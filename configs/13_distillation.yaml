@@ -1,0 +1,80 @@
+# 13: knowledge distillation. The teacher with the weights of an earlier run (weights: {run, model, which}; loaded wholesale after
+# the build, cannot be written together with init), frozen and in eval mode with trainable: false (BatchNorm and dropout
+# fixed), writes no optimizer, no warning. The student with the main optimizer; the distill loss reads the two models from models
+# (refs: student and teacher of the model type), returns {loss, ce, kl}, the terms enter the history (train/kd/ce, train/kd/kl).
+# Rule: once val/accuracy passes 0.90 the learning rate drops (metric_above, the set target <opt>.<param>). It fits the alternating turn.
+# kalfa predict runs/distill_x            with the student (predicts: student); --model teacher with the teacher
+
+include:
+  - /alias/kalfa/vision
+
+plugins:
+  - timm_legos
+
+params:
+  epochs: 40
+  lr: 1.0e-3
+  temperature: 4.0
+  alpha: 0.7
+  seed: 7
+
+seed: $seed$
+device: cuda                      # a device lego (auto | cpu | cuda | mps | {uri, params}); an unavailable device is an error
+
+data:
+  source: {uri: image_folder, params: {path: data/cifar10}}
+  split: {ratios: [0.9, 0.1, 0.0], seed: $seed$}
+  batch: {size: 128, eval_size: 512}
+  preprocessors:
+    to_tensor: {uri: to_tensor}
+    normalize: {uri: normalize, params: {mean: cifar10, std: cifar10}}
+  fields:
+    image: {preprocessors: [to_tensor, normalize]}
+    label: {target: true}
+  feed: table
+
+model:
+  models:
+    teacher:
+      trainable: false
+      weights: {run: runs/cifar_resnet50_x, model: net, which: best}
+      inputs: [image]
+      outputs: [logits]
+      nodes:
+        - {uri: timm_backbone, params: {name: resnet50, pooled: true}}
+        - {uri: linear, params: {out_features: 10}}
+    student:
+      optimizer: main
+      inputs: [image]
+      outputs: [logits]
+      nodes:
+        - {uri: timm_backbone, params: {name: resnet18, pooled: true}}
+        - {uri: linear, params: {out_features: 10}}
+
+metrics:
+  accuracy: {uri: accuracy}
+
+losses:
+  kd: {uri: distill, params: {student: student, teacher: teacher, temperature: $temperature$, alpha: $alpha$}}
+
+optimizers:
+  main: {uri: adamw, params: {lr: $lr$}, loss: kd}
+
+training:
+  turn: supervised
+  predicts: student
+  epochs: $epochs$
+  rules:
+    - name: cool_down
+      when: {uri: metric_above, params: {monitor: val/accuracy, value: 0.90}}
+      set: {main.lr: 1.0e-4}
+  stop:
+    - {uri: plateau, params: {monitor: val/accuracy, mode: max, patience: 6}}
+  checkpoint: {uri: best, params: {monitor: val/accuracy, mode: max}}
+  report: best
+
+plots:
+  loss_curve: {uri: loss_curve, params: {series: [train/kd/ce, train/kd/kl, val/accuracy]}}
+  confusion:  {uri: confusion_matrix}
+
+record: runs/distill_$datetime$

@@ -1,0 +1,32 @@
+# 14: a sweep. Config 01 as the lower layer; this file adds the width param, writes the model with it and builds a 3x2 grid over
+# lr x width with the sweep section. Every point is an ordinary run: a record directory under <root>/<id>/ plus
+# sweep.json (the id, the point, the strategy, the total, the objective value and its turn). Strategies deterministic by id (grid, random,
+# sobol) run anywhere with --id; the fed back optuna only in the local loop.
+#   kalfa sweep 14_sweep_grid.yaml --count                     6
+#   kalfa sweep 14_sweep_grid.yaml --show 4                    the fourth point
+#   kalfa sweep 14_sweep_grid.yaml --id 4                      that point only (a queue job; looks at no other point)
+#   kalfa sweep 14_sweep_grid.yaml                             the local loop, every point in a subprocess
+#   kalfa collect runs/sweep_housing                           sweep.csv, sweep.json, sweep.md and the best point
+#   kalfa sweep 14_sweep_grid.yaml --set 'sweep.strategy={uri: optuna, params: {trials: 8, seed: 1}}' \
+#       --set 'sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}'
+
+include:
+  - 01_mlp_regression.yaml
+
+params:
+  epochs: 20
+  width: 128
+
+model:
+  nodes:
+    - {uri: linear_relu, params: {out_features: $width$}}
+    - {uri: linear_relu, params: {out_features: $width$}}
+    - {uri: linear, params: {out_features: 1}}
+
+sweep:
+  strategy: grid
+  space:
+    lr: [1.0e-2, 1.0e-3, 1.0e-4]
+    width: [64, 128]
+  objective: {monitor: val/rmse, mode: min, at: best}
+  record: runs/sweep_housing

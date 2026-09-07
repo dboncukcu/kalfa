@@ -1,0 +1,77 @@
+# kalfa config reference. Section keys are fixed, an unknown key is an error; what is not written does not exist.
+# The mark of every line: [required] a check error when not written | [empty] absent when not written, adds no behavior | [derived] one rule
+# that looks at the shape | [library] the default of the wrapped library when not written. kalfa has no defaults of its own.
+# A lego call: {uri: name_or_uri, params: {...}}; a plain string is a call without params. Short names come from the alias packs an
+# include brings; the table is flat, one name one URI; which section a lego may be written in follows from its kind (mae is one lego, in losses and metrics). Details: CONFIG.md.
+
+include: []                       # [empty] alias packs (/alias/kalfa/tabular, vision, text, lazy), YAML fragments, other configs
+                                  # an included file is the lower layer, the including one the upper; strict merging inside a layer, leaf overriding between layers;
+                                  # --set path=value (dotted from the root; a bare name is a top level key) and -p name=value (params) are the top layer; the dump writes the source of every overridden value
+plugins: []                       # [empty] modules next to the config or pip packages; @lego registrations
+params: {}                        # [empty] $name$ placeholders; -p name=value (--param); no reserved names, not on the bus
+
+seed: null                        # [library] the global seed; the model seed hash(seed, index), the loader, the generator, init; without it torch runs unseeded, check warns
+device: null                      # [library] a device lego: auto | cpu | cuda | mps | {uri: cuda, params: {index: 1}} | your own; cpu when absent; --set device=cuda
+
+data:
+  source: null                    # [required] {uri: parquet | csv | image_folder | text_lines | your own lego, params: {path: ...}}
+  filter: []                      # [empty] "query" (before the split) | {query: "...", sets: [train]} (after the split, on those sets)
+  split: null                     # [required] {ratios: [.7, .15, .15], seed: $seed$} (no uri: the random split, {uri: random_split, params: {ratios, seed}} written out) | {uri: sequential, params: {ratios, group}}
+                                  # | {uri: kfold, params: {k: 5, fold: $fold$, val: 0.15, seed}} (the held out fold is test; val from the training part, without it no valid)
+                                  # | {uri: given, params: {valid: b.parquet, test: c.parquet}}
+                                  # ratios always has three entries (train, valid, test); 0.0 means no set; a missing set is not in the history
+  batch: null                     # [required] 128 (size) or {size: 128, eval_size: 512, shuffle: true, drop_last: false, workers: 0, collate: null, balanced: false}
+                                  # the defaults of the loader lego [library]: shuffle on in training, off in evaluation; eval_size = size;
+                                  # collate null = the torch default; balanced puts a class balancing sampler over the target field
+  preprocessors: {}               # [empty] name: {uri, params, sets}; those that need a fit are fitted on the filtered train set and go into the record;
+                                  # sets: [train] on those sets only (predict data is treated like test); a definition used in no chain and by no refs is a warning
+  drop: []                        # [empty] columns dropped before the field mapping; column typed params (group) cannot be dropped
+  fields: {}                      # [required] glob: {preprocessors: [..], target: true}; a field that is not written does not enter the model; input is a reserved word
+                                  # specificity: a name without wildcards > the count of fixed characters > the count of ? > a check error
+  feed: null                      # [required] table | {uri: window, params: {size, horizon, context, group}} | {uri: next_token, params: {seq_len}} | your own lego
+                                  # table: the non target fields into one tensor (x), the targets under their own names; Dataset fields under their own names
+
+model:                            # [required] either several models:
+  templates: {}                   #   [empty] name: {variables: {..}, inputs, outputs, nodes}
+  models: {}                      #   name: {optimizer, inputs, outputs, nodes, init, ema: {decay}, trainable, weights}
+                                  # or the single model shorthand: model: {optimizer: {uri, params}, inputs, outputs, nodes, init, ema, trainable, weights}
+                                  # nodes: a list (a chain) or a mapping (a graph: the key is the node name; without outputs it is the single output wire too)
+                                  # a node: {uri, params, inputs, outputs, init, repeat} | {template: name, params, repeat, inputs, outputs} | {model: name, inputs, outputs}
+                                  # optimizer: a name in optimizers (a string) or an inline {uri, params}; a model writing none is not trained (a warning; composites and trainable: false excepted)
+                                  # init: {weights, bias, scale: a short name | {uri, params}, patterns: [{match: "head.*", weights: ...}]} [library: torch]
+                                  # trainable: false: requires_grad off and eval mode; the rule set: {<name>.trainable: true} opens both
+                                  # weights: {run: runs/x, model: name, which: best | last | final}; loaded after the build; together with init on the same model a check error
+                                  # a composite model (a {model: name} node): cannot write optimizer, init, ema, trainable, weights; does not enter the checkpoint
+                                  # ema: {decay}: under the name <name>.ema in predicts, generate, refs model params and kalfa predict --model
+                                  # a . in a model name is forbidden
+
+metrics: {}                       # [empty] name: {uri, params, every: 1, sets: [train, valid, test], output, target}
+                                  # a lego of the metric kind (update/compute; the update arguments by name: predictions, targets, models, batch, rng, predicts, record, turn, prep, set)
+                                  # or of the criterion kind (a running mean); the objective kind here is a check error
+losses: {}                        # [required, at least one] name: {uri, params, every: 1, sets: [train, valid, test], output, target}
+                                  # a lego of the criterion kind ((predictions, targets); the std adapter hands the predicts output and the target) or of the
+                                  # objective kind ((models, batch, **params); a scalar or a mapping of terms with a required loss key); the metric kind is a check error
+                                  # output: the wire of a multi output model (the first output when absent); target: a field name | input (the target: true field when absent)
+                                  # needs_grad objectives write sets: [train]; the alias table is flat: mae is /criterion/kalfa/mae in both sections
+optimizers: {}                    # [empty, with an inline one] name: {uri, params: {lr, ..., groups: [{match: "model.*", lr}]}, loss: loss_name, schedule: {uri, params}}
+                                  # an unused definition is an error; loss is required
+
+training:
+  turn: null                      # [required] supervised | {uri: alternating, params: {order: [d, g], steps: {d: 5, g: 1}, fresh_batch: false}} | your own lego
+                                  # the default of order is the writing order of optimizers, of steps 1 [library: the lego]
+  predicts: null                  # [derived] the prediction model; the single trained model when there is one; a check error when needed and absent
+  epochs: null                    # [required, one of the two] or steps: {total: T, turn: K}; a step = one update pass, k batches with accumulate k
+  steps: null
+  loss: null                      # the name of the loss with a single optimizer (the only place when the optimizer is inline)
+  checkpoint: null                # [empty] {uri: best, params: {monitor: val/rmse, mode: min}} | last | {uri: snapshot, params: {every: 10}} | null
+                                  # the intermediate records; final/ is always written when the run ends; the default of mode is min [library: the lego]
+  report: null                    # [required] best | last; the identity of the model after training (plots, predictions, generate, kalfa predict); best needs checkpoint best
+  stop: []                        # [empty] [{uri: plateau, params: {monitor: val/rmse, patience: 6}}, ...]; test/ cannot be watched; a missing set cannot be watched
+  rules: []                       # [empty] [{name, when: {uri, params}, set: {target: value}, after: name}]
+                                  # the set targets: <opt>.loss | loss | <loss>.<param> | <opt>.<param> | <model>.trainable
+  # amp, grad_clip, accumulate and every other key go to the turn's params; not in the signature is an error
+
+generate: null                    # [empty] {uri: sampler_lego, params: {model: unet.ema, ...}}; at the end of training (with the report model) and kalfa generate
+sweep: null                       # [empty] {strategy: grid | {uri, params}, space: {param: [choices] | {low, high, log, int, steps}}, objective: {monitor, mode, at}, record: root}; kalfa sweep
+plots: {}                         # [empty] name: {uri, params, inputs: {param: history_key | field | model}}
+record: null                      # [required] the record directory; $datetime$ is built in (YYYYmmdd_HHMMSS)

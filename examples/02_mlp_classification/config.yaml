@@ -1,0 +1,62 @@
+# 02: table classification. The target label is encoded (label_encoder, inverted in the predictions), the class weight is a run time
+# component ({uri: class_weights}: computed from the train set once the data exists, cross_entropy takes it as weight=),
+# the best model by val/f1 (mode: max). The model in the user's form: one model under models, an inline optimizer,
+# the loss through training.loss. Several targets: the table feed passes every target field under its own name; the std losses take
+# one target, two targets mean two losses or one lego.
+
+include:
+  - /alias/kalfa/tabular
+
+params:
+  epochs: 30
+  lr: 1.0e-3
+  seed: 7
+
+seed: $seed$
+
+data:
+  source: {uri: parquet, params: {path: churn.parquet}}
+  split: {ratios: [0.7, 0.15, 0.15], seed: $seed$}
+  batch: 256
+  preprocessors:
+    std_scaler: {uri: standard_scaler}
+    onehot:     {uri: one_hot}
+    label:      {uri: label_encoder}
+  fields:
+    "num_*":  {preprocessors: [std_scaler]}
+    "cat_*":  {preprocessors: [onehot]}
+    churned:  {target: true, preprocessors: [label]}
+  feed: table
+
+model:
+  models:
+    net:
+      optimizer: {uri: adam, params: {lr: $lr$}}
+      inputs: [x]
+      outputs: [logits]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 64}}
+        - {uri: linear_relu, params: {out_features: 64}}
+        - {uri: linear, params: {out_features: 2}}
+
+metrics:
+  accuracy: {uri: accuracy}
+  f1:       {uri: f1}
+
+losses:
+  ce: {uri: cross_entropy, params: {weight: {uri: class_weights}}}
+
+training:
+  turn: supervised
+  loss: ce
+  epochs: $epochs$
+  stop:
+    - {uri: plateau, params: {monitor: val/f1, mode: max, patience: 5}}
+  checkpoint: {uri: best, params: {monitor: val/f1, mode: max}}
+  report: best
+
+plots:
+  loss_curve: {uri: loss_curve}
+  confusion:  {uri: confusion_matrix}
+
+record: runs/churn_$datetime$

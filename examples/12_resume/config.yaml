@@ -1,0 +1,13 @@
+# 12: resuming. The same as config 01; resuming is on the command line, the config has no key for it:
+#   kalfa run 01_mlp_regression.yaml                (runs/housing_x, interrupted at epoch 40)
+#   kalfa resume runs/housing_x                     (opens a new directory, from 41 to epochs)
+# kalfa resume reads the record's resolved.yaml, loads checkpoints/last.pt in place (the models, the optimizers, the EMA
+# copies, the counters, the rule slots and the trigger states, the four RNGs), takes the checkpoints over into the new directory.
+# An interrupted run with checkpoint: null cannot be resumed (no last.pt); a finished run resumes from final/ (--set training.epochs=N).
+# Resuming in the steps mode restarts the data stream (the batch iterator does not enter the checkpoint).
+# This file only calls 01 as it is; record is overridden to tell the records apart.
+
+include:
+  - 01_mlp_regression.yaml
+
+record: runs/housing_resume_$datetime$

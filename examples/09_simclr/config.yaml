@@ -1,0 +1,73 @@
+# 09: SimCLR. Two views per sample come from a preprocessor (two_views, train set only); the ntxent loss takes the pair of
+# views in the batch, with in batch negatives; no target, no metric, no validation. The backbone and the projection head are
+# separate models on the same optimizer; the simclr composite model is used in training; at inference the projection head is dropped:
+# kalfa predict runs/simclr_x --model backbone --data data/stl10/test. It fits the alternating turn: one optimizer.
+
+include:
+  - /alias/kalfa/vision
+
+plugins:
+  - timm_legos
+
+params:
+  epochs: 100
+  lr: 3.0e-4
+  temperature: 0.5
+  seed: 7
+
+seed: $seed$
+device: cuda                      # a device lego (auto | cpu | cuda | mps | {uri, params}); an unavailable device is an error
+
+data:
+  source: {uri: image_folder, params: {path: data/stl10/unlabeled}}
+  split: {ratios: [1.0, 0.0, 0.0], seed: $seed$}
+  batch: {size: 256, drop_last: true}
+  preprocessors:
+    simclr_aug: {uri: simclr_aug, params: {size: 96}}
+    two_views:  {uri: two_views, params: {transform: simclr_aug}, sets: [train]}
+    to_tensor:  {uri: to_tensor}
+  fields:
+    image: {preprocessors: [two_views, to_tensor]}
+  feed: table
+
+model:
+  models:
+    backbone:
+      optimizer: main
+      inputs: [image]
+      outputs: [h]
+      nodes:
+        - {uri: timm_backbone, params: {name: resnet18, pooled: true}}
+    head:
+      optimizer: main
+      inputs: [h]
+      outputs: [z]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 512}}
+        - {uri: linear, params: {out_features: 128}}
+    simclr:
+      inputs: [image]
+      outputs: [z]
+      nodes:
+        h: {model: backbone, inputs: [image]}
+        z: {model: head, inputs: [h]}
+
+losses:
+  ntx: {uri: ntxent, params: {model: simclr, temperature: $temperature$}, sets: [train]}
+
+optimizers:
+  main: {uri: adamw, params: {lr: $lr$}, loss: ntx}
+
+training:
+  turn: supervised
+  predicts: simclr
+  epochs: $epochs$
+  amp: true
+  checkpoint: last
+  report: last
+  stop: []
+
+plots:
+  loss_curve: {uri: loss_curve}
+
+record: runs/simclr_$datetime$

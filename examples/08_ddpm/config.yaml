@@ -1,0 +1,70 @@
+# 08: DDPM. One model (unet, from a plugin), an EMA copy, the ddpm loss: the random time step and the noise inside the loss
+# (kalfa passes rng), the noise schedule is a param of the loss. The step schedule in the optimizer (warmup_cosine),
+# AMP and clipping as the turn's params. No validation metric, checkpoint last, no stopping (epochs turns).
+# Generation at the end of training and with kalfa generate, from the EMA. It fits the alternating turn: one optimizer (supervised).
+
+include:
+  - /alias/kalfa/vision
+
+plugins:
+  - unet_legos
+
+params:
+  epochs: 200
+  lr: 2.0e-4
+  diffusion_steps: 1000
+  seed: 7
+
+seed: $seed$
+device: cuda                      # a device lego (auto | cpu | cuda | mps | {uri, params}); an unavailable device is an error
+
+data:
+  source: {uri: image_folder, params: {path: data/cifar10}}
+  split: {ratios: [1.0, 0.0, 0.0], seed: $seed$}
+  batch: 128
+  preprocessors:
+    to_signed: {uri: to_tensor_signed}
+  fields:
+    image: {preprocessors: [to_signed]}
+  feed: table
+
+model:
+  models:
+    unet:
+      optimizer: main
+      ema: {decay: 0.9999}
+      inputs: [image, t]
+      outputs: [noise]
+      nodes:
+        - {uri: unet, params: {channels: 64}}
+
+metrics:
+  samples: {uri: sample_writer, params: {sampler: generate, n: 16}, every: 5, sets: [train]}
+
+losses:
+  ddpm: {uri: ddpm, params: {model: unet, schedule: {uri: linear_betas, params: {steps: $diffusion_steps$}}}}
+
+optimizers:
+  main:
+    uri: adamw
+    params: {lr: $lr$}
+    loss: ddpm
+    schedule: {uri: warmup_cosine, params: {warmup: 1000, total: 400000}}
+
+training:
+  turn: supervised
+  epochs: $epochs$
+  amp: true
+  grad_clip: 1.0
+  checkpoint: last
+  report: last
+  stop: []
+
+generate:
+  uri: ddpm_sampler
+  params: {model: unet.ema, schedule: {uri: linear_betas, params: {steps: $diffusion_steps$}}, shape: [3, 32, 32], n: 64}
+
+plots:
+  loss_curve: {uri: loss_curve}
+
+record: runs/ddpm_$datetime$

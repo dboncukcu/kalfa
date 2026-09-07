@@ -1,0 +1,75 @@
+# 10: a character level language model. The tokenizer is a preprocessor (fitted on the train set, the vocabulary goes into the record),
+# the vocabulary size is the kind: data component vocab_size (from the fitted tokenizer; the embedding's num and the last layer's out_features),
+# the next token feed feed: next_token (the input_ids and targets fields), a turn of 200 steps (steps), accumulation, AMP,
+# clipping as the turn's params, warmup plus cosine in the optimizer (total = steps.total), perplexity on the validation set every turn,
+# generation from the record, autoregressive (kalfa generate; reads the tokenizer from the preprocessor). It fits the alternating turn: one optimizer.
+
+include:
+  - /alias/kalfa/text
+
+plugins:
+  - gpt_legos
+
+params:
+  total_steps: 20000
+  turn_steps: 200
+  lr: 3.0e-4
+  seq_len: 128
+  seed: 7
+
+seed: $seed$
+device: cuda                      # a device lego (auto | cpu | cuda | mps | {uri, params}); an unavailable device is an error
+
+data:
+  source: {uri: text_lines, params: {path: data/shakespeare.txt}}
+  split: {ratios: [0.98, 0.02, 0.0], seed: $seed$}
+  batch: 64
+  preprocessors:
+    tokenizer: {uri: char_tokenizer}
+  fields:
+    text: {preprocessors: [tokenizer]}
+  feed: {uri: next_token, params: {seq_len: $seq_len$}}
+
+model:
+  models:
+    gpt:
+      optimizer: main
+      inputs: [input_ids]
+      outputs: [logits]
+      nodes:
+        - {uri: embedding, params: {num: {uri: vocab_size}, dim: 256}}
+        - {uri: gpt, params: {d_model: 256, layers: 4, heads: 4, seq_len: $seq_len$}}
+        - {uri: linear, params: {out_features: {uri: vocab_size}}}
+
+metrics:
+  perplexity: {uri: perplexity, target: targets}
+
+losses:
+  lm: {uri: cross_entropy, target: targets}
+
+optimizers:
+  main:
+    uri: adamw
+    params: {lr: $lr$, weight_decay: 0.1}
+    loss: lm
+    schedule: {uri: warmup_cosine, params: {warmup: 500, total: $total_steps$}}
+
+training:
+  turn: supervised
+  steps: {total: $total_steps$, turn: $turn_steps$}
+  accumulate: 2
+  amp: true
+  grad_clip: 1.0
+  stop:
+    - {uri: plateau, params: {monitor: val/perplexity, patience: 10}}
+  checkpoint: {uri: best, params: {monitor: val/perplexity}}
+  report: best
+
+generate:
+  uri: lm_sampler
+  params: {model: gpt, prompt: "ROMEO:", max_new_tokens: 500, temperature: 0.9}
+
+plots:
+  loss_curve: {uri: loss_curve, params: {series: [train/lm, val/perplexity]}}
+
+record: runs/charlm_$datetime$

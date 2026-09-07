@@ -1,0 +1,56 @@
+# The teacher run: the model config.yaml loads with weights: {run: runs/cifar_resnet50_x, model: net, which: best}.
+# The same data and preprocessing, one model (net), the best checkpoint. This runs first, then config.yaml.
+
+include:
+  - /alias/kalfa/vision
+
+plugins:
+  - timm_legos
+
+params:
+  epochs: 5
+  lr: 1.0e-3
+  seed: 3
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: image_folder, params: {path: data/cifar10}}
+  split: {ratios: [0.9, 0.1, 0.0], seed: $seed$}
+  batch: {size: 32, eval_size: 128}
+  preprocessors:
+    to_tensor: {uri: to_tensor}
+    normalize: {uri: normalize, params: {mean: cifar10, std: cifar10}}
+  fields:
+    image: {preprocessors: [to_tensor, normalize]}
+    label: {target: true}
+  feed: table
+
+model:
+  models:
+    net:
+      optimizer: {uri: adam, params: {lr: $lr$}}
+      inputs: [image]
+      outputs: [logits]
+      nodes:
+        - {uri: timm_backbone, params: {name: resnet50, pooled: true}}
+        - {uri: linear, params: {out_features: 10}}
+
+metrics:
+  accuracy: {uri: accuracy}
+
+losses:
+  ce: {uri: cross_entropy}
+
+training:
+  turn: supervised
+  loss: ce
+  epochs: $epochs$
+  checkpoint: {uri: best, params: {monitor: val/accuracy, mode: max}}
+  report: best
+
+plots:
+  loss_curve: {uri: loss_curve}
+
+record: runs/cifar_resnet50_x

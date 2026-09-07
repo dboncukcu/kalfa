@@ -1,0 +1,73 @@
+# 01: table regression. One model, one optimizer (supervised), three loss definitions and a rule chain:
+# to huber at the end of epoch 50, to mae once the huber loss drops below 0.01, to log_cosh once val/loss_mae plateaus for five turns.
+# Rules are evaluated at the end of a turn, effective in the next; after: not evaluated until the named rule fires;
+# a rule that fired stays sticky; among rules writing the same key (loss) the last one wins.
+# kalfa run 01_mlp_regression.yaml ; kalfa predict runs/housing_x --data new.parquet
+
+include:
+  - /alias/kalfa/tabular
+
+params:
+  epochs: 100
+  lr: 1.0e-3
+  seed: 7
+
+seed: $seed$
+
+data:
+  source: {uri: parquet, params: {path: housing.parquet}}
+  split: {ratios: [0.7, 0.15, 0.15], seed: $seed$}
+  batch: 128
+  preprocessors:
+    std_scaler: {uri: standard_scaler}
+    target_std: {uri: standard_scaler}
+  fields:
+    "x*":  {preprocessors: [std_scaler]}
+    price: {target: true, preprocessors: [target_std]}
+  feed: table
+
+model:
+  optimizer: {uri: adam, params: {lr: $lr$}}
+  inputs: [x]
+  outputs: [y]
+  nodes:
+    - {uri: linear_relu, params: {out_features: 128}}
+    - {uri: linear_relu, params: {out_features: 128}}
+    - {uri: linear, params: {out_features: 1}}
+
+metrics:
+  rmse: {uri: rmse}
+  mae:  {uri: mae}
+
+losses:
+  loss_mse:     {uri: mse}
+  loss_huber:   {uri: huber, params: {delta: 1.0}}
+  loss_mae:     {uri: mae}
+  loss_logcosh: {uri: log_cosh}
+
+training:
+  turn: supervised
+  loss: loss_mse
+  epochs: $epochs$
+  rules:
+    - name: to_huber
+      when: {uri: after_epoch, params: {at: 50}}
+      set: {loss: loss_huber}
+    - name: to_mae
+      after: to_huber
+      when: {uri: metric_below, params: {monitor: train/loss_huber, value: 0.01}}
+      set: {loss: loss_mae}
+    - name: to_logcosh
+      after: to_mae
+      when: {uri: plateau, params: {monitor: val/loss_mae, patience: 5}}
+      set: {loss: loss_logcosh}
+  stop:
+    - {uri: plateau, params: {monitor: val/rmse, patience: 6}}
+  checkpoint: {uri: best, params: {monitor: val/rmse}}
+  report: best
+
+plots:
+  loss_curve:   {uri: loss_curve}
+  pred_vs_true: {uri: pred_vs_true}
+
+record: runs/housing_$datetime$

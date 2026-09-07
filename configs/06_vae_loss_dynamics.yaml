@@ -1,0 +1,91 @@
+# 06: VAE and loss dynamics. The objective lego vae (the objective kind: takes models and batch): two terms (w_rec * recon + w_kl(step) * kl),
+# the reparameterization inside the loss, the KL weight grows with the step (kl_schedule, kalfa passes step); the terms enter the history
+# (train/vae_loss/recon, train/vae_loss/kl, train/vae_loss/w_kl). The recon param is a criterion lego (refs: criterion).
+# Rules: w_rec 0.5 at the end of epoch ten (a loss param), recon to huber once val/recon_rmse plateaus for five turns
+# (a loss param whose value is a criterion name; check knows the kind from refs). It fits the alternating turn: one optimizer.
+
+include:
+  - /alias/kalfa/vision
+
+params:
+  epochs: 50
+  lr: 1.0e-3
+  kl_warmup_steps: 20000
+  seed: 7
+
+seed: $seed$
+
+data:
+  source: {uri: image_folder, params: {path: data/mnist}}
+  split: {ratios: [0.9, 0.1, 0.0], seed: $seed$}
+  batch: 128
+  preprocessors:
+    to_tensor: {uri: to_tensor}
+  fields:
+    image: {preprocessors: [to_tensor]}
+  feed: table
+
+model:
+  models:
+    encoder:
+      optimizer: main
+      inputs: [image]
+      outputs: [mu, logvar]
+      nodes:
+        f:      {uri: flatten, inputs: [image]}
+        h:      {uri: linear_relu, params: {out_features: 512}, inputs: [f]}
+        mu:     {uri: linear, params: {out_features: 32}, inputs: [h]}
+        logvar: {uri: linear, params: {out_features: 32}, inputs: [h]}
+    decoder:
+      optimizer: main
+      inputs: [z]
+      outputs: [x_hat]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 256}}
+        - {uri: linear, params: {out_features: 784}}
+        - {uri: unflatten, params: {shape: [1, 28, 28]}}
+    vae:
+      inputs: [image]
+      outputs: [x_hat]
+      nodes:
+        enc:   {model: encoder, inputs: [image], outputs: [mu, logvar]}
+        z:     {uri: reparam, inputs: [mu, logvar]}
+        x_hat: {model: decoder, inputs: [z]}
+
+metrics:
+  recon_rmse: {uri: rmse, target: input}
+
+losses:
+  vae_loss:
+    uri: vae
+    params:
+      encoder: encoder
+      decoder: decoder
+      recon: mse
+      w_rec: 1.0
+      kl_schedule: {uri: linear_warmup, params: {start: 0.0, end: 1.0, steps: $kl_warmup_steps$}}
+
+optimizers:
+  main: {uri: adam, params: {lr: $lr$}, loss: vae_loss}
+
+training:
+  turn: supervised
+  predicts: vae
+  epochs: $epochs$
+  rules:
+    - name: half_recon
+      when: {uri: after_epoch, params: {at: 10}}
+      set: {vae_loss.w_rec: 0.5}
+    - name: to_huber
+      when: {uri: plateau, params: {monitor: val/recon_rmse, patience: 5}}
+      set: {vae_loss.recon: huber}
+  stop:
+    - {uri: plateau, params: {monitor: val/recon_rmse, patience: 12}}
+  checkpoint: {uri: best, params: {monitor: val/recon_rmse}}
+  report: best
+
+plots:
+  loss_curve:      {uri: loss_curve, params: {series: [train/vae_loss/recon, train/vae_loss/kl, val/recon_rmse]}}
+  reconstructions: {uri: image_pairs, params: {n: 8}}
+
+record: runs/vae_$datetime$

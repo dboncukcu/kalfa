@@ -1,0 +1,245 @@
+# kalfa v2 target surface: ALAD (adversarial anomaly detection), table data.
+# The general rule: what is not written does not exist. Section keys are fixed, an unknown key is an error;
+# every piece of information you add goes either into a lego's params or into a new lego.
+# References are by name: what a section defines (a metric, a loss, an optimizer, a template, a model)
+# is used by name in another section.
+
+# include: alias packs and reusable YAML fragments. The short names
+# (parquet, standard_scaler, adam, mse...) come from here; a full URI is always valid.
+include:
+  - /alias/kalfa/tabular
+
+# plugins: Python modules next to the config. Legos registered with @lego come from here;
+# in this file the two ALAD loss legos live in myexample.py. The turn is std (alternating), not a plugin.
+plugins:
+  - myexample
+
+# params: constants used anywhere in the file through $name$ placeholders.
+# Overridden from the command line with -p name=value; a sweep works over these names.
+params:
+  log_base: 10
+  log_norm: 1200
+  latent_dim: 4
+  epochs: 60
+  lr: 2.0e-4
+  seed: 42
+
+# seed: from the param above; python, numpy and torch are seeded, the model seeds derive from it.
+seed: $seed$
+
+# data: the data pipeline. The order is fixed and independent of the writing order:
+# source -> filter (those without sets) -> split -> filter (those with sets) -> fit on the train set -> apply
+data:
+  # source: the lego that brings the data; it returns a DataFrame or a Dataset.
+  source: {uri: /source/kalfa/parquet, params: {path: anomaly_data.parquet}}
+  # filter: pandas query strings. A plain string: on all the data before the split.
+  # {query, sets}: after the split, on those sets only. Filters of the same stage are joined with "and".
+  filter:
+    - {query: "is_anomaly == 0", sets: [train]}
+    - "(is_anomaly > -4) & (is_anomaly < 4)"
+  # split: the split lego; ratios in the order train, valid, test.
+  split: {ratios: [0.7, 0.1, 0.2], seed: $seed$}
+  # batch: the batch size (the short form; the long form is {size, workers, shuffle, ...}).
+  batch: 50
+  # feed: how rows turn into tensors; table is one sample per row. The window and
+  # next token feeds are separate legos. Required, no default.
+  feed: table
+  # preprocessors: named transform definitions. Used by name in a chain; those that need a fit
+  # are fitted on the train set only. A type conversion is a lego too (cast), no special key.
+  preprocessors:
+    abs_scaler: {uri: /pre/kalfa/abs}
+    log_scaler: {uri: /pre/kalfa/log, params: {base: $log_base$, norm: $log_norm$}}
+    std_scaler: {uri: /pre/sklearn/standard_scaler}
+    cast_int:   {uri: /pre/kalfa/cast, params: {dtype: int}}
+  # drop: columns dropped before the field mapping; they reach no pattern.
+  drop: [xx6, xx7]
+  # fields: column -> role and chain. The keys are globs: ? one character, * zero or more.
+  # target: true marks the target column; the target transform is inverted in the report.
+  # A column that is not written does not enter the model.
+  fields:
+    "x?":       {preprocessors: [abs_scaler, log_scaler, std_scaler]}
+    "xx*":      {preprocessors: [abs_scaler, log_scaler, std_scaler]}
+    is_anomaly: {target: true, preprocessors: [cast_int]}
+
+# model: templates and named models. Every model and template is a mapping; when nodes is a list
+# it is a chain (every item takes the output of the previous one), when a mapping it is a graph (the key
+# is the wire name, connected with inputs). The boundary wires are written with inputs and outputs, even in a chain.
+model:
+  # templates: pieces parameterized with variables; used with {template: name, params: {...}}.
+  # Every use is a separate copy, there is no weight sharing.
+  templates:
+    mlp_hidden:
+      variables: {width: {required: true}}
+      nodes:
+        - {uri: /layer/torch/linear, params: {in_features: $width$, out_features: $width$}}
+        - {uri: /layer/torch/relu}
+
+    # repeat: stacks the item n times (n separate copies).
+    # /layer/kalfa/linear is lazy: it reads the input width from the first batch (for after a concat).
+    mlp:
+      variables:
+        in_features:  {required: true}
+        out_features: {required: true}
+        width:        {default: 64}
+        depth:        {default: 2}
+      inputs: [x]
+      outputs: [y]
+      nodes:
+        h0: {uri: /layer/torch/linear, params: {in_features: $in_features$, out_features: $width$}, inputs: [x]}
+        a0: {uri: /layer/torch/relu, inputs: [h0]}
+        h:  {template: mlp_hidden, params: {width: $width$}, repeat: $depth$, inputs: [a0]}
+        j:  {uri: /layer/torch/concat, params: {dim: 1}, inputs: [x, h]}
+        y:  {uri: /layer/kalfa/linear, params: {out_features: $out_features$}, inputs: [j]}
+
+    branch:
+      variables: {in_features: {required: true}, width: {required: true}}
+      nodes:
+        - {uri: /layer/torch/linear, params: {in_features: $in_features$, out_features: $width$}}
+        - {uri: /layer/torch/leaky_relu, params: {negative_slope: 0.2}}
+
+    # A multi output template: outputs gives two wires; the using model takes what it wants.
+    head:
+      variables: {in_features: {required: true}, width: {required: true}}
+      inputs: [c]
+      outputs: [feature, logit]
+      nodes:
+        h:       {uri: /layer/torch/linear, params: {in_features: $in_features$, out_features: $width$}, inputs: [c]}
+        feature: {uri: /layer/torch/leaky_relu, params: {negative_slope: 0.2}, inputs: [h]}
+        d:       {uri: /layer/torch/dropout, params: {p: 0.2}, inputs: [feature]}
+        logit:   {uri: /layer/torch/linear, params: {in_features: $width$, out_features: 1}, inputs: [d]}
+
+  # models: the models that are trained and used.
+  # optimizer: a name in the optimizers section (a string) or an inline definition (a mapping).
+  #   Models writing the same name share one optimizer object. A model writing none is not trained.
+  # init: a role mapping (weights, bias, scale); a role that is not written stays at the torch default.
+  #   An init on a layer item changes only that layer.
+  # Every model is initialized with its own seed derived from the global seed.
+  models:
+    encoder:
+      optimizer: g
+      inputs: [x]
+      outputs: [z]
+      nodes:
+        - {template: mlp, params: {in_features: 6, out_features: 64, width: 64, depth: 2}}
+        - {uri: /layer/torch/leaky_relu, params: {negative_slope: 0.2}}
+        - {uri: /layer/torch/linear, params: {in_features: 64, out_features: $latent_dim$}}
+
+    generator:
+      optimizer: g
+      inputs: [z]
+      outputs: [x_hat]
+      init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}
+      nodes:
+        - {uri: /layer/torch/linear, params: {in_features: $latent_dim$, out_features: 64}}
+        - {uri: /layer/torch/relu}
+        - {uri: /layer/torch/linear, params: {in_features: 64, out_features: 64}}
+        - {uri: /layer/torch/relu}
+        - {uri: /layer/torch/linear, params: {in_features: 64, out_features: 6}}
+
+    dxz:
+      optimizer: d
+      inputs: [x, z]
+      outputs: [logit]
+      init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}
+      nodes:
+        xb:   {template: branch, params: {in_features: 6, width: 32}, inputs: [x]}
+        zb:   {template: branch, params: {in_features: $latent_dim$, width: 32}, inputs: [z]}
+        j:    {uri: /layer/torch/concat, params: {dim: 1}, inputs: [xb, zb]}
+        head: {template: head, params: {in_features: 64, width: 64}, inputs: [j], outputs: [feature, logit]}
+
+    dxx:
+      optimizer: d
+      inputs: [x, x_hat]
+      outputs: [logit, feature]
+      init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}
+      nodes:
+        j:    {uri: /layer/torch/concat, params: {dim: 1}, inputs: [x, x_hat]}
+        head: {template: head, params: {in_features: 12, width: 64}, inputs: [j], outputs: [feature, logit]}
+
+    dzz:
+      optimizer: d
+      inputs: [z, z_hat]
+      outputs: [logit]
+      init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}
+      nodes:
+        j:    {uri: /layer/torch/concat, params: {dim: 1}, inputs: [z, z_hat]}
+        head: {template: head, params: {in_features: 8, width: 32}, inputs: [j], outputs: [feature, logit]}
+
+    # A composite model: a {model: name} node puts a trained model itself (the same object, the same
+    # weights) into the graph. It has no parameters of its own; it cannot write optimizer or init;
+    # it does not enter the checkpoint, it is rebuilt from the YAML. When the same model is called twice
+    # the wires of every call are named separately with outputs.
+    anomaly_score:
+      inputs: [x]
+      outputs: [score]
+      nodes:
+        z:     {model: encoder, inputs: [x]}
+        x_hat: {model: generator, inputs: [z]}
+        rec:   {model: dxx, inputs: [x, x_hat], outputs: [logit_rec, feature_rec]}
+        ref:   {model: dxx, inputs: [x, x], outputs: [logit_ref, feature_ref]}
+        score: {uri: /layer/kalfa/l1_distance, inputs: [feature_rec, feature_ref]}
+
+# metrics: definitions. Everything written here is computed on all three sets every turn and written
+# to the history (train/auroc, val/auroc, test/auroc). The exception keys: every: k (frequency),
+# sets: [...] (silencing a meaningless set). The prediction = the output of the training.predicts model,
+# the target = the target: true column.
+metrics:
+  auroc:             {uri: /metric/torchmetrics/binary_auroc}
+  average_precision: {uri: /metric/torchmetrics/binary_average_precision}
+
+# losses: loss definitions; the signature (models, batch, **params), a scalar or a mapping of terms.
+# Optimizers pick them with loss: name. Reported on the three sets every turn, like the metrics.
+# The replaceable parts (criterion) are params; the set of a rule targets them.
+losses:
+  adv_d: {uri: /objective/myexample/alad_discriminator, params: {criterion: bce_logits, latent_dim: $latent_dim$}}
+  adv_g: {uri: /objective/myexample/alad_generator, params: {criterion: bce_logits, latent_dim: $latent_dim$, feature_matching: 0.0}}
+
+# optimizers: every optimizer minimizes one loss; the parameters it minimizes over follow
+# from the models that pick it (optimizer: name). The names (g, d) are only names,
+# not roles. An unused definition is an error.
+optimizers:
+  g: {uri: /optimizer/torch/adam, params: {lr: $lr$, betas: [0.5, 0.999]}, loss: adv_g}
+  d: {uri: /optimizer/torch/adam, params: {lr: $lr$, betas: [0.5, 0.999]}, loss: adv_d}
+
+# training: the training loop. The fixed keys: turn, predicts, epochs or steps, checkpoint,
+# stop, rules, loss (the short form with a single optimizer). Every other key goes to the turn's params;
+# not in the turn's signature is an error (amp, grad_clip, accumulate are valid in the std turn).
+training:
+  # turn: what happens in one turn. The std alternating: every batch walks the optimizers in
+  # the order, each computes its own loss and updates its own models; steps is the step count per
+  # optimizer (WGAN n_critic = steps: {d: 5, g: 1}). supervised is its short name with a single
+  # optimizer. A custom turn lego is only for regimes that do not fit this pattern.
+  turn: {uri: alternating, params: {order: [d, g], steps: {d: 1, g: 1}}}
+  # predicts: which model's output counts as "the prediction" (the metrics, the plots,
+  # kalfa predict). Not written with a single model.
+  predicts: anomaly_score
+  epochs: $epochs$
+  # checkpoint: null saves nothing; best, last, snapshot or your own lego.
+  checkpoint: null
+  # stop: the list of stopping triggers; when empty it runs for epochs. The watched value
+  # can only be train/ or val/, watching test/ is an error.
+  stop: []
+  # report: which one is "the model" at the end of training: best (the checkpoint's best) or last.
+  # The last weights are always written under final/; the checkpoint only manages the intermediate records.
+  report: last
+
+# plots: plot legos that run once training ends; they read the prediction, the target and the history by name.
+# A custom plot needing an extra input is bound with inputs: {param: bus_key}.
+plots:
+  score_histogram: {uri: /plot/kalfa/class_histogram}
+  roc:             {uri: /plot/torchmetrics/binary_roc}
+  pr_curve:        {uri: /plot/torchmetrics/binary_precision_recall_curve}
+  architecture:    {uri: /plot/kalfa/architecture}
+
+# record: the record directory. $datetime$ is a built in placeholder. The directory holds: the resolved config
+# (aliases and params expanded, runnable again on its own), the weights, the fitted
+# preprocessors, the history, the predictions, the plots, the event stream.
+record: runs/alad_$datetime$
+
+# Running:
+#   kalfa run config.yaml                               training, the record directory from record
+#   kalfa run config.yaml -p epochs=5                   a param override
+#   kalfa check config.yaml                             validation without running (an unknown key,
+#                                                       an unresolvable name, a role mismatch, a column
+#                                                       matching no glob)
+#   kalfa predict runs/alad_x --data new.parquet        predictions from the record (the predicts model)

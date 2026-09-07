@@ -1,0 +1,74 @@
+# 05: autoencoder. The encoder and the decoder are separate models on the same optimizer; ae is a composite model (no parameters of
+# its own) and the prediction. Flattening is the encoder's first layer (flatten), the decoder returns to the image shape (unflatten); the
+# target is the input itself: the mse criterion and the rmse metric take the model's input with target: input (an adapter key, on the definition).
+# The latent code: kalfa predict runs/ae_x --model encoder (the encoder itself, not the composite).
+# It fits the alternating turn: one optimizer, one loss.
+
+include:
+  - /alias/kalfa/vision
+
+params:
+  epochs: 20
+  lr: 1.0e-3
+  seed: 7
+
+seed: $seed$
+
+data:
+  source: {uri: image_folder, params: {path: data/mnist}}
+  split: {ratios: [0.9, 0.1, 0.0], seed: $seed$}
+  batch: 128
+  preprocessors:
+    to_tensor: {uri: to_tensor}
+  fields:
+    image: {preprocessors: [to_tensor]}
+  feed: table
+
+model:
+  models:
+    encoder:
+      optimizer: main
+      inputs: [image]
+      outputs: [z]
+      nodes:
+        - {uri: flatten}
+        - {uri: linear_relu, params: {out_features: 256}}
+        - {uri: linear, params: {out_features: 32}}
+    decoder:
+      optimizer: main
+      inputs: [z]
+      outputs: [x_hat]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 256}}
+        - {uri: linear, params: {out_features: 784}}
+        - {uri: unflatten, params: {shape: [1, 28, 28]}}
+    ae:
+      inputs: [image]
+      outputs: [x_hat]
+      nodes:
+        z:     {model: encoder, inputs: [image]}
+        x_hat: {model: decoder, inputs: [z]}
+
+metrics:
+  recon_rmse: {uri: rmse, target: input}
+
+losses:
+  rec: {uri: mse, target: input}
+
+optimizers:
+  main: {uri: adam, params: {lr: $lr$}, loss: rec}
+
+training:
+  turn: supervised
+  predicts: ae
+  epochs: $epochs$
+  stop:
+    - {uri: plateau, params: {monitor: val/recon_rmse, patience: 5}}
+  checkpoint: {uri: best, params: {monitor: val/recon_rmse}}
+  report: best
+
+plots:
+  loss_curve:      {uri: loss_curve}
+  reconstructions: {uri: image_pairs, params: {n: 8}}
+
+record: runs/ae_$datetime$

@@ -1,0 +1,73 @@
+include:
+  - /alias/kalfa/tabular
+
+params:
+  epochs: 100
+  lr: 1.0e-3
+  seed: 7
+
+seed: $seed$
+
+data:
+  source: {uri: parquet, params: {path: housing.parquet}}
+  split: {ratios: [0.7, 0.15, 0.15], seed: $seed$}
+  batch: 128
+  feed: table
+  preprocessors:
+    std_scaler: {uri: standard_scaler}
+    target_std: {uri: standard_scaler}
+  fields:
+    "x*":  {preprocessors: [std_scaler]}
+    price: {target: true, preprocessors: [target_std]}
+
+model:
+  models:
+    net:
+      # a single model: the optimizer can be defined inline, no optimizers section needed
+      optimizer: {uri: adam, params: {lr: $lr$}}
+      inputs: [x]
+      outputs: [y]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 128}}
+        - {uri: linear_relu, params: {out_features: 128}}
+        - {uri: linear, params: {out_features: 1}}
+
+metrics:
+  rmse: {uri: rmse}
+  mae:  {uri: mae}
+
+losses:
+  loss_mse:     {uri: mse}
+  loss_huber:   {uri: huber, params: {delta: 1.0}}
+  loss_mae:     {uri: mae}
+  loss_logcosh: {uri: log_cosh}
+
+training:
+  turn: supervised
+  loss: loss_mse
+  epochs: $epochs$
+  # rules: evaluated at the end of every turn in list order, effective in the next turn.
+  # A rule that fired stays sticky (it never closes again). after: this rule is not evaluated at all
+  # until the named rule fires; that is how a chain is built. Among rules writing the same key the last one wins.
+  rules:
+    - name: to_huber
+      when: {uri: after_epoch, params: {at: 50}}
+      set: {loss: loss_huber}
+    - name: to_mae
+      after: to_huber
+      when: {uri: metric_below, params: {monitor: train/loss_huber, value: 0.01}}
+      set: {loss: loss_mae}
+    - name: to_logcosh
+      after: to_mae
+      when: {uri: plateau, params: {monitor: val/loss_mae, patience: 5}}
+      set: {loss: loss_logcosh}
+  stop:
+    - {uri: plateau, params: {monitor: val/rmse, patience: 6}}
+  checkpoint: {uri: best, params: {monitor: val/rmse}}
+  report: best
+
+plots:
+  loss_curve:   {uri: loss_curve}
+  pred_vs_true: {uri: pred_vs_true}
+
+record: runs/housing_$datetime$

@@ -1,0 +1,57 @@
+# 03: time series. The sequential split, series grouping by site_id (the split is sequential inside every series, a window does not
+# cross a series), the window 168 and horizon 24 (multi step) feed, the validation and test windows take context from the previous set
+# at the split boundary. The model is a GRU: it takes (batch, window, features), a 24 wide output from the last step; rmse is averaged
+# over the 24 steps, in the original scale.
+
+include:
+  - /alias/kalfa/tabular
+
+params:
+  epochs: 30
+  lr: 1.0e-3
+  seed: 7
+
+seed: $seed$
+
+data:
+  source: {uri: parquet, params: {path: energy.parquet}}
+  split: {uri: sequential, params: {ratios: [0.7, 0.15, 0.15], group: site_id}}
+  batch: 64
+  preprocessors:
+    std_scaler: {uri: standard_scaler}
+    target_std: {uri: standard_scaler}
+  fields:
+    "x*":  {preprocessors: [std_scaler]}
+    load:  {target: true, preprocessors: [target_std]}
+  feed: {uri: window, params: {size: 168, horizon: 24, context: true, group: site_id}}
+
+model:
+  optimizer: {uri: adam, params: {lr: $lr$}}
+  inputs: [x]
+  outputs: [y]
+  nodes:
+    - {uri: gru, params: {hidden: 64}}
+    - {uri: last_step}
+    - {uri: linear, params: {out_features: 24}}
+
+metrics:
+  rmse: {uri: rmse}
+  mae:  {uri: mae}
+
+losses:
+  loss_mse: {uri: mse}
+
+training:
+  turn: supervised
+  loss: loss_mse
+  epochs: $epochs$
+  stop:
+    - {uri: plateau, params: {monitor: val/rmse, patience: 5}}
+  checkpoint: {uri: best, params: {monitor: val/rmse}}
+  report: best
+
+plots:
+  loss_curve: {uri: loss_curve}
+  forecast:   {uri: forecast_samples, params: {n: 6}}
+
+record: runs/energy_$datetime$

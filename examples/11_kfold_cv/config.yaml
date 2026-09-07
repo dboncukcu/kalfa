@@ -1,0 +1,29 @@
+# 11: k fold cross validation. The config of 01 is the lower layer (include), this file overrides split and record on top.
+# The held out fold is the test set; the CV estimate is the test/ metrics and exists in every fold. valid is carved from the
+# training part with the val: ratio; since 01's early stopping and checkpoint watch val/rmse, val: 0.15 is given here.
+# Without val there is no valid set: training.stop: [] and checkpoint: last are written, the fold runs for epochs
+# (making the held out fold the valid set would point early stopping at it and make the CV estimate optimistic; kalfa does not allow it).
+#   for i in 0 1 2 3 4; do kalfa run 11_kfold_cv.yaml -p fold=$i; done
+#   kalfa collect runs/cv_housing_*        the mean and deviation of the test/ metrics over the folds, the last values
+#                                          per fold and the history; cv.json
+# The same path as an out of process sweep; there is no in process Map in v1.
+
+include:
+  - 01_mlp_regression.yaml
+
+params:
+  fold: 0
+
+data:
+  split: {uri: kfold, params: {k: 5, fold: $fold$, val: 0.15, seed: $seed$}}
+
+record: runs/cv_housing_$fold$
+
+# the form without valid (no early stopping, the fold runs for epochs):
+# data:
+#   split: {uri: kfold, params: {k: 5, fold: $fold$, seed: $seed$}}
+# training:
+#   stop: []
+#   rules: []          # 01's rules watch val/; a missing set is a check error
+#   checkpoint: last
+#   report: last

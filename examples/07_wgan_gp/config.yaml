@@ -1,0 +1,88 @@
+# 07: conditional WGAN GP. Two models, two optimizers, two losses; the alternating turn with order [d, g], steps {d: 5, g: 1}
+# (n_critic), fresh_batch: true draws a new real batch for every critic step. The gradient penalty is inside the wgan_gp_d loss
+# (the gradient of the gradient; needs_grad: train set only, sets: [train]), the loss reads the condition label from the batch.
+# The generator's EMA (generator.ema), FID every five turns against the validation set with the EMA generator, the checkpoint by val/fid.
+# Generation at the end of training and with kalfa generate, from the EMA generator. It fits the alternating turn.
+
+include:
+  - /alias/kalfa/vision
+
+plugins:
+  - dcgan_legos
+
+params:
+  epochs: 100
+  lr: 1.0e-4
+  latent: 128
+  n_classes: 10
+  seed: 7
+
+seed: $seed$
+device: cuda                      # a device lego (auto | cpu | cuda | mps | {uri, params}); an unavailable device is an error
+
+data:
+  source: {uri: image_folder, params: {path: data/celeba64}}
+  split: {ratios: [0.95, 0.05, 0.0], seed: $seed$}
+  batch: {size: 64, drop_last: true}
+  preprocessors:
+    to_signed: {uri: to_tensor_signed}
+  fields:
+    image: {preprocessors: [to_signed]}
+    label: {target: true}
+  feed: table
+
+model:
+  templates:
+    cond_embed:
+      variables: {n_classes: {required: true}}
+      nodes:
+        - {uri: embedding, params: {num: $n_classes$, dim: 64}}
+  models:
+    generator:
+      optimizer: g
+      ema: {decay: 0.999}
+      init: {weights: {uri: normal, params: {std: 0.02}}}
+      inputs: [z, label]
+      outputs: [image]
+      nodes:
+        y:     {template: cond_embed, params: {n_classes: $n_classes$}, inputs: [label]}
+        zy:    {uri: concat, params: {dim: 1}, inputs: [z, y]}
+        image: {uri: dcgan_generator, params: {in_dim: 192, channels: 64}, inputs: [zy]}
+    critic:
+      optimizer: d
+      init: {weights: {uri: normal, params: {std: 0.02}}}
+      inputs: [image, label]
+      outputs: [score]
+      nodes:
+        y:     {template: cond_embed, params: {n_classes: $n_classes$}, inputs: [label]}
+        score: {uri: dcgan_critic, params: {channels: 64, cond_dim: 64}, inputs: [image, y]}
+
+metrics:
+  fid: {uri: fid, params: {model: generator.ema, latent: $latent$, conditional: true, n: 2000}, every: 5, sets: [valid]}
+  samples: {uri: sample_writer, params: {sampler: generate, n: 16}, every: 5, sets: [valid]}
+
+losses:
+  wgan_d: {uri: wgan_gp_d, params: {generator: generator, critic: critic, latent: $latent$, gp_weight: 10, conditional: true}, sets: [train]}
+  wgan_g: {uri: wgan_g,    params: {generator: generator, critic: critic, latent: $latent$, conditional: true}}
+
+optimizers:
+  d: {uri: adam, params: {lr: $lr$, betas: [0.0, 0.9]}, loss: wgan_d}
+  g: {uri: adam, params: {lr: $lr$, betas: [0.0, 0.9]}, loss: wgan_g}
+
+training:
+  turn: {uri: alternating, params: {order: [d, g], steps: {d: 5, g: 1}, fresh_batch: true}}
+  epochs: $epochs$
+  checkpoint: {uri: best, params: {monitor: val/fid}}
+  report: best
+  stop: []
+
+generate:
+  uri: gan_sampler
+  params: {model: generator.ema, latent: $latent$, conditional: true, n_classes: $n_classes$, n: 64}
+
+plots:
+  loss_curve: {uri: loss_curve, params: {series: [train/wgan_d, train/wgan_g, val/fid]}}
+  samples_gif: {uri: samples_gif}
+  samples_matrix: {uri: samples_matrix, params: {n: 8}}
+
+record: runs/wgan_$datetime$
