@@ -89,6 +89,87 @@ stay on the cpu without it. Your own device lego (`/device/acme/tpu`) plugs into
 `--layers` shows the layer tree and the overridden leaves. The set table is from the file header, before the
 filters; `--load` runs the data block and prints the real sizes.
 
+## Python API
+
+Every command is a function and the command line is a thin shell over them: `kalfa.api` holds `check`, `run`,
+`resume`, `predict` and `generate`, `kalfa.collect` the collectors, `kalfa.sweep` the sweep plan. `paths` is a list
+of config files (the same layering as on the command line), `sets` is `--set` written as `(dotted path, value)`
+pairs, and `-p lr=1e-4` is `("params.lr", 1e-4)`.
+
+```python
+from kalfa.api import check, generate, predict, resume, run
+
+prepared = check(["config.yaml"], load=True)              # nothing trains; load=True measures the real set sizes
+result = run(["config.yaml"], sets=[("training.epochs", 3), ("record", "runs/nb_$datetime$")])
+longer = resume(result.record, sets=[("training.epochs", 10)])
+prediction = predict(result.record, data="new.parquet")
+samples = generate(result.record, which="best")
+```
+
+| Function | Returns | What it carries |
+|---|---|---|
+| `check(paths, sets=None, load=False)` | `Prepared` | `problems`, `errors`, `warnings`, `sizes` (the set table), `loaded` (real sizes), `implicit` (the implicit bindings), `document`, `analysis`, `pipeline`, `dump()` (the `flow.yaml` document) |
+| `run(paths, sets=None, executor="serial", workers=None)` | `RunResult` | `record` (the directory it opened), `report` (tezgah's, `report.outputs["history"]` is the per turn table), `device` |
+| `resume(run_dir, sets=None, executor="serial", workers=None)` | `RunResult` | the same, in a new record directory |
+| `predict(run_dir, model=None, which=None, data=None, device=None)` | `Prediction` | `path`, `table` (a DataFrame), `model` |
+| `generate(run_dir, which=None, device=None)` | `Generated` | `path`, `samples` |
+| `collect_root(root, out=None)` in `kalfa.collect` | mapping | the sweep or fold table and the best point; `load_runs`, `fold_summary`, `sweep_table` are the pieces |
+| `plan(paths, sets=None, record=None)` in `kalfa.sweep` | `Plan` | the points of a sweep without running any of them |
+
+`check` never raises, it returns what it found; `run` raises `ConfigError` on an error and warns (`CirakWarning`)
+for the rest. `print(render_problems(prepared.problems))` from `cirak.errors` prints them the way the command line
+does. Writing a lego needs no plugin file here: `@kalfa.lego` in the session registers it like any other.
+
+**In a notebook.** The kernel has to be this project's environment, because tezgah and cirak come in as path
+dependencies:
+
+```
+uv add --dev jupyterlab ipykernel
+uv run jupyter lab                    # the kernel is the project venv; paths resolve from the notebook's folder
+```
+
+A run blocks the cell and draws its usual progress bar. Four things differ from the command line:
+
+```python
+import json
+import pandas as pd
+from IPython.display import Image
+from kalfa.api import run
+from tezgah import load_run
+
+result = run(["config.yaml"], sets=[("record", "runs/nb_$datetime$")])   # 1. a fresh directory every time
+
+history = pd.DataFrame(result.report.outputs["history"])                 # 2. the metric table, one row per turn
+history.plot(y=["train/loss_mse", "val/rmse"])
+lines = [json.loads(line) for line in open(f"{result.record}/history.jsonl")]
+pd.DataFrame(lines)[["turn", "global_step", "lr/model", "rules"]].tail()  # what the record adds
+
+record = load_run(result.record)                                         # 3. tezgah's record: status, timings, events
+Image(f"{result.record}/plots/loss_curve.png")
+```
+
+1. A non empty record directory is an error, so a cell you run twice needs `$datetime$` in `record` or a different
+   path each time.
+2. `result.report.outputs` holds `history` and `predictions`. The in memory `history` is the metric table, one row
+   per turn in order; `history.jsonl` carries the same values plus the bookkeeping (`turn`, `global_step`,
+   `lr/<optimizer>`, the rules that fired), and `resolved.yaml` and `flow.yaml` say what ran.
+3. `load_run` and `RunCatalog` from tezgah read finished runs, so a notebook can compare several record
+   directories without rerunning anything.
+4. Registering the same URI twice with a different function is an error, which is what a re-run cell does. Restart
+   the kernel after editing a lego, or drop the entry first:
+
+```python
+from cirak.registry import registry
+
+for uri in ("/criterion/acme/asymmetric",):
+    registry._entries.pop(uri, None)
+    registry._resolved.pop(uri, None)
+```
+
+Interrupting a cell stops the run where it is; `resume(record)` continues from the last checkpoint into a new
+directory. On a GPU box `sets=[("device", "cuda")]` picks the device, and `predict` and `generate` take `device`
+the same way.
+
 ## The record directory
 
 The `record` key gives the directory, `$datetime$` is filled once at the start of the run. A non empty directory is
