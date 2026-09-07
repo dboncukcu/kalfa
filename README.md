@@ -7,17 +7,26 @@ graph, tezgah runs it. The full definition of the surface is `CONFIG.md`, the cl
 
 ## Installation
 
-Python 3.13 and above. `../tezgah` and `../cirak` are path dependencies (editable installs); the three repositories
-sit side by side.
+Python 3.13 and above.
 
 ```
+pip install kalfa            # or: uv add kalfa
+kalfa --help
+```
+
+The dependencies come with it: cirak and tezgah (the recipe compiler and the pipeline runner), torch, pandas,
+pyarrow, scikit-learn, torchmetrics, matplotlib, pillow, scipy, ruamel.yaml, tqdm. `pip install "kalfa[sweep]"`
+adds optuna for the fed back sweep strategy.
+
+The reference configs, the examples and the test suite live in the repository:
+
+```
+git clone https://github.com/dboncukcu/kalfa.git
+cd kalfa
 uv sync
 uv run kalfa --help
 uv run pytest          # about 260 tests, half a minute
 ```
-
-Dependencies: torch, pandas, pyarrow, scikit-learn, torchmetrics, matplotlib, pillow, scipy, ruamel.yaml, tqdm;
-`uv sync --extra sweep` adds optuna for the fed back sweep strategy.
 
 ## First run
 
@@ -120,12 +129,11 @@ samples = generate(result.record, which="best")
 for the rest. `print(render_problems(prepared.problems))` from `cirak.errors` prints them the way the command line
 does. Writing a lego needs no plugin file here: `@kalfa.lego` in the session registers it like any other.
 
-**In a notebook.** The kernel has to be this project's environment, because tezgah and cirak come in as path
-dependencies:
+**In a notebook.** The kernel has to be an environment kalfa is installed in:
 
 ```
-uv add --dev jupyterlab ipykernel
-uv run jupyter lab                    # the kernel is the project venv; paths resolve from the notebook's folder
+pip install jupyterlab ipykernel
+jupyter lab                           # paths resolve from the notebook's folder
 ```
 
 A run blocks the cell and draws its usual progress bar. Four things differ from the command line:
@@ -269,13 +277,12 @@ synthetic data with `--set` overrides that keep it small on a CPU and checks the
 `src/kalfa/templates/kalfa.yaml`), `<name>.flow.yaml` the expanded graph of `kalfa check --dump`; both are
 generated, never edited; `tests/test_dump.py` checks that they are current and structurally equal to a fresh dump,
 `tests/test_examples.py` that the example copies match, `tests/test_docs.py` that `DOCS.md` matches the registry
-(`uv run kalfa docs --write DOCS.md` after touching a lego). cirak copies the recipes and dumps as its own fixtures.
+(`uv run kalfa docs --write DOCS.md` after touching a lego).
 
 **Test rules.** `uv run pytest` must stay green; every lego has a unit test under `tests/test_std_*.py`; every
 reference config has an end to end run test on synthetic data, CPU only, no network; test plugins live under
 `tests/plugins/`; the reinstalled environment (`uv sync --reinstall`) runs the suite before a release.
 
-**Versions and releases.** The three packages are released in dependency order: tezgah first, then cirak (which
-depends on tezgah), then kalfa (which pins `tezgah>=` and `cirak>=` in `pyproject.toml`); bump the version, run the
-suite of each repository against the reinstalled environment, then build (`uv build`). kalfa is 0.2.0 with tezgah
-and cirak 0.2.0.
+**Versions and releases.** kalfa pins `tezgah>=` and `cirak>=` in `pyproject.toml`; bump the version, run the
+suite against the reinstalled environment (`uv sync --reinstall`), then build (`uv build`). kalfa is 0.2.0 and
+needs tezgah and cirak 0.2.0 or later.

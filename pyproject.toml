@@ -30,6 +30,11 @@ dependencies = [
     "scipy>=1.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/dboncukcu/kalfa"
+Repository = "https://github.com/dboncukcu/kalfa"
+Issues = "https://github.com/dboncukcu/kalfa/issues"
+
 [project.scripts]
 kalfa = "kalfa.cli:main"
 
@@ -46,10 +51,6 @@ dev = [
     "optuna>=3.6",
     "pytest>=8",
 ]
-
-[tool.uv.sources]
-tezgah = { path = "../tezgah", editable = true }
-cirak = { path = "../cirak", editable = true }
 
 [build-system]
 requires = ["hatchling"]
