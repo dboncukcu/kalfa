@@ -1,6 +1,6 @@
-"""The kalfa registration decorator: cirak's ``lego`` with the kind taken from the URI."""
+"""The kalfa registration decorator: cirak's ``register`` with the kind taken from the URI."""
 
-from cirak import lego as cirak_lego
+from cirak import register
 
 from .kinds import cirak_kind, kind_of
 
@@ -12,4 +12,4 @@ def lego(uri, target=None, *, description=None, **facts):
     if "kind" in facts:
         raise ValueError(f"{uri}: kalfa.lego takes the kind from the first segment of the URI; drop kind=")
     kind = kind_of(uri)
-    return cirak_lego(uri, target, description=description, kind=cirak_kind(kind), **facts)
+    return register(uri, target, description=description, kind=cirak_kind(kind), **facts)
