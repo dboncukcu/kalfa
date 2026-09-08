@@ -8,8 +8,8 @@ import torch
 from ..registration import lego
 from .feed import sized
 
-from .runtime import (Context, active_entries, collect_results, named_outputs, call_model, observe_all, resolve_model,
-                      set_modes, to_device, tracker_for, turn_generator)
+from .runtime import (Context, active_entries, collect_results, expand_targets, named_outputs, call_model,
+                      observe_all, resolve_model, set_modes, to_device, tracker_for, turn_generator)
 
 
 @lego("/lego/kalfa/evaluate", returns="metrics", bus=["device", "prep", "record"],
@@ -41,8 +41,13 @@ def evaluate(models, emas, composites, counters, effects, loader, set, losses, m
     return collect_results(trackers)
 
 
-def prediction_table(model, loader, prep, dataset, device=None):
-    """The predictions DataFrame: row id, targets inverted, pred_<wire> inverted or decoded, raw_<wire>."""
+def prediction_table(model, loader, prep, dataset, device=None, target_map=None):
+    """The predictions DataFrame: row id, targets inverted, pred_<wire> inverted or decoded, raw_<wire>.
+
+    With a target map (``training.targets``) every wire is cut into the fields it predicts and each block is
+    inverted with that field's own chain; without one a single wire as wide as all the targets together is cut the
+    same way, and nothing else can be paired.
+    """
     import pandas
 
     model.eval()
@@ -78,34 +83,48 @@ def prediction_table(model, loader, prep, dataset, device=None):
         else:
             for position in range(width):
                 columns[f"raw_{wire}_{position}"] = matrix[:, position]
+        if target_map:
+            names = expand_targets(target_map.get(wire), dataset.targets)
+            _write_blocks(columns, prep, matrix, names, widths, set_name, wire, suffix=True)
+            continue
         decoder = prep.decoder(single) if single is not None else None
         if decoder is not None:
             columns[f"pred_{wire}"] = prep.decode(single, matrix, set_name)
         elif width == total and total:
-            offset = 0
-            for name in dataset.targets:
-                span = widths[name]
-                block = matrix[:, offset:offset + span]
-                offset += span
-                label = f"pred_{wire}" if single is not None else f"pred_{wire}_{name}"
-                if span == 1:
-                    columns[label] = prep.inverse(name, block[:, 0], set_name)
-                else:
-                    for position in range(span):
-                        columns[f"{label}_{position}"] = prep.inverse(name, block[:, position], set_name)
+            _write_blocks(columns, prep, matrix, list(dataset.targets), widths, set_name, wire,
+                          suffix=single is None)
     return pandas.DataFrame(columns)
+
+
+def _write_blocks(columns, prep, matrix, names, widths, set_name, wire, suffix=True):
+    """Cut a wire into the blocks of the fields it predicts and invert every block with that field's chain."""
+    offset = 0
+    for name in names:
+        span = widths.get(name, 1)
+        block = matrix[:, offset:offset + span]
+        offset += span
+        if block.shape[1] == 0:
+            continue
+        label = f"pred_{wire}_{name}" if suffix else f"pred_{wire}"
+        if prep.decoder(name) is not None:
+            columns[label] = prep.decode(name, block, set_name)
+        elif span == 1:
+            columns[label] = prep.inverse(name, block[:, 0], set_name)
+        else:
+            for position in range(span):
+                columns[f"{label}_{position}"] = prep.inverse(name, block[:, position], set_name)
 
 
 @lego("/lego/kalfa/predict", returns="predictions", bus=["record", "device"],
             description="Predict the test set with the report model, invert the target chain, "
                         "write predictions.parquet")
-def predict(models, composites, loader, prep, predicts, set, record=None, device=None):
+def predict(models, composites, loader, prep, predicts, set, target_map=None, record=None, device=None):
     import pandas
 
     if loader is None or sized(loader.dataset) == 0 or predicts is None:
         return pandas.DataFrame()
     model = resolve_model(predicts, models, composites)
-    table = prediction_table(model, loader, prep, loader.dataset, device)
+    table = prediction_table(model, loader, prep, loader.dataset, device, target_map)
     if len(table) == 0:
         return pandas.DataFrame()
     if record is not None:

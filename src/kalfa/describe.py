@@ -156,7 +156,8 @@ def table(headers, rows, style, indent="  ", width=None):
             total -= take
         rows = [[clip(cell, widths[position]) for position, cell in enumerate(row)] for row in rows]
     def row_text(row):
-        return "  ".join(ljust(row[position], widths[position]) for position in range(len(headers))).rstrip()
+        cells = [row[position] if wide(row[position]) else "" for position in range(len(headers))]
+        return "  ".join(ljust(cell, widths[position]) for position, cell in enumerate(cells)).rstrip()
     span = sum(widths) + 2 * (len(headers) - 1)
     lines = [indent + style.dim(row_text(headers)), indent + style.dim("─" * span)]
     lines.extend(indent + row_text(row) for row in rows)
@@ -207,6 +208,31 @@ def owners_of(prepared):
     fields = params.get("fields") or {}
     owners, _ = assign_fields(columns, list(fields))
     return owners, columns
+
+
+def target_fields(prepared):
+    """The target fields in the order the plan builds them: pattern by pattern, column by column."""
+    params = data_params(prepared) or {}
+    fields = params.get("fields") or {}
+    owners, columns = owners_of(prepared)
+    found = []
+    for pattern, spec in fields.items():
+        if (spec or {}).get("target"):
+            found.extend([column for column in columns if owners.get(column) == pattern])
+    return found
+
+
+def target_slots(prepared):
+    """The place every target field takes in the output wire that predicts it, from training.targets."""
+    from .std.runtime import expand_targets
+
+    mapping = block_params(prepared, "after").get("targets") or {}
+    fields = target_fields(prepared)
+    slots = {}
+    for wire, selector in mapping.items():
+        for position, name in enumerate(expand_targets(selector, fields)):
+            slots[name] = (wire, position)
+    return slots
 
 
 def summary_section(prepared, style, width, probe=None):
@@ -430,7 +456,10 @@ def model_section(prepared, style, width, probe=None):
             facts.append(f"ema decay {number(emas[name], style)}")
         if probe is not None and name in probe.parameters:
             total, trainable = probe.parameters[name]
-            facts.append(f"{count(total)} parameters" + ("" if total == trainable else f" ({count(trainable)} trainable)"))
+            facts.append(f"{count(total)} parameters"
+                         + ("" if total == trainable else f" ({count(trainable)} trainable)"))
+        elif probe is not None:
+            facts.append("parameters after the first batch")
         lines.append(f"  {style.bold(name)}   {style.dim(f'  {DOT}  '.join(facts))}")
         lines.extend(block_lines(blocks, name, style, width=width))
         lines.append("")
@@ -484,10 +513,34 @@ def sets_of(keys, style=PLAIN):
     every = keys.get("every")
     if every:
         text += style.dim(f"  every {number(every, style)}")
-    for name in ("output", "target"):
-        if keys.get(name):
-            text += f"  {name} {keys[name]}"
     return text
+
+
+def compares_of(keys, style=PLAIN):
+    """The wire and the target fields a definition compares, when it names either."""
+    keys = keys or {}
+    output, target = keys.get("output"), keys.get("target")
+    if output is None and target is None:
+        return ""
+    selector = target if isinstance(target, str) else (", ".join(target) if target else "")
+    return f"{output or '—'} {ARROW} {selector or '—'}"
+
+
+def definition_table(label, definitions, keys_table, style, width, notes):
+    if not definitions:
+        return []
+    keys_table = keys_table or {}
+    rows = []
+    for name, call in definitions.items():
+        keys = keys_table.get(name) or {}
+        rows.append([name, call_text(unwrap(call), style=style), compares_of(keys, style), sets_of(keys, style),
+                     style.dim(notes.get(name, ""))])
+    if any(row[2] for row in rows):
+        headers = [label, "lego", "compares", "reported on", ""]
+    else:
+        rows = [[row[0], row[1], row[3], row[4]] for row in rows]
+        headers = [label, "lego", "reported on", ""]
+    return ["", *table(headers, rows, style, width=width)]
 
 
 def training_section(prepared, style, width, probe=None):
@@ -507,6 +560,15 @@ def training_section(prepared, style, width, probe=None):
                                     f"{style.dim('predicts')} {params.get('predicts') or '—'}", style))
     if extra:
         lines.append(field_line("", extra, style))
+    from .std.runtime import expand_targets
+
+    mapping = block_params(prepared, "after").get("targets") or {}
+    if mapping:
+        fields = target_fields(prepared)
+        rows = [[wire, ARROW, ", ".join(expand_targets(selector, fields)) or str(selector)]
+                for wire, selector in mapping.items()]
+        lines.append("")
+        lines.extend(table(["output wire", "", "predicts the target fields"], rows, style, width=width))
     rows = []
     for item in optimizers:
         rows.append([item["name"], call_text({"uri": item["uri"], "params": item.get("params")}, style=style),
@@ -518,22 +580,10 @@ def training_section(prepared, style, width, probe=None):
         lines.extend(table(["optimizer", "lego", "trains", "loss", "schedule"], rows, style, width=width))
     active = {item.get("loss") for item in optimizers}
     losses = group_of(document, "losses")
-    rows = []
-    for name, call in losses.items():
-        note = "active at turn 1" if name in active else "held for the rules"
-        rows.append([name, call_text(unwrap(call), style=style),
-                     sets_of((params.get("losses_keys") or {}).get(name), style), style.dim(note)])
-    if rows:
-        lines.append("")
-        lines.extend(table(["loss", "lego", "reported on", ""], rows, style, width=width))
-    metrics = group_of(document, "metrics")
-    rows = []
-    for name, call in metrics.items():
-        rows.append([name, call_text(unwrap(call), style=style),
-                     sets_of((params.get("metrics_keys") or {}).get(name), style)])
-    if rows:
-        lines.append("")
-        lines.extend(table(["metric", "lego", "reported on"], rows, style, width=width))
+    notes = {name: "active at turn 1" if name in active else "held for the rules" for name in losses}
+    lines.extend(definition_table("loss", losses, params.get("losses_keys"), style, width, notes))
+    lines.extend(definition_table("metric", group_of(document, "metrics"), params.get("metrics_keys"), style,
+                                  width, {}))
     lines.append("")
     checkpoint = params.get("checkpoint")
     lines.append(field_line("checkpoint", f"{pad(call_text(checkpoint, style=style) if checkpoint else 'none', 44)}"
@@ -603,6 +653,7 @@ def columns_section(prepared, style, width, probe=None):
     drop = list(params.get("drop") or [])
     owners, _ = owners_of(prepared)
     refs = column_refs(prepared)
+    wires = target_slots(prepared)
     produced = {}
     slots = {}
     if probe is not None and probe.prep is not None:
@@ -627,7 +678,9 @@ def columns_section(prepared, style, width, probe=None):
             role = f"read by {refs[column]}" if column in refs else "not a field"
             rows.append([column, dtype, "—", "—", role, "—"])
         elif spec.get("target"):
-            rows.append([column, dtype, pattern, chain, "target", column])
+            wire, position = wires.get(column, (None, None))
+            rows.append([column, dtype, pattern, chain, "target",
+                         column if wire is None else f"{wire}[{position}]"])
         else:
             span = slots.get(column)
             tensor = "x"

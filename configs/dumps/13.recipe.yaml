@@ -45,4 +45,5 @@ flow:
           kd: {}}, metrics_keys: {accuracy: {}}, predicts: student, epochs: 40, steps: null, rules: [{name: cool_down, 
             when: '@triggers.cool_down', set: {main.lr: 0.0001}, after: null}], stop: ['@triggers.stop_0'], checkpoint: {
         uri: /checkpoint/kalfa/best, params: {monitor: val/accuracy, mode: max}}}}
-  after: {block: after, params: {report: best, predicts: student, generate: null, plots_keys: {loss_curve: {}, confusion: {}}}}
+  after: {block: after, params: {report: best, predicts: student, targets: {}, generate: null, plots_keys: {loss_curve: {},
+        confusion: {}}}}

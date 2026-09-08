@@ -35,6 +35,6 @@ flow:
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {amp: true, 
           grad_clip: 1.0}, losses_keys: {ddpm: {}}, metrics_keys: {samples: {sets: [train], every: 5}}, predicts: unet, 
         epochs: 200, steps: null, rules: [], stop: [], checkpoint: {uri: /checkpoint/kalfa/last}}}
-  after: {block: after, params: {report: last, predicts: unet, generate: {uri: /generate/kalfa/ddpm_sampler, params: {
-            model: unet.ema, schedule: {uri: /schedule/kalfa/linear_betas, params: {steps: 1000}}, shape: [3, 32, 32], n: 
-            64}}, plots_keys: {loss_curve: {}}}}
+  after: {block: after, params: {report: last, predicts: unet, targets: {}, generate: {uri: /generate/kalfa/ddpm_sampler,
+        params: {model: unet.ema, schedule: {uri: /schedule/kalfa/linear_betas, params: {steps: 1000}}, shape: [3, 32, 
+              32], n: 64}}, plots_keys: {loss_curve: {}}}}

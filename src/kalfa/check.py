@@ -16,6 +16,7 @@ from cirak.registry import registry as default_registry
 from .driver import MODEL_KEYS, is_composite, is_shortcut, models_of
 from .kinds import kalfa_kind, RESERVED_BLOCKS, SETS, TRAINING_FIXED
 from .std.pre import RESERVED_FEATURES, RESERVED_INPUT, assign_fields, torch_dtype
+from .std.runtime import expand_targets
 from .std.source import STREAM_SOURCES
 from .std.source import header as read_header
 from .std.split import sizes as split_sizes
@@ -74,6 +75,7 @@ class Checker:
         self.present = {"train": True, "valid": None, "test": None}
         self.header = None
         self.weight_checks = []
+        self.target_checks = []
 
     def error(self, kind, message, path=(), hint=None):
         self.problems.append(error(kind, message, self.surface.source(path), hint))
@@ -98,6 +100,9 @@ class Checker:
         self.sweep_section()
         self.structural = len(self.problems)
         self.data_header()
+        self.target_fields_of(self.data.get("training") or {})
+        for section, name, entry, path in self.target_checks:
+            self.definition_target(section, name, entry, path)
         for name, definition, weights, path in self.weight_checks:
             self.weights_of(name, definition, weights, path)
 
@@ -513,9 +518,13 @@ class Checker:
                     if names is not None and "scaler" not in names:
                         self.error("amp_scaler", f"{section}.{name} needs gradients under amp, so its signature "
                                                  f"must take scaler", path)
-                for key in ("output", "target"):
-                    if entry.get(key) is not None and not isinstance(entry[key], str):
-                        self.error("invalid_value", f"{section}.{name}.{key} must be a name", path)
+                if entry.get("output") is not None and not isinstance(entry["output"], str):
+                    self.error("invalid_value", f"{section}.{name}.output must be a name", path)
+                if entry.get("target") is not None and not is_selector(entry["target"]):
+                    self.error("invalid_value", f"{section}.{name}.target must be a field name, a list of names "
+                                                f"or a glob", path)
+                elif self.compares(uri, facts):
+                    self.target_checks.append((section, name, entry, path))
         optimizers = self.data.get("optimizers") or {}
         if not isinstance(optimizers, dict):
             self.error("invalid_section", "optimizers must be a mapping", ("optimizers",))
@@ -608,6 +617,7 @@ class Checker:
             self.monitors_of(trigger, path, strict=True)
         self.rules_of(training.get("rules") or [])
         self.predicts_of(training)
+        self.targets_of(training)
         self.order_of(training, turn_uri)
 
     def parameters(self, target):
@@ -752,6 +762,117 @@ class Checker:
             elif resolve_alias(value, self.surface.aliases) is None:
                 self.error("unresolved_ref", f"{param}: {value!r} is no known {ref_type} lego",
                            path + ("params", param), hint="a short name needs its alias pack, or write the full URI")
+
+    def compares(self, uri, facts):
+        """Whether a definition takes predictions and a target, so that its target selector has to resolve."""
+        kind = kalfa_kind(uri)
+        if kind == "criterion":
+            return True
+        return kind == "metric" and (not facts.uses or "predictions" in facts.uses)
+
+    def target_fields(self):
+        """The target fields in the order the plan builds them: pattern by pattern, column by column."""
+        if self.header is None:
+            return None
+        data = self.data.get("data") or {}
+        drop = data.get("drop") or []
+        columns = [name for name in self.header["columns"] if name not in drop]
+        fields = data.get("fields") or {}
+        if not isinstance(fields, dict):
+            return None
+        owners, _ = assign_fields(columns, list(fields))
+        found = []
+        for pattern, spec in fields.items():
+            if (spec or {}).get("target"):
+                found.extend([column for column in columns if owners.get(column) == pattern])
+        return found
+
+    def output_wires(self):
+        """The output wires of the predicts model, None when they cannot be read from the config."""
+        training = self.data.get("training") or {}
+        name = training.get("predicts")
+        if name is None:
+            name = self.trained[0] if len(self.trained) == 1 else None
+        if isinstance(name, str) and name.endswith(".ema"):
+            name = name[:-4]
+        definition = self.models.get(name) if isinstance(name, str) else None
+        outputs = (definition or {}).get("outputs")
+        return list(outputs) if isinstance(outputs, list) else None
+
+    def target_selector(self, entry):
+        """The target a definition compares against: what it writes, else the training.targets entry of its wire."""
+        if entry.get("target") is not None:
+            return entry["target"]
+        targets = (self.data.get("training") or {}).get("targets")
+        if not isinstance(targets, dict) or not targets:
+            return None
+        if entry.get("output") is not None:
+            return targets.get(entry["output"])
+        return next(iter(targets.values())) if len(targets) == 1 else None
+
+    def definition_target(self, section, name, entry, path):
+        selector = self.target_selector(entry)
+        fields = self.target_fields()
+        if selector == "input" or not fields:
+            return
+        if selector is None:
+            if len(fields) > 1:
+                self.error("target_missing", f"{section}.{name} compares against a target and the data has "
+                                             f"{len(fields)} target fields; write target on the definition, or "
+                                             f"training.targets for the output wire it names", path)
+            return
+        self.selector_fields(selector, fields, f"{section}.{name}.target", path)
+
+    def selector_fields(self, selector, fields, label, path):
+        """A target selector against the target fields: a glob has to match, a name may still be a feed key."""
+        matched = expand_targets(selector, fields)
+        unknown = [field for field in matched if field not in fields]
+        if not matched:
+            self.error("target_not_a_field", f"{label} names {selector!r}, which matches no target field; the "
+                                             f"target fields are {fields}", path)
+        elif unknown:
+            self.warning("target_not_a_field", f"{label} names {unknown}, which the data does not carry as target "
+                                               f"fields; only a feed that writes them puts them in the batch", path)
+
+    def targets_of(self, training):
+        """The shape of training.targets: a mapping of output wire to selector (the fields need the header)."""
+        targets = training.get("targets")
+        if targets is None:
+            return
+        if not isinstance(targets, dict):
+            self.error("invalid_value", "training.targets must be a mapping of output wire to target fields",
+                       ("training", "targets"))
+            return
+        wires = self.output_wires()
+        for wire, selector in targets.items():
+            path = ("training", "targets", wire)
+            if wires is not None and wire not in wires:
+                self.error("targets_not_a_wire", f"training.targets names {wire!r}, which is no output wire of the "
+                                                 f"predicts model; the wires are {wires}", path)
+            if not is_selector(selector):
+                self.error("invalid_value", f"training.targets.{wire} must be a field name, a list of names or a "
+                                            f"glob", path)
+
+    def target_fields_of(self, training):
+        """training.targets against the target fields of the data, once the header is read."""
+        fields = self.target_fields()
+        if not fields:
+            return
+        targets = training.get("targets")
+        if targets is None:
+            wires = self.output_wires()
+            if wires is not None and len(fields) > 1 and len(wires) > 1:
+                self.error("targets_missing", f"the predicts model writes {len(wires)} output wires {wires} and the "
+                                              f"data has {len(fields)} target fields; write training.targets to say "
+                                              f"which wire predicts which fields", ("training",),
+                           hint="without it nothing pairs the outputs with the targets and the report writes no "
+                                "predictions")
+            return
+        if not isinstance(targets, dict):
+            return
+        for wire, selector in targets.items():
+            if is_selector(selector):
+                self.selector_fields(selector, fields, f"training.targets.{wire}", ("training", "targets", wire))
 
     def uses_predicts(self):
         for table in (self.losses, self.metrics):
@@ -1000,6 +1121,11 @@ class Checker:
                 other = None
             found[name] = other["rows"] if other else None
         return found
+
+
+def is_selector(value):
+    """A target selector: one field name, a glob, or a list of names."""
+    return isinstance(value, str) or (isinstance(value, list) and all(isinstance(item, str) for item in value))
 
 
 def turn_extras(registry, uri, target=None):

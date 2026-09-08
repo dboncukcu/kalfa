@@ -385,7 +385,8 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
         tag = ""
     if model is not None:
         tag += f"_{model}"
-    table = prediction_table(target, loader, prep, loader.dataset, device)
+    target_map = (document["flow"]["after"]["params"] or {}).get("targets")
+    table = prediction_table(target, loader, prep, loader.dataset, device, target_map)
     path = Path(run_dir) / f"predictions{tag}.parquet"
     table.to_parquet(path, index=False)
     return Prediction(str(path), table, name)

@@ -137,5 +137,5 @@ flow:
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {order: [d, g], steps: {d: 1, g: 1}}},
       turn_params: {}, losses_keys: {adv_d: {}, adv_g: {}}, metrics_keys: {auroc: {}, average_precision: {}}, predicts: 
         anomaly_score, epochs: 60, steps: null, rules: [], stop: [], checkpoint: null}}
-  after: {block: after, params: {report: last, predicts: anomaly_score, generate: null, plots_keys: {score_histogram: {},
-        roc: {}, pr_curve: {}, architecture: {}}}}
+  after: {block: after, params: {report: last, predicts: anomaly_score, targets: {}, generate: null, plots_keys: {
+          score_histogram: {}, roc: {}, pr_curve: {}, architecture: {}}}}

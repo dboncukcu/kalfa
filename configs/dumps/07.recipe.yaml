@@ -59,6 +59,6 @@ flow:
             fresh_batch: true}}, turn_params: {}, losses_keys: {wgan_d: {sets: [train]}, wgan_g: {}}, metrics_keys: {fid: {
           sets: [valid], every: 5}, samples: {sets: [valid], every: 5}}, predicts: null, epochs: 100, steps: null, rules: [],
       stop: [], checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/fid}}}}
-  after: {block: after, params: {report: best, predicts: null, generate: {uri: /generate/kalfa/gan_sampler, params: {
-            model: generator.ema, latent: 128, conditional: true, n_classes: 10, n: 64}}, plots_keys: {loss_curve: {}, 
-          samples_gif: {}, samples_matrix: {}}}}
+  after: {block: after, params: {report: best, predicts: null, targets: {}, generate: {uri: /generate/kalfa/gan_sampler, 
+          params: {model: generator.ema, latent: 128, conditional: true, n_classes: 10, n: 64}}, plots_keys: {loss_curve: {},
+        samples_gif: {}, samples_matrix: {}}}}

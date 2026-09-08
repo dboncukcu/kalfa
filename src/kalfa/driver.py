@@ -1,7 +1,8 @@
 """The driver: the resolved config becomes the cirak document the templates open (CONFIG.md section 8).
 
-Direct transfer for data.*, metrics, losses, plots, generate, training.*, seed, device, record; eleven reshapings,
-each reading only the shape of a section (a key's presence, a list's length, a string against a mapping).
+Direct transfer for data.*, metrics, losses, plots, generate, training.*, seed, device, record; thirteen
+reshapings, each reading only the shape of a section (a key's presence, a list's length, a string against a
+mapping).
 """
 
 from cirak.registry import registry as default_registry
@@ -267,11 +268,22 @@ def components_of(section, registry, aliases=None, generate=None):
     return {name: component_of(entry, registry, aliases, generate) for name, entry in (section or {}).items()}
 
 
-def keys_of(section):
-    """(12) the definition level keys of a component table, one entry per name (empty when nothing is written)."""
+def keys_of(section, targets=None):
+    """(12) the definition level keys of a component table, one entry per name (empty when nothing is written).
+
+    (13) a definition that names an output wire and no target inherits the target of that wire from
+    ``training.targets``; with a single entry in that table a definition that names neither inherits it too.
+    """
+    targets = dict(targets or {})
     table = {}
     for name, entry in (section or {}).items():
-        table[name] = {key: entry[key] for key in DEFINITION_KEYS if isinstance(entry, dict) and key in entry}
+        keys = {key: entry[key] for key in DEFINITION_KEYS if isinstance(entry, dict) and key in entry}
+        if targets and keys.get("target") is None:
+            inherited = targets.get(keys["output"]) if keys.get("output") is not None else (
+                next(iter(targets.values())) if len(targets) == 1 else None)
+            if inherited is not None:
+                keys["target"] = inherited
+        table[name] = keys
     return table
 
 
@@ -316,6 +328,7 @@ def recipe(config, registry=None, aliases=None):
               "set": set_values(rule.get("set"), losses, aliases, registry), "after": rule.get("after")}
              for rule in training.get("rules") or []]
     checkpoint = training.get("checkpoint")
+    targets = training.get("targets") or {}
     generate = config.get("generate")
     document = {
         "losses": components_of(losses, registry, aliases, generate),
@@ -341,8 +354,8 @@ def recipe(config, registry=None, aliases=None):
             "training": {"block": "training", "params": {
                 "turn": call_with_params(training["turn"]),
                 "turn_params": {key: value for key, value in training.items() if key not in TRAINING_FIXED},
-                "losses_keys": keys_of(losses),
-                "metrics_keys": keys_of(config.get("metrics")),
+                "losses_keys": keys_of(losses, targets),
+                "metrics_keys": keys_of(config.get("metrics"), targets),
                 "predicts": predicts,
                 "epochs": training.get("epochs"),
                 "steps": training.get("steps"),
@@ -352,6 +365,7 @@ def recipe(config, registry=None, aliases=None):
             "after": {"block": "after", "params": {
                 "report": training.get("report"),
                 "predicts": predicts,
+                "targets": targets,
                 "generate": None if generate is None else call_resolved(generate, aliases, registry),
                 "plots_keys": keys_of(config.get("plots"))}},
         },

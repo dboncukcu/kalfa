@@ -68,12 +68,25 @@ def named_outputs(model, result):
     return {outputs[0]: result}
 
 
+def expand_targets(selector, fields):
+    """The target fields a selector names, in the dataset order: one name, a list of names, or a glob."""
+    import fnmatch
+
+    if selector is None:
+        return []
+    if isinstance(selector, str):
+        if any(character in selector for character in "*?["):
+            return [name for name in fields if fnmatch.fnmatchcase(name, selector)]
+        return [selector]
+    return [str(name) for name in selector]
+
+
 class Context:
     """One batch as the adapters see it: the predictions of the ``predicts`` model, computed once, and the targets."""
 
     def __init__(self, batch, models, composites=None, emas=None, predicts=None, targets=(), step=None, epoch=None,
                  rng=None, train=False, prep=None, set_name=None, scaler=None, losses=None, losses_keys=None,
-                 record=None):
+                 record=None, target_map=None):
         self.batch = batch
         self.losses = losses
         self.losses_keys = losses_keys
@@ -90,6 +103,7 @@ class Context:
         self.prep = prep
         self.set_name = set_name
         self.scaler = scaler
+        self.target_map = dict(target_map or {})
         self._outputs = None
 
     def everything(self):
@@ -120,18 +134,41 @@ class Context:
             raise KeyError(f"model {self.predicts!r} has no output wire {output!r}; it writes {list(outputs)}")
         return outputs[output]
 
-    def target(self, name=None):
+    def selector(self, name=None, output=None):
+        """The target selector of a definition: what it writes, else what training.targets says for its wire."""
+        if name is not None:
+            return name
+        if output is not None:
+            return self.target_map.get(output)
+        if len(self.target_map) == 1:
+            return next(iter(self.target_map.values()))
+        return None
+
+    def target_fields(self, name=None, output=None):
+        """The target fields a definition compares against, in the dataset order."""
+        selector = self.selector(name, output)
+        if selector is None:
+            if len(self.targets) != 1:
+                raise ValueError(f"target is not written and the batch has {len(self.targets)} target fields "
+                                 f"{self.targets}; write target on the definition, or training.targets for the "
+                                 f"output wire it names")
+            return [self.targets[0]]
+        names = expand_targets(selector, self.targets)
+        if not names:
+            raise KeyError(f"target {selector!r} names no target field; the fields are {self.targets}")
+        return names
+
+    def target(self, name=None, output=None):
         if name == "input":
             wires = model_inputs(self.model())
             return self.batch[wires[0]]
-        if name is None:
-            if len(self.targets) != 1:
-                raise ValueError(f"target is not written and the batch has {len(self.targets)} target fields "
-                                 f"{self.targets}; write target on the definition")
-            name = self.targets[0]
-        if name not in self.batch:
-            raise KeyError(f"target field {name!r} is not in the batch; the fields are {sorted(self.batch)}")
-        return self.batch[name]
+        names = self.target_fields(name, output)
+        missing = [field for field in names if field not in self.batch]
+        if missing:
+            raise KeyError(f"target fields {missing} are not in the batch; the fields are {sorted(self.batch)}")
+        if len(names) == 1:
+            return self.batch[names[0]]
+        return torch.cat([self.batch[field].reshape(len(self.batch[field]), -1) for field in names], dim=1)
 
     def rescaled(self, output=None, target=None):
         """Predictions and target in the original scale: the rescaling preprocessors of the target field undone.
@@ -139,7 +176,7 @@ class Context:
         Without a prep, or for a target whose chain rescales nothing, the tensors come back as they are.
         """
         predictions = self.predictions(output)
-        targets = self.target(target)
+        targets = self.target(target, output)
         if self.prep is None or not isinstance(predictions, torch.Tensor) or not isinstance(targets, torch.Tensor):
             return predictions, targets
         set_name = self.set_name or "test"
@@ -148,14 +185,19 @@ class Context:
                 return predictions, targets
             transform = lambda matrix: self.prep.rescale_features(matrix, set_name)  # noqa: E731
         else:
-            name = target if target is not None else (self.targets[0] if len(self.targets) == 1 else None)
-            if name is None or not self.prep.rescales(name):
+            names = self.target_fields(target, output)
+            if not any(self.prep.rescales(name) for name in names):
                 return predictions, targets
 
             def transform(matrix):
                 out = numpy.array(matrix, dtype="float64")
-                for position in range(out.shape[1]):
-                    out[:, position] = self.prep.rescale(name, out[:, position], set_name)
+                if len(names) == 1:
+                    for position in range(out.shape[1]):
+                        out[:, position] = self.prep.rescale(names[0], out[:, position], set_name)
+                    return out
+                for position, name in enumerate(names):
+                    if position < out.shape[1]:
+                        out[:, position] = self.prep.rescale(name, out[:, position], set_name)
                 return out
         return _rescale_tensor(predictions, transform), _rescale_tensor(targets, transform)
 
@@ -163,7 +205,7 @@ class Context:
         """A copy for observation: the same batch, predictions detached from the graph."""
         copy = Context(self.batch, self.models, self.composites, self.emas, self.predicts, self.targets,
                        self.step, self.epoch, self.rng, self.train, self.prep, self.set_name, self.scaler,
-                       self.losses, self.losses_keys, self.record)
+                       self.losses, self.losses_keys, self.record, self.target_map)
         if self._outputs is not None:
             copy._outputs = {key: value.detach() if isinstance(value, torch.Tensor) else value
                              for key, value in self._outputs.items()}

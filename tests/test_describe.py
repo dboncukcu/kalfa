@@ -61,6 +61,19 @@ def test_describe_load_shows_one_hot_widths(workdir, capsys):
     assert "── DATA " not in out
 
 
+def test_describe_shows_the_target_table_and_the_slots(tmp_path, monkeypatch, capsys):
+    from kalfa.synthetic import write_scores
+
+    monkeypatch.chdir(tmp_path)
+    write_scores(tmp_path / "scores.parquet")
+    assert main(["describe", str(CONFIGS / "15_multi_target.yaml")]) == 0
+    out = capsys.readouterr().out
+    assert "output wire" in out and "predicts the target fields" in out
+    assert "y_hat" in out and "y_a, y_b, y_c" in out
+    assert "target   y_hat[0]" in out and "target   z_hat[0]" in out
+    assert "y_hat ─→ y_*" in out and "compares" in out
+
+
 def test_describe_sections_and_wiring(workdir, capsys):
     assert main(["describe", str(CONFIG_01), "--section", "model"]) == 0
     out = capsys.readouterr().out

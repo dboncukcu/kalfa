@@ -197,7 +197,7 @@ never written into (an error).
 | `checkpoints/` | `best.pt`, `last.pt` (by policy); models, optimizers, EMAs, counters, rule states, RNG |
 | `final/state.pt` | always, once the run ends, with the same scope |
 | `preprocessors/` | the fitted preprocessors (one file per name) and `plan.json`; `kalfa predict` reads from here |
-| `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>` |
+| `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>`; with `training.targets` one column per predicted field, `pred_<output>_<field>` |
 | `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`; `architecture` writes text) |
 | `samples/` | the output of `generate`: `samples.pt` (for images `grid.png` too), `samples.txt` for text; `turn_<n>.*` from `sample_writer` |
 | `plugins/` | copies of the plugin modules the run imported, so predict, generate and resume work from the record |
@@ -206,6 +206,35 @@ never written into (an error).
 
 `kalfa predict` rewrites `predictions.parquet` on the run's own test set; with `--data`
 `predictions_<file name>[_<model>].parquet`.
+
+## Several targets at once
+
+A table can carry more than one target column, and a model more than one output wire. `training.targets` says
+which wire predicts which target fields:
+
+```yaml
+data:
+  fields:
+    "y_*":  {target: true, preprocessors: [y_scaler]}   # three columns, three fitted scalers
+    z:      {target: true, preprocessors: [y_scaler]}
+    "x*":   {preprocessors: [x_scaler]}
+
+training:
+  predicts: full
+  targets:
+    y_hat: "y_*"        # a field name, a list of names or a glob
+    z_hat: z
+
+losses:
+  l_y: {uri: mse, output: y_hat}     # the target comes from the table
+  l_z: {uri: mse, output: z_hat}
+```
+
+The fields a selector names become one tensor, so `mse` is called once with two `(batch, 3)` sides; every column
+keeps its own fitted preprocessor, so the metrics and `predictions.parquet` invert each one with its own scale
+(`pred_y_hat_y_a`, `pred_y_hat_y_b`, ...) and `pred_vs_true` draws one titled panel per field. `kalfa describe`
+prints the table and the place every column takes in its wire (`y_a → y_hat[0]`). `examples/15_multi_target` is
+the runnable version.
 
 ## Looking at a config
 

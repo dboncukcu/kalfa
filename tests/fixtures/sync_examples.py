@@ -29,6 +29,7 @@ TABLE = {
     "12_resume": {"config": "12_resume.yaml", "includes": ["01_mlp_regression.yaml"]},
     "13_distillation": {"config": "13_distillation.yaml", "plugins": ["timm_legos.py"]},
     "14_sweep_grid": {"config": "14_sweep_grid.yaml", "includes": ["01_mlp_regression.yaml"]},
+    "15_multi_target": {"config": "15_multi_target.yaml"},
 }
 
 STANDALONE = ("alad", "minimal")

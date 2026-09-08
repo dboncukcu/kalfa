@@ -38,4 +38,5 @@ flow:
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {
           ce: {}}, metrics_keys: {accuracy: {}, f1: {}}, predicts: net, epochs: 30, steps: null, rules: [], stop: ['@triggers.stop_0'],
       checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/f1, mode: max}}}}
-  after: {block: after, params: {report: best, predicts: net, generate: null, plots_keys: {loss_curve: {}, confusion: {}}}}
+  after: {block: after, params: {report: best, predicts: net, targets: {}, generate: null, plots_keys: {loss_curve: {}, 
+          confusion: {}}}}

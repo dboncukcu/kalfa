@@ -35,5 +35,5 @@ flow:
           amp: true, grad_clip: 1.0}, losses_keys: {lm: {target: targets}}, metrics_keys: {perplexity: {target: targets}},
       predicts: gpt, epochs: null, steps: {total: 20000, turn: 200}, rules: [], stop: ['@triggers.stop_0'], checkpoint: {
         uri: /checkpoint/kalfa/best, params: {monitor: val/perplexity}}}}
-  after: {block: after, params: {report: best, predicts: gpt, generate: {uri: /generate/kalfa/lm_sampler, params: {model: 
-            gpt, prompt: 'ROMEO:', max_new_tokens: 500, temperature: 0.9}}, plots_keys: {loss_curve: {}}}}
+  after: {block: after, params: {report: best, predicts: gpt, targets: {}, generate: {uri: /generate/kalfa/lm_sampler, 
+          params: {model: gpt, prompt: 'ROMEO:', max_new_tokens: 500, temperature: 0.9}}, plots_keys: {loss_curve: {}}}}

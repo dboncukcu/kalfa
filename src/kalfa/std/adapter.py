@@ -25,7 +25,7 @@ class CriterionAdapter:
         if rescale:
             predictions, targets = context.rescaled(output, target)
         else:
-            predictions, targets = context.predictions(output), context.target(target)
+            predictions, targets = context.predictions(output), context.target(target, output)
         return self.criterion(predictions, targets)
 
     def tracker(self, name, keys=None, rescale=False):
@@ -102,7 +102,7 @@ class MetricTracker:
             if self.rescale:
                 predictions, targets = context.rescaled(self.output, self.target)
             else:
-                predictions, targets = context.predictions(self.output), context.target(self.target)
+                predictions, targets = context.predictions(self.output), context.target(self.target, self.output)
             if "predictions" in names:
                 arguments["predictions"] = predictions
             if "targets" in names:

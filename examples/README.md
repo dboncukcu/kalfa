@@ -205,6 +205,20 @@ uv run kalfa collect /shared/sweep_housing
 A fed back strategy runs in the local loop only: `--set 'sweep.strategy={uri: optuna, params: {trials: 8, seed: 1}}'
 --set 'sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}'` (`uv sync --extra sweep`).
 
+## 15_multi_target
+
+Multi target regression: three analysis scores come out of one three wide output wire, their combination out of a
+second and a tail label out of a third. `training.targets` binds every wire to the target fields it predicts, so
+one loss call compares the whole `(batch, 3)` block, every column is reported and inverted with its own scaler,
+and `pred_vs_true` draws one titled panel per field. The losses and the metrics name only their wire and inherit
+the target from that table.
+
+```
+uv run python make_data.py
+uv run kalfa describe config.yaml --load
+uv run kalfa run config.yaml -p epochs=10 --set record=runs/15
+```
+
 ## alad
 
 Adversarial anomaly detection with a plugin: five trained models and a composite score model, two optimizers over

@@ -51,5 +51,5 @@ flow:
           ce: {}}, metrics_keys: {accuracy: {}}, predicts: classifier, epochs: 20, steps: null, rules: [{name: unfreeze, 
             when: '@triggers.unfreeze', set: {backbone.trainable: true}, after: null}], stop: ['@triggers.stop_0'], 
         checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/accuracy, mode: max}}}}
-  after: {block: after, params: {report: best, predicts: classifier, generate: null, plots_keys: {loss_curve: {}, 
-          confusion: {}}}}
+  after: {block: after, params: {report: best, predicts: classifier, targets: {}, generate: null, plots_keys: {
+          loss_curve: {}, confusion: {}}}}

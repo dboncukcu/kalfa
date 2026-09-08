@@ -1,0 +1,97 @@
+# 15: multi target regression. Three analysis scores (y_a, y_b, y_c) come out of one three wide output wire, their
+# combination z out of a second wire and a tail label out of a third. training.targets says which wire predicts
+# which target fields; the losses and the metrics name only their wire and inherit the target from that table.
+# Every target column keeps its own scaler, so the report inverts each one with its own scale.
+# kalfa run 15_multi_target.yaml ; kalfa describe 15_multi_target.yaml --load
+
+include:
+  - /alias/kalfa/tabular
+
+params:
+  epochs: 30
+  lr: 1.0e-3
+  hidden: 64
+  analyses: 3
+  tail_weight: 5.0
+  seed: 7
+
+seed: $seed$
+
+data:
+  source: {uri: parquet, params: {path: scores.parquet}}
+  split: {ratios: [0.7, 0.15, 0.15], seed: $seed$}
+  batch: 256
+  preprocessors:
+    x_scaler: {uri: standard_scaler}
+    y_scaler: {uri: standard_scaler}
+    to_float: {uri: cast, params: {dtype: float32}}
+  fields:
+    "y_*":  {target: true, preprocessors: [y_scaler]}   # three columns, three fitted scalers
+    z:      {target: true, preprocessors: [y_scaler]}
+    z_tail: {target: true, preprocessors: [to_float]}
+    "x*":   {preprocessors: [x_scaler]}
+  feed: table
+
+model:
+  models:
+    head:
+      optimizer: main
+      inputs: [x]
+      outputs: [y_hat]
+      nodes:
+        - {uri: linear_relu, params: {out_features: $hidden$}}
+        - {uri: linear, params: {out_features: $analyses$}}
+    combine:
+      optimizer: main
+      inputs: [y_hat]
+      outputs: [z_hat]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 32}}
+        - {uri: linear, params: {out_features: 1}}
+    tail:
+      optimizer: main
+      inputs: [x]
+      outputs: [tail_logit]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 32}}
+        - {uri: linear, params: {out_features: 1}}
+    full:
+      inputs: [x]
+      outputs: [y_hat, z_hat, tail_logit]
+      nodes:
+        y_hat:      {model: head,    inputs: [x]}
+        z_hat:      {model: combine, inputs: [y_hat]}
+        tail_logit: {model: tail,    inputs: [x]}
+
+metrics:
+  rmse_y:     {uri: rmse, output: y_hat}          # target y_a, y_b, y_c, from training.targets
+  rmse_z:     {uri: rmse, output: z_hat}
+  auroc_tail: {uri: auroc, output: tail_logit}
+
+losses:
+  l_y:    {uri: mse, output: y_hat}
+  l_z:    {uri: mse, output: z_hat}
+  l_tail: {uri: bce_logits, output: tail_logit, params: {pos_weight: $tail_weight$}}
+  total:  {uri: weighted_sum, params: {terms: {l_y: 1.0, l_z: 1.0, l_tail: 0.5}}}
+
+optimizers:
+  main: {uri: adam, params: {lr: $lr$}, loss: total}
+
+training:
+  turn: supervised
+  predicts: full
+  targets:                     # output wire -> the target fields it predicts
+    y_hat:      "y_*"
+    z_hat:      z
+    tail_logit: z_tail
+  epochs: $epochs$
+  stop:
+    - {uri: plateau, params: {monitor: val/rmse_z, patience: 8}}
+  checkpoint: {uri: best, params: {monitor: val/rmse_z}}
+  report: best
+
+plots:
+  loss_curve:   {uri: loss_curve}
+  pred_vs_true: {uri: pred_vs_true}
+
+record: runs/scores_$datetime$

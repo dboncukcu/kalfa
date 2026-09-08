@@ -87,6 +87,44 @@ def test_with_param_rebuilds_the_partial():
     assert changed.criterion.keywords == {"delta": 0.1} and adapter.criterion.keywords == {"delta": 1.0}
 
 
+def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
+    import numpy
+    from kalfa.std.pre import apply, fit, standard_scaler
+    from kalfa.synthetic import scores_frame
+
+    data = scores_frame(rows=40)
+    prep = fit(data, {"y_*": {"target": True, "preprocessors": ["t"]}, "z": {"target": True, "preprocessors": ["t"]},
+                      "x*": {"preprocessors": ["s"]}},
+               {"s": standard_scaler(), "t": standard_scaler()}, [])
+    frame = apply(data, prep, "valid")
+    batch = {"x": torch.from_numpy(frame.data[prep.features].to_numpy(dtype="float32"))}
+    for name in ("y_a", "y_b", "y_c", "z"):
+        batch[name] = torch.from_numpy(frame.data[name].to_numpy(dtype="float32"))
+
+    class Zero(torch.nn.Module):
+        inputs = ["x"]
+        outputs = ["y_hat", "z_hat"]
+
+        def forward(self, value):
+            return torch.zeros(len(value), 3), torch.zeros(len(value), 1)
+
+    context = Context(batch, {"m": Zero()}, predicts="m", targets=["y_a", "y_b", "y_c", "z"], prep=prep,
+                      set_name="valid", target_map={"y_hat": "y_*", "z_hat": "z"})
+    stacked = context.target(None, "y_hat")
+    assert stacked.shape == (40, 3)
+    assert torch.allclose(stacked[:, 1], batch["y_b"])
+    assert context.target(None, "z_hat").shape == (40,)
+    assert context.target_fields(None, "y_hat") == ["y_a", "y_b", "y_c"]
+
+    predictions, targets = context.rescaled("y_hat", None)
+    for position, name in enumerate(("y_a", "y_b", "y_c")):
+        original = data[name].to_numpy()
+        assert numpy.allclose(targets[:, position].numpy(), original, atol=1e-4)
+        assert numpy.allclose(predictions[:, position].numpy(), prep.inverse(name, numpy.zeros(40)), atol=1e-4)
+    means = [float(prep.fitted["t"][name].scaler.mean_[0]) for name in ("y_a", "y_b", "y_c")]
+    assert len(set(round(value, 6) for value in means)) == 3
+
+
 def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     import numpy
     from kalfa.std.pre import apply, fit, standard_scaler

@@ -22,7 +22,8 @@ from kalfa.recipe import recipe_text  # noqa: E402
 TARGETS = (("configs/01_mlp_regression.yaml", "01.recipe.yaml"), ("examples/alad/config.yaml", "tidy.recipe.yaml"),
            ("configs/02_mlp_classification.yaml", "02.recipe.yaml"), ("configs/03_timeseries_window.yaml", "03.recipe.yaml"), ("configs/11_kfold_cv.yaml", "11.recipe.yaml"),
            ("configs/12_resume.yaml", "12.recipe.yaml"), ("configs/05_autoencoder.yaml", "05.recipe.yaml"), ("configs/06_vae_loss_dynamics.yaml", "06.recipe.yaml"), ("configs/04_cnn_images.yaml", "04.recipe.yaml"), ("configs/13_distillation.yaml", "13.recipe.yaml"), ("configs/07_wgan_gp.yaml", "07.recipe.yaml"), ("configs/08_ddpm.yaml", "08.recipe.yaml"), ("configs/09_simclr.yaml", "09.recipe.yaml"),
-           ("configs/10_char_lm.yaml", "10.recipe.yaml"), ("configs/14_sweep_grid.yaml", "14.recipe.yaml"))
+           ("configs/10_char_lm.yaml", "10.recipe.yaml"), ("configs/14_sweep_grid.yaml", "14.recipe.yaml"),
+           ("configs/15_multi_target.yaml", "15.recipe.yaml"))
 DUMPS = ROOT / "configs" / "dumps"
 INCLUDE = "../../src/kalfa/templates/kalfa.yaml"
 

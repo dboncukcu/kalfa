@@ -71,9 +71,18 @@ def loss_curve(predictions, history, models, record, series=None, name=None):
     return None
 
 
+def true_column(pred, targets):
+    """The observed column a ``pred_<wire>_<field>`` column belongs to: the longest target name it ends with."""
+    matches = [target for target in targets if pred == f"pred_{target}" or pred.endswith(f"_{target}")]
+    return max(matches, key=len) if matches else None
+
+
 @lego("/plot/kalfa/pred_vs_true", partial=True, alias="pred_vs_true",
-            description="Predicted against true values of the test set, one panel per target")
-def pred_vs_true(predictions, history, models, record, name=None):
+            description="Predicted against true values of the test set, one panel per predicted field, laid out in "
+                        "a grid of columns panels per row and titled with the field name")
+def pred_vs_true(predictions, history, models, record, name=None, columns=4):
+    import numpy
+
     if predictions is None or len(predictions) == 0:
         return None
     preds = [column for column in predictions.columns if column.startswith("pred_")]
@@ -81,15 +90,32 @@ def pred_vs_true(predictions, history, models, record, name=None):
                if not column.startswith(("pred_", "raw_")) and column != "row"]
     if not preds or not targets:
         return None
+    pairs = [(pred, true_column(pred, targets)) for pred in preds]
+    pairs = [(pred, true) for pred, true in pairs if true is not None]
+    if not pairs:
+        pairs = list(zip(preds, targets * len(preds)))
+    pairs = [(pred, true) for pred, true in pairs
+             if predictions[pred].dtype.kind in "fiu" and predictions[true].dtype.kind in "fiu"]
+    if not pairs:
+        return None
     pyplot = _figure()
-    figure, axes = pyplot.subplots(1, len(preds), figsize=(6 * len(preds), 6), squeeze=False)
-    for axis, pred, target in zip(axes[0], preds, targets * len(preds)):
+    width = max(1, min(int(columns or 4), len(pairs)))
+    rows = -(-len(pairs) // width)
+    figure, axes = pyplot.subplots(rows, width, figsize=(4.6 * width, 4.3 * rows), squeeze=False)
+    panels = [axis for row in axes for axis in row]
+    for axis, (pred, target) in zip(panels, pairs):
         true = predictions[target].to_numpy()
-        axis.scatter(true, predictions[pred].to_numpy(), s=12, alpha=0.5)
-        low, high = float(min(true.min(), predictions[pred].min())), float(max(true.max(), predictions[pred].max()))
+        guess = predictions[pred].to_numpy()
+        axis.scatter(true, guess, s=12, alpha=0.5)
+        low = float(numpy.nanmin([true.min(), guess.min()]))
+        high = float(numpy.nanmax([true.max(), guess.max()]))
         axis.plot([low, high], [low, high], linestyle=":", color="gray")
-        axis.set_xlabel(f"true {target}")
-        axis.set_ylabel(pred)
+        axis.set_title(target)
+        axis.set_xlabel("true")
+        axis.set_ylabel("predicted")
+    for axis in panels[len(pairs):]:
+        axis.axis("off")
+    figure.tight_layout()
     figure.savefig(_target(record, f"{name or 'pred_vs_true'}.png"), bbox_inches="tight")
     pyplot.close(figure)
     return None

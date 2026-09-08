@@ -33,7 +33,8 @@ TARGETS = (("configs/01_mlp_regression.yaml", "01.flow.yaml", "01.recipe.yaml"),
            ("configs/08_ddpm.yaml", "08.flow.yaml", "08.recipe.yaml"),
            ("configs/09_simclr.yaml", "09.flow.yaml", "09.recipe.yaml"),
            ("configs/10_char_lm.yaml", "10.flow.yaml", "10.recipe.yaml"),
-           ("configs/14_sweep_grid.yaml", "14.flow.yaml", "14.recipe.yaml"))
+           ("configs/14_sweep_grid.yaml", "14.flow.yaml", "14.recipe.yaml"),
+           ("configs/15_multi_target.yaml", "15.flow.yaml", "15.recipe.yaml"))
 DUMPS = ROOT / "configs" / "dumps"
 TOLERATED = ("source_missing", "weights_run_missing")
 

@@ -287,6 +287,69 @@ def test_turn_without_an_extras_declaration_takes_no_extra_keys(workdir):
     assert "no extras fact" in prepared.problems[0].hint
 
 
+def two_targets():
+    """The minimal config with two target fields (x0 and price) and two output wires (y and y2)."""
+    config = minimal()
+    config["data"]["fields"] = {"x0": {"target": True, "preprocessors": ["scale"]},
+                                "x*": {"preprocessors": ["scale"]},
+                                "price": {"target": True}}
+    config["model"]["outputs"] = ["y", "y2"]
+    config["model"]["nodes"] = {"y": {"uri": "linear", "params": {"out_features": 1}, "inputs": ["x"]},
+                                "y2": {"uri": "linear", "params": {"out_features": 1}, "inputs": ["x"]}}
+    config["metrics"] = {"rmse": {"uri": "rmse", "output": "y"}}
+    config["losses"] = {"mse": {"uri": "mse", "output": "y"}}
+    return config
+
+
+def test_several_targets_and_wires_need_the_targets_table(workdir):
+    prepared, kinds = kinds_of(workdir, two_targets())
+    assert "targets_missing" in kinds
+    assert "write training.targets" in prepared.errors[0].message
+
+
+def test_the_targets_table_binds_the_wires_and_the_definitions_inherit(workdir):
+    config = two_targets()
+    config["training"]["targets"] = {"y": "price", "y2": "x0"}
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == []
+    keys = prepared.document["flow"]["training"]["params"]
+    assert keys["losses_keys"]["mse"] == {"output": "y", "target": "price"}
+    assert keys["metrics_keys"]["rmse"] == {"output": "y", "target": "price"}
+    assert prepared.document["flow"]["after"]["params"]["targets"] == {"y": "price", "y2": "x0"}
+
+
+def test_the_targets_table_is_checked_against_the_wires_and_the_fields(workdir):
+    config = two_targets()
+    config["training"]["targets"] = {"ghost": "price", "y2": "x0"}
+    prepared, kinds = kinds_of(workdir, config)
+    assert "targets_not_a_wire" in kinds
+    config["training"]["targets"] = {"y": "nowhere_*", "y2": "x0"}
+    prepared, kinds = kinds_of(workdir, config)
+    assert "target_not_a_field" in kinds
+    config["training"]["targets"] = {"y": ["price", "x0"], "y2": 3}
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == ["invalid_value"]
+
+
+def test_a_definition_target_names_a_field(workdir):
+    config = two_targets()
+    config["training"]["targets"] = {"y": "price", "y2": "x0"}
+    config["losses"]["mse"]["target"] = "ghost"
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == ["target_not_a_field"]
+    config["losses"]["mse"]["target"] = ["price", "x0"]
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == []
+
+
+def test_a_definition_without_a_target_is_caught(workdir):
+    config = two_targets()
+    config["training"]["targets"] = {"y2": "x0"}
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == ["target_missing", "target_missing"]      # the loss and the metric that name the wire y
+    assert "training.targets" in prepared.errors[0].message
+
+
 def test_unresolved_lego_reference_in_params(workdir):
     import myexample  # noqa: F401
 
