@@ -29,14 +29,13 @@ def ljust(text, size):
 
 DEFAULT_SECTIONS = ("summary", "data", "model", "training", "after", "columns")
 ALL_SECTIONS = (*DEFAULT_SECTIONS, "wiring")
-MIN_WIDTH = 72
-MAX_WIDTH = 108
 ARROW = "─→"
 DOT = "·"
 
 
 def width_of():
-    return max(MIN_WIDTH, min(MAX_WIDTH, shutil.get_terminal_size((96, 24)).columns))
+    """The width the terminal reports: COLUMNS overrides it, a pipe has none and falls back to 96 columns."""
+    return max(40, shutil.get_terminal_size((96, 24)).columns)
 
 
 def count(value):

@@ -85,27 +85,29 @@ def prediction_table(model, loader, prep, dataset, device=None, target_map=None)
                 columns[f"raw_{wire}_{position}"] = matrix[:, position]
         if target_map:
             names = expand_targets(target_map.get(wire), dataset.targets)
-            _write_blocks(columns, prep, matrix, names, widths, set_name, wire, suffix=True)
+            _write_blocks(columns, prep, matrix, names, widths, set_name,
+                          [f"pred_{wire}_{name}" for name in names])
             continue
         decoder = prep.decoder(single) if single is not None else None
         if decoder is not None:
             columns[f"pred_{wire}"] = prep.decode(single, matrix, set_name)
         elif width == total and total:
-            _write_blocks(columns, prep, matrix, list(dataset.targets), widths, set_name, wire,
-                          suffix=single is None)
+            names = list(dataset.targets)
+            _write_blocks(columns, prep, matrix, names, widths, set_name,
+                          [f"pred_{wire}" if single is not None else f"pred_{wire}_{name}" for name in names])
     return pandas.DataFrame(columns)
 
 
-def _write_blocks(columns, prep, matrix, names, widths, set_name, wire, suffix=True):
-    """Cut a wire into the blocks of the fields it predicts and invert every block with that field's chain."""
+def _write_blocks(columns, prep, matrix, names, widths, set_name, labels):
+    """Cut a wire into the blocks of the fields it predicts and invert every block with that field's chain; the
+    caller names the column of every block."""
     offset = 0
-    for name in names:
+    for name, label in zip(names, labels):
         span = widths.get(name, 1)
         block = matrix[:, offset:offset + span]
         offset += span
         if block.shape[1] == 0:
             continue
-        label = f"pred_{wire}_{name}" if suffix else f"pred_{wire}"
         if prep.decoder(name) is not None:
             columns[label] = prep.decode(name, block, set_name)
         elif span == 1:
