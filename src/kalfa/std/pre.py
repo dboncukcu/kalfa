@@ -87,6 +87,46 @@ class Field:
     columns: list = field(default_factory=list)
 
 
+class ColumnView:
+    """One column of a grouped preprocessor under the per column interface the chains use."""
+
+    def __init__(self, obj, position):
+        self.obj = obj
+        self.position = position
+
+    def __getattr__(self, name):
+        return getattr(self.obj, name)
+
+    def apply(self, values):
+        return self.obj.apply(values, columns=[self.position])
+
+    def inverse(self, values):
+        return self.obj.inverse(values, columns=[self.position])
+
+
+@dataclass
+class Grouped:
+    """A preprocessor fitted once over every column that names it, in fit order."""
+
+    obj: object
+    columns: list
+
+    def view(self, name):
+        return ColumnView(self.obj, self.columns.index(name))
+
+
+def is_grouped(obj):
+    """Whether a preprocessor fits over all its columns at once (sklearn style) instead of one copy per column."""
+    return bool(getattr(obj, "grouped", False))
+
+
+def fitted_object(fitted, pre, name):
+    entry = (fitted or {}).get(pre)
+    if isinstance(entry, Grouped):
+        return entry.view(name) if name in entry.columns else None
+    return (entry or {}).get(name)
+
+
 @dataclass
 class Prep:
     """The fitted preprocessing plan: fields in order, fitted objects per (preprocessor, column), output layout."""
@@ -112,6 +152,10 @@ class Prep:
     def target_names(self):
         return [item.name for item in self.fields if item.target]
 
+    def object_of(self, pre, name):
+        """The fitted preprocessor of one column: the copy of a per column lego, a view of a grouped one."""
+        return fitted_object(self.fitted, pre, name)
+
     def inverse(self, name, values, set_name="test"):
         """Undo a target field's chain on a column of values (numpy, one column)."""
         item = next(entry for entry in self.fields if entry.name == name)
@@ -119,7 +163,7 @@ class Prep:
         for pre in reversed(item.chain):
             if not self._applies(pre, set_name):
                 continue
-            obj = self.fitted[pre][name]
+            obj = self.object_of(pre, name)
             if hasattr(obj, "inverse"):
                 out = numpy.asarray(obj.inverse(out))
         return out
@@ -131,7 +175,7 @@ class Prep:
         for pre in reversed(item.chain):
             if not self._applies(pre, set_name):
                 continue
-            obj = self.fitted[pre][name]
+            obj = self.object_of(pre, name)
             if getattr(obj, "rescales", False) and hasattr(obj, "inverse"):
                 out = numpy.asarray(obj.inverse(out))
         return out
@@ -142,7 +186,7 @@ class Prep:
             if name is not None and item.name != name:
                 continue
             for pre in item.chain:
-                obj = self.fitted.get(pre, {}).get(item.name)
+                obj = self.object_of(pre, item.name)
                 if getattr(obj, "rescales", False) and hasattr(obj, "inverse"):
                     return True
         return False
@@ -169,7 +213,7 @@ class Prep:
         """The fitted preprocessor that encodes and decodes text, if any field has one."""
         for item in self.fields:
             for pre in item.chain:
-                obj = self.fitted.get(pre, {}).get(item.name)
+                obj = self.object_of(pre, item.name)
                 if obj is not None and hasattr(obj, "encode") and hasattr(obj, "decode"):
                     return obj
         return None
@@ -178,7 +222,7 @@ class Prep:
         """The preprocessor of a target field's chain that decodes class scores, if any."""
         item = next(entry for entry in self.fields if entry.name == name)
         for pre in reversed(item.chain):
-            obj = self.fitted[pre][name]
+            obj = self.object_of(pre, name)
             if hasattr(obj, "decode"):
                 return obj
         return None
@@ -188,7 +232,7 @@ class Prep:
         item = next(entry for entry in self.fields if entry.name == name)
         out = None
         for pre in reversed(item.chain):
-            obj = self.fitted[pre][name]
+            obj = self.object_of(pre, name)
             if out is None:
                 if hasattr(obj, "decode"):
                     out = numpy.asarray(obj.decode(scores))
@@ -340,6 +384,68 @@ def _resolve(df, fields, drop):
     return resolved
 
 
+def _fit_chains(items, values_of, templates, sets, fitted, set_name="train"):
+    """Fit every chain on the train set: a per column preprocessor gets one fitted copy per column, a grouped one
+    is fitted once over the matrix of every column that names it. Returns the transformed values per field."""
+    values = {item.name: values_of(item) for item in items}
+    position = {item.name: 0 for item in items}
+
+    def skipped(pre):
+        allowed = sets.get(pre)
+        return allowed is not None and set_name not in allowed
+
+    def waiting(item):
+        while position[item.name] < len(item.chain):
+            pre = item.chain[position[item.name]]
+            if skipped(pre):
+                position[item.name] += 1
+                continue
+            return pre
+        return None
+
+    while True:
+        for item in items:
+            pre = waiting(item)
+            while pre is not None and not is_grouped(templates[pre]):
+                obj = copy.deepcopy(templates[pre])
+                if hasattr(obj, "fit"):
+                    obj.fit(values[item.name])
+                fitted.setdefault(pre, {})[item.name] = obj
+                values[item.name] = numpy.asarray(obj.apply(values[item.name]))
+                position[item.name] += 1
+                pre = waiting(item)
+        ready = None
+        for item in items:
+            pre = waiting(item)
+            if pre is None:
+                continue
+            members = [other for other in items if pre in other.chain]
+            if all(waiting(other) == pre for other in members):
+                ready = (pre, members)
+                break
+        if ready is None:
+            break
+        pre, members = ready
+        wide = [member.name for member in members if numpy.asarray(values[member.name]).ndim > 1]
+        if wide:
+            raise ValueError(f"preprocessor {pre!r} fits over all its columns at once, so every column reaching it "
+                             f"must be one column wide; {wide} are wider")
+        obj = copy.deepcopy(templates[pre])
+        block = numpy.column_stack([numpy.asarray(values[member.name]) for member in members])
+        if hasattr(obj, "fit"):
+            obj.fit(block)
+        transformed = numpy.asarray(obj.apply(block))
+        for index, member in enumerate(members):
+            values[member.name] = transformed[:, index]
+            position[member.name] += 1
+        fitted[pre] = Grouped(obj, [member.name for member in members])
+    stuck = [item.name for item in items if waiting(item) is not None]
+    if stuck:
+        raise ValueError(f"the chains of {stuck} cannot be fitted: preprocessors that fit over all their columns "
+                         f"are written in different orders")
+    return values
+
+
 def _run_chain(item, values, fitted, templates, sets, set_name, fit):
     for pre in item.chain:
         allowed = sets.get(pre)
@@ -351,7 +457,7 @@ def _run_chain(item, values, fitted, templates, sets, set_name, fit):
                 obj.fit(values)
             fitted.setdefault(pre, {})[item.name] = obj
         else:
-            obj = fitted[pre][item.name]
+            obj = fitted_object(fitted, pre, item.name)
         values = numpy.asarray(obj.apply(values))
     return values
 
@@ -360,7 +466,7 @@ def _columns_of(item, values, fitted):
     if values.ndim == 1:
         return [item.name]
     for pre in reversed(item.chain):
-        obj = fitted.get(pre, {}).get(item.name)
+        obj = fitted_object(fitted, pre, item.name)
         if obj is not None and hasattr(obj, "columns"):
             return list(obj.columns(item.name))
     return [f"{item.name}_{position}" for position in range(values.shape[1])]
@@ -431,9 +537,9 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
         if record is not None:
             write_prep(prep, record)
         return prep
+    final = _fit_chains(items, lambda item: _values(df, item.name), templates, sets, fitted)
     for item in items:
-        values = _values(df, item.name)
-        values = _run_chain(item, values, fitted, templates, sets, "train", fit=True)
+        values = final[item.name]
         if len(values):
             values, kind = _cast(values, item.name)
         else:
@@ -488,7 +594,7 @@ def apply(df, prep, set, keys=None):
         for item in prep.fields:
             if item.name not in df.fields:
                 raise ValueError(f"the {set} data lacks field {item.name!r}")
-            chains[item.name] = [prep.fitted[pre][item.name] for pre in item.chain
+            chains[item.name] = [prep.object_of(pre, item.name) for pre in item.chain
                                  if sets.get(pre) is None or set in sets[pre]]
         return Frame(None, [], prep.targets, set, None, df, [item.name for item in prep.fields], chains)
     columns = {}
@@ -513,26 +619,61 @@ def apply(df, prep, set, keys=None):
     return Frame(data, prep.features, prep.targets, set, extra)
 
 
-class StandardScaler:
+class _Scaler:
+    """A sklearn scaler over every column that names it: one object, per column statistics (``grouped``).
+
+    ``fit`` takes the matrix of the columns in plan order; ``apply`` and ``inverse`` take the whole matrix, or a
+    slice of it with ``columns`` naming the positions the slice holds.
+    """
+
     rescales = True
+    grouped = True
+
+    def build(self):
+        raise NotImplementedError
 
     def fit(self, values):
-        from sklearn.preprocessing import StandardScaler as Scaler
-
-        self.scaler = Scaler().fit(numpy.asarray(values, dtype="float64").reshape(-1, 1))
+        self.scaler = self.build().fit(_block(values))
 
     def partial_fit(self, values):
+        if getattr(self, "scaler", None) is None:
+            self.scaler = self.build()
+        self.scaler.partial_fit(_block(values))
+
+    def apply(self, values, columns=None):
+        return self._run(values, columns, forward=True)
+
+    def inverse(self, values, columns=None):
+        return self._run(values, columns, forward=False)
+
+    def _run(self, values, columns, forward):
+        matrix = _block(values)
+        width = int(getattr(self.scaler, "n_features_in_", matrix.shape[1]))
+        positions = numpy.arange(width) if columns is None else numpy.asarray(columns, dtype=int)
+        if len(positions) != matrix.shape[1]:
+            raise ValueError(f"the scaler was fitted on {width} columns and got {matrix.shape[1]}")
+        shift, scale = self.terms()
+        out = (matrix - shift[positions]) / scale[positions] if forward else matrix * scale[positions] + shift[positions]
+        return numpy.asarray(out).reshape(numpy.asarray(values).shape)
+
+    def terms(self):
+        """The per column (shift, scale) of the fitted scaler: apply is (value - shift) / scale."""
+        raise NotImplementedError
+
+
+def _block(values):
+    matrix = numpy.asarray(values, dtype="float64")
+    return matrix.reshape(-1, 1) if matrix.ndim == 1 else matrix
+
+
+class StandardScaler(_Scaler):
+    def build(self):
         from sklearn.preprocessing import StandardScaler as Scaler
 
-        if getattr(self, "scaler", None) is None:
-            self.scaler = Scaler()
-        self.scaler.partial_fit(numpy.asarray(values, dtype="float64").reshape(-1, 1))
+        return Scaler()
 
-    def apply(self, values):
-        return self.scaler.transform(numpy.asarray(values, dtype="float64").reshape(-1, 1)).reshape(-1)
-
-    def inverse(self, values):
-        return self.scaler.inverse_transform(numpy.asarray(values, dtype="float64").reshape(-1, 1)).reshape(-1)
+    def terms(self):
+        return numpy.asarray(self.scaler.mean_, dtype="float64"), numpy.asarray(self.scaler.scale_, dtype="float64")
 
 
 @lego("/pre/sklearn/standard_scaler", state=True, alias="standard_scaler",
@@ -541,31 +682,19 @@ def standard_scaler():
     return StandardScaler()
 
 
-class MinMaxScaler:
-    rescales = True
-
+class MinMaxScaler(_Scaler):
     def __init__(self, low, high):
         self.low = low
         self.high = high
 
-    def fit(self, values):
+    def build(self):
         from sklearn.preprocessing import MinMaxScaler as Scaler
 
-        self.scaler = Scaler(feature_range=(self.low, self.high)).fit(
-            numpy.asarray(values, dtype="float64").reshape(-1, 1))
+        return Scaler(feature_range=(self.low, self.high))
 
-    def partial_fit(self, values):
-        from sklearn.preprocessing import MinMaxScaler as Scaler
-
-        if getattr(self, "scaler", None) is None:
-            self.scaler = Scaler(feature_range=(self.low, self.high))
-        self.scaler.partial_fit(numpy.asarray(values, dtype="float64").reshape(-1, 1))
-
-    def apply(self, values):
-        return self.scaler.transform(numpy.asarray(values, dtype="float64").reshape(-1, 1)).reshape(-1)
-
-    def inverse(self, values):
-        return self.scaler.inverse_transform(numpy.asarray(values, dtype="float64").reshape(-1, 1)).reshape(-1)
+    def terms(self):
+        scale = numpy.asarray(self.scaler.scale_, dtype="float64")
+        return -numpy.asarray(self.scaler.min_, dtype="float64") / scale, 1.0 / scale
 
 
 @lego("/pre/sklearn/minmax_scaler", state=True, alias="minmax_scaler",

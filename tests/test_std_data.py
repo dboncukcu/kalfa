@@ -11,8 +11,8 @@ from kalfa.std.data import filter as filter_rows
 from kalfa.std.data import filter_set
 from kalfa.std.feed import table
 from kalfa.std.loader import torch as torch_loader
-from kalfa.std.pre import (Prep, apply, assign_fields, fit, read_prep, specificity, standard_scaler, torch_dtype,
-                           write_prep)
+from kalfa.std.pre import (Prep, apply, assign_fields, fit, minmax_scaler, read_prep, specificity, standard_scaler,
+                           torch_dtype, write_prep)
 from kalfa.std.source import csv, header, parquet
 from kalfa.std.split import random as random_split
 from kalfa.std.split import sizes
@@ -74,13 +74,61 @@ def test_dtype_table():
     assert torch_dtype("object") is None and torch_dtype("category") is None and torch_dtype("datetime64[ns]") is None
 
 
+def test_a_grouped_preprocessor_is_one_object_over_all_its_columns(tmp_path):
+    data = housing_frame(rows=200)
+    prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["s"]}},
+               {"s": standard_scaler()}, [], record=str(tmp_path))
+    grouped = prep.fitted["s"]
+    assert grouped.columns == [f"x{position}" for position in range(8)] + ["price"]
+    assert grouped.obj.scaler.mean_.shape == (9,)
+    assert float(grouped.obj.scaler.mean_[-1]) == pytest.approx(float(data["price"].mean()))
+    train = apply(data, prep, "train")
+    assert abs(float(train.data["price"].mean())) < 1e-6 and abs(float(train.data["x3"].mean())) < 1e-6
+    restored = prep.inverse("price", train.data["price"].to_numpy())
+    assert numpy.allclose(restored, data["price"].to_numpy(), atol=1e-3)
+    again = read_prep(str(tmp_path))
+    assert again.fitted["s"].columns == grouped.columns
+    assert numpy.allclose(again.object_of("s", "x2").apply([0.0, 1.0]),
+                          prep.object_of("s", "x2").apply([0.0, 1.0]))
+
+
+def test_a_grouped_preprocessor_waits_for_the_per_column_steps_before_it(tmp_path):
+    from kalfa.std.pre import cast
+
+    data = housing_frame(rows=50)
+    prep = fit(data, {"x*": {"preprocessors": ["c", "s"]}, "price": {"target": True}},
+               {"c": cast("float32"), "s": standard_scaler()}, [])
+    assert sorted(prep.fitted["c"]) == [f"x{position}" for position in range(8)]
+    assert prep.fitted["s"].columns == [f"x{position}" for position in range(8)]
+    train = apply(data, prep, "train")
+    assert abs(float(train.data["x5"].mean())) < 1e-5
+
+
+def test_grouped_preprocessors_written_in_different_orders_are_an_error():
+    data = housing_frame(rows=40)
+    fields = {"x0": {"preprocessors": ["a", "b"]}, "x1": {"preprocessors": ["b", "a"]},
+              "x*": {"preprocessors": ["a"]}, "price": {"target": True}}
+    with pytest.raises(ValueError, match="different orders"):
+        fit(data, fields, {"a": standard_scaler(), "b": minmax_scaler()}, [])
+
+
+def test_a_grouped_preprocessor_needs_one_column_wide_input():
+    from kalfa.std.pre import one_hot
+
+    data = housing_frame(rows=40)
+    data["kind"] = ["a", "b"] * 20
+    fields = {"kind": {"preprocessors": ["hot", "s"]}, "x*": {}, "price": {"target": True}}
+    with pytest.raises(ValueError, match="one column wide"):
+        fit(data, fields, {"hot": one_hot(), "s": standard_scaler()}, [])
+
+
 def test_fit_and_apply_scale_features_and_invert_the_target(tmp_path):
     data = housing_frame(rows=200)
     scaler = standard_scaler()
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},
                {"s": scaler, "t": standard_scaler()}, [], record=str(tmp_path))
     assert prep.features == [f"x{i}" for i in range(8)] and prep.targets == {"price": ["price"]}
-    assert set(prep.fitted["s"]) == set(prep.features) and set(prep.fitted["t"]) == {"price"}
+    assert set(prep.fitted["s"].columns) == set(prep.features) and set(prep.fitted["t"].columns) == {"price"}
     train = apply(data, prep, "train")
     assert abs(float(train.data["x0"].mean())) < 1e-5 and abs(float(train.data["price"].std()) - 1.0) < 0.01
     assert train.data.dtypes["x0"] == "float32"

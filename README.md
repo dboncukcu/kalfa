@@ -315,7 +315,10 @@ def after_minutes(metrics, turn_index, state, minutes=30.0):
 A trigger takes the turn's `metrics`, the `turn_index` and its own `state` mapping and returns `(fired, state)`; a
 criterion takes `(predictions, targets, **params)`; an objective `(models, batch, **params)`; a metric is an
 object with `update(...)` and `compute()`; a preprocessor an object with `apply` and optionally `fit`, `inverse`,
-`partial_fit`; a device lego (`/device/acme/tpu`) takes no inputs, returns a `torch.device` and raises when the device is
+`partial_fit`, `rescales = True` (the metrics undo it to report in the original scale) and `dtype`; with
+`grouped = True` it is fitted once over the matrix of every column that names it (`fit(matrix)`,
+`apply(matrix, columns=None)`, `inverse(matrix, columns=None)`, `columns` naming the positions a slice holds), the
+sklearn way, and it keeps its statistics per column; a device lego (`/device/acme/tpu`) takes no inputs, returns a `torch.device` and raises when the device is
 not available (`device: {uri: /device/acme/tpu}` then selects it).
 
 **Plugin layout.** A module next to the config (or in a `plugins/` folder next to it) comes in with

@@ -69,9 +69,13 @@ def test_streamed_fit_matches_the_table_fit(housing):
     lazy = fit(stream, fields, pres, [])
     eager = fit(frame, fields, {"scale": standard_scaler(), "hot": one_hot()}, [])
     assert lazy.features == eager.features and lazy.dtypes == eager.dtypes
+    values = numpy.linspace(-2.0, 2.0, 5)
     for name in ("x0", "x1", "x2"):
-        assert lazy.fitted["scale"][name].scaler.mean_ == pytest.approx(eager.fitted["scale"][name].scaler.mean_)
-    assert lazy.fitted["hot"]["kind"].columns("kind") == eager.fitted["hot"]["kind"].columns("kind")
+        # the lazy set fits a grouped preprocessor column by column, the table fit fits one object over the block;
+        # for a per column scaler the two are the same transform
+        assert lazy.object_of("scale", name).apply(values) == pytest.approx(
+            eager.object_of("scale", name).apply(values))
+    assert lazy.object_of("hot", "kind").columns("kind") == eager.object_of("hot", "kind").columns("kind")
     view = apply(stream, lazy, "test")
     assert view.stream is not None and view.index is None
     with pytest.raises(TypeError, match="no length"):

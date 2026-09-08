@@ -121,8 +121,9 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
         original = data[name].to_numpy()
         assert numpy.allclose(targets[:, position].numpy(), original, atol=1e-4)
         assert numpy.allclose(predictions[:, position].numpy(), prep.inverse(name, numpy.zeros(40)), atol=1e-4)
-    means = [float(prep.fitted["t"][name].scaler.mean_[0]) for name in ("y_a", "y_b", "y_c")]
-    assert len(set(round(value, 6) for value in means)) == 3
+    grouped = prep.fitted["t"]
+    means = [float(grouped.obj.scaler.mean_[grouped.columns.index(name)]) for name in ("y_a", "y_b", "y_c")]
+    assert len(set(round(value, 6) for value in means)) == 3 and grouped.columns == ["y_a", "y_b", "y_c", "z"]
 
 
 def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():

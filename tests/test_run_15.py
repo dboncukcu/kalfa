@@ -65,9 +65,9 @@ def test_every_target_keeps_its_own_scale(scores):
 
     source = pandas.read_parquet(scores / "scores.parquet")
     prep = fit(source, {"y_*": {"target": True, "preprocessors": ["s"]}}, {"s": standard_scaler()}, [])
-    scalers = prep.fitted["s"]
-    assert sorted(scalers) == ["y_a", "y_b", "y_c"]
-    means = [float(scalers[name].scaler.mean_[0]) for name in ("y_a", "y_b", "y_c")]
+    grouped = prep.fitted["s"]
+    assert grouped.columns == ["y_a", "y_b", "y_c"]                    # one object, one column of statistics each
+    means = [float(grouped.obj.scaler.mean_[position]) for position in range(3)]
     assert len(set(round(value, 6) for value in means)) == 3
     values = prep.inverse("y_b", [0.0, 1.0])
     assert abs(values[0] - means[1]) < 1e-6
