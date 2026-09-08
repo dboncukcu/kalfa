@@ -87,6 +87,6 @@ def test_save_final_and_select(tmp_path):
     with torch.no_grad():
         state["models"]["model"].nodes["layer"].weight.fill_(9.0)
     chosen = select(state["models"], {}, "best", str(tmp_path))
-    assert float(chosen["model"].nodes["layer"].weight.max()) < 9.0
+    assert float(chosen["model"].nodes["layer"].weight.max().detach()) < 9.0
     with pytest.raises(ValueError):
         select(state["models"], {}, "middle", str(tmp_path))

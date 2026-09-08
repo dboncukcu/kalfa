@@ -62,7 +62,7 @@ def recon_error():
 
 def as_float(value):
     if isinstance(value, torch.Tensor):
-        return float(value)
+        return float(value.detach())
     return float(value)
 
 

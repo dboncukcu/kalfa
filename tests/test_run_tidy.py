@@ -41,6 +41,9 @@ def test_check_tidy(anomaly):
     assert document["losses"]["adv_d"]["params"]["criterion"] == {"uri": "/criterion/kalfa/bce_logits"}
 
 
+@pytest.mark.filterwarnings("ignore::cirak.errors.CirakWarning")      # the dxx heads write a feature the composite alone reads
+@pytest.mark.filterwarnings("ignore:auroc is undefined")             # one class in a set of the tiny synthetic table
+@pytest.mark.filterwarnings("ignore:average_precision is undefined")
 def test_run_tidy(anomaly):
     result = run([CONFIG], parse_sets(params=["epochs=2"]), when="fixed")
     record = Path(result.record)

@@ -45,6 +45,7 @@ def backbone_norm(record, tag="last"):
     return state[key]
 
 
+@pytest.mark.filterwarnings("ignore:the test backbone")
 def test_frozen_backbone_then_unfreeze(pets):
     frozen = run([CONFIG], parse_sets(SMALL, ["epochs=1", "unfreeze_at=5"]), when="frozen")
     history = read_history(frozen.record)
@@ -63,6 +64,7 @@ def test_frozen_backbone_then_unfreeze(pets):
     assert not (Path(thawed.record) / "predictions.parquet").exists()
 
 
+@pytest.mark.filterwarnings("ignore:the test backbone")
 def test_balanced_loader_sees_every_class(pets):
     from kalfa.api import prepare
 

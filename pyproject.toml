@@ -61,4 +61,8 @@ packages = ["src/kalfa"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["ignore::DeprecationWarning"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    # assertions read a parameter or a loss with float(); the library itself detaches (kalfa.std.metric.as_float)
+    "ignore:Converting a tensor with requires_grad=True to a scalar",
+]

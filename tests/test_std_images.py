@@ -155,7 +155,7 @@ def test_two_views_and_simclr_aug(folder):
 
     torch.manual_seed(0)
     loss = ntxent({"net": Net()}, {"image": torch.rand(4, 2, 1, 16, 16)}, "net", temperature=0.5)
-    assert loss.requires_grad and float(loss) > 0.0
+    assert loss.requires_grad and float(loss.detach()) > 0.0
     with pytest.raises(ValueError, match="two views"):
         ntxent({"net": Net()}, {"image": torch.rand(4, 1, 16, 16)}, "net")
 

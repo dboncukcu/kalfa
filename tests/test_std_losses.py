@@ -97,9 +97,9 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
                       "x*": {"preprocessors": ["s"]}},
                {"s": standard_scaler(), "t": standard_scaler()}, [])
     frame = apply(data, prep, "valid")
-    batch = {"x": torch.from_numpy(frame.data[prep.features].to_numpy(dtype="float32"))}
+    batch = {"x": torch.from_numpy(numpy.array(frame.data[prep.features].to_numpy(dtype="float32"), copy=True))}
     for name in ("y_a", "y_b", "y_c", "z"):
-        batch[name] = torch.from_numpy(frame.data[name].to_numpy(dtype="float32"))
+        batch[name] = torch.from_numpy(numpy.array(frame.data[name].to_numpy(dtype="float32"), copy=True))
 
     class Zero(torch.nn.Module):
         inputs = ["x"]
@@ -135,8 +135,8 @@ def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},
                {"s": standard_scaler(), "t": standard_scaler()}, [])
     frame = apply(data, prep, "valid")
-    x = torch.from_numpy(frame.data[prep.features].to_numpy(dtype="float32"))
-    price = torch.from_numpy(frame.data["price"].to_numpy(dtype="float32"))
+    x = torch.from_numpy(numpy.array(frame.data[prep.features].to_numpy(dtype="float32"), copy=True))
+    price = torch.from_numpy(numpy.array(frame.data["price"].to_numpy(dtype="float32"), copy=True))
 
     class Zero(torch.nn.Module):
         inputs = ["x"]
