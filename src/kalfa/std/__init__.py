@@ -1,11 +1,12 @@
-"""kalfa's standard legos, registered with cirak on import; the kinds are declared first."""
+"""kalfa's standard legos, registered with cirak on import; the kinds and the facts are declared first."""
 
-from cirak import declare_kinds
+from cirak import declare_facts, declare_kinds
 from cirak.registry import registry
 
-from ..kinds import KINDS
+from ..kinds import FACTS, KINDS
 
 declare_kinds(*[kind for kind in KINDS if kind not in ("builder", "data")])
+declare_facts(*FACTS)
 
 _before = set(registry.uris())
 

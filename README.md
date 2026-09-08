@@ -284,7 +284,9 @@ defaulted parameters), `mutates` (inputs changed in place and returned under the
 holds the inputs), `refs` (which params are references and of what type: `model`, `loss`, `criterion`,
 `schedule`, `preprocessor`, `generate`, `field`, `column`), `uses` (`predicts` when the lego needs the prediction
 model), `needs_grad` (an objective that needs gradients in the evaluation pass), `extras` (the training keys a turn
-accepts). A `/data/` lego is a run time component: `{uri: name}` as a param value, built once the data exists with
+accepts), `grouped` (a preprocessor fitted once over every column that names it). The last five are kalfa's own
+vocabulary, declared to cirak at import (`kalfa.kinds.FACTS` through `cirak.declare_facts`); cirak stores them and
+reads none of them, and a fact kalfa never declared stays a `RegistryError`, so a misspelled one is still caught. A `/data/` lego is a run time component: `{uri: name}` as a param value, built once the data exists with
 the parameters its signature names (`loader`, `prep`, `target`). The turn contract is the signature of
 `/turn/kalfa/alternating` (`models, optimizers, emas, counters, composites, effects, loader, params, extra, losses,
 metrics, losses_keys, metrics_keys, predicts, steps` plus the bus keys `device`, `prep`, `record`), returning

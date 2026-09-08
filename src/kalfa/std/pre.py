@@ -676,8 +676,9 @@ class StandardScaler(_Scaler):
         return numpy.asarray(self.scaler.mean_, dtype="float64"), numpy.asarray(self.scaler.scale_, dtype="float64")
 
 
-@lego("/pre/sklearn/standard_scaler", state=True, alias="standard_scaler",
-            description="Standardize a column to zero mean and unit variance (sklearn StandardScaler)")
+@lego("/pre/sklearn/standard_scaler", state=True, alias="standard_scaler", grouped=True,
+            description="Standardize a column to zero mean and unit variance (sklearn StandardScaler); one object "
+                        "over every column that names it, its statistics per column")
 def standard_scaler():
     return StandardScaler()
 
@@ -697,8 +698,9 @@ class MinMaxScaler(_Scaler):
         return -numpy.asarray(self.scaler.min_, dtype="float64") / scale, 1.0 / scale
 
 
-@lego("/pre/sklearn/minmax_scaler", state=True, alias="minmax_scaler",
-            description="Scale a column into [low, high] (sklearn MinMaxScaler)")
+@lego("/pre/sklearn/minmax_scaler", state=True, alias="minmax_scaler", grouped=True,
+            description="Scale a column into [low, high] (sklearn MinMaxScaler); one object over every column that "
+                        "names it, its statistics per column")
 def minmax_scaler(low=0.0, high=1.0):
     return MinMaxScaler(low, high)
 

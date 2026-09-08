@@ -14,7 +14,7 @@ from cirak.errors import error, warning
 from cirak.registry import registry as default_registry
 
 from .driver import MODEL_KEYS, is_composite, is_shortcut, models_of
-from .kinds import kalfa_kind, RESERVED_BLOCKS, SETS, TRAINING_FIXED
+from .kinds import kalfa_kind, names_of, RESERVED_BLOCKS, SETS, TRAINING_FIXED
 from .std.pre import RESERVED_FEATURES, RESERVED_INPUT, assign_fields, torch_dtype
 from .std.runtime import expand_targets
 from .std.source import STREAM_SOURCES
@@ -257,11 +257,34 @@ class Checker:
             if name not in used:
                 self.warning("unused_preprocessor", f"preprocessor {name!r} is defined but no field uses it",
                              ("data", "preprocessors", name))
+        self.grouped_order(data)
         if "feed" in data:
             self.call_of(data["feed"], ("data", "feed"), ("feed",), "data.feed")
         source = data.get("source")
         if isinstance(source, dict) and source.get("uri") in STREAM_SOURCES:
             self.lazy_rules(data)
+
+    def grouped_order(self, data):
+        """Two preprocessors that fit over all their columns cannot be written in opposite orders: the columns of
+        the first have to reach it together, and each chain would hold the other back."""
+        grouped = {name for name, entry in self.preprocessors.items()
+                   if isinstance(entry, dict) and isinstance(entry.get("uri"), str)
+                   and self.registry.facts(entry["uri"]).get("grouped", False)}
+        seen = {}
+        fields = data.get("fields") or {}
+        if not isinstance(fields, dict):
+            return
+        for pattern, spec in fields.items():
+            chain = [pre for pre in ((spec or {}).get("preprocessors") or []) if pre in grouped]
+            for position, name in enumerate(chain):
+                for later in chain[position + 1:]:
+                    if (later, name) in seen:
+                        self.error("grouped_order", f"preprocessors {name!r} and {later!r} both fit over all their "
+                                                    f"columns and are written in both orders "
+                                                    f"({seen[(later, name)]!r} and {pattern!r}); one order for all "
+                                                    f"the fields, or a second definition under another name",
+                                   ("data", "fields", pattern))
+                    seen[(name, later)] = pattern
 
     def lazy_rules(self, data):
         """What the lazy set refuses (CONFIG.md section 3): a shuffled or folded split, the balanced sampler, the window
@@ -511,9 +534,9 @@ class Checker:
                 if not isinstance(every, int) or isinstance(every, bool) or every < 1:
                     self.error("invalid_value", f"{section}.{name}.every must be a positive integer", path)
                 self.sets_of(entry.get("sets"), path)
-                if facts.needs_grad and entry.get("sets") != ["train"]:
+                if facts.get("needs_grad") and entry.get("sets") != ["train"]:
                     self.error("needs_grad_set", f"{section}.{name} needs gradients; write sets: [train]", path)
-                if facts.needs_grad and (self.data.get("training") or {}).get("amp"):
+                if facts.get("needs_grad") and (self.data.get("training") or {}).get("amp"):
                     names = self.parameters(self.registry.resolve_quietly(uri))
                     if names is not None and "scaler" not in names:
                         self.error("amp_scaler", f"{section}.{name} needs gradients under amp, so its signature "
@@ -768,7 +791,8 @@ class Checker:
         kind = kalfa_kind(uri)
         if kind == "criterion":
             return True
-        return kind == "metric" and (not facts.uses or "predictions" in facts.uses)
+        uses = names_of(facts.get("uses"))
+        return kind == "metric" and (not uses or "predictions" in uses)
 
     def target_fields(self):
         """The target fields in the order the plan builds them: pattern by pattern, column by column."""
@@ -883,7 +907,8 @@ class Checker:
                 facts = self.registry.facts(uri)
                 if kalfa_kind(uri) == "criterion":
                     return True
-                if kalfa_kind(uri) == "metric" and (not facts.uses or "predictions" in facts.uses):
+                uses = names_of(facts.get("uses"))
+                if kalfa_kind(uri) == "metric" and (not uses or "predictions" in uses):
                     return True
         return False
 
@@ -1130,7 +1155,7 @@ def is_selector(value):
 
 def turn_extras(registry, uri, target=None):
     """The training keys a turn lego accepts: its extras fact."""
-    return set(registry.facts(uri).extras)
+    return set(names_of(registry.facts(uri).get("extras")))
 
 
 def _mentions(value, uri):

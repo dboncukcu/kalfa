@@ -350,6 +350,20 @@ def test_a_definition_without_a_target_is_caught(workdir):
     assert "training.targets" in prepared.errors[0].message
 
 
+def test_grouped_preprocessors_in_opposite_orders(workdir):
+    config = minimal()
+    config["data"]["preprocessors"] = {"scale": {"uri": "standard_scaler"}, "span": {"uri": "minmax_scaler"}}
+    config["data"]["fields"] = {"x0": {"preprocessors": ["scale", "span"]},
+                                "x*": {"preprocessors": ["span", "scale"]},
+                                "price": {"target": True}}
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == ["grouped_order"]
+    assert "one order for all the fields" in prepared.errors[0].message
+    config["data"]["fields"]["x0"]["preprocessors"] = ["span", "scale"]
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == []
+
+
 def test_unresolved_lego_reference_in_params(workdir):
     import myexample  # noqa: F401
 

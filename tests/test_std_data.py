@@ -104,6 +104,24 @@ def test_a_grouped_preprocessor_waits_for_the_per_column_steps_before_it(tmp_pat
     assert abs(float(train.data["x5"].mean())) < 1e-5
 
 
+def test_the_grouped_fact_matches_the_object_the_lego_builds():
+    from cirak.registry import registry
+
+    from kalfa.std.pre import is_grouped
+
+    for uri in sorted(registry.uris()):
+        if not uri.startswith("/pre/"):
+            continue
+        entry = registry.lookup(uri)
+        if entry.facts.partial:
+            continue
+        try:
+            built = registry.resolve(uri)()
+        except TypeError:                                   # the lego needs params (cast, resize, normalize)
+            continue
+        assert is_grouped(built) == registry.facts(uri).get("grouped", False), uri
+
+
 def test_grouped_preprocessors_written_in_different_orders_are_an_error():
     data = housing_frame(rows=40)
     fields = {"x0": {"preprocessors": ["a", "b"]}, "x1": {"preprocessors": ["b", "a"]},

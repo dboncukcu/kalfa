@@ -73,8 +73,8 @@ The legos a config writes, by kind.
 | `/pre/kalfa/to_tensor` | `to_tensor` | `()` |  | Image to a float tensor in [0, 1], channels first |
 | `/pre/kalfa/to_tensor_signed` | `to_tensor_signed` | `()` |  | Image to a float tensor in [-1, 1], channels first |
 | `/pre/kalfa/two_views` | `two_views` | `(transform)` | refs: transform=preprocessor | Two independent applications of a transform to one image, as a pair |
-| `/pre/sklearn/minmax_scaler` | `minmax_scaler` | `(low=0.0, high=1.0)` | state: True | Scale a column into [low, high] (sklearn MinMaxScaler) |
-| `/pre/sklearn/standard_scaler` | `standard_scaler` | `()` | state: True | Standardize a column to zero mean and unit variance (sklearn StandardScaler) |
+| `/pre/sklearn/minmax_scaler` | `minmax_scaler` | `(low=0.0, high=1.0)` | state: True; grouped: True | Scale a column into [low, high] (sklearn MinMaxScaler); one object over every column that names it, its statistics per column |
+| `/pre/sklearn/standard_scaler` | `standard_scaler` | `()` | state: True; grouped: True | Standardize a column to zero mean and unit variance (sklearn StandardScaler); one object over every column that names it, its statistics per column |
 
 ### feed
 

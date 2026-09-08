@@ -74,7 +74,7 @@ def test_myexample_objectives_register_with_facts_and_run():
 
     facts = registry.facts("/objective/myexample/alad_discriminator")
     assert facts.kind == "objective" and facts.partial and facts.refs == {"criterion": "criterion"}
-    assert set(facts.needs_models) == {"encoder", "generator", "dxz", "dxx", "dzz"}
+    assert set(facts.get("needs_models")) == {"encoder", "generator", "dxz", "dxx", "dzz"}
     torch.manual_seed(0)
     models = {"encoder": nn.Linear(6, 4), "generator": nn.Linear(4, 6), "dxz": Two(10, ["logit"]),
               "dxx": Two(12, ["logit", "feature"]), "dzz": Two(8, ["logit"])}

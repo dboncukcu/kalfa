@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "tezgah>=0.2.0",
-    "cirak>=0.2.0",
+    "cirak>=0.2.2",
     "ruamel.yaml>=0.18",
     "torch>=2.2",
     "pandas>=2.2",

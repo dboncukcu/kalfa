@@ -1,4 +1,6 @@
-"""The lego kinds kalfa declares to cirak and where each kind may be written in a config."""
+"""The lego kinds and facts kalfa declares to cirak, and where each kind may be written in a config."""
+
+FACTS = ("uses", "needs_grad", "needs_models", "extras", "grouped")
 
 KINDS = ("source", "split", "pre", "feed", "loader", "layer", "init", "criterion", "objective", "metric",
          "adapter", "optimizer", "schedule", "turn", "trigger", "checkpoint", "rule", "generate", "plot", "strategy",
@@ -15,6 +17,13 @@ def kind_of(uri):
     if kind not in KINDS:
         raise ValueError(f"{uri}: {kind!r} is not a kalfa kind; the kinds are {list(KINDS)}")
     return kind
+
+
+def names_of(value):
+    """A fact written as a name or a list of names, as a tuple; cirak stores a declared fact as it was written."""
+    if value is None:
+        return ()
+    return (value,) if isinstance(value, str) else tuple(value)
 
 
 def cirak_kind(kind):
