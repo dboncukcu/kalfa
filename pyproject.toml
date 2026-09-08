@@ -1,6 +1,6 @@
 [project]
 name = "kalfa"
-version = "0.2.1"
+version = "0.2.2"
 description = "YAML front end for PyTorch training: config sections compiled through cirak templates onto tezgah pipelines"
 readme = "README.md"
 license = "MIT"
