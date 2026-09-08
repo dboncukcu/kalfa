@@ -36,6 +36,7 @@ class Prepared:
     surface: object
     problems: list
     sizes: dict | None = None
+    header: dict | None = None
     document: dict | None = None
     analysis: object = None
     pipeline: object = None
@@ -72,6 +73,7 @@ def prepare(paths, sets=None, inputs=RUN_INPUTS, dry=True) -> Prepared:
         checker.run()
         problems.extend(checker.problems)
     prepared = Prepared(surface, problems)
+    prepared.header = checker.header
     prepared.sizes = checker.sizes() if checker.header is not None else None
     if blocking or has_errors(checker.problems) and not checker.header_only_errors():
         return prepared
@@ -120,6 +122,45 @@ def loaded_sizes(document):
 
     outputs = _data_outputs(document, ["train_loader", "valid_loader", "test_loader"])
     return {name: dataset_size(outputs[f"{name}_loader"].dataset) for name in ("train", "valid", "test")}
+
+
+@dataclass
+class Probe:
+    sizes: dict | None = None
+    prep: object = None
+    features: int | None = None
+    parameters: dict = field(default_factory=dict)
+    shapes: dict = field(default_factory=dict)
+    notes: dict = field(default_factory=dict)
+
+
+def probe(document) -> Probe:
+    """Run the data and models blocks of a recipe: the real set sizes, the fitted plan and the models built on one
+    batch, so that lazy layers have their shapes and the parameters can be counted. Nothing is written."""
+    from .std.feed import dataset_size
+    from .std.runtime import call_model, named_outputs
+
+    outputs = _flow_outputs(document, ("data", "models"),
+                            ["prep", "train_loader", "valid_loader", "test_loader", "models", "composites"])
+    found = Probe(sizes={name: dataset_size(outputs[f"{name}_loader"].dataset) for name in ("train", "valid", "test")},
+                  prep=outputs.get("prep"))
+    if found.prep is not None:
+        found.features = len(found.prep.features)
+    batch = next(iter(outputs["train_loader"]), None)
+    models = {**(outputs.get("models") or {}), **(outputs.get("composites") or {})}
+    for name, module in models.items():
+        if batch is not None:
+            try:
+                with torch.no_grad():
+                    result = named_outputs(module, call_model(module, batch))
+                found.shapes[name] = {wire: tuple(value.shape) for wire, value in result.items()
+                                      if hasattr(value, "shape")}
+            except Exception as exc:
+                found.notes[name] = f"not built on the batch: {type(exc).__name__} {exc}"
+        if getattr(module, "initialized", True):
+            found.parameters[name] = (sum(item.numel() for item in module.parameters()),
+                                      sum(item.numel() for item in module.parameters() if item.requires_grad))
+    return found
 
 
 def seed_all(seed):
@@ -406,7 +447,14 @@ def generate(run_dir, which=None, sets=None, device=None) -> Generated:
 
 def _data_outputs(document, names):
     """Outputs of the data block of a recipe run on its own (no record, nothing written)."""
-    flow = {"outputs": list(names), "data": document["flow"]["data"]}
+    return _flow_outputs(document, ("data",), names)
+
+
+def _flow_outputs(document, blocks, names):
+    """Outputs of the named flow blocks of a recipe run on their own (no record, nothing written)."""
+    flow = {"outputs": list(names)}
+    for block in blocks:
+        flow[block] = document["flow"][block]
     analysis = analyze({**{key: value for key, value in document.items() if key != "flow"}, "flow": flow})
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -422,5 +470,5 @@ def _test_loader(document):
     return _data_outputs(document, ["test_loader"])["test_loader"]
 
 
-__all__ = ["Generated", "KalfaError", "Prepared", "Prediction", "RunResult", "check", "generate", "predict",
-           "prepare", "read_resolved", "resume", "run", "seed_all"]
+__all__ = ["Generated", "KalfaError", "Prepared", "Prediction", "Probe", "RunResult", "check", "generate",
+           "predict", "prepare", "probe", "read_resolved", "resume", "run", "seed_all"]

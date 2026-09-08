@@ -15,8 +15,8 @@ from .api import generate as generate_run
 from .api import predict as predict_run
 from .api import resume as resume_run
 from .api import run as run_config
-from .check import sets_text
 from .collect import collect as collect_runs
+from .describe import ALL_SECTIONS, DEFAULT_SECTIONS
 from .kinds import kalfa_kind
 from .config import parse_sets
 
@@ -85,6 +85,19 @@ def build_parser():
     check_cmd.add_argument("--load", action="store_true",
                            help="run the data block and report the real set sizes (after filters)")
     check_cmd.set_defaults(handler=cmd_check)
+
+    describe_cmd = commands.add_parser("describe", help="the config as an analysis: data, model, training, after "
+                                                       "and the columns, after the same checks")
+    describe_cmd.add_argument("config", nargs="+")
+    _set_option(describe_cmd)
+    describe_cmd.add_argument("--load", action="store_true",
+                              help="run the data and model blocks: the real set sizes, the fitted column widths and "
+                                   "the parameter counts")
+    describe_cmd.add_argument("--section", action="append", default=[], choices=list(ALL_SECTIONS),
+                              help="print this section only (repeatable)")
+    describe_cmd.add_argument("--wiring", action="store_true",
+                              help="add the implicit bindings of the compiled pipeline")
+    describe_cmd.set_defaults(handler=cmd_describe)
 
     predict_cmd = commands.add_parser("predict", help="predict with a recorded run")
     predict_cmd.add_argument("run")
@@ -223,14 +236,10 @@ def cmd_check(args) -> int:
         print_problems(prepared.problems, sys.stdout)
     else:
         print(style.green("no problems found"))
-    if prepared.sizes is not None:
-        print(sets_text(prepared.sizes))
     if prepared.loaded is not None:
-        print(sets_text(prepared.loaded, loaded=True))
-    if prepared.implicit:
-        print("implicit bindings:")
-        for path, param, key in prepared.implicit:
-            print(f"  {path}: {param} <- {key}")
+        from .describe import load_text
+
+        print(load_text(prepared, style))
     if args.recipe:
         if prepared.document is None:
             print(style.red("the config could not be shaped, no recipe"), file=sys.stderr)
@@ -269,6 +278,35 @@ def cmd_resume(args) -> int:
     print(f"resumed {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
           f"record {style.cyan(result.record)}")
     return 0
+
+
+def cmd_describe(args) -> int:
+    from .describe import render
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        prepared = check_config(args.config, _layer(args))
+    style = style_for(sys.stdout)
+    if prepared.problems:
+        print_problems(prepared.problems, sys.stdout)
+    else:
+        print(style.green("no problems found"))
+    found = None
+    if args.load:
+        if prepared.document is None or prepared.errors:
+            print(style.yellow("--load needs a config without errors; describing the config as written"),
+                  file=sys.stderr)
+        else:
+            from .api import probe
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                found = probe(prepared.document)
+    sections = list(args.section) if args.section else None
+    if args.wiring and "wiring" not in (sections or ()):
+        sections = list(sections or DEFAULT_SECTIONS) + ["wiring"]
+    sys.stdout.write(render(prepared, style, sections, found))
+    return 1 if prepared.errors else 0
 
 
 def cmd_predict(args) -> int:

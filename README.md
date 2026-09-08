@@ -67,6 +67,9 @@ in `CONFIG.md` section 3).
 kalfa run cfg.yaml [--set path=value ...] [-p name=value ...]     # check, compile, train; opens the record directory
                     [--executor thread --workers N]               # serial by default; under thread an aliasing warning is an error
 kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--load]
+                                                                  # only the problems; --load runs the data block
+kalfa describe cfg.yaml [--load] [--section data|model|...] [--wiring]
+                                                                  # the config as an analysis, after the same checks
 kalfa predict runs/x [--model name] [--which best|last] [--data new.parquet] [--device cuda]
 kalfa generate runs/x [--which best|last] [--device cuda]         # writes samples/ with the sampler of the generate section
 kalfa resume runs/x [--set training.epochs=N]                     # continues from last.pt or final/ into a new directory
@@ -118,7 +121,8 @@ samples = generate(result.record, which="best")
 
 | Function | Returns | What it carries |
 |---|---|---|
-| `check(paths, sets=None, load=False)` | `Prepared` | `problems`, `errors`, `warnings`, `sizes` (the set table), `loaded` (real sizes), `implicit` (the implicit bindings), `document`, `analysis`, `pipeline`, `dump()` (the `flow.yaml` document) |
+| `check(paths, sets=None, load=False)` | `Prepared` | `problems`, `errors`, `warnings`, `sizes` (the set table), `loaded` (real sizes), `header` (columns, dtypes, rows), `implicit` (the implicit bindings), `document`, `analysis`, `pipeline`, `dump()` (the `flow.yaml` document) |
+| `probe(document)` | `Probe` | the data and model blocks run on their own: `sizes`, `prep` (the fitted plan), `features` (the width of the feature tensor), `parameters` per model, `shapes` of one batch, `notes`; `kalfa.describe.render(prepared, style, sections, probe)` turns the two into the text `kalfa describe` prints |
 | `run(paths, sets=None, executor="serial", workers=None)` | `RunResult` | `record` (the directory it opened), `report` (tezgah's, `report.outputs["history"]` is the per turn table), `device` |
 | `resume(run_dir, sets=None, executor="serial", workers=None)` | `RunResult` | the same, in a new record directory |
 | `predict(run_dir, model=None, which=None, data=None, device=None)` | `Prediction` | `path`, `table` (a DataFrame), `model` |
@@ -202,6 +206,30 @@ never written into (an error).
 
 `kalfa predict` rewrites `predictions.parquet` on the run's own test set; with `--data`
 `predictions_<file name>[_<model>].parquet`.
+
+## Looking at a config
+
+`kalfa check` answers one question: are there problems. `kalfa describe` answers the rest. It runs the same checks
+and then prints the config as an analysis: where the data comes from and what every field goes through, the model
+graphs as wire diagrams, the optimizers with the loss each one carries, the losses and metrics with the sets they
+are reported on, the rule chain with its conditions, what the run writes at the end, and a column by column table
+of the source (dtype, field, preprocessor chain, role, the place it takes in the feature tensor).
+
+In a terminal the colors carry the grammar: a lego name is cyan, a parameter name is dim, the values stay plain.
+So `parquet  housing.parquet` reads as the source lego and its file, `grouped_table prefix=y_ name=y` as the feed
+lego and its parameters, and `random  0.8 / 0.1 / 0.1  seed=7` as the split lego, its ratios and its seed.
+
+Statically it reads the file header and the compiled recipe, so it needs no data beyond the source header.
+`--load` runs the data and model blocks for real (nothing is written): the set sizes after the filters, the widths
+a fitted `one_hot` produces, the tensor slots of every column, and the parameter counts of models whose layers are
+lazy until the first batch. `--section data|model|training|after|columns|wiring` narrows the output, `--wiring`
+adds the implicit bindings of the compiled pipeline to the default sections.
+
+```
+kalfa describe config.yaml
+kalfa describe config.yaml --load
+kalfa describe config.yaml --section columns
+```
 
 ## Alias packs and plugins
 

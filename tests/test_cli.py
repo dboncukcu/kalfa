@@ -16,8 +16,7 @@ def test_check_reports_problems_and_exit_codes(workdir, capsys):
     path = write_config(workdir / "cfg.yaml", minimal())
     assert main(["check", path]) == 0
     out = capsys.readouterr().out
-    assert "no problems found" in out and "sets (before filters, from the file header): train 1400, valid 300, test 300" in out
-    assert "implicit bindings:" in out and "training.init: device <- device" in out
+    assert out.strip() == "no problems found"
     config = minimal()
     config["training"]["report"] = "best"
     path = write_config(workdir / "bad.yaml", config)
@@ -74,7 +73,9 @@ def test_run_predict_resume_collect_ls(workdir, capsys):
 
     assert main(["check", "cfg.yaml", "--load"]) == 0
     printed = capsys.readouterr().out
-    assert "sets (before filters, from the file header): train" in printed and "sets (loaded): train" in printed
+    assert "loaded the data block:" in printed and "housing.parquet 2 000 rows" in printed
+    assert "fitted scale on train ─→ table feed ─→ 3 loaders, batch 64" in printed
+    assert "sets after filters: train 1 400" in printed
     assert main(["ls", "/alias/kalfa/tabular"]) == 0
     out = capsys.readouterr().out
     assert "/alias/kalfa/tabular" in out and re.search(r"parquet\s+source\s+/source/kalfa/parquet", out)
