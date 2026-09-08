@@ -26,15 +26,15 @@ wheels = [
 
 [[package]]
 name = "cirak"
-version = "0.2.0"
+version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ruamel-yaml" },
     { name = "tezgah" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/89/22/54eb0c2a2ba2c83b6f84858e6639a3e2bd84d521b8847871cbbfb277da72/cirak-0.2.0.tar.gz", hash = "sha256:a0a886768a2df281783f72b2ec9fa12f0d910f26400ba0625b85208be14fac62", size = 120359, upload-time = "2026-09-07T14:36:49.128Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/15/9a65b269f1a564fd2371e78e2bcdaae13fbca97b17685c771006cc35036c/cirak-0.2.2.tar.gz", hash = "sha256:a224189c534efdf6c162313f454f837036f4ee14be4ace6070c9d8cc0f718415", size = 121291, upload-time = "2026-09-08T15:34:21.906Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/d7/5e9bcd105572d872d072cba22b3d5fcaff0f918350715b025016cf586218/cirak-0.2.0-py3-none-any.whl", hash = "sha256:c3a9b1276d3f1cc13144172d06f7293d1e748298b3584240baeb73da164e8a9d", size = 56851, upload-time = "2026-09-07T14:36:50.105Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/c3/53dd2510eab621ab63ef30d204d4d50ee576edea81724623d4064a0eb82a/cirak-0.2.2-py3-none-any.whl", hash = "sha256:140bbdd4b856548b6a22fa0b814935f6febb6c6c82ff007638cf18c6cb278868", size = 57236, upload-time = "2026-09-08T15:34:23.07Z" },
 ]
 
 [[package]]
@@ -353,7 +353,7 @@ wheels = [
 
 [[package]]
 name = "kalfa"
-version = "0.2.1"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "cirak" },
@@ -383,7 +383,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cirak", specifier = ">=0.2.0" },
+    { name = "cirak", specifier = ">=0.2.2" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "optuna", marker = "extra == 'sweep'", specifier = ">=3.6" },
     { name = "pandas", specifier = ">=2.2" },
