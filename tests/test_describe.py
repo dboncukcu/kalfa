@@ -74,6 +74,28 @@ def test_describe_shows_the_target_table_and_the_slots(tmp_path, monkeypatch, ca
     assert "y_hat ─→ y_*" in out and "compares" in out
 
 
+def test_describe_load_falls_back_to_the_plan_without_a_header(tmp_path, monkeypatch, capsys):
+    import kalfa
+    from kalfa.synthetic import scores_frame
+
+    @kalfa.lego("/source/test/scores", returns="df", alias="test_scores",
+                description="the scores table built in memory, with no file to read a header from")
+    def scores(rows=400):
+        return scores_frame(rows)
+
+    monkeypatch.chdir(tmp_path)
+    config = (CONFIGS / "15_multi_target.yaml").read_text().replace(
+        "{uri: parquet, params: {path: scores.parquet}}", "{uri: test_scores, params: {rows: 400}}")
+    path = tmp_path / "in_memory.yaml"
+    path.write_text(config)
+    assert main(["describe", str(path), "--section", "columns"]) == 0
+    assert "the data header could not be read" in capsys.readouterr().out
+    assert main(["describe", str(path), "--load", "--section", "columns", "--section", "training"]) == 0
+    out = capsys.readouterr().out
+    assert "y_a" in out and "target   y_hat[0]" in out and "y_c" in out
+    assert "y_a, y_b, y_c" in out
+
+
 def test_describe_sections_and_wiring(workdir, capsys):
     assert main(["describe", str(CONFIG_01), "--section", "model"]) == 0
     out = capsys.readouterr().out

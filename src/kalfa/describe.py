@@ -210,8 +210,11 @@ def owners_of(prepared):
     return owners, columns
 
 
-def target_fields(prepared):
-    """The target fields in the order the plan builds them: pattern by pattern, column by column."""
+def target_fields(prepared, probe=None):
+    """The target fields in the order the plan builds them: from the fitted plan when the data was loaded, else
+    from the file header and the field patterns, pattern by pattern, column by column."""
+    if probe is not None and probe.prep is not None:
+        return [item.name for item in probe.prep.fields if item.target]
     params = data_params(prepared) or {}
     fields = params.get("fields") or {}
     owners, columns = owners_of(prepared)
@@ -222,12 +225,12 @@ def target_fields(prepared):
     return found
 
 
-def target_slots(prepared):
+def target_slots(prepared, probe=None):
     """The place every target field takes in the output wire that predicts it, from training.targets."""
     from .std.runtime import expand_targets
 
     mapping = block_params(prepared, "after").get("targets") or {}
-    fields = target_fields(prepared)
+    fields = target_fields(prepared, probe)
     slots = {}
     for wire, selector in mapping.items():
         for position, name in enumerate(expand_targets(selector, fields)):
@@ -564,7 +567,7 @@ def training_section(prepared, style, width, probe=None):
 
     mapping = block_params(prepared, "after").get("targets") or {}
     if mapping:
-        fields = target_fields(prepared)
+        fields = target_fields(prepared, probe)
         rows = [[wire, ARROW, ", ".join(expand_targets(selector, fields)) or str(selector)]
                 for wire, selector in mapping.items()]
         lines.append("")
@@ -647,13 +650,16 @@ def column_refs(prepared):
 def columns_section(prepared, style, width, probe=None):
     header = prepared.header
     if header is None:
-        return [style.dim("  the data header could not be read, no column table")]
+        if probe is not None and probe.prep is not None:
+            return plan_columns(prepared, style, width, probe)
+        return [style.dim("  the data header could not be read (a source lego of your own reads it), "
+                          "no column table; --load builds it from the fitted plan")]
     params = data_params(prepared) or {}
     fields = params.get("fields") or {}
     drop = list(params.get("drop") or [])
     owners, _ = owners_of(prepared)
     refs = column_refs(prepared)
-    wires = target_slots(prepared)
+    wires = target_slots(prepared, probe)
     produced = {}
     slots = {}
     if probe is not None and probe.prep is not None:
@@ -691,6 +697,28 @@ def columns_section(prepared, style, width, probe=None):
     if probe is None:
         lines.append("  " + style.dim("the produced widths and the tensor slots need --load"))
     return lines
+
+
+def plan_columns(prepared, style, width, probe):
+    """The column table of a run whose header could not be read: every field of the fitted plan, in plan order."""
+    prep = probe.prep
+    features = list(prep.features)
+    wires = target_slots(prepared, probe)
+    rows = []
+    for item in prep.fields:
+        chain = f" {ARROW} ".join(item.chain) or "—"
+        if len(item.columns) > 1:
+            chain += f"  ({len(item.columns)} columns)"
+        dtype = str(prep.dtypes.get(item.columns[0] if item.columns else item.name, "?"))
+        if item.target:
+            wire, position = wires.get(item.name, (None, None))
+            rows.append([item.name, dtype, chain, "target", item.name if wire is None else f"{wire}[{position}]"])
+            continue
+        positions = [features.index(name) for name in item.columns if name in features]
+        span = f"x[{min(positions)} … {max(positions)}]" if len(positions) > 1 else (
+            f"x[{positions[0]}]" if positions else "—")
+        rows.append([item.name, dtype, chain, "feature", span])
+    return table(["column", "dtype", "preprocessors", "role", "tensor"], rows, style, width=width)
 
 
 def wiring_section(prepared, style, width, probe=None):
