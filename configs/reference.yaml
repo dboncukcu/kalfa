@@ -51,7 +51,9 @@ metrics: {}                       # [empty] name: {uri, params, every: 1, sets: 
 losses: {}                        # [required, at least one] name: {uri, params, every: 1, sets: [train, valid, test], output, target}
                                   # a lego of the criterion kind ((predictions, targets); the std adapter hands the predicts output and the target) or of the
                                   # objective kind ((models, batch, **params); a scalar or a mapping of terms with a required loss key); the metric kind is a check error
-                                  # output: the wire of a multi output model (the first output when absent); target: a field name | input (the target: true field when absent)
+                                  # output: the wire of a multi output model (the first output when absent)
+                                  # target: a field name | a list of names | a glob | input; absent takes the selector training.targets gives the wire,
+                                  # else the single target: true field (a check error with several); several fields are stacked into one (batch, n) tensor
                                   # needs_grad objectives write sets: [train]; the alias table is flat: mae is /criterion/kalfa/mae in both sections
 optimizers: {}                    # [empty, with an inline one] name: {uri, params: {lr, ..., groups: [{match: "model.*", lr}]}, loss: loss_name, schedule: {uri, params}}
                                   # an unused definition is an error; loss is required
@@ -60,6 +62,9 @@ training:
   turn: null                      # [required] supervised | {uri: alternating, params: {order: [d, g], steps: {d: 5, g: 1}, fresh_batch: false}} | your own lego
                                   # the default of order is the writing order of optimizers, of steps 1 [library: the lego]
   predicts: null                  # [derived] the prediction model; the single trained model when there is one; a check error when needed and absent
+  targets: {}                     # [empty] output wire: the target fields it predicts, {y_hat: "y_*", z_hat: z}; a name, a list of names or a glob
+                                  # several fields become one (batch, n) tensor in the plan's field order, every column inverted with its own chain;
+                                  # the losses and the metrics inherit the target of the wire they name; required with several wires and several target fields
   epochs: null                    # [required, one of the two] or steps: {total: T, turn: K}; a step = one update pass, k batches with accumulate k
   steps: null
   loss: null                      # the name of the loss with a single optimizer (the only place when the optimizer is inline)
