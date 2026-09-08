@@ -24,6 +24,23 @@ def test_docs_command_prints_and_writes(tmp_path, capsys):
     assert target.read_text() == render()
 
 
+def test_docs_lists_the_legos_of_a_plugin(capsys):
+    assert main(["docs", "--plugin", "myexample"]) == 0
+    out = capsys.readouterr().out
+    assert "## Plugin legos" in out and "| `/objective/myexample/alad_discriminator` |" in out
+    assert "## Skeleton steps" in out and out != render()
+    assert main(["docs", "--config", str(ROOT / "examples" / "alad" / "config.yaml")]) == 0
+    assert "| `/objective/myexample/alad_generator` |" in capsys.readouterr().out
+    assert render() == (ROOT / "DOCS.md").read_text(), "the plugin section must stay out of the std reference"
+
+
+def test_docs_reports_a_plugin_it_cannot_import(capsys):
+    assert main(["docs", "--plugin", "no_such_plugin_module"]) == 1
+    captured = capsys.readouterr()
+    assert "## Plugin legos" in captured.out
+    assert "[plugin_import_failed]" in captured.err and "no_such_plugin_module" in captured.err
+
+
 def listed_uris(section):
     return set(re.findall(r"^\| `(/[^`]+)`", section, re.M))
 

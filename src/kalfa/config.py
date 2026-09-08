@@ -86,6 +86,11 @@ def _import_plugins(names, problems):
                 problems.append(error("plugin_import_failed", f"cannot import plugin {name}: {exc}"))
 
 
+def _add_to_sys_path(directory):
+    if directory.is_dir() and str(directory) not in sys.path:
+        sys.path.insert(0, str(directory))
+
+
 def _extend_sys_path(layer):
     """Plugins import from the directory of every config file and from a plugins/ folder next to it (a record
     directory keeps the copies of the modules its run imported)."""
@@ -94,8 +99,29 @@ def _extend_sys_path(layer):
             continue
         parent = Path(loaded.file).parent
         for directory in (parent / "plugins", parent):
-            if directory.is_dir() and str(directory) not in sys.path:
-                sys.path.insert(0, str(directory))
+            _add_to_sys_path(directory)
+
+
+def _module_name(text):
+    path = Path(text)
+    if path.suffix == ".py":
+        _add_to_sys_path(path.resolve().parent)
+        return path.stem
+    for directory in (Path.cwd() / "plugins", Path.cwd()):
+        _add_to_sys_path(directory)
+    return text
+
+
+def import_plugins(paths=(), modules=()):
+    problems = []
+    for path in paths or ():
+        layer, load_problems = load([str(path)], registry.fragments())
+        raw, _, _, merge_problems = merge_layers(layer)
+        problems.extend([*load_problems, *merge_problems])
+        _extend_sys_path(layer)
+        _import_plugins(raw.get("plugins"), problems)
+    _import_plugins([_module_name(name) for name in modules or ()], problems)
+    return problems
 
 
 def plugin_aliases():

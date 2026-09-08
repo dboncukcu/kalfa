@@ -16,6 +16,11 @@ config section it may be written in follows from the kind (`CONFIG.md` section 5
 valid in a config; the alias packs at the end give the short names. The skeleton steps come after the catalog.
 """
 
+PLUGIN_NOTE = """Legos outside kalfa's std set: what the plugin modules of this listing registered (`kalfa docs --plugin module`
+or `kalfa docs --config config.yaml`). They are written in a config exactly like the std legos, the kind is the
+first segment of the URI and decides which section takes them.
+"""
+
 SKELETON_NOTE = """These are the skeleton steps `src/kalfa/templates/kalfa.yaml` calls; they are not written in a config, the
 template places them and the driver fills their params from the config sections. The list is derived from the URIs
 the template mentions, so it cannot drift. Two more legos are inserted by the driver rather than by the template
@@ -81,6 +86,18 @@ def pack_tables():
     return tables
 
 
+def plugin_uris():
+    from .std import STD_URIS
+
+    found = []
+    for uri in sorted(registry.uris()):
+        entry = registry.lookup(uri)
+        if uri in STD_URIS or entry is None or entry.fragment:
+            continue
+        found.append(uri)
+    return found
+
+
 def table(lines, uris):
     lines.append("| URI | Alias | Signature | Facts | Description |")
     lines.append("|---|---|---|---|---|")
@@ -93,8 +110,9 @@ def table(lines, uris):
     lines.append("")
 
 
-def render(uris=None):
-    """The reference as Markdown: the catalog by kind, the skeleton steps the template calls, the alias packs."""
+def render(uris=None, plugins=None):
+    """The reference as Markdown: the catalog by kind, the plugin legos when a listing loaded any, the skeleton
+    steps the template calls, the alias packs."""
     from .std import STD_URIS
 
     everything = sorted(uris if uris is not None else STD_URIS)
@@ -128,6 +146,17 @@ def render(uris=None):
             continue
         lines.append(f"### {kind}\n")
         table(lines, entries)
+    if plugins is not None:
+        lines.append("## Plugin legos\n")
+        lines.append(PLUGIN_NOTE)
+        by_kind = {kind: [uri for uri in plugins if kalfa_kind(uri) == kind] for kind in KINDS}
+        by_kind["other"] = [uri for uri in plugins if kalfa_kind(uri) is None]
+        if not plugins:
+            lines.append("Nothing registered outside kalfa's std set.\n")
+        for kind, entries in by_kind.items():
+            if entries:
+                lines.append(f"### {kind}\n")
+                table(lines, entries)
     lines.append("## Skeleton steps\n")
     lines.append(SKELETON_NOTE)
     table(lines, skeleton)

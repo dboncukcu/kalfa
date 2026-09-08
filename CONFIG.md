@@ -177,6 +177,7 @@ The history: per turn the `train/`, `val/`, `test/` metric and loss values (loss
   * `kalfa collect <root>`: walks the subfolders of a sweep root, puts those with a `sweep.json` into the table (`sweep.csv`, `sweep.json`, `sweep.md`) and writes the best point; lists and skips the unfinished or failed ones, and works on a half done sweep. `kalfa collect runs/cv_*`: the k fold summary when there is a `fold` param (the mean and deviation of every fold's `test/` metrics, the last values per fold, `cv.json` and `cv.md`); otherwise the sweep table of the list of runs (the `params` differences as columns).
   * `kalfa ls [/alias/kalfa/tabular | /loss/ | ...] [--kind kind]`: lists the packs and the legos with their facts; a word without a leading slash (`kalfa ls tokenizer`) searches the URIs, aliases and descriptions and shows the aliases with their packs.
   * `kalfa docs --write DOCS.md`: the lego reference generated from the registry.
+  * `ls` and `docs` take `--plugin module` (a module name, or a path to a `.py` file) and `--config cfg.yaml` (the modules of the config's `plugins` section), both repeatable: the modules are imported before the listing, so your own legos are listed with their signature and facts. The config is read, not validated, so a half written config still brings its legos in; an import that fails is printed and the exit code is 1. `docs` prints them in a separate `Plugin legos` section, so `DOCS.md` (written without the options) stays the reference of what kalfa ships.
 
 ## Appendix (designer)
 

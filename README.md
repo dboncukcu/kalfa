@@ -74,6 +74,7 @@ kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep 
 kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
 kalfa ls [/alias/kalfa/tabular | /criterion | ... | word]         # packs and legos with their kinds and facts; a word searches
 kalfa docs [--write DOCS.md]                                      # the lego reference generated from the registry
+kalfa ls|docs [--plugin module ...] [--config cfg.yaml ...]       # the same listings with your own legos imported first
 ```
 
 `--set path=value`: the path is dotted from the root of the document (`--set training.epochs=5`,
@@ -210,7 +211,9 @@ never written into (an error).
 everywhere; `kalfa ls /alias/kalfa/tabular` prints the contents, `kalfa ls tokenizer` searches names and
 descriptions. Your own lego is registered with `@kalfa.lego` in a Python module next to the config and comes in
 with `plugins: [module]`; `examples/alad/myexample.py` (the ALAD objectives of that example) and `tests/plugins/`
-are examples. Details in the Development section.
+are examples. `kalfa ls alad --plugin myexample` and `kalfa docs --config cfg.yaml` import those modules before the
+listing, so your own legos come with their signature and facts (`docs` prints them in a separate `Plugin legos`
+section, `DOCS.md` stays the reference of what kalfa ships). Details in the Development section.
 
 ## Development
 
@@ -283,6 +286,7 @@ generated, never edited; `tests/test_dump.py` checks that they are current and s
 reference config has an end to end run test on synthetic data, CPU only, no network; test plugins live under
 `tests/plugins/`; the reinstalled environment (`uv sync --reinstall`) runs the suite before a release.
 
-**Versions and releases.** kalfa pins `tezgah>=` and `cirak>=` in `pyproject.toml`; bump the version, run the
-suite against the reinstalled environment (`uv sync --reinstall`), then build (`uv build`). kalfa is 0.2.0 and
+**Versions and releases.** kalfa pins `tezgah>=` and `cirak>=` in `pyproject.toml`; bump the version, regenerate
+the dumps (`tests/fixtures/regenerate_recipes.py` and `regenerate_dumps.py`, whose headers carry the version), run
+the suite against the reinstalled environment (`uv sync --reinstall`), then build (`uv build`). kalfa is 0.2.0 and
 needs tezgah and cirak 0.2.0 or later.

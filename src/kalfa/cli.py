@@ -132,14 +132,36 @@ def build_parser():
     docs_cmd = commands.add_parser("docs", help="print the lego reference generated from the registry, or write it "
                                                 "with --write DOCS.md")
     docs_cmd.add_argument("--write", metavar="PATH", help="write the reference to this file instead of printing it")
+    _plugin_option(docs_cmd)
     docs_cmd.set_defaults(handler=cmd_docs)
 
     ls_cmd = commands.add_parser("ls", help="list alias packs and legos with their kinds and facts; a word without "
                                             "a leading slash searches names, aliases and descriptions")
     ls_cmd.add_argument("prefix", nargs="?", default=None, metavar="PREFIX|WORD")
     ls_cmd.add_argument("--kind")
+    _plugin_option(ls_cmd)
     ls_cmd.set_defaults(handler=cmd_ls)
     return parser
+
+
+def _plugin_option(command):
+    command.add_argument("--plugin", action="append", default=[], metavar="MODULE",
+                         help="import this module before listing, so that its legos come with; a module name on "
+                              "sys.path or next to the working directory, or a path to a .py file (repeatable)")
+    command.add_argument("--config", action="append", default=[], metavar="PATH",
+                         help="import the modules of this config's plugins section before listing; the config is "
+                              "read, not validated (repeatable)")
+
+
+def _load_plugins(args):
+    if not args.plugin and not args.config:
+        return False
+    from .config import import_plugins
+
+    problems = import_plugins(args.config, args.plugin)
+    if problems:
+        print_problems(problems, sys.stderr)
+    return any(problem.severity == "error" for problem in problems)
 
 
 def _device_option(command):
@@ -309,26 +331,28 @@ def cmd_sweep(args) -> int:
 
 
 def cmd_docs(args) -> int:
-    from .docs import render
+    from .docs import plugin_uris, render
 
-    text = render()
+    failed = _load_plugins(args)
+    text = render(plugins=plugin_uris() if args.plugin or args.config else None)
     if args.write:
         from pathlib import Path
 
         Path(args.write).write_text(text)
         print(f"wrote {args.write}")
-        return 0
-    sys.stdout.write(text)
-    return 0
+    else:
+        sys.stdout.write(text)
+    return 1 if failed else 0
 
 
 def cmd_ls(args) -> int:
     style = style_for(sys.stdout)
+    code = 1 if _load_plugins(args) else 0
     prefix = args.prefix
     if prefix is not None and not prefix.startswith("/"):
         entries = search_entries(prefix, args.kind)
         _print_entries(entries, style, aliases=True)
-        return 0
+        return code
     if prefix is None or prefix.startswith("/alias/"):
         for uri, path in sorted(registry.fragments().items()):
             if not uri.startswith("/alias/") or (prefix is not None and not uri.startswith(prefix.rstrip("/"))):
@@ -336,13 +360,13 @@ def cmd_ls(args) -> int:
             print(style.bold(uri) + "  " + style.dim(str(path)))
             _print_pack(path, style, args.kind)
         if prefix is not None:
-            return 0
+            return code
         print()
     entries = registry.ls(prefix or "/")
     if args.kind is not None:
         entries = [entry for entry in entries if kalfa_kind(entry.uri) == args.kind]
     _print_entries(entries, style)
-    return 0
+    return code
 
 
 def search_entries(word, kind=None):

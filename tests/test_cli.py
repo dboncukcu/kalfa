@@ -6,6 +6,7 @@ import re
 import pytest
 
 import kalfa  # noqa: F401
+from conftest import ROOT
 from helpers import minimal, write_config
 from kalfa.cli import main
 from kalfa.collect import collect, fold_summary, sweep_table
@@ -83,6 +84,16 @@ def test_run_predict_resume_collect_ls(workdir, capsys):
     assert main(["ls"]) == 0
     out = capsys.readouterr().out
     assert "/alias/kalfa/tabular" in out and "/turn/kalfa/alternating" in out
+
+
+def test_ls_takes_plugins(capsys):
+    assert main(["ls", "alad", "--plugin", "myexample"]) == 0
+    out = capsys.readouterr().out
+    assert "/objective/myexample/alad_discriminator" in out and "/objective/myexample/alad_generator" in out
+    assert main(["ls", "/objective/myexample", "--config", str(ROOT / "examples" / "alad" / "config.yaml")]) == 0
+    assert "/objective/myexample/alad_generator" in capsys.readouterr().out
+    assert main(["ls", "alad", "--plugin", "no_such_plugin_module"]) == 1
+    assert "cannot import plugin no_such_plugin_module" in capsys.readouterr().err
 
 
 def test_collect_sweep_table(tmp_path):
