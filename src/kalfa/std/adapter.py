@@ -16,6 +16,13 @@ def wires(keys):
     return keys.get("output"), keys.get("target")
 
 
+def observed(value):
+    """A tensor as an observation: off the graph. Metrics never backpropagate, and a metric that accumulates a
+    tensor carrying gradients keeps the graph of every batch alive."""
+    detach = getattr(value, "detach", None)
+    return detach() if callable(detach) else value
+
+
 class CriterionAdapter:
     def __init__(self, criterion):
         self.criterion = criterion
@@ -24,6 +31,7 @@ class CriterionAdapter:
         output, target = wires(keys)
         if rescale:
             predictions, targets = context.rescaled(output, target)
+            predictions, targets = observed(predictions), observed(targets)
         else:
             predictions, targets = context.predictions(output), context.target(target, output)
         return self.criterion(predictions, targets)
@@ -104,9 +112,9 @@ class MetricTracker:
             else:
                 predictions, targets = context.predictions(self.output), context.target(self.target, self.output)
             if "predictions" in names:
-                arguments["predictions"] = predictions
+                arguments["predictions"] = observed(predictions)
             if "targets" in names:
-                arguments["targets"] = targets
+                arguments["targets"] = observed(targets)
         if "models" in names:
             arguments["models"] = context.everything()
         if "batch" in names:

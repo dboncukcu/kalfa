@@ -425,22 +425,26 @@ def search_entries(word, kind=None):
 
 def pack_members():
     """Alias name and pack per URI, read from the registered alias packs."""
+    from pathlib import Path
+
     from ruamel.yaml import YAML
 
     members = {}
     for uri, path in sorted(registry.fragments().items()):
         if not uri.startswith("/alias/"):
             continue
-        table = (YAML(typ="safe").load(open(path).read()) or {}).get("alias") or {}
+        table = (YAML(typ="safe").load(Path(path).read_text()) or {}).get("alias") or {}
         for name, target in table.items():
             members.setdefault(target, []).append((name, uri.rsplit("/", 1)[-1]))
     return members
 
 
 def _print_pack(path, style, kind):
+    from pathlib import Path
+
     from ruamel.yaml import YAML
 
-    table = (YAML(typ="safe").load(open(path).read()) or {}).get("alias") or {}
+    table = (YAML(typ="safe").load(Path(path).read_text()) or {}).get("alias") or {}
     width = max((len(name) for name in table), default=0)
     for name, uri in table.items():
         found = kalfa_kind(uri)

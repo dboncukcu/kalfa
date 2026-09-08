@@ -431,7 +431,10 @@ def samples_gif(predictions, history, models, record, name=None, duration=400):
     if not frames:
         warnings.warn("samples_gif: no samples/turn_*.png in the record; add a sample_writer metric")
         return None
-    images = [Image.open(frame).convert("RGB") for frame in frames]
+    images = []
+    for frame in frames:
+        with Image.open(frame) as handle:
+            images.append(handle.convert("RGB"))
     images[0].save(_target(record, f"{name or 'samples_gif'}.gif"), save_all=True, append_images=images[1:],
                    duration=int(duration), loop=0)
     return None

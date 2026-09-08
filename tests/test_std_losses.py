@@ -42,12 +42,12 @@ def test_criterion_adapter_reads_output_and_target_from_the_definition_keys():
     data = batch()
     context = Context(data, {"model": model}, predicts="model", targets=["price"])
     adapter = criterion_adapter(mae)
-    expected = float(mae(model(data["x"]), data["price"]))
-    assert float(adapter.loss(context, {"output": "y", "target": "price"})) == pytest.approx(expected)
-    assert float(adapter.loss(context)) == pytest.approx(expected)
+    expected = float(mae(model(data["x"]), data["price"]).detach())
+    assert float(adapter.loss(context, {"output": "y", "target": "price"}).detach()) == pytest.approx(expected)
+    assert float(adapter.loss(context).detach()) == pytest.approx(expected)
     against_input = criterion_adapter(mse)
-    assert float(against_input.loss(context, {"target": "input"})) == pytest.approx(
-        float(mse(model(data["x"]), data["x"])))
+    assert float(against_input.loss(context, {"target": "input"}).detach()) == pytest.approx(
+        float(mse(model(data["x"]), data["x"]).detach()))
     with pytest.raises(KeyError):
         adapter.loss(context, {"output": "ghost"})
     context.targets = ["a", "b"]
@@ -68,14 +68,15 @@ def test_activity_and_trackers():
     for seed in (0, 1):
         data = batch(seed=seed)
         tracker.observe(Context(data, {"model": model}, predicts="model", targets=["price"]))
-    values = [float(mae(model(batch(seed=seed)["x"]), batch(seed=seed)["price"])) for seed in (0, 1)]
+    values = [float(mae(model(batch(seed=seed)["x"]), batch(seed=seed)["price"]).detach()) for seed in (0, 1)]
     assert tracker.result() == {"mae": pytest.approx(sum(values) / 2)}
     metric = metric_adapter(rmse())
     tracker = metric.tracker("rmse", {"output": "y"})
     assert math.isnan(tracker.result()["rmse"])
     data = batch()
     tracker.observe(Context(data, {"model": model}, predicts="model", targets=["price"]))
-    assert tracker.result()["rmse"] == pytest.approx(math.sqrt(float(mse(model(data["x"]), data["price"]))))
+    assert tracker.result()["rmse"] == pytest.approx(math.sqrt(float(mse(model(data["x"]),
+                                                                          data["price"]).detach())))
     assert not hasattr(metric.metric, "seen") and metric.tracker("r").live is not metric.metric
 
 
@@ -206,7 +207,8 @@ def test_vae_objective_and_schedules():
     schedule = functools.partial(linear_warmup, start=0.0, end=1.0, steps=10)
     out = vae(models, batch, "encoder", "decoder", mse, w_rec=1.0, kl_schedule=schedule, step=5)
     assert set(out) == {"loss", "recon", "kl", "w_kl"} and out["w_kl"] == pytest.approx(0.5)
-    assert float(out["loss"]) == pytest.approx(float(out["recon"]) + 0.5 * float(out["kl"]))
+    assert float(out["loss"].detach()) == pytest.approx(float(out["recon"].detach())
+                                                       + 0.5 * float(out["kl"].detach()))
     assert out["loss"].requires_grad
     objective = functools.partial(vae, encoder="encoder", decoder="decoder", recon=mse, kl_schedule=schedule)
     changed = with_param(objective, "w_rec", 0.5)

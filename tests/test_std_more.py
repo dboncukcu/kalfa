@@ -48,10 +48,10 @@ def test_weighted_sum_combines_other_losses_by_name():
     context = Context(batch(), {"model": model}, predicts="model", targets=["price"], losses=losses,
                       losses_keys={"a": {}, "b": {}})
     value = entry_loss(losses["both"], context)
-    a = float(entry_loss(losses["a"], context))
-    b = float(entry_loss(losses["b"], context))
+    a = float(entry_loss(losses["a"], context).detach())
+    b = float(entry_loss(losses["b"], context).detach())
     assert set(value) == {"a", "b", "loss"}
-    assert float(value["loss"]) == pytest.approx(a + 2.0 * b)
+    assert float(value["loss"].detach()) == pytest.approx(a + 2.0 * b)
     assert value["loss"].requires_grad
     with pytest.raises(KeyError, match="no definition"):
         entry_loss(functools.partial(weighted_sum, terms={"ghost": 1.0}), context)

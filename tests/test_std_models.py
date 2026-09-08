@@ -26,9 +26,9 @@ def test_layers():
 def test_inits_apply_per_role():
     layer = nn.Linear(4, 4)
     apply_roles(layer, {"weights": zeros(), "bias": normal(std=0.5, mean=3.0)})
-    assert float(layer.weight.abs().sum()) == 0.0 and abs(float(layer.bias.mean()) - 3.0) < 1.5
+    assert float(layer.weight.detach().abs().sum()) == 0.0 and abs(float(layer.bias.detach().mean()) - 3.0) < 1.5
     apply_roles(layer, {}, [{"match": "weight", "weights": xavier()}])
-    assert float(layer.weight.abs().sum()) > 0.0
+    assert float(layer.weight.detach().abs().sum()) > 0.0
 
 
 def test_builder_is_seeded_by_index_and_deterministic():
@@ -57,8 +57,10 @@ def test_init_roles_and_node_init():
     graph = Graph(("x",), ("y",), (GraphNode("a", nn.Linear(3, 3), ("x",), ("h",)),
                                    GraphNode("b", nn.Linear(3, 1), ("h",), ("y",), extra={"init": {"weights": zeros()}})))
     model = Module(graph, seed=1, init={"bias": zeros()})
-    assert float(model.nodes["a"].bias.abs().sum()) == 0.0 and float(model.nodes["b"].bias.abs().sum()) == 0.0
-    assert float(model.nodes["b"].weight.abs().sum()) == 0.0 and float(model.nodes["a"].weight.abs().sum()) > 0.0
+    assert float(model.nodes["a"].bias.detach().abs().sum()) == 0.0
+    assert float(model.nodes["b"].bias.detach().abs().sum()) == 0.0
+    assert float(model.nodes["b"].weight.detach().abs().sum()) == 0.0
+    assert float(model.nodes["a"].weight.detach().abs().sum()) > 0.0
 
 
 def test_trainable_false_freezes_and_keeps_eval_mode():

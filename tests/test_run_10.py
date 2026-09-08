@@ -59,7 +59,8 @@ def test_run_10_steps_mode_and_resume(corpus):
     assert payload["counters"] == {"global_step": 8, "turn": 4}
     import pickle
 
-    tokenizer = pickle.load((record / "preprocessors" / "tokenizer.pkl").open("rb"))["text"]
+    with (record / "preprocessors" / "tokenizer.pkl").open("rb") as stream:
+        tokenizer = pickle.load(stream)["text"]
     head = next(name for name in payload["models"]["gpt"] if name.endswith("weight") and "nodes.s2" in name)
     assert payload["models"]["gpt"][head].shape[0] == tokenizer.size
     assert payload["models"]["gpt"]["nodes.s0.weight"].shape == (tokenizer.size, 16)
