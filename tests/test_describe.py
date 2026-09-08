@@ -1,3 +1,4 @@
+import re
 import sys
 
 import pytest
@@ -94,6 +95,24 @@ def test_describe_load_falls_back_to_the_plan_without_a_header(tmp_path, monkeyp
     out = capsys.readouterr().out
     assert "y_a" in out and "target   y_hat[0]" in out and "y_c" in out
     assert "y_a, y_b, y_c" in out
+
+
+def test_describe_save_writes_the_analysis_with_nothing_clipped(workdir, capsys):
+    target = workdir / "report.txt"
+    assert main(["describe", str(CONFIG_01), "--save", str(target)]) == 0
+    assert capsys.readouterr().out.strip().endswith(f"wrote {target}")
+    written = target.read_text()
+    assert "── DATA " in written and "── COLUMNS " in written and "\x1b[" not in written
+    assert not re.search(r"\S…", written)          # clipping glues the ellipsis to a word; "x0 … x7" is a range
+    rules = [line for line in written.splitlines() if line.startswith("── ")]
+    longest = max(len(line) for line in written.splitlines())
+    assert rules and all(len(line) == longest for line in rules)      # the rules are cut to the widest line
+
+
+def test_describe_does_not_clip_when_the_output_is_not_a_terminal(workdir, capsys):
+    assert main(["describe", str(CONFIGS / "15_multi_target.yaml")]) == 1        # no scores.parquet here
+    out = capsys.readouterr().out
+    assert not re.search(r"\S…", out) and "── TRAINING " in out
 
 
 def test_describe_sections_and_wiring(workdir, capsys):

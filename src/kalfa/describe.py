@@ -737,6 +737,15 @@ SECTION_TABLE = {
 }
 
 
+def report(prepared, style, sections=None, probe=None, span=100_000):
+    """The analysis with nothing clipped: rendered at a width nothing reaches, then again at the longest line the
+    content produced. A line exactly ``span`` long was drawn to the width (a section rule, the version line), so it
+    says nothing about how wide the text is. For a file or a pipe, where there is no terminal to fit."""
+    text = render(prepared, style, sections, probe, width=span)
+    content = [wide(line) for line in text.splitlines() if wide(line) != span]
+    return render(prepared, style, sections, probe, width=max(40, max(content, default=80)))
+
+
 def render(prepared, style, sections=None, probe=None, width=None):
     width = width or width_of()
     chosen = [name for name in ALL_SECTIONS if name in (sections or DEFAULT_SECTIONS)]

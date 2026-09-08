@@ -97,6 +97,9 @@ def build_parser():
                               help="print this section only (repeatable)")
     describe_cmd.add_argument("--wiring", action="store_true",
                               help="add the implicit bindings of the compiled pipeline")
+    describe_cmd.add_argument("--save", metavar="PATH",
+                              help="write the analysis to this file instead of printing it, with nothing clipped "
+                                   "and no colors")
     describe_cmd.set_defaults(handler=cmd_describe)
 
     predict_cmd = commands.add_parser("predict", help="predict with a recorded run")
@@ -281,7 +284,7 @@ def cmd_resume(args) -> int:
 
 
 def cmd_describe(args) -> int:
-    from .describe import render
+    from .describe import render, report
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -305,7 +308,15 @@ def cmd_describe(args) -> int:
     sections = list(args.section) if args.section else None
     if args.wiring and "wiring" not in (sections or ()):
         sections = list(sections or DEFAULT_SECTIONS) + ["wiring"]
-    sys.stdout.write(render(prepared, style, sections, found))
+    if args.save:
+        from pathlib import Path
+
+        Path(args.save).write_text(report(prepared, Style(False), sections, found))
+        print(f"wrote {args.save}")
+    elif style.enabled:
+        sys.stdout.write(render(prepared, style, sections, found))
+    else:
+        sys.stdout.write(report(prepared, style, sections, found))
     return 1 if prepared.errors else 0
 
 

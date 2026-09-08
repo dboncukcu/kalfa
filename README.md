@@ -68,7 +68,7 @@ kalfa run cfg.yaml [--set path=value ...] [-p name=value ...]     # check, compi
                     [--executor thread --workers N]               # serial by default; under thread an aliasing warning is an error
 kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--load]
                                                                   # only the problems; --load runs the data block
-kalfa describe cfg.yaml [--load] [--section data|model|...] [--wiring]
+kalfa describe cfg.yaml [--load] [--section data|model|...] [--wiring] [--save report.txt]
                                                                   # the config as an analysis, after the same checks
 kalfa predict runs/x [--model name] [--which best|last] [--data new.parquet] [--device cuda]
 kalfa generate runs/x [--which best|last] [--device cuda]         # writes samples/ with the sampler of the generate section
@@ -252,7 +252,10 @@ Statically it reads the file header and the compiled recipe, so it needs no data
 `--load` runs the data and model blocks for real (nothing is written): the set sizes after the filters, the widths
 a fitted `one_hot` produces, the tensor slots of every column, and the parameter counts of models whose layers are
 lazy until the first batch. `--section data|model|training|after|columns|wiring` narrows the output, `--wiring`
-adds the implicit bindings of the compiled pipeline to the default sections.
+adds the implicit bindings of the compiled pipeline to the default sections. Tables are fitted to the width the
+terminal reports (`COLUMNS=140 kalfa describe ...` overrides it, a narrow terminal clips the widest column with an
+ellipsis); with `--save report.txt`, or whenever the output is not a terminal, nothing is clipped and the section
+rules are cut to the longest line instead.
 
 ```
 kalfa describe config.yaml
