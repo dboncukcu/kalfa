@@ -353,5 +353,5 @@ reference config has an end to end run test on synthetic data, CPU only, no netw
 
 **Versions and releases.** kalfa pins `tezgah>=` and `cirak>=` in `pyproject.toml`; bump the version, regenerate
 the dumps (`tests/fixtures/regenerate_recipes.py` and `regenerate_dumps.py`, whose headers carry the version), run
-the suite against the reinstalled environment (`uv sync --reinstall`), then build (`uv build`). kalfa is 0.2.2 and
+the suite against the reinstalled environment (`uv sync --reinstall`), then build (`uv build`). kalfa is 0.2.3 and
 needs tezgah 0.2.0 or later and cirak 0.2.2 or later.
