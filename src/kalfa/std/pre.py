@@ -705,6 +705,212 @@ def minmax_scaler(low=0.0, high=1.0):
     return MinMaxScaler(low, high)
 
 
+class Asinh:
+    rescales = True
+
+    def __init__(self, scale=1.0, overflow=700.0):
+        if scale <= 0.0:
+            raise ValueError(f"asinh: scale must be positive, got {scale!r}")
+        self.scale = float(scale)
+        self.overflow = float(overflow)
+
+    def apply(self, values):
+        return numpy.arcsinh(numpy.asarray(values, dtype="float64") / self.scale)
+
+    def inverse(self, values):
+        out = numpy.asarray(values, dtype="float64")
+        largest = float(numpy.abs(out).max()) if out.size else 0.0
+        if largest > self.overflow:
+            raise ValueError(f"asinh: the inverse overflows at {largest}, past overflow={self.overflow}")
+        return numpy.sinh(out) * self.scale
+
+
+@lego("/pre/kalfa/asinh", alias="asinh",
+            description="Signed log scale of a heavy tailed column: arcsinh(x / scale), inverted by scale sinh(y); "
+                        "keeps the sign, linear near zero, logarithmic in the tails, defined at zero; the inverse "
+                        "refuses values past overflow, where sinh leaves float64")
+def asinh(scale=1.0, overflow=700.0):
+    return Asinh(scale, overflow)
+
+
+class Sinh:
+    rescales = True
+
+    def __init__(self, scale=1.0, overflow=700.0):
+        if scale <= 0.0:
+            raise ValueError(f"sinh: scale must be positive, got {scale!r}")
+        self.scale = float(scale)
+        self.overflow = float(overflow)
+
+    def apply(self, values):
+        out = numpy.asarray(values, dtype="float64") / self.scale
+        largest = float(numpy.abs(out).max()) if out.size else 0.0
+        if largest > self.overflow:
+            raise ValueError(f"sinh: overflows at {largest} / scale, past overflow={self.overflow}; raise scale")
+        return numpy.sinh(out)
+
+    def inverse(self, values):
+        return numpy.arcsinh(numpy.asarray(values, dtype="float64")) * self.scale
+
+
+@lego("/pre/kalfa/sinh", alias="sinh",
+            description="sinh(x / scale), the direction opposite to asinh: it stretches the tails instead of "
+                        "compressing them; a value past overflow is an error, where sinh leaves float64")
+def sinh(scale=1.0, overflow=700.0):
+    return Sinh(scale, overflow)
+
+
+class Tanh:
+    rescales = True
+
+    def __init__(self, scale=1.0, eps=1e-15):
+        if scale <= 0.0:
+            raise ValueError(f"tanh: scale must be positive, got {scale!r}")
+        self.scale = float(scale)
+        self.eps = float(eps)
+
+    def apply(self, values):
+        return numpy.tanh(numpy.asarray(values, dtype="float64") / self.scale)
+
+    def inverse(self, values):
+        limit = 1.0 - self.eps
+        clipped = numpy.clip(numpy.asarray(values, dtype="float64"), -limit, limit)
+        return numpy.arctanh(clipped) * self.scale
+
+
+@lego("/pre/kalfa/tanh", alias="tanh",
+            description="tanh(x / scale) into (-1, 1); the inverse clips at 1 - eps, so a value that saturated in "
+                        "float64 (past about 19 scale) comes back at the clip instead of infinity")
+def tanh(scale=1.0, eps=1e-15):
+    return Tanh(scale, eps)
+
+
+class Atanh:
+    rescales = True
+
+    def __init__(self, scale=1.0):
+        if scale <= 0.0:
+            raise ValueError(f"atanh: scale must be positive, got {scale!r}")
+        self.scale = float(scale)
+
+    def apply(self, values):
+        scaled = numpy.asarray(values, dtype="float64") / self.scale
+        outside = numpy.abs(scaled) >= 1.0
+        if outside.any():
+            raise ValueError(f"atanh takes values inside (-scale, scale); {int(outside.sum())} of {scaled.size} "
+                             f"are outside, the largest is {float(numpy.abs(scaled).max()) * self.scale}; "
+                             f"raise scale")
+        return numpy.arctanh(scaled)
+
+    def inverse(self, values):
+        return numpy.tanh(numpy.asarray(values, dtype="float64")) * self.scale
+
+
+@lego("/pre/kalfa/atanh", alias="atanh",
+            description="artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside "
+                        "(-scale, scale) is an error that names how many and how large")
+def atanh(scale=1.0):
+    return Atanh(scale)
+
+
+class MaxAbsScaler(_Scaler):
+    def build(self):
+        from sklearn.preprocessing import MaxAbsScaler as Scaler
+
+        return Scaler()
+
+    def terms(self):
+        scale = numpy.asarray(self.scaler.scale_, dtype="float64")
+        return numpy.zeros_like(scale), scale
+
+
+class RobustScaler(_Scaler):
+    def __init__(self, low, high):
+        self.low = low
+        self.high = high
+
+    def build(self):
+        from sklearn.preprocessing import RobustScaler as Scaler
+
+        return Scaler(quantile_range=(self.low, self.high))
+
+    def terms(self):
+        return (numpy.asarray(self.scaler.center_, dtype="float64"),
+                numpy.asarray(self.scaler.scale_, dtype="float64"))
+
+
+@lego("/pre/sklearn/max_abs_scaler", state=True, alias="max_abs_scaler", grouped=True,
+            description="Scale a column by its largest absolute value, into [-1, 1] with the sign and the zeros "
+                        "kept (sklearn MaxAbsScaler); one object over every column that names it")
+def max_abs_scaler():
+    return MaxAbsScaler()
+
+
+@lego("/pre/sklearn/robust_scaler", state=True, alias="robust_scaler", grouped=True,
+            description="Center a column on its median and scale it by the distance between the low and high "
+                        "percentiles (sklearn RobustScaler); outliers do not move the statistics")
+def robust_scaler(low=25.0, high=75.0):
+    return RobustScaler(low, high)
+
+
+class _Fitted:
+    """A sklearn transformer fitted per column: the work is per feature anyway, so no grouping to win."""
+
+    rescales = True
+
+    def build(self, values):
+        raise NotImplementedError
+
+    def fit(self, values):
+        self.transformer = self.build(numpy.asarray(values, dtype="float64"))
+        self.transformer.fit(numpy.asarray(values, dtype="float64").reshape(-1, 1))
+
+    def apply(self, values):
+        return self.transformer.transform(numpy.asarray(values, dtype="float64").reshape(-1, 1)).reshape(-1)
+
+    def inverse(self, values):
+        return self.transformer.inverse_transform(
+            numpy.asarray(values, dtype="float64").reshape(-1, 1)).reshape(-1)
+
+
+class QuantileTransformer(_Fitted):
+    def __init__(self, quantiles, output, seed):
+        self.quantiles = int(quantiles)
+        self.output = output
+        self.seed = seed
+
+    def build(self, values):
+        from sklearn.preprocessing import QuantileTransformer as Transformer
+
+        return Transformer(n_quantiles=max(2, min(self.quantiles, len(values))),
+                           output_distribution=self.output, random_state=self.seed)
+
+
+class PowerTransformer(_Fitted):
+    def __init__(self, method, standardize):
+        self.method = method
+        self.standardize = bool(standardize)
+
+    def build(self, values):
+        from sklearn.preprocessing import PowerTransformer as Transformer
+
+        return Transformer(method=self.method, standardize=self.standardize)
+
+
+@lego("/pre/sklearn/quantile_transformer", state=True, alias="quantile_transformer",
+            description="Map a column onto its own quantiles, uniform or normal (sklearn QuantileTransformer); "
+                        "flattens any shape, the inverse interpolates between the stored quantiles")
+def quantile_transformer(quantiles=1000, output="uniform", seed=None):
+    return QuantileTransformer(quantiles, output, seed)
+
+
+@lego("/pre/sklearn/power_transformer", state=True, alias="power_transformer",
+            description="Yeo-Johnson (or Box-Cox for positive columns) with the exponent fitted per column, then "
+                        "standardized (sklearn PowerTransformer); the invertible way to a near normal column")
+def power_transformer(method="yeo-johnson", standardize=True):
+    return PowerTransformer(method, standardize)
+
+
 class Cast:
     def __init__(self, dtype):
         self.dtype = dtype
@@ -772,6 +978,65 @@ class OneHot:
             description="One hot columns <field>_<category> of a categorical column; unknown categories give zeros")
 def one_hot():
     return OneHot()
+
+
+class KBins:
+    def __init__(self, bins, strategy, encode):
+        self.bins = int(bins)
+        self.strategy = strategy
+        self.encode = encode
+
+    def fit(self, values):
+        from sklearn.preprocessing import KBinsDiscretizer
+
+        kind = "onehot-dense" if self.encode == "onehot" else "ordinal"
+        self.encoder = KBinsDiscretizer(n_bins=self.bins, encode=kind, strategy=self.strategy)
+        self.encoder.fit(numpy.asarray(values, dtype="float64").reshape(-1, 1))
+        self.width = int(self.encoder.n_bins_[0]) if self.encode == "onehot" else 1
+
+    def apply(self, values):
+        out = self.encoder.transform(numpy.asarray(values, dtype="float64").reshape(-1, 1))
+        return numpy.asarray(out, dtype="float32").reshape(len(numpy.asarray(values)), -1) \
+            if self.encode == "onehot" else numpy.asarray(out, dtype="float32").reshape(-1)
+
+    def columns(self, name):
+        return [f"{name}_bin{position}" for position in range(self.width)]
+
+
+@lego("/pre/sklearn/kbins_discretizer", state=True, alias="kbins_discretizer",
+            description="Cut a column into bins and write them as one hot columns <field>_bin<n> (encode: ordinal "
+                        "for one integer column); strategy quantile, uniform or kmeans (sklearn KBinsDiscretizer)")
+def kbins_discretizer(bins=5, strategy="quantile", encode="onehot"):
+    return KBins(bins, strategy, encode)
+
+
+class Spline:
+    def __init__(self, knots, degree, extrapolation):
+        self.knots = int(knots)
+        self.degree = int(degree)
+        self.extrapolation = extrapolation
+
+    def fit(self, values):
+        from sklearn.preprocessing import SplineTransformer
+
+        self.transformer = SplineTransformer(n_knots=self.knots, degree=self.degree,
+                                             extrapolation=self.extrapolation, include_bias=False)
+        self.transformer.fit(numpy.asarray(values, dtype="float64").reshape(-1, 1))
+        self.width = len(self.transformer.get_feature_names_out())
+
+    def apply(self, values):
+        out = self.transformer.transform(numpy.asarray(values, dtype="float64").reshape(-1, 1))
+        return numpy.asarray(out, dtype="float32")
+
+    def columns(self, name):
+        return [f"{name}_spline{position}" for position in range(self.width)]
+
+
+@lego("/pre/sklearn/spline_transformer", state=True, alias="spline_transformer",
+            description="A B-spline basis of a column, <field>_spline<n>: a smooth non linear expansion of one "
+                        "feature that a linear head can use (sklearn SplineTransformer)")
+def spline_transformer(knots=5, degree=3, extrapolation="constant"):
+    return Spline(knots, degree, extrapolation)
 
 
 class LabelEncoder:

@@ -1,5 +1,6 @@
 """Model legos: layers, inits, the builder and the EMA clone."""
 
+import pytest
 import torch
 from cirak.build import Graph, GraphNode
 from torch import nn
@@ -8,7 +9,8 @@ import kalfa  # noqa: F401
 from helpers import linear_graph, tiny_model
 from kalfa.std.builder import Module, apply_roles, model_seed, module
 from kalfa.std.init import normal, xavier, zeros
-from kalfa.std.layer import concat, dropout, flatten, leaky_relu, linear, linear_relu, relu, torch_linear
+from kalfa.std.layer import (concat, dropout, flatten, l2_normalize, leaky_relu, linear, linear_relu,
+                             polynomial, relu, torch_linear)
 from kalfa.std.model import clone
 
 
@@ -91,6 +93,29 @@ def test_load_state_dict_marks_the_model_built():
     target.load_state_dict(source.state_dict())
     assert target.initialized
     assert torch.equal(target(torch.ones(2, 4)), source(torch.ones(2, 4)))
+
+
+def test_polynomial_expands_the_feature_vector_like_sklearn():
+    import numpy
+    import sklearn.preprocessing as sklearn_pre
+
+    values = numpy.random.default_rng(0).normal(size=(5, 4))
+    for degree in (2, 3):
+        for interaction_only in (False, True):
+            ours = polynomial(degree=degree, interaction_only=interaction_only)(torch.tensor(values)).numpy()
+            reference = sklearn_pre.PolynomialFeatures(degree=degree, interaction_only=interaction_only,
+                                                       include_bias=False).fit_transform(values)
+            assert ours.shape == reference.shape
+            assert numpy.allclose(numpy.sort(ours, axis=1), numpy.sort(reference, axis=1))
+    products = polynomial(keep=False, bias=True)(torch.tensor([[2.0, 3.0]]))
+    assert products.tolist() == [[1.0, 4.0, 6.0, 9.0]]
+    assert polynomial()(torch.tensor([[2.0, 3.0]])).tolist() == [[2.0, 3.0, 4.0, 6.0, 9.0]]
+
+
+def test_l2_normalize_divides_every_sample_by_its_own_norm():
+    out = l2_normalize()(torch.tensor([[3.0, 4.0], [0.0, 0.0]]))
+    assert out[0].tolist() == pytest.approx([0.6, 0.8]) and out[1].tolist() == [0.0, 0.0]
+    assert float(out[0].norm().detach()) == pytest.approx(1.0)
 
 
 def test_clone_shifts_towards_the_model():

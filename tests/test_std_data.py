@@ -74,6 +74,97 @@ def test_dtype_table():
     assert torch_dtype("object") is None and torch_dtype("category") is None and torch_dtype("datetime64[ns]") is None
 
 
+def test_the_elementwise_scale_transforms_invert_themselves():
+    from kalfa.std.pre import asinh, atanh, sinh, tanh
+
+    heavy = numpy.array([-5000.0, -1.0, 0.0, 0.3, 7.5, 1200.0])
+    assert numpy.allclose(asinh(2.0).inverse(asinh(2.0).apply(heavy)), heavy)
+    assert numpy.allclose(asinh(2.0).apply(heavy)[2], 0.0) and asinh(1.0).apply(heavy)[0] < 0
+    mild = numpy.array([-6.0, 0.0, 1.5])
+    assert numpy.allclose(sinh(2.0).inverse(sinh(2.0).apply(mild)), mild)
+    assert numpy.allclose(tanh(2.0).inverse(tanh(2.0).apply(numpy.array([-20.0, 0.0, 7.5]))),
+                          numpy.array([-20.0, 0.0, 7.5]))
+    inside = numpy.array([-9.0, 0.0, 3.0])
+    assert numpy.allclose(atanh(10.0).inverse(atanh(10.0).apply(inside)), inside)
+    assert all(getattr(lego(1.0), "rescales", False) for lego in (asinh, sinh, tanh, atanh))
+
+
+def test_the_elementwise_scale_transforms_say_where_they_break():
+    from kalfa.std.pre import atanh, sinh, tanh
+
+    with pytest.raises(ValueError, match="overflows"):
+        sinh(1.0).apply(numpy.array([800.0]))
+    with pytest.raises(ValueError, match="inside"):
+        atanh(1.0).apply(numpy.array([1.5]))
+    with pytest.raises(ValueError, match="scale must be positive"):
+        tanh(0.0)
+    saturated = tanh(2.0).inverse(tanh(2.0).apply(numpy.array([500.0])))
+    assert 30.0 < float(saturated[0]) < 40.0                 # beyond about 19 scale the inverse saturates
+
+
+def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
+    import sklearn.preprocessing as sklearn_pre
+    from kalfa.std.pre import max_abs_scaler, power_transformer, quantile_transformer, robust_scaler
+
+    values = numpy.random.default_rng(0).normal(size=(200, 3)) * [1.0, 50.0, 0.01] + [0.0, 3.0, -1.0]
+    for built, reference in ((max_abs_scaler(), sklearn_pre.MaxAbsScaler()),
+                             (robust_scaler(), sklearn_pre.RobustScaler())):
+        built.fit(values)
+        out = built.apply(values)
+        assert numpy.allclose(out, reference.fit(values).transform(values))
+        assert numpy.allclose(built.inverse(out), values)
+        assert numpy.allclose(built.apply(values[:, 1], columns=[1]), out[:, 1])
+        assert built.grouped and built.rescales
+    column = values[:, 1]
+    for built in (quantile_transformer(output="normal"), power_transformer()):
+        built.fit(column)
+        out = built.apply(column)
+        assert numpy.allclose(built.inverse(out), column)
+        assert abs(float(out.mean())) < 0.05 and not getattr(built, "grouped", False)
+
+
+def test_the_widening_preprocessors_name_the_columns_they_produce():
+    import sklearn.preprocessing as sklearn_pre
+    from kalfa.std.pre import kbins_discretizer, spline_transformer
+
+    values = numpy.random.default_rng(0).normal(size=200)
+    bins = kbins_discretizer(bins=4)
+    bins.fit(values)
+    out = bins.apply(values)
+    assert out.shape == (200, 4) and bins.columns("x0") == [f"x0_bin{position}" for position in range(4)]
+    assert numpy.allclose(out.sum(axis=1), 1.0)
+    reference = sklearn_pre.KBinsDiscretizer(n_bins=4, encode="onehot-dense", strategy="quantile")
+    assert numpy.allclose(out, reference.fit_transform(values.reshape(-1, 1)))
+    ordinal = kbins_discretizer(bins=4, encode="ordinal")
+    ordinal.fit(values)
+    assert ordinal.apply(values).shape == (200,) and ordinal.columns("x0") == ["x0_bin0"]
+    assert sorted(set(ordinal.apply(values).tolist())) == [0.0, 1.0, 2.0, 3.0]
+
+    spline = spline_transformer()
+    spline.fit(values)
+    produced = spline.apply(values)
+    assert produced.shape[0] == 200 and spline.columns("x0") == [f"x0_spline{position}"
+                                                                for position in range(produced.shape[1])]
+    assert numpy.allclose(produced, sklearn_pre.SplineTransformer(n_knots=5, degree=3, extrapolation="constant",
+                                                                  include_bias=False).fit_transform(
+                                                                      values.reshape(-1, 1)))
+
+
+def test_a_widening_preprocessor_expands_the_feature_layout(tmp_path):
+    from kalfa.std.pre import kbins_discretizer
+
+    data = housing_frame(rows=200)
+    prep = fit(data, {"x0": {"preprocessors": ["bins"]}, "x*": {"preprocessors": ["s"]},
+                      "price": {"target": True}},
+               {"bins": kbins_discretizer(bins=3), "s": standard_scaler()}, [], record=str(tmp_path))
+    assert prep.features[:3] == ["x0_bin0", "x0_bin1", "x0_bin2"]
+    train = apply(data, prep, "train")
+    assert list(train.data.columns)[:3] == ["x0_bin0", "x0_bin1", "x0_bin2"]
+    assert set(train.data["x0_bin0"].unique()) <= {0.0, 1.0}
+    again = read_prep(str(tmp_path))
+    assert again.features == prep.features
+
+
 def test_a_grouped_preprocessor_is_one_object_over_all_its_columns(tmp_path):
     data = housing_frame(rows=200)
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["s"]}},

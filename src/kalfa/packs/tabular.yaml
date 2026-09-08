@@ -10,16 +10,28 @@ alias:
   # pre
   standard_scaler: /pre/sklearn/standard_scaler
   minmax_scaler: /pre/sklearn/minmax_scaler
+  max_abs_scaler: /pre/sklearn/max_abs_scaler
+  robust_scaler: /pre/sklearn/robust_scaler
+  quantile_transformer: /pre/sklearn/quantile_transformer
+  power_transformer: /pre/sklearn/power_transformer
+  asinh: /pre/kalfa/asinh
+  sinh: /pre/kalfa/sinh
+  tanh: /pre/kalfa/tanh
+  atanh: /pre/kalfa/atanh
   cast: /pre/kalfa/cast
   abs: /pre/kalfa/abs
   log: /pre/kalfa/log
   one_hot: /pre/kalfa/one_hot
+  kbins_discretizer: /pre/sklearn/kbins_discretizer
+  spline_transformer: /pre/sklearn/spline_transformer
   label_encoder: /pre/kalfa/label_encoder
   # feed
   table: /feed/kalfa/table
   window: /feed/kalfa/window
   # layer
   linear: /layer/kalfa/linear
+  polynomial: /layer/kalfa/polynomial
+  l2_normalize: /layer/kalfa/l2_normalize
   linear_relu: /layer/kalfa/linear_relu
   concat: /layer/torch/concat
   flatten: /layer/torch/flatten

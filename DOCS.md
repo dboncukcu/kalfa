@@ -16,9 +16,9 @@ The legos a config writes, by kind.
 |---|---|---|
 | `source` | data.source | 6 |
 | `split` | data.split | 4 |
-| `pre` | data.preprocessors | 15 |
+| `pre` | data.preprocessors | 25 |
 | `feed` | data.feed | 3 |
-| `layer` | model nodes | 16 |
+| `layer` | model nodes | 18 |
 | `init` | model init | 4 |
 | `criterion` | losses, metrics | 6 |
 | `objective` | losses | 7 |
@@ -61,6 +61,8 @@ The legos a config writes, by kind.
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/pre/kalfa/abs` | `abs` | `()` |  | Absolute value of a column |
+| `/pre/kalfa/asinh` | `asinh` | `(scale=1.0, overflow=700.0)` |  | Signed log scale of a heavy tailed column: arcsinh(x / scale), inverted by scale sinh(y); keeps the sign, linear near zero, logarithmic in the tails, defined at zero; the inverse refuses values past overflow, where sinh leaves float64 |
+| `/pre/kalfa/atanh` | `atanh` | `(scale=1.0)` |  | artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside (-scale, scale) is an error that names how many and how large |
 | `/pre/kalfa/cast` | `cast` | `(dtype)` |  | Cast a column to a numpy dtype |
 | `/pre/kalfa/char_tokenizer` | `char_tokenizer` | `()` | state: True | Character level tokenizer fitted on the train text; the vocabulary goes into the record |
 | `/pre/kalfa/label_encoder` | `label_encoder` | `()` | state: True | Integer codes of a label column, sorted by label; inverted in reports and predictions, class scores decode to labels |
@@ -70,10 +72,18 @@ The legos a config writes, by kind.
 | `/pre/kalfa/random_crop_flip` | `random_crop_flip` | `(size)` |  | Random crop of size after padding and a random horizontal flip |
 | `/pre/kalfa/resize` | `resize` | `(size)` |  | Resize an image to size (int or [h, w]) |
 | `/pre/kalfa/simclr_aug` | `simclr_aug` | `(size, scale=(0.5, 1.0))` |  | SimCLR augmentation: random resized crop to size, horizontal flip, brightness jitter |
+| `/pre/kalfa/sinh` | `sinh` | `(scale=1.0, overflow=700.0)` |  | sinh(x / scale), the direction opposite to asinh: it stretches the tails instead of compressing them; a value past overflow is an error, where sinh leaves float64 |
+| `/pre/kalfa/tanh` | `tanh` | `(scale=1.0, eps=1e-15)` |  | tanh(x / scale) into (-1, 1); the inverse clips at 1 - eps, so a value that saturated in float64 (past about 19 scale) comes back at the clip instead of infinity |
 | `/pre/kalfa/to_tensor` | `to_tensor` | `()` |  | Image to a float tensor in [0, 1], channels first |
 | `/pre/kalfa/to_tensor_signed` | `to_tensor_signed` | `()` |  | Image to a float tensor in [-1, 1], channels first |
 | `/pre/kalfa/two_views` | `two_views` | `(transform)` | refs: transform=preprocessor | Two independent applications of a transform to one image, as a pair |
+| `/pre/sklearn/kbins_discretizer` | `kbins_discretizer` | `(bins=5, strategy='quantile', encode='onehot')` | state: True | Cut a column into bins and write them as one hot columns <field>_bin<n> (encode: ordinal for one integer column); strategy quantile, uniform or kmeans (sklearn KBinsDiscretizer) |
+| `/pre/sklearn/max_abs_scaler` | `max_abs_scaler` | `()` | state: True; grouped: True | Scale a column by its largest absolute value, into [-1, 1] with the sign and the zeros kept (sklearn MaxAbsScaler); one object over every column that names it |
 | `/pre/sklearn/minmax_scaler` | `minmax_scaler` | `(low=0.0, high=1.0)` | state: True; grouped: True | Scale a column into [low, high] (sklearn MinMaxScaler); one object over every column that names it, its statistics per column |
+| `/pre/sklearn/power_transformer` | `power_transformer` | `(method='yeo-johnson', standardize=True)` | state: True | Yeo-Johnson (or Box-Cox for positive columns) with the exponent fitted per column, then standardized (sklearn PowerTransformer); the invertible way to a near normal column |
+| `/pre/sklearn/quantile_transformer` | `quantile_transformer` | `(quantiles=1000, output='uniform', seed=None)` | state: True | Map a column onto its own quantiles, uniform or normal (sklearn QuantileTransformer); flattens any shape, the inverse interpolates between the stored quantiles |
+| `/pre/sklearn/robust_scaler` | `robust_scaler` | `(low=25.0, high=75.0)` | state: True; grouped: True | Center a column on its median and scale it by the distance between the low and high percentiles (sklearn RobustScaler); outliers do not move the statistics |
+| `/pre/sklearn/spline_transformer` | `spline_transformer` | `(knots=5, degree=3, extrapolation='constant')` | state: True | A B-spline basis of a column, <field>_spline<n>: a smooth non linear expansion of one feature that a linear head can use (sklearn SplineTransformer) |
 | `/pre/sklearn/standard_scaler` | `standard_scaler` | `()` | state: True; grouped: True | Standardize a column to zero mean and unit variance (sklearn StandardScaler); one object over every column that names it, its statistics per column |
 
 ### feed
@@ -89,8 +99,10 @@ The legos a config writes, by kind.
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/layer/kalfa/l1_distance` | `l1_distance` | `()` |  | Mean absolute difference of two wires per sample |
+| `/layer/kalfa/l2_normalize` | `l2_normalize` | `(eps=1e-12)` |  | Divide every sample by the L2 norm of its own feature vector (sklearn's Normalizer as a layer: it reads the whole vector, so it belongs to the model, not to a column chain) |
 | `/layer/kalfa/linear` | `linear` | `(out_features, in_features=None)` |  | Linear layer; without in_features the input width is taken from the first batch |
 | `/layer/kalfa/linear_relu` | `linear_relu` | `(out_features, in_features=None)` |  | Linear layer followed by ReLU; lazy without in_features |
+| `/layer/kalfa/polynomial` | `polynomial` | `(degree=2, interaction_only=False, bias=False, keep=True)` |  | Polynomial expansion of the feature vector: the features and every product of degree of them (interaction_only drops the squares, bias adds a constant column, keep: false returns the products alone); the place for feature interactions, computed per batch |
 | `/layer/kalfa/reparam` | `reparam` | `()` |  | Sample z from mu and logvar in train mode, return mu in eval mode |
 | `/layer/kalfa/unflatten` | `unflatten` | `(shape)` |  | Reshape the features of every sample to shape |
 | `/layer/torch/concat` | `concat` | `(dim=1)` |  | Concatenate wires along a dimension |
@@ -379,14 +391,26 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `kfold` | `/split/kalfa/kfold` | split |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
+| `max_abs_scaler` | `/pre/sklearn/max_abs_scaler` | pre |
+| `robust_scaler` | `/pre/sklearn/robust_scaler` | pre |
+| `quantile_transformer` | `/pre/sklearn/quantile_transformer` | pre |
+| `power_transformer` | `/pre/sklearn/power_transformer` | pre |
+| `asinh` | `/pre/kalfa/asinh` | pre |
+| `sinh` | `/pre/kalfa/sinh` | pre |
+| `tanh` | `/pre/kalfa/tanh` | pre |
+| `atanh` | `/pre/kalfa/atanh` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
 | `abs` | `/pre/kalfa/abs` | pre |
 | `log` | `/pre/kalfa/log` | pre |
 | `one_hot` | `/pre/kalfa/one_hot` | pre |
+| `kbins_discretizer` | `/pre/sklearn/kbins_discretizer` | pre |
+| `spline_transformer` | `/pre/sklearn/spline_transformer` | pre |
 | `label_encoder` | `/pre/kalfa/label_encoder` | pre |
 | `table` | `/feed/kalfa/table` | feed |
 | `window` | `/feed/kalfa/window` | feed |
 | `linear` | `/layer/kalfa/linear` | layer |
+| `polynomial` | `/layer/kalfa/polynomial` | layer |
+| `l2_normalize` | `/layer/kalfa/l2_normalize` | layer |
 | `linear_relu` | `/layer/kalfa/linear_relu` | layer |
 | `concat` | `/layer/torch/concat` | layer |
 | `flatten` | `/layer/torch/flatten` | layer |
