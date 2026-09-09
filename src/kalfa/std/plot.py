@@ -375,15 +375,6 @@ def binary_precision_recall_curve(predictions, history, models, record, name=Non
     return _binary_curve(predictions, record, "binary_precision_recall_curve", "recall", "precision", name)
 
 
-def _because(exc):
-    """The exception and the chain of causes under it; torchview hides the real error one link down."""
-    parts = []
-    while exc is not None and len(parts) < 4:
-        parts.append(f"{type(exc).__name__}: {exc}")
-        exc = exc.__cause__
-    return " <- ".join(parts)
-
-
 def _draw_models(models, loaders, record, stem, device=None):
     import warnings
 
@@ -412,7 +403,9 @@ def _draw_models(models, loaders, record, stem, device=None):
             drawing.visual_graph.render(str(figure.target(record, f"{stem}_{label}")), format="png", cleanup=True)
             logger.debug(f"architecture: drew {label}")
         except Exception as exc:
-            warnings.warn(f"architecture: torchview could not draw {label}: {_because(exc)}")
+            cause = f" <- {type(exc.__cause__).__name__}: {exc.__cause__}" if exc.__cause__ else ""
+            warnings.warn(f"architecture: torchview could not draw {label}: "
+                          f"{type(exc).__name__}: {exc}{cause}")
 
 
 @lego("/plot/kalfa/architecture", partial=True, alias="architecture",
