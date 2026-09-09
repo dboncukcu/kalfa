@@ -16,8 +16,8 @@ class Rmse:
         self.count = 0
 
     def update(self, predictions, targets):
-        predictions = predictions.reshape(len(predictions), -1).double()
-        targets = targets.reshape(len(targets), -1).double()
+        predictions = predictions.reshape(len(predictions), -1).float()
+        targets = targets.reshape(len(targets), -1).float()
         self.total += float(((predictions - targets) ** 2).sum())
         self.count += targets.numel()
 
@@ -43,8 +43,8 @@ class ReconError:
         self.count = 0
 
     def update(self, predictions, targets):
-        predictions = predictions.reshape(len(predictions), -1).double()
-        targets = targets.reshape(len(targets), -1).double()
+        predictions = predictions.reshape(len(predictions), -1).float()
+        targets = targets.reshape(len(targets), -1).float()
         self.total += float(((predictions - targets) ** 2).mean(dim=1).sum())
         self.count += len(targets)
 

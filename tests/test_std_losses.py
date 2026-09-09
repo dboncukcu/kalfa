@@ -10,7 +10,7 @@ from helpers import batch, tiny_model
 from kalfa.std.adapter import criterion as criterion_adapter
 from kalfa.std.adapter import metric as metric_adapter
 from kalfa.std.criterion import bce_logits, cross_entropy, huber, log_cosh, mae, mse
-from kalfa.std.metric import rmse
+from kalfa.std.metric import recon_error, rmse
 from kalfa.std.runtime import Context
 
 
@@ -35,6 +35,19 @@ def test_rmse_metric_accumulates():
     assert metric.compute() == pytest.approx(math.sqrt(5 / 3))
     metric.reset()
     assert math.isnan(metric.compute())
+
+
+def test_metrics_accumulate_above_the_range_of_a_half_precision_batch():
+    metric = rmse()
+    metric.update(torch.full((4, 2), 300.0, dtype=torch.float16), torch.zeros(4, 2, dtype=torch.float16))
+    assert metric.compute() == pytest.approx(300.0)
+
+
+@pytest.mark.skipif(not torch.backends.mps.is_available(), reason="the machine has no mps device")
+def test_metrics_update_on_mps_which_has_no_float64():
+    for metric in (rmse(), recon_error()):
+        metric.update(torch.zeros(4, 2, device="mps"), torch.ones(4, 2, device="mps"))
+        assert metric.compute() == pytest.approx(1.0)
 
 
 def test_criterion_adapter_reads_output_and_target_from_the_definition_keys():
