@@ -623,6 +623,9 @@ def after_section(prepared, style, width, probe=None):
         named = [name if short((call or {}).get("uri")) == name else f"{name} ({call_text(call, style=style)})"
                  for name, call in plots.items()]
         lines.append(field_line("plots", ", ".join(named) + f"  {ARROW} plots/", style))
+    figures = prepared.surface.data.get("figures")
+    if figures:
+        lines.append(field_line("figures", ", ".join(f"{key} {value}" for key, value in figures.items()), style))
     generate = params.get("generate")
     if generate:
         lines.append(field_line("generate", f"{call_text(generate, style=style)}  {ARROW} samples/", style))

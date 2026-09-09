@@ -17,7 +17,8 @@ kalfa --help
 The dependencies come with it: cirak and tezgah (the recipe compiler and the pipeline runner), torch, pandas,
 pyarrow, scikit-learn, torchmetrics, matplotlib, pillow, scipy, ruamel.yaml, tqdm and optuna (the fed back sweep
 strategy); there are no optional extras. The `architecture` plot draws the models when `torchview` and the graphviz
-`dot` binary are installed, and says so in the log when they are not; neither is a dependency of kalfa.
+`dot` binary are installed, and `pairplot`, `violin` and `kde` need `seaborn`; none of the three is a dependency of
+kalfa, and a plot that misses one says so in the log and is skipped.
 
 The reference configs, the examples and the test suite live in the repository:
 
@@ -245,7 +246,7 @@ never written into (an error).
 | `final/state.pt` | always, once the run ends, with the same scope |
 | `preprocessors/` | the fitted preprocessors (one file per name) and `plan.json`; `kalfa predict` reads from here |
 | `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>`; with `training.targets` one column per predicted field, `pred_<output>_<field>` |
-| `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`; `architecture` writes text) |
+| `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`, or the format `figures` asks for; `architecture` writes text) |
 | `samples/` | the output of `generate`: `samples.pt` (for images `grid.png` too), `samples.txt` for text; `turn_<n>.*` from `sample_writer` |
 | `plugins/` | copies of the plugin modules the run imported, so predict, generate and resume work from the record |
 | `device.json` | the chosen device and the device lego that picked it |
