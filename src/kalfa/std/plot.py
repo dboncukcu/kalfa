@@ -665,3 +665,196 @@ def correlation_heatmap(predictions, history, models, record, loaders=None, prep
                  note=f"{len(data):,} rows of the {set_name} set, {len(picked)} columns")
     figure.save(drawing, record, name or "correlation_heatmap")
     return None
+
+
+def _points(count):
+    return f"{int(count)} point" + ("" if int(count) == 1 else "s")
+
+
+def pick_pair(predictions, output=None, target=None):
+    """The (prediction column, target column) a definition names: by output wire, by target field, or the first."""
+    pairs = prediction_pairs(predictions)
+    for pred, field in pairs:
+        if output is not None and not (pred == f"pred_{output}" or pred.startswith(f"pred_{output}_")):
+            continue
+        if target is not None and field != target:
+            continue
+        return pred, field
+    if output is None and target is None and pairs:
+        return pairs[0]
+    return None, None
+
+
+@lego("/plot/kalfa/residuals", partial=True, alias="residuals", refs={"target": "field"},
+            description="Three panels of one prediction's residual: the distribution with its bias and sigma, the "
+                        "residual against the truth as a density, and the mean and median error over equal count "
+                        "bins of the target range")
+def residuals(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None):
+    pred, field = pick_pair(predictions, output, target)
+    if pred is None:
+        return None
+    truth, guess = figure.finite(predictions[field].to_numpy(), predictions[pred].to_numpy())
+    if len(truth) < 2:
+        return None
+    error = guess - truth
+    drawing, axes = figure.grid(1, 3, width=5.0, height=4.0)
+    left, middle, right = axes[0]
+
+    left.hist(error, bins=140, color=figure.CATEGORICAL[0], edgecolor="none")
+    left.axvline(0.0, color=figure.INK_MUTED, linewidth=1)
+    figure.label(left, "Residual distribution", "predicted - true", "points",
+                 note=f"bias {error.mean():+.4f}, sigma {error.std():.4f}")
+
+    figure.density(drawing, middle, truth, error, gridsize)
+    middle.axhline(0.0, color=figure.CATEGORICAL[1], linewidth=2)
+    figure.label(middle, "Residual vs truth", f"true {field}", "residual")
+
+    centers, median = figure.profile(truth, numpy.abs(error), bins)
+    _, mean = figure.profile(truth, numpy.abs(error), bins, statistic="mean")
+    if len(centers):
+        right.plot(centers, median, marker="o", color=figure.CATEGORICAL[0], label="median |error|")
+        right.plot(centers, mean, marker="s", color=figure.CATEGORICAL[1], label="mean |error|")
+        right.legend(loc="upper left")
+    figure.label(right, "Error across the target range", f"true {field} (equal count bins)", "|residual|")
+
+    figure.title(drawing, f"{field} residuals ({len(truth):,} test points)")
+    drawing.tight_layout(rect=(0, 0, 1, 0.94))
+    figure.save(drawing, record, name or "residuals")
+    return None
+
+
+@lego("/plot/kalfa/error_map", partial=True, alias="error_map",
+            refs={"x": "column", "y": "column", "target": "field"},
+            description="The error of one prediction over a 2d grid of two columns: with statistic residual blue "
+                        "is a prediction below the truth and red above it, with abs the mean absolute error; bins "
+                        "holding fewer than min_count points stay empty")
+def error_map(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None,
+              output=None, target=None, statistic="residual", bins=55, min_count=15, name=None):
+    pred, field = pick_pair(predictions, output, target)
+    table = set_frame(loaders, prep, first_set(sets, "test"))
+    if pred is None or table is None or x is None or y is None:
+        return None
+    if x not in table.columns or y not in table.columns or "row" not in predictions.columns:
+        return None
+    picked = table.reindex(predictions["row"].to_numpy())
+    error = predictions[pred].to_numpy(dtype="float64") - predictions[field].to_numpy(dtype="float64")
+    if statistic == "abs":
+        error = numpy.abs(error)
+    across, along, values = figure.finite(picked[x].to_numpy(), picked[y].to_numpy(), error)
+    if len(across) < int(min_count):
+        return None
+    x_edges, y_edges, mean = figure.binned(across, along, values, bins, min_count)
+    drawing, axis = figure.single(width=7.0, height=5.0)
+    if statistic == "abs":
+        drawn = axis.pcolormesh(x_edges, y_edges, mean.T, cmap=figure.sequential(), shading="auto")
+        note = f"mean absolute error; bins with at least {_points(min_count)}"
+        text = "mean |error|"
+    else:
+        limit = figure.symmetric(mean)
+        drawn = axis.pcolormesh(x_edges, y_edges, mean.T, cmap=figure.diverging(), vmin=-limit, vmax=limit,
+                                shading="auto")
+        note = (f"blue: prediction below truth, red: prediction above truth; bins with at least "
+                f"{_points(min_count)}")
+        text = "mean residual (pred - true)"
+    figure.colorbar(drawing, drawn, axis, text)
+    axis.grid(visible=False)
+    figure.label(axis, f"Where the model is off, over ({x}, {y})", x, y, note=note)
+    figure.save(drawing, record, name or "error_map")
+    return None
+
+
+def _feature_batch(loader, model, prep, sample):
+    """One matrix of the model's first input wire and the target tensor of the pass, up to sample rows."""
+    import torch
+
+    from .runtime import model_inputs, named_outputs
+
+    wires = model_inputs(model)
+    device = next(iter(model.parameters()), torch.zeros(1)).device
+    features, targets, taken = [], [], 0
+    names = list(prep.targets) if prep is not None else []
+    for batch in loader:
+        if wires[0] not in batch or not names or names[0] not in batch:
+            return None, None, None
+        features.append(batch[wires[0]])
+        targets.append(batch[names[0]])
+        taken += len(features[-1])
+        if taken >= int(sample):
+            break
+    if not features:
+        return None, None, None
+    matrix = torch.cat(features)[:int(sample)].to(device)
+    truth = torch.cat(targets)[:int(sample)].to(device).reshape(len(matrix), -1)
+    if matrix.ndim != 2:
+        return None, None, None
+    return matrix, truth, named_outputs
+
+
+def _scored(model, matrix, truth, wire, named_outputs):
+    import torch
+
+    with torch.no_grad():
+        outputs = named_outputs(model, model(matrix))
+    guess = outputs[wire] if wire in outputs else next(iter(outputs.values()))
+    guess = guess.reshape(len(matrix), -1)[:, :truth.shape[1]]
+    spread = float(((truth - truth.mean(dim=0)) ** 2).sum())
+    if spread <= 0:
+        return float("nan")
+    return 1.0 - float(((guess - truth) ** 2).sum()) / spread
+
+
+@lego("/plot/kalfa/permutation_importance", partial=True, alias="permutation_importance",
+            description="The drop in R2 when one feature column is shuffled, the largest first; the model runs "
+                        "again for every feature and every repeat, so sample bounds the cost")
+def permutation_importance(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None,
+                           repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None):
+    import torch
+
+    from .runtime import resolve_model
+
+    loader = (loaders or {}).get(first_set(sets, "test"))
+    if loader is None or prep is None or predicts is None:
+        return None
+    model = resolve_model(predicts, models)
+    model.eval()
+    matrix, truth, tools = _feature_batch(loader, model, prep, sample)
+    if matrix is None or matrix.shape[1] != len(prep.features):
+        return None
+    wire = output or ""
+    base = _scored(model, matrix, truth, wire, tools)
+    if not numpy.isfinite(base):
+        return None
+    generator = torch.Generator(device="cpu").manual_seed(int(seed))
+    means, deviations = [], []
+    for column in range(matrix.shape[1]):
+        scores = []
+        for _ in range(int(repeats)):
+            shuffled = matrix.clone()
+            order = torch.randperm(len(matrix), generator=generator).to(matrix.device)
+            shuffled[:, column] = matrix[order, column]
+            scores.append(base - _scored(model, shuffled, truth, wire, tools))
+        means.append(float(numpy.mean(scores)))
+        deviations.append(float(numpy.std(scores)))
+    order = numpy.argsort(means)[::-1][:int(top)][::-1]
+    names = [prep.features[position] for position in order]
+    values = [means[position] for position in order]
+    spread = [deviations[position] for position in order]
+    table = dict(groups or {})
+    labels = [table.get(column, "feature") for column in names]
+    ordered = list(dict.fromkeys(labels))
+    colors = {label: figure.CATEGORICAL[position % len(figure.CATEGORICAL)]
+              for position, label in enumerate(ordered)}
+    drawing, axes = figure.sized(figure.width_of(9.5), 0.34 * len(names) + 2.0)
+    axis = axes[0][0]
+    axis.barh(names, values, xerr=spread, height=0.66, color=[colors[label] for label in labels],
+              error_kw={"ecolor": figure.INK_MUTED, "elinewidth": 1})
+    axis.axvline(0.0, color=figure.INK_MUTED, linewidth=1)
+    axis.grid(axis="y", visible=False)
+    if len(ordered) > 1:
+        handles = [figure.pyplot().Line2D([], [], marker="s", linestyle="", markersize=8, color=colors[label],
+                                          label=label) for label in ordered]
+        axis.legend(handles=handles, loc="lower right")
+    figure.label(axis, "Permutation importance", "drop in R2 when the feature is shuffled", None,
+                 note=f"R2 = {base:.4f} on {len(matrix):,} points, {int(repeats)} repeats")
+    figure.save(drawing, record, name or "permutation_importance")
+    return None

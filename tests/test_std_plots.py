@@ -144,7 +144,7 @@ def test_a_plot_definition_overrides_the_figure_size(tmp_path):
     figure.configure(None)
 
 
-def test_data_plots_draw_from_the_set_the_definition_names(workdir):
+def test_the_data_and_diagnostic_plots_draw_from_a_run(workdir):
     from pathlib import Path
 
     from helpers import minimal, write_config
@@ -154,8 +154,12 @@ def test_data_plots_draw_from_the_set_the_definition_names(workdir):
     config = minimal()
     config["figures"] = {"format": "pdf", "width": 4.0, "height": 3.0}
     config["plots"] = {"tvf": {"uri": "target_vs_features", "params": {"per_row": 3, "log": ["x0"]}},
-                       "corr": {"uri": "correlation_heatmap", "sets": ["train"], "width": 7.0}}
+                       "corr": {"uri": "correlation_heatmap", "sets": ["train"], "width": 7.0},
+                       "resid": {"uri": "residuals"},
+                       "map": {"uri": "error_map", "params": {"x": "x0", "y": "x1", "bins": 8, "min_count": 2}},
+                       "importance": {"uri": "permutation_importance", "params": {"repeats": 2}}}
     path = write_config(workdir / "cfg.yaml", config)
     record = Path(run([path], parse_sets([])).record) / "plots"
-    assert (record / "tvf.pdf").exists() and (record / "corr.pdf").exists()
+    for drawn in ("tvf", "corr", "resid", "map", "importance"):
+        assert (record / f"{drawn}.pdf").exists(), drawn
     assert not list(record.glob("*.png"))

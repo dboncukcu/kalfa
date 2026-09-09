@@ -30,7 +30,7 @@ The legos a config writes, by kind.
 | `trigger` | training.stop, rules when | 5 |
 | `checkpoint` | training.checkpoint | 3 |
 | `generate` | generate | 3 |
-| `plot` | plots | 14 |
+| `plot` | plots | 17 |
 | `strategy` | sweep.strategy | 4 |
 | `device` | device, predict --device, generate --device | 4 |
 | `lego` | a param value, or the driver | 2 |
@@ -227,11 +227,14 @@ The legos a config writes, by kind.
 | `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
 | `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
 | `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None)` | partial: True | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
+| `/plot/kalfa/error_map` | `error_map` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, output=None, target=None, statistic='residual', bins=55, min_count=15, name=None)` | partial: True; refs: x=column, y=column, target=field | The error of one prediction over a 2d grid of two columns: with statistic residual blue is a prediction below the truth and red above it, with abs the mean absolute error; bins holding fewer than min_count points stay empty |
 | `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |
 | `/plot/kalfa/image_grid` | `image_grid` | `(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None)` | partial: True | n outputs of the predicts model on the report set as an image grid |
 | `/plot/kalfa/image_pairs` | `image_pairs` | `(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None)` | partial: True | n inputs of the report set next to the predicts model's outputs (reconstructions) |
 | `/plot/kalfa/loss_curve` | `loss_curve` | `(predictions, history, models, record, series=None, log=False, name=None)` | partial: True | Every history series over the turns, or the named ones |
+| `/plot/kalfa/permutation_importance` | `permutation_importance` | `(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None)` | partial: True | The drop in R2 when one feature column is shuffled, the largest first; the model runs again for every feature and every repeat, so sample bounds the cost |
 | `/plot/kalfa/pred_vs_true` | `pred_vs_true` | `(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70)` | partial: True | Predicted against true values of the test set, one panel per predicted field with its R2, as a hexbin density over many points and a scatter over few; the panel is titled with the field name, plus the output wire when two outputs predict the same field |
+| `/plot/kalfa/residuals` | `residuals` | `(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None)` | partial: True; refs: target=field | Three panels of one prediction's residual: the distribution with its bias and sigma, the residual against the truth as a density, and the mean and median error over equal count bins of the target range |
 | `/plot/kalfa/samples_gif` | `samples_gif` | `(predictions, history, models, record, name=None, duration=400)` | partial: True | The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning when there are none |
 | `/plot/kalfa/samples_matrix` | `samples_matrix` | `(predictions, history, models, record, name=None, n=8)` | partial: True | A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; skipped with a warning when there are none |
 | `/plot/kalfa/target_vs_features` | `target_vs_features` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None)` | partial: True; refs: target=field | One panel per feature: the target against it as a hexbin density with the median profile over equal count bins; it reads the set the definition names (train without one) and draws in the original units |
@@ -459,6 +462,9 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
 | `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
+| `residuals` | `/plot/kalfa/residuals` | plot |
+| `error_map` | `/plot/kalfa/error_map` | plot |
+| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
@@ -540,6 +546,9 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
 | `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
+| `residuals` | `/plot/kalfa/residuals` | plot |
+| `error_map` | `/plot/kalfa/error_map` | plot |
+| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
@@ -629,6 +638,9 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
 | `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
+| `residuals` | `/plot/kalfa/residuals` | plot |
+| `error_map` | `/plot/kalfa/error_map` | plot |
+| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |

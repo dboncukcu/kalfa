@@ -75,6 +75,9 @@ alias:
   pred_vs_true: /plot/kalfa/pred_vs_true
   target_vs_features: /plot/kalfa/target_vs_features
   correlation_heatmap: /plot/kalfa/correlation_heatmap
+  residuals: /plot/kalfa/residuals
+  error_map: /plot/kalfa/error_map
+  permutation_importance: /plot/kalfa/permutation_importance
   class_histogram: /plot/kalfa/class_histogram
   confusion_matrix: /plot/kalfa/confusion_matrix
   forecast_samples: /plot/kalfa/forecast_samples
