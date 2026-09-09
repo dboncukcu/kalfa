@@ -368,6 +368,14 @@ object with `update(...)` and `compute()`; a preprocessor an object with `apply`
 sklearn way, and it keeps its statistics per column; a device lego (`/device/acme/tpu`) takes no inputs, returns a `torch.device` and raises when the device is
 not available (`device: {uri: /device/acme/tpu}` then selects it).
 
+**Writing a plot.** A plot lego takes `predictions, history, models, record` and, by naming them in its
+signature, anything else the run holds: `prep`, `train_loader`, `valid_loader`, `test_loader`, `loaders` (the
+three in one mapping), `predicts`, `sets`, `name`, `device`, `counters`, `optimizers`, `emas`, `rules`. Draw with
+`kalfa.std.figure` (`single`, `grid`, `label`, `density`, `profile`, `binned`, `colorbar`, `save` and the palette)
+and the figure comes out in the run's own style and format. `kalfa.std.plot.set_frame(loaders, prep, set)` gives
+the columns of one set as a DataFrame in the original units, features and targets together, which is what
+`target_vs_features` and `correlation_heatmap` draw.
+
 **Logging from a lego.** `logging.getLogger("kalfa.<stage>")` is the whole contract: nothing is declared, no fact,
 no parameter, and the line only appears when the user asked for it with `--log`. The stage is what the third column
 of a log line shows, so name it after the place in the run (`data.source`, `models`, `training.turn`,

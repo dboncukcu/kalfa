@@ -30,7 +30,7 @@ The legos a config writes, by kind.
 | `trigger` | training.stop, rules when | 5 |
 | `checkpoint` | training.checkpoint | 3 |
 | `generate` | generate | 3 |
-| `plot` | plots | 12 |
+| `plot` | plots | 14 |
 | `strategy` | sweep.strategy | 4 |
 | `device` | device, predict --device, generate --device | 4 |
 | `lego` | a param value, or the driver | 2 |
@@ -226,6 +226,7 @@ The legos a config writes, by kind.
 | `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, name=None)` | partial: True | The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed |
 | `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
 | `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
+| `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None)` | partial: True | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
 | `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |
 | `/plot/kalfa/image_grid` | `image_grid` | `(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None)` | partial: True | n outputs of the predicts model on the report set as an image grid |
 | `/plot/kalfa/image_pairs` | `image_pairs` | `(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None)` | partial: True | n inputs of the report set next to the predicts model's outputs (reconstructions) |
@@ -233,6 +234,7 @@ The legos a config writes, by kind.
 | `/plot/kalfa/pred_vs_true` | `pred_vs_true` | `(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70)` | partial: True | Predicted against true values of the test set, one panel per predicted field with its R2, as a hexbin density over many points and a scatter over few; the panel is titled with the field name, plus the output wire when two outputs predict the same field |
 | `/plot/kalfa/samples_gif` | `samples_gif` | `(predictions, history, models, record, name=None, duration=400)` | partial: True | The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning when there are none |
 | `/plot/kalfa/samples_matrix` | `samples_matrix` | `(predictions, history, models, record, name=None, n=8)` | partial: True | A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; skipped with a warning when there are none |
+| `/plot/kalfa/target_vs_features` | `target_vs_features` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None)` | partial: True; refs: target=field | One panel per feature: the target against it as a hexbin density with the median profile over equal count bins; it reads the set the definition names (train without one) and draws in the original units |
 | `/plot/torchmetrics/binary_precision_recall_curve` |  | `(predictions, history, models, record, name=None)` | partial: True | Precision recall curve of the raw test scores against the binary target |
 | `/plot/torchmetrics/binary_roc` |  | `(predictions, history, models, record, name=None)` | partial: True | ROC curve of the raw test scores against the binary target |
 
@@ -294,7 +296,7 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `/lego/kalfa/merge` |  | `(parts)` |  | Merge the per set metrics under train/, val/ and test/ |
 | `/lego/kalfa/pack` |  | `(items)` | aliases: items | A mapping of the given items |
 | `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict the test set with the report model, invert the target chain, write predictions.parquet |
-| `/lego/kalfa/run_all` |  | `(predictions, history, models, plots, keys=None, predicts=None, figures=None, composites=None, valid_loader=None, test_loader=None, record=None)` | returns: None; bus: record=record, composites=composites, valid_loader=valid_loader, test_loader=test_loader | Run every plot of the plots table with the predictions, the history and the models; keys carry the extra inputs a plot names; plots that take loaders, predicts or name get them, name being the definition key the file is named after; figures carries the figure settings of the config |
+| `/lego/kalfa/run_all` |  | `(predictions, history, models, plots, keys=None, predicts=None, figures=None, bus=None, record=None)` | returns: None; bus: record=record | Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height); bus carries everything else the run has (prep, the loaders, the device, the final state) and a plot receives whatever its signature names, plus loaders, predicts, sets and name; figures carries the figure settings of the config |
 | `/lego/kalfa/save_final` |  | `(models, optimizers, emas, counters, rules, record=None)` | returns: None; bus: record=record | Write final/state.pt with the full state once training ends |
 | `/lego/kalfa/select` |  | `(models, emas, which, record=None)` | returns: selected; bus: record=record | The report models: copies loaded from best.pt, or the final state for last |
 | `/loader/kalfa/torch` |  | `(data, set, batch)` |  | torch DataLoader; shuffles the train set only, eval_size for the other sets; a stream dataset shuffles through its buffer and takes no sampler or workers |
@@ -455,6 +457,8 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
+| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
+| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
@@ -534,6 +538,8 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
+| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
+| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
@@ -621,6 +627,8 @@ criteria and metrics of a config) and the progress component (`/lego/kalfa/progr
 | `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
+| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
+| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |

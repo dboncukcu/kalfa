@@ -88,14 +88,15 @@ flow:
           stop: {uri: /rule/kalfa/stop, params: {triggers: []}, inputs: {rules: rules_ruled}, outputs: {rules: rules_next, stop: stop}}  # implicit: metrics
           checkpoint: {uri: /lego/kalfa/checkpoint, params: {policy: {uri: /checkpoint/kalfa/last}}, inputs: {state: '*_next'}, outputs: []} # state *_next: counters_next, emas_next, models_next, optimizers_next, rules_next; implicit: metrics, record
           log: {uri: /lego/kalfa/history, params: {progress: '@progress'}, outputs: []} # implicit: metrics, turn_index, counters_next, optimizers_next, rules_next, record
-  after: # reads: models_final, optimizers_final, emas_final, counters_final, rules_final, record, composites, test_loader, prep, device, history, valid_loader; exports: predictions
+  after: # reads: models_final, optimizers_final, emas_final, counters_final, rules_final, record, composites, test_loader, prep, device, history, train_loader, valid_loader; exports: predictions
     final: {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: 
           rules_final}, outputs: []}  # implicit: record
     report: {uri: /lego/kalfa/select, params: {which: last}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]} # implicit: record
     predict: {uri: /lego/kalfa/predict, params: {predicts: unet, set: test, target_map: {}}, inputs: {models: selected, composites: composites, loader: 
           test_loader, prep: prep}, outputs: [predictions]} # implicit: record, device
     plots: {uri: /lego/kalfa/run_all, params: {plots: '@plots', keys: {loss_curve: {}}, predicts: unet, figures: null}, inputs: {predictions: predictions, 
-          history: history, models: selected}, outputs: []} # implicit: record, composites, valid_loader, test_loader
+          history: history, models: selected, bus: {prep: prep, train_loader: train_loader, valid_loader: valid_loader, test_loader: test_loader, composites: 
+            composites, device: device, counters: counters_final, optimizers: optimizers_final, emas: emas_final, rules: rules_final}}, outputs: []} # implicit: record
     generate: {uri: /lego/kalfa/generate, params: {generate: {uri: /generate/kalfa/ddpm_sampler, params: {model: unet.ema, schedule: {uri: 
                 /schedule/kalfa/linear_betas, params: {steps: 1000}}, shape: [3, 32, 32], n: 64}}}, inputs: {models: selected, composites: composites, prep: 
           prep}, outputs: []} # implicit: record

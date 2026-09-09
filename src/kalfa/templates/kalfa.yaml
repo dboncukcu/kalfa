@@ -174,7 +174,12 @@ blocks:
       report:  {uri: /lego/kalfa/select, params: {which: $report$}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]}
       predict: {uri: /lego/kalfa/predict, params: {predicts: $predicts$, set: test, target_map: $targets$},
                 inputs: {models: selected, composites: composites, loader: test_loader, prep: prep}, outputs: [predictions]}
+      # bus is the one place that says what a plot may name in its signature; a new key here reaches every plot.
       plots:   {uri: /lego/kalfa/run_all, params: {plots: "@plots", keys: $plots_keys$, predicts: $predicts$,
                                                    figures: $figures$},
-                inputs: {predictions: predictions, history: history, models: selected}}
+                inputs: {predictions: predictions, history: history, models: selected,
+                         bus: {prep: prep, train_loader: train_loader, valid_loader: valid_loader,
+                               test_loader: test_loader, composites: composites, device: device,
+                               counters: counters_final, optimizers: optimizers_final, emas: emas_final,
+                               rules: rules_final}}}
       generate: {uri: /lego/kalfa/generate, params: {generate: $generate$}, inputs: {models: selected, composites: composites, prep: prep}}

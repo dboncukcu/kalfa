@@ -96,13 +96,13 @@ def test_sample_writer_and_the_sample_plots(tmp_path):
     with pytest.raises(ValueError, match="sampler"):
         sample_writer(n=2).update(models={}, predicts=None, rng=rng, record=str(tmp_path), turn=1)
     plots = {"gif": functools.partial(samples_gif, duration=100), "matrix": functools.partial(samples_matrix, n=2)}
-    run_all(None, [], {}, plots, keys={}, predicts=None, composites={}, record=str(tmp_path))
+    run_all(None, [], {}, plots, keys={}, predicts=None, bus={"composites": {}}, record=str(tmp_path))
     assert (tmp_path / "plots" / "gif.gif").exists() and (tmp_path / "plots" / "matrix.png").exists()
     empty = tmp_path / "empty"
     empty.mkdir()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        run_all(None, [], {}, plots, keys={}, predicts=None, composites={}, record=str(empty))
+        run_all(None, [], {}, plots, keys={}, predicts=None, bus={"composites": {}}, record=str(empty))
     assert len(caught) == 2 and not (empty / "plots" / "gif.gif").exists()
 
 
@@ -142,3 +142,20 @@ def test_a_plot_definition_overrides_the_figure_size(tmp_path):
     assert seen["size"] == (12.0, 3.0)
     assert figure.settings()["width"] == 5.0
     figure.configure(None)
+
+
+def test_data_plots_draw_from_the_set_the_definition_names(workdir):
+    from pathlib import Path
+
+    from helpers import minimal, write_config
+    from kalfa.api import run
+    from kalfa.config import parse_sets
+
+    config = minimal()
+    config["figures"] = {"format": "pdf", "width": 4.0, "height": 3.0}
+    config["plots"] = {"tvf": {"uri": "target_vs_features", "params": {"per_row": 3, "log": ["x0"]}},
+                       "corr": {"uri": "correlation_heatmap", "sets": ["train"], "width": 7.0}}
+    path = write_config(workdir / "cfg.yaml", config)
+    record = Path(run([path], parse_sets([])).record) / "plots"
+    assert (record / "tvf.pdf").exists() and (record / "corr.pdf").exists()
+    assert not list(record.glob("*.png"))

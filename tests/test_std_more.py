@@ -93,8 +93,8 @@ def test_image_grid_and_run_all_name_files_after_the_definition(tmp_path):
             return value
 
     plots = {"grid": functools.partial(image_grid, n=3), "curve": functools.partial(image_grid, n=2, set="test")}
-    run_all(None, [], {"same": Same()}, plots, keys={}, predicts="same", composites={}, valid_loader=None,
-            test_loader=loader, record=str(tmp_path))
+    run_all(None, [], {"same": Same()}, plots, keys={}, predicts="same",
+            bus={"composites": {}, "valid_loader": None, "test_loader": loader}, record=str(tmp_path))
     assert (tmp_path / "plots" / "grid.png").exists() and (tmp_path / "plots" / "curve.png").exists()
     assert not (tmp_path / "plots" / "image_grid.png").exists()
 

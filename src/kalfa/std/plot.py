@@ -158,22 +158,25 @@ def _accepts(plot, name):
     return name in parameters or any(parameter.kind is parameter.VAR_KEYWORD for parameter in parameters.values())
 
 
-@lego("/lego/kalfa/run_all", returns=None,
-            bus=["record", "composites", "valid_loader", "test_loader"],
+@lego("/lego/kalfa/run_all", returns=None, bus=["record"],
             description="Run every plot of the plots table with the predictions, the history and the models; keys "
-                        "carry the extra inputs a plot names; plots that take loaders, predicts or name get them, "
-                        "name being the definition key the file is named after; figures carries the figure "
+                        "carry the definition level keys (inputs, sets, width, height); bus carries everything else "
+                        "the run has (prep, the loaders, the device, the final state) and a plot receives whatever "
+                        "its signature names, plus loaders, predicts, sets and name; figures carries the figure "
                         "settings of the config")
-def run_all(predictions, history, models, plots, keys=None, predicts=None, figures=None, composites=None,
-            valid_loader=None, test_loader=None, record=None):
+def run_all(predictions, history, models, plots, keys=None, predicts=None, figures=None, bus=None, record=None):
     keys = keys or {}
+    bus = dict(bus or {})
     figure.configure(figures)
-    everything = {**dict(composites or {}), **dict(models or {})}
-    loaders = {"valid": valid_loader, "test": test_loader}
+    everything = {**dict(bus.get("composites") or {}), **dict(models or {})}
+    loaders = {name: bus.get(f"{name}_loader") for name in ("train", "valid", "test")}
     for name, plot in (plots or {}).items():
         logger.debug(f"drawing {name}")
         definition = keys.get(name) or {}
         extra = plot_inputs(plot, definition.get("inputs"), predictions, history, everything)
+        for key, value in bus.items():
+            if _accepts(plot, key):
+                extra[key] = value
         if _accepts(plot, "loaders"):
             extra["loaders"] = loaders
         if _accepts(plot, "predicts"):
@@ -528,4 +531,137 @@ def samples_matrix(predictions, history, models, record, name=None, n=8):
                 axis.axis("off")
         axes[row][0].set_ylabel(f"turn {turn}")
     figure.save(drawing, record, name or "samples_matrix")
+    return None
+
+
+def first_set(sets, default="train"):
+    names = [name for name in (sets or []) if name]
+    return names[0] if names else default
+
+
+def set_frame(loaders, prep, set_name="train"):
+    """The columns of one set in their original units: the features rescaled, the single column targets inverted
+    and the extra columns as they were read. None when the set is not a table (images, a stream)."""
+    import pandas
+
+    loader = (loaders or {}).get(set_name)
+    frame = getattr(getattr(loader, "dataset", None), "frame", None)
+    data = getattr(frame, "data", None)
+    if prep is None or data is None or not len(data):
+        return None
+    features = [column for column in prep.features]
+    if features and all(column in data.columns for column in features):
+        table = pandas.DataFrame(prep.rescale_features(data[features].to_numpy(dtype="float64"), set_name),
+                                 columns=features, index=data.index)
+    else:
+        table = pandas.DataFrame(index=data.index)
+    for target, columns in (frame.targets or {}).items():
+        if len(columns) == 1 and columns[0] in data.columns:
+            table[target] = prep.inverse(target, data[columns[0]].to_numpy(dtype="float64"), set_name)
+    extra = getattr(frame, "extra", None)
+    for column in (list(extra.columns) if extra is not None else []):
+        if column not in table.columns:
+            table[column] = extra[column].to_numpy()
+    return table if len(table.columns) else None
+
+
+def columns_of(table, patterns=None, skip=()):
+    """The numeric columns a pattern list names, in the table's order; every one of them without patterns."""
+    import fnmatch
+
+    names = [column for column in table.columns
+             if column not in skip and table[column].dtype.kind in "fiub"]
+    if not patterns:
+        return names
+    wanted = [patterns] if isinstance(patterns, str) else list(patterns)
+    picked = []
+    for pattern in wanted:
+        glob = any(character in str(pattern) for character in "*?[")
+        for column in names:
+            hit = fnmatch.fnmatchcase(column, str(pattern)) if glob else column == pattern
+            if hit and column not in picked:
+                picked.append(column)
+    return picked
+
+
+def _logged(values, column, log):
+    if column not in set(log or ()):
+        return values, column
+    floor = numpy.nanpercentile(numpy.abs(values[values != 0]), 1) if numpy.any(values != 0) else 1e-12
+    return numpy.log10(numpy.clip(values, max(float(floor), 1e-300), None)), f"log10({column})"
+
+
+@lego("/plot/kalfa/target_vs_features", partial=True, alias="target_vs_features", refs={"target": "field"},
+            description="One panel per feature: the target against it as a hexbin density with the median profile "
+                        "over equal count bins; it reads the set the definition names (train without one) and "
+                        "draws in the original units")
+def target_vs_features(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None,
+                       columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None):
+    set_name = first_set(sets, "train")
+    table = set_frame(loaders, prep, set_name)
+    if table is None:
+        return None
+    field = target or next(iter(prep.targets), None)
+    if field is None or field not in table.columns:
+        return None
+    picked = columns_of(table, columns, skip=(field,) + tuple(prep.targets))[:int(limit)]
+    if not picked:
+        return None
+    width = max(1, min(int(per_row or 4), len(picked)))
+    rows = -(-len(picked) // width)
+    drawing, axes = figure.grid(rows, width, width=6.4, height=4.2)
+    panels = [axis for row in axes for axis in row]
+    truth = table[field].to_numpy(dtype="float64")
+    for axis, column in zip(panels, picked):
+        values, shown = _logged(table[column].to_numpy(dtype="float64"), column, log)
+        x, y = figure.finite(values, truth)
+        if not len(x):
+            axis.axis("off")
+            continue
+        figure.density(drawing, axis, x, y, gridsize)
+        centers, profile = figure.profile(x, y, bins)
+        if len(centers):
+            axis.plot(centers, profile, color=figure.CATEGORICAL[1], linewidth=2.4, label="median profile")
+            axis.legend(loc="lower left")
+        figure.label(axis, f"{field} vs {shown}", shown, field)
+    for axis in panels[len(picked):]:
+        axis.axis("off")
+    figure.title(drawing, f"{field} against every feature ({set_name} set, {len(table):,} rows)")
+    drawing.tight_layout(rect=(0, 0, 1, 0.97))
+    figure.save(drawing, record, name or "target_vs_features")
+    return None
+
+
+@lego("/plot/kalfa/correlation_heatmap", partial=True, alias="correlation_heatmap",
+            description="The rank correlation of every column of a set against every other, features and targets "
+                        "together; it reads the set the definition names (train without one)")
+def correlation_heatmap(predictions, history, models, record, loaders=None, prep=None, sets=None,
+                        method="spearman", columns=None, sample=80000, annotate=False, name=None):
+    set_name = first_set(sets, "train")
+    table = set_frame(loaders, prep, set_name)
+    if table is None:
+        return None
+    picked = columns_of(table, columns)
+    if len(picked) < 2:
+        return None
+    data = table[picked]
+    if sample and len(data) > int(sample):
+        data = data.sample(int(sample), random_state=0)
+    matrix = data.corr(method=method).to_numpy()
+    side = 0.34 * len(picked) + 3.4
+    drawing, axes = figure.sized(side, side * 0.92)
+    axis = axes[0][0]
+    drawn = axis.imshow(matrix, cmap=figure.diverging(), vmin=-1, vmax=1)
+    axis.set_xticks(range(len(picked)), picked, rotation=90, fontsize=8)
+    axis.set_yticks(range(len(picked)), picked, fontsize=8)
+    axis.grid(visible=False)
+    if annotate and len(picked) <= 20:
+        for row in range(len(picked)):
+            for column in range(len(picked)):
+                axis.text(column, row, f"{matrix[row, column]:.2f}", ha="center", va="center", fontsize=7,
+                          color=figure.INK if abs(matrix[row, column]) < 0.6 else "#ffffff")
+    figure.colorbar(drawing, drawn, axis, f"{method} rho", fraction=0.032)
+    figure.label(axis, "Column correlation", None, None,
+                 note=f"{len(data):,} rows of the {set_name} set, {len(picked)} columns")
+    figure.save(drawing, record, name or "correlation_heatmap")
     return None
