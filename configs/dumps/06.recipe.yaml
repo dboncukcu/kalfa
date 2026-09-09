@@ -56,5 +56,5 @@ flow:
             name: half_recon, when: '@triggers.half_recon', set: {vae_loss.w_rec: 0.5}, after: null}, {name: to_huber, 
             when: '@triggers.to_huber', set: {vae_loss.recon: {uri: /criterion/kalfa/huber}}, after: null}], stop: ['@triggers.stop_0'],
       checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/recon_rmse}}}}
-  after: {block: after, params: {report: best, predicts: vae, targets: {}, generate: null, plots_keys: {loss_curve: {}, 
-          reconstructions: {}}}}
+  after: {block: after, params: {report: best, figures: null, predicts: vae, targets: {}, generate: null, plots_keys: {
+          loss_curve: {}, reconstructions: {}}}}

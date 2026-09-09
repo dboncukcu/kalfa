@@ -4,6 +4,7 @@ import pandas
 import pytest
 
 import kalfa  # noqa: F401
+from kalfa.std import figure
 from kalfa.std.plot import loss_curve, panel_title, pred_vs_true, run_all, series_of
 
 
@@ -103,3 +104,41 @@ def test_sample_writer_and_the_sample_plots(tmp_path):
         warnings.simplefilter("always")
         run_all(None, [], {}, plots, keys={}, predicts=None, composites={}, record=str(empty))
     assert len(caught) == 2 and not (empty / "plots" / "gif.gif").exists()
+
+
+def test_figure_settings_choose_the_format_and_the_panel_size(tmp_path):
+    figure.configure({"format": "pdf", "width": 3.0, "height": 2.0})
+    try:
+        drawing, axis = figure.single()
+        assert tuple(drawing.get_size_inches()) == (3.0, 2.0)
+        path = figure.save(drawing, str(tmp_path), "sized")
+        assert path.name == "sized.pdf" and path.exists()
+        drawing, axes = figure.grid(2, 3)
+        assert tuple(drawing.get_size_inches()) == (9.0, 4.0)
+        figure.pyplot().close(drawing)
+    finally:
+        figure.configure(None)
+    assert figure.settings()["format"] == "png"
+
+
+def test_figure_profile_and_binned_follow_the_data():
+    import numpy
+
+    x = numpy.linspace(0.0, 1.0, 400)
+    centers, values = figure.profile(x, 2.0 * x, bins=4)
+    assert len(centers) == 4 and values[0] < values[-1]
+    edges_x, edges_y, mean = figure.binned(x, x, x, bins=4, min_count=1)
+    assert mean.shape == (4, 4) and numpy.isnan(mean).any() and numpy.nanmin(mean) >= 0.0
+
+
+def test_a_plot_definition_overrides_the_figure_size(tmp_path):
+    seen = {}
+
+    def plot(predictions, history, models, record, name=None):
+        seen["size"] = (figure.width_of(1.0), figure.height_of(1.0))
+
+    run_all(None, [], {}, {"one": plot}, keys={"one": {"width": 12.0, "height": 3.0}},
+            figures={"width": 5.0}, record=str(tmp_path))
+    assert seen["size"] == (12.0, 3.0)
+    assert figure.settings()["width"] == 5.0
+    figure.configure(None)

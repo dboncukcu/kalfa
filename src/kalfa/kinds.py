@@ -47,4 +47,4 @@ RESERVED_BLOCKS = ("data", "models", "optimizers", "training", "after")
 TRAINING_FIXED = ("turn", "predicts", "targets", "epochs", "steps", "loss", "checkpoint", "report", "stop",
                   "rules")
 
-DEFINITION_KEYS = ("sets", "every", "inputs", "output", "target")
+DEFINITION_KEYS = ("sets", "every", "inputs", "output", "target", "width", "height")

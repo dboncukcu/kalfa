@@ -133,6 +133,11 @@ written to `device.json` in the record and printed by `kalfa run`. `kalfa predic
 same choice as `--device` (a short name, or a lego call in quotes), so a record can be replayed on a GPU box; they
 stay on the cpu without it. Your own device lego (`/device/acme/tpu`) plugs into the same slot.
 
+`figures` sets the look of every plot in one place: `{format: png | pdf | svg, width, height, dpi, style}`, where
+`width` and `height` are the size of one panel in inches. A single plot overrides them with the definition level
+keys `width` and `height`, and `--set figures.format=pdf` switches the whole run from the command line. The plots
+share one palette and one grid, so a record's figures look like one document.
+
 `check --dump` prints the graph that will run (`flow.yaml`), `--recipe` the document the driver hands to cirak;
 `--layers` shows the layer tree and the overridden leaves. The set table is from the file header, before the
 filters; `--load` runs the data block and prints the real sizes.

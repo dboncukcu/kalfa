@@ -364,6 +364,7 @@ def recipe(config, registry=None, aliases=None):
                 "checkpoint": None if checkpoint is None else call(checkpoint)}},
             "after": {"block": "after", "params": {
                 "report": training.get("report"),
+                "figures": config.get("figures"),
                 "predicts": predicts,
                 "targets": targets,
                 "generate": None if generate is None else call_resolved(generate, aliases, registry),

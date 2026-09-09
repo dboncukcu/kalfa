@@ -398,3 +398,13 @@ def test_plot_name_clash_for_nameless_plot_legos(workdir):
     problems = check([str(write_config(workdir / "cfg.yaml", config))], parse_sets([])).problems
     assert [problem.kind for problem in problems] == ["plot_name_clash"]
     assert "plots.b and plots.a" in problems[0].message
+
+
+def test_figures_section_values(workdir):
+    config = minimal()
+    config["figures"] = {"format": "png", "width": 6.0, "height": 4.0, "dpi": 200, "style": "kalfa"}
+    assert kinds_of(workdir, config)[1] == []
+    config["figures"] = {"format": "eps", "width": 0, "style": "seaborn", "colour": "blue"}
+    prepared, kinds = kinds_of(workdir, config, "bad.yaml")
+    assert kinds == ["unknown_key", "invalid_value", "invalid_value", "invalid_value"]
+    assert "figures.format must be one of" in prepared.problems[1].message

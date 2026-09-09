@@ -52,7 +52,7 @@ class Surface:
 
 
 TOP_KEYS = ("plugins", "params", "seed", "device", "data", "model", "metrics", "losses", "optimizers", "training",
-            "generate", "plots", "record")
+            "generate", "plots", "figures", "record")
 
 
 def parse_set(text):

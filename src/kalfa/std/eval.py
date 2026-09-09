@@ -179,18 +179,18 @@ def write_sample_files(samples, target, stem, image_stem):
 
 def write_grid(images, path):
     """An image grid of at most eight columns, saved as png."""
-    from .plot import _figure, _image_grid
+    from . import figure
+    from .plot import _image_grid
 
     count = len(images)
     columns = min(8, count)
     rows = (count + columns - 1) // columns
-    pyplot = _figure()
-    figure, axes = pyplot.subplots(rows, columns, figsize=(1.6 * columns, 1.6 * rows), squeeze=False)
+    drawing, axes = figure.tiles(rows, columns)
     for position in range(rows * columns):
         axis = axes[position // columns][position % columns]
         if position < count:
             _image_grid(axis, images[position])
         else:
             axis.axis("off")
-    figure.savefig(path, bbox_inches="tight")
-    pyplot.close(figure)
+    drawing.savefig(path, bbox_inches="tight")
+    figure.pyplot().close(drawing)

@@ -31,5 +31,5 @@ flow:
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {
           loss_mse: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model, epochs: 30, steps: null, rules: [], stop: ['@triggers.stop_0'],
       checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/rmse}}}}
-  after: {block: after, params: {report: best, predicts: model, targets: {}, generate: null, plots_keys: {loss_curve: {},
-        forecast: {}}}}
+  after: {block: after, params: {report: best, figures: null, predicts: model, targets: {}, generate: null, plots_keys: {
+        loss_curve: {}, forecast: {}}}}

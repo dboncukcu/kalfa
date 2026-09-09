@@ -166,13 +166,15 @@ blocks:
       predicts: {default: null}
       targets: {default: {}}            # {output wire: target selector} from training.targets
       generate: {default: null}         # {uri, params} or null
-      plots_keys: {default: {}}         # {name: {inputs}}; the definition level keys
+      plots_keys: {default: {}}         # {name: {inputs, sets, width, height}}; the definition level keys
+      figures: {default: null}          # the figures section: format, width, height, dpi, style
       # "@plots" is a group reference to the plots section of the driver document, not a block variable
     flow:
       final:   {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: rules_final}}
       report:  {uri: /lego/kalfa/select, params: {which: $report$}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]}
       predict: {uri: /lego/kalfa/predict, params: {predicts: $predicts$, set: test, target_map: $targets$},
                 inputs: {models: selected, composites: composites, loader: test_loader, prep: prep}, outputs: [predictions]}
-      plots:   {uri: /lego/kalfa/run_all, params: {plots: "@plots", keys: $plots_keys$, predicts: $predicts$},
+      plots:   {uri: /lego/kalfa/run_all, params: {plots: "@plots", keys: $plots_keys$, predicts: $predicts$,
+                                                   figures: $figures$},
                 inputs: {predictions: predictions, history: history, models: selected}}
       generate: {uri: /lego/kalfa/generate, params: {generate: $generate$}, inputs: {models: selected, composites: composites, prep: prep}}

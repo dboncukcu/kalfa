@@ -49,5 +49,5 @@ flow:
           rec: {target: input}}, metrics_keys: {recon_rmse: {target: input}}, predicts: ae, epochs: 20, steps: null, 
         rules: [], stop: ['@triggers.stop_0'], checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: 
             val/recon_rmse}}}}
-  after: {block: after, params: {report: best, predicts: ae, targets: {}, generate: null, plots_keys: {loss_curve: {}, 
-          reconstructions: {}}}}
+  after: {block: after, params: {report: best, figures: null, predicts: ae, targets: {}, generate: null, plots_keys: {
+          loss_curve: {}, reconstructions: {}}}}

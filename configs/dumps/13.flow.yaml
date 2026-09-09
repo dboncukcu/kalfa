@@ -108,6 +108,6 @@ flow:
     report: {uri: /lego/kalfa/select, params: {which: best}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]} # implicit: record
     predict: {uri: /lego/kalfa/predict, params: {predicts: student, set: test, target_map: {}}, inputs: {models: selected, composites: composites, loader: 
           test_loader, prep: prep}, outputs: [predictions]} # implicit: record, device
-    plots: {uri: /lego/kalfa/run_all, params: {plots: '@plots', keys: {loss_curve: {}, confusion: {}}, predicts: student}, inputs: {predictions: predictions, 
-          history: history, models: selected}, outputs: []} # implicit: record, composites, valid_loader, test_loader
+    plots: {uri: /lego/kalfa/run_all, params: {plots: '@plots', keys: {loss_curve: {}, confusion: {}}, predicts: student, figures: null}, inputs: {predictions: 
+          predictions, history: history, models: selected}, outputs: []} # implicit: record, composites, valid_loader, test_loader
     generate: {uri: /lego/kalfa/generate, params: {generate: null}, inputs: {models: selected, composites: composites, prep: prep}, outputs: []} # implicit: record

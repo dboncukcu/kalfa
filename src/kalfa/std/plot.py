@@ -1,10 +1,9 @@
 """Plots: partial legos called after training with the predictions, the history and the report models."""
 
-from pathlib import Path
-
-import cirak
+import numpy
 
 from ..registration import lego
+from . import figure
 from .log import logger_for
 
 logger = logger_for("after.plots")
@@ -22,21 +21,6 @@ def uri_of(plot):
         if entry is not None and entry.target is base:
             return uri
     return None
-
-
-def _figure():
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as pyplot
-
-    return pyplot
-
-
-def _target(record, name):
-    directory = Path(record) / "plots"
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory / name
 
 
 def series_of(history, series=None):
@@ -57,19 +41,19 @@ def series_of(history, series=None):
 
 @lego("/plot/kalfa/loss_curve", partial=True, alias="loss_curve",
             description="Every history series over the turns, or the named ones")
-def loss_curve(predictions, history, models, record, series=None, name=None):
+def loss_curve(predictions, history, models, record, series=None, log=False, name=None):
     found = series_of(history, series)
     if not found:
         return None
-    pyplot = _figure()
-    figure, axis = pyplot.subplots(figsize=(8, 5))
+    drawing, axis = figure.single(width=8.0, height=5.0)
     for label, values in found.items():
         axis.plot(range(1, len(values) + 1), values, label=label)
-    axis.set_xlabel("turn")
-    axis.set_ylabel("value")
-    axis.legend(fontsize=7)
-    figure.savefig(_target(record, f"{name or 'loss_curve'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+    if log:
+        axis.set_yscale("log")
+    axis.legend(loc="upper right", ncols=1 if len(found) < 6 else 2)
+    last = ", ".join(f"{label} {values[-1]:.4g}" for label, values in list(found.items())[:4])
+    figure.label(axis, "Training history", "turn", "value", note=f"last turn: {last}" if last else None)
+    figure.save(drawing, record, name or "loss_curve")
     return None
 
 
@@ -85,49 +69,62 @@ def panel_title(pred, target, paired):
     return f"{target} ({pred[len('pred_'):-len(target) - 1]})"
 
 
-@lego("/plot/kalfa/pred_vs_true", partial=True, alias="pred_vs_true",
-            description="Predicted against true values of the test set, one panel per predicted field, laid out in "
-                        "a grid of columns panels per row and titled with the field name, plus the output wire "
-                        "when two outputs predict the same field")
-def pred_vs_true(predictions, history, models, record, name=None, columns=4):
-    import numpy
-
+def prediction_pairs(predictions):
+    """The (prediction column, target column) pairs of a predictions frame, numeric ones only."""
     if predictions is None or len(predictions) == 0:
-        return None
+        return []
     preds = [column for column in predictions.columns if column.startswith("pred_")]
     targets = [column for column in predictions.columns
                if not column.startswith(("pred_", "raw_")) and column != "row"]
     if not preds or not targets:
-        return None
+        return []
     pairs = [(pred, true_column(pred, targets)) for pred in preds]
     pairs = [(pred, true) for pred, true in pairs if true is not None]
     if not pairs:
         pairs = list(zip(preds, targets * len(preds)))
-    pairs = [(pred, true) for pred, true in pairs
-             if predictions[pred].dtype.kind in "fiu" and predictions[true].dtype.kind in "fiu"]
+    return [(pred, true) for pred, true in pairs
+            if predictions[pred].dtype.kind in "fiu" and predictions[true].dtype.kind in "fiu"]
+
+
+def r2_of(true, guess):
+    spread = float(numpy.sum((true - numpy.mean(true)) ** 2))
+    if spread <= 0:
+        return float("nan")
+    return 1.0 - float(numpy.sum((guess - true) ** 2)) / spread
+
+
+@lego("/plot/kalfa/pred_vs_true", partial=True, alias="pred_vs_true",
+            description="Predicted against true values of the test set, one panel per predicted field with its R2, "
+                        "as a hexbin density over many points and a scatter over few; the panel is titled with the "
+                        "field name, plus the output wire when two outputs predict the same field")
+def pred_vs_true(predictions, history, models, record, name=None, columns=4, kind="auto", gridsize=70):
+    pairs = prediction_pairs(predictions)
     if not pairs:
         return None
-    pyplot = _figure()
     width = max(1, min(int(columns or 4), len(pairs)))
     rows = -(-len(pairs) // width)
-    figure, axes = pyplot.subplots(rows, width, figsize=(4.6 * width, 4.3 * rows), squeeze=False)
+    drawing, axes = figure.grid(rows, width, width=5.4, height=4.6)
     panels = [axis for row in axes for axis in row]
     paired = [field for _, field in pairs]
     for axis, (pred, target) in zip(panels, pairs):
-        true = predictions[target].to_numpy()
-        guess = predictions[pred].to_numpy()
-        axis.scatter(true, guess, s=12, alpha=0.5)
-        low = float(numpy.nanmin([true.min(), guess.min()]))
-        high = float(numpy.nanmax([true.max(), guess.max()]))
-        axis.plot([low, high], [low, high], linestyle=":", color="gray")
-        axis.set_title(panel_title(pred, target, paired))
-        axis.set_xlabel("true")
-        axis.set_ylabel("predicted")
+        true, guess = figure.finite(predictions[target].to_numpy(), predictions[pred].to_numpy())
+        if not len(true):
+            axis.axis("off")
+            continue
+        dense = kind == "hexbin" or (kind == "auto" and len(true) >= 2000)
+        if dense:
+            figure.density(drawing, axis, true, guess, gridsize)
+        else:
+            axis.scatter(true, guess, s=12, alpha=0.5, color=figure.CATEGORICAL[0], edgecolors="none")
+        low = float(min(true.min(), guess.min()))
+        high = float(max(true.max(), guess.max()))
+        axis.plot([low, high], [low, high], color=figure.CATEGORICAL[1], linewidth=2, label="perfect")
+        axis.legend(loc="upper left")
+        figure.label(axis, panel_title(pred, target, paired), "true", "predicted",
+                     note=f"R2 = {r2_of(true, guess):.4f} on {len(true):,} points")
     for axis in panels[len(pairs):]:
         axis.axis("off")
-    figure.tight_layout()
-    figure.savefig(_target(record, f"{name or 'pred_vs_true'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+    figure.save(drawing, record, name or "pred_vs_true")
     return None
 
 
@@ -165,22 +162,34 @@ def _accepts(plot, name):
             bus=["record", "composites", "valid_loader", "test_loader"],
             description="Run every plot of the plots table with the predictions, the history and the models; keys "
                         "carry the extra inputs a plot names; plots that take loaders, predicts or name get them, "
-                        "name being the definition key the file is named after")
-def run_all(predictions, history, models, plots, keys=None, predicts=None, composites=None, valid_loader=None,
-            test_loader=None, record=None):
+                        "name being the definition key the file is named after; figures carries the figure "
+                        "settings of the config")
+def run_all(predictions, history, models, plots, keys=None, predicts=None, figures=None, composites=None,
+            valid_loader=None, test_loader=None, record=None):
     keys = keys or {}
+    figure.configure(figures)
     everything = {**dict(composites or {}), **dict(models or {})}
     loaders = {"valid": valid_loader, "test": test_loader}
     for name, plot in (plots or {}).items():
         logger.debug(f"drawing {name}")
-        extra = plot_inputs(plot, (keys.get(name) or {}).get("inputs"), predictions, history, everything)
+        definition = keys.get(name) or {}
+        extra = plot_inputs(plot, definition.get("inputs"), predictions, history, everything)
         if _accepts(plot, "loaders"):
             extra["loaders"] = loaders
         if _accepts(plot, "predicts"):
             extra["predicts"] = predicts
+        if _accepts(plot, "sets"):
+            extra["sets"] = definition.get("sets")
         if _accepts(plot, "name"):
             extra["name"] = name
-        plot(predictions=predictions, history=history, models=everything, record=record, **extra)
+        size = {key: definition[key] for key in ("width", "height") if definition.get(key) is not None}
+        if size:
+            figure.configure({**figure.settings(), **size})
+        try:
+            plot(predictions=predictions, history=history, models=everything, record=record, **extra)
+        finally:
+            if size:
+                figure.configure(figures)
     if plots:
         logger.info(f"plots: {', '.join(plots)}")
     return None
@@ -199,8 +208,6 @@ def _report_loader(loaders, set_name=None):
 
 
 def _image_grid(axis, tensor):
-    import numpy
-
     array = tensor.detach().cpu().float().numpy()
     if array.ndim == 3 and array.shape[0] in (1, 3):
         array = array.transpose(1, 2, 0)
@@ -210,6 +217,7 @@ def _image_grid(axis, tensor):
     if high > low:
         array = (array - low) / (high - low)
     axis.imshow(numpy.clip(array, 0.0, 1.0), cmap="gray" if array.ndim == 2 else None)
+    axis.grid(visible=False)
     axis.set_xticks([])
     axis.set_yticks([])
 
@@ -240,8 +248,7 @@ def image_grid(predictions, history, models, record, loaders=None, predicts=None
         return None
     columns = min(8, count)
     rows = (count + columns - 1) // columns
-    pyplot = _figure()
-    figure, axes = pyplot.subplots(rows, columns, figsize=(1.6 * columns, 1.6 * rows), squeeze=False)
+    drawing, axes = figure.tiles(rows, columns)
     for position in range(rows * columns):
         axis = axes[position // columns][position % columns]
         if position < count:
@@ -249,8 +256,7 @@ def image_grid(predictions, history, models, record, loaders=None, predicts=None
         else:
             axis.axis("off")
     axes[0][0].set_ylabel(set_name)
-    figure.savefig(_target(record, f"{name or 'image_grid'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+    figure.save(drawing, record, name or "image_grid")
     return None
 
 
@@ -275,15 +281,13 @@ def image_pairs(predictions, history, models, record, loaders=None, predicts=Non
         outputs = named_outputs(model, call_model(model, batch))
     wire = next(iter(outputs))
     inputs = batch[model.inputs[0]]
-    pyplot = _figure()
-    figure, axes = pyplot.subplots(2, count, figsize=(1.6 * count, 3.4), squeeze=False)
+    drawing, axes = figure.sized(1.6 * count, 3.4, 2, count)
     for position in range(count):
         _image_grid(axes[0][position], inputs[position])
         _image_grid(axes[1][position], outputs[wire][position])
     axes[0][0].set_ylabel(set_name)
     axes[1][0].set_ylabel(wire)
-    figure.savefig(_target(record, f"{name or 'image_pairs'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+    figure.save(drawing, record, name or "image_pairs")
     return None
 
 
@@ -302,15 +306,20 @@ def class_histogram(predictions, history, models, record, bins=40, name=None):
     scores, labels = _scores_and_labels(predictions)
     if scores is None:
         return None
-    pyplot = _figure()
-    figure, axis = pyplot.subplots(figsize=(8, 5))
-    for label in sorted(set(labels.tolist())):
-        axis.hist(scores[labels == label], bins=bins, alpha=0.5, label=str(label))
-    axis.set_xlabel("score")
-    axis.legend()
-    figure.savefig(_target(record, f"{name or 'class_histogram'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+    drawing, axis = figure.single(width=8.0, height=5.0)
+    classes = sorted(set(labels.tolist()))
+    for position, label in enumerate(classes):
+        axis.hist(scores[labels == label], bins=bins, alpha=0.55, edgecolor="none",
+                  color=figure.CATEGORICAL[position % len(figure.CATEGORICAL)], label=str(label))
+    axis.legend(loc="upper right")
+    figure.label(axis, "Score by class", "score", "points",
+                 note=f"{len(scores):,} test points over {len(classes)} classes")
+    figure.save(drawing, record, name or "class_histogram")
     return None
+
+
+def _area(x, y):
+    return float(abs(numpy.sum(numpy.diff(x) * (y[:-1] + y[1:]) / 2.0)))
 
 
 def _binary_curve(predictions, record, kind, xlabel, ylabel, name=None):
@@ -320,22 +329,25 @@ def _binary_curve(predictions, record, kind, xlabel, ylabel, name=None):
     scores, labels = _scores_and_labels(predictions)
     if scores is None or len(set(labels.tolist())) < 2:
         return None
-    import numpy
-
     score = torch.as_tensor(numpy.array(scores, dtype="float32"))
     label = torch.as_tensor(numpy.array(labels)).long()
     if kind == "binary_roc":
         x, y, _ = binary_roc(score, label)
+        title, note = "ROC", f"AUC = {_area(x.numpy(), y.numpy()):.4f}"
     else:
         precision, recall, _ = binary_precision_recall_curve(score, label)
         x, y = recall, precision
-    pyplot = _figure()
-    figure, axis = pyplot.subplots(figsize=(6, 6))
-    axis.plot(x.numpy(), y.numpy())
-    axis.set_xlabel(xlabel)
-    axis.set_ylabel(ylabel)
-    figure.savefig(_target(record, f"{name or kind}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+        title, note = "Precision and recall", f"AP = {_area(x.numpy(), y.numpy()):.4f}"
+    drawing, axis = figure.single(width=6.0, height=5.0)
+    axis.plot(x.numpy(), y.numpy(), color=figure.CATEGORICAL[0], label=note)
+    if kind == "binary_roc":
+        axis.plot([0, 1], [0, 1], color=figure.INK_MUTED, linewidth=1, linestyle="--", label="chance")
+    else:
+        axis.axhline(float(label.float().mean()), color=figure.INK_MUTED, linewidth=1, linestyle="--",
+                     label="base rate")
+    axis.legend(loc="lower right" if kind == "binary_roc" else "lower left")
+    figure.label(axis, title, xlabel, ylabel, note=f"{len(scores):,} test points")
+    figure.save(drawing, record, name or kind)
     return None
 
 
@@ -376,7 +388,7 @@ def _draw_models(models, loaders, record, stem):
         try:
             drawing = draw_graph(model, input_data=[batch[wire][:2].to(device) for wire in wires],
                                  graph_name=label, expand_nested=True)
-            drawing.visual_graph.render(str(_target(record, f"{stem}_{label}")), format="png", cleanup=True)
+            drawing.visual_graph.render(str(figure.target(record, f"{stem}_{label}")), format="png", cleanup=True)
             logger.debug(f"architecture: drew {label}")
         except Exception as exc:
             warnings.warn(f"architecture: torchview could not draw {label}: {type(exc).__name__}: {exc}")
@@ -392,13 +404,14 @@ def architecture(predictions, history, models, record, loaders=None, name=None):
         lines.append(repr(model))
         lines.append("")
     stem = name or "architecture"
-    _target(record, f"{stem}.txt").write_text("\n".join(lines))
+    figure.target(record, f"{stem}.txt").write_text("\n".join(lines))
     _draw_models(models, loaders, record, stem)
     return None
 
 
 @lego("/plot/kalfa/confusion_matrix", partial=True, alias="confusion_matrix",
-            description="Confusion matrix of the decoded test predictions against the target labels")
+            description="Confusion matrix of the decoded test predictions against the target labels, counts and "
+                        "row shares in every cell")
 def confusion_matrix(predictions, history, models, record, name=None):
     if predictions is None or len(predictions) == 0:
         return None
@@ -413,18 +426,22 @@ def confusion_matrix(predictions, history, models, record, name=None):
     guess = predictions[preds[0]].astype(str).to_numpy()
     labels = sorted(set(truth.tolist()) | set(guess.tolist()))
     matrix = sk_confusion(truth, guess, labels=labels)
-    pyplot = _figure()
-    figure, axis = pyplot.subplots(figsize=(1.5 + 0.8 * len(labels), 1.5 + 0.8 * len(labels)))
-    axis.imshow(matrix, cmap="Blues")
+    shares = matrix / numpy.maximum(matrix.sum(axis=1, keepdims=True), 1)
+    side = 1.8 + 0.8 * len(labels)
+    drawing, axes = figure.sized(side, side * 0.86)
+    axis = axes[0][0]
+    drawn = axis.imshow(shares, cmap=figure.sequential(), vmin=0, vmax=1)
     for row in range(len(labels)):
         for column in range(len(labels)):
-            axis.text(column, row, str(matrix[row, column]), ha="center", va="center")
+            axis.text(column, row, f"{matrix[row, column]:,}\n{shares[row, column] * 100:.1f}%",
+                      ha="center", va="center", fontsize=9,
+                      color=figure.INK if shares[row, column] < 0.55 else "#ffffff")
     axis.set_xticks(range(len(labels)), labels)
     axis.set_yticks(range(len(labels)), labels)
-    axis.set_xlabel("predicted")
-    axis.set_ylabel("true")
-    figure.savefig(_target(record, f"{name or 'confusion_matrix'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+    axis.grid(visible=False)
+    figure.colorbar(drawing, drawn, axis, "row share", fraction=0.045)
+    figure.label(axis, "Confusion matrix", "predicted", "true", note=f"{len(truth):,} test points")
+    figure.save(drawing, record, name or "confusion_matrix")
     return None
 
 
@@ -440,24 +457,17 @@ def forecast_samples(predictions, history, models, record, n=6, name=None):
     if not preds or not truths:
         return None
     count = min(int(n), len(predictions))
-    picked = [int(round(position)) for position in numpy_linspace(0, len(predictions) - 1, count)]
-    pyplot = _figure()
-    figure, axes = pyplot.subplots(count, 1, figsize=(8, 2.2 * count), squeeze=False)
+    picked = [int(round(position)) for position in numpy.linspace(0, len(predictions) - 1, count)]
+    drawing, axes = figure.sized(figure.width_of(8.0), 2.2 * count, count, 1)
     for axis, position in zip(axes[:, 0], picked):
         row = predictions.iloc[position]
-        axis.plot([row[column] for column in truths], label="true")
-        axis.plot([row[column] for column in preds], label="predicted", linestyle="--")
-        axis.set_title(f"row {row['row']}")
-    axes[0, 0].legend()
-    figure.savefig(_target(record, f"{name or 'forecast_samples'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+        axis.plot([row[column] for column in truths], color=figure.CATEGORICAL[0], label="true")
+        axis.plot([row[column] for column in preds], color=figure.CATEGORICAL[1], linestyle="--",
+                  label="predicted")
+        figure.label(axis, f"row {row['row']}", None, None)
+    axes[0, 0].legend(loc="upper right")
+    figure.save(drawing, record, name or "forecast_samples")
     return None
-
-
-def numpy_linspace(start, stop, count):
-    import numpy
-
-    return numpy.linspace(start, stop, count)
 
 
 def _turn_files(record, suffix):
@@ -482,8 +492,8 @@ def samples_gif(predictions, history, models, record, name=None, duration=400):
     for frame in frames:
         with Image.open(frame) as handle:
             images.append(handle.convert("RGB"))
-    images[0].save(_target(record, f"{name or 'samples_gif'}.gif"), save_all=True, append_images=images[1:],
-                   duration=int(duration), loop=0)
+    images[0].save(figure.target(record, f"{name or 'samples_gif'}.gif"), save_all=True,
+                   append_images=images[1:], duration=int(duration), loop=0)
     return None
 
 
@@ -508,8 +518,7 @@ def samples_matrix(predictions, history, models, record, name=None, n=8):
         warnings.warn("samples_matrix: the turn samples are not images")
         return None
     columns = max(len(samples) for _, samples in rows)
-    pyplot = _figure()
-    figure, axes = pyplot.subplots(len(rows), columns, figsize=(1.6 * columns, 1.6 * len(rows)), squeeze=False)
+    drawing, axes = figure.tiles(len(rows), columns)
     for row, (turn, samples) in enumerate(rows):
         for column in range(columns):
             axis = axes[row][column]
@@ -518,6 +527,5 @@ def samples_matrix(predictions, history, models, record, name=None, n=8):
             else:
                 axis.axis("off")
         axes[row][0].set_ylabel(f"turn {turn}")
-    figure.savefig(_target(record, f"{name or 'samples_matrix'}.png"), bbox_inches="tight")
-    pyplot.close(figure)
+    figure.save(drawing, record, name or "samples_matrix")
     return None

@@ -66,5 +66,5 @@ flow:
             z_tail}, total: {}}, metrics_keys: {rmse_y: {output: y_hat, target: y_*}, rmse_z: {output: z_hat, target: z},
         auroc_tail: {output: tail_logit, target: z_tail}}, predicts: full, epochs: 30, steps: null, rules: [], stop: ['@triggers.stop_0'],
       checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/rmse_z}}}}
-  after: {block: after, params: {report: best, predicts: full, targets: {y_hat: y_*, z_hat: z, tail_logit: z_tail}, 
-        generate: null, plots_keys: {loss_curve: {}, pred_vs_true: {}}}}
+  after: {block: after, params: {report: best, figures: null, predicts: full, targets: {y_hat: y_*, z_hat: z, tail_logit: 
+          z_tail}, generate: null, plots_keys: {loss_curve: {}, pred_vs_true: {}}}}

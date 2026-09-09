@@ -39,5 +39,5 @@ flow:
             after: null}, {name: to_mae, when: '@triggers.to_mae', set: {loss: loss_mae}, after: to_huber}, {name: 
             to_logcosh, when: '@triggers.to_logcosh', set: {loss: loss_logcosh}, after: to_mae}], stop: ['@triggers.stop_0'],
       checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/rmse}}}}
-  after: {block: after, params: {report: best, predicts: model, targets: {}, generate: null, plots_keys: {loss_curve: {},
-        pred_vs_true: {}}}}
+  after: {block: after, params: {report: best, figures: null, predicts: model, targets: {}, generate: null, plots_keys: {
+        loss_curve: {}, pred_vs_true: {}}}}

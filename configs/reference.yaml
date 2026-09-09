@@ -78,5 +78,9 @@ training:
 
 generate: null                    # [empty] {uri: sampler_lego, params: {model: unet.ema, ...}}; at the end of training (with the report model) and kalfa generate
 sweep: null                       # [empty] {strategy: grid | {uri, params}, space: {param: [choices] | {low, high, log, int, steps}}, objective: {monitor, mode, at}, record: root}; kalfa sweep
-plots: {}                         # [empty] name: {uri, params, inputs: {param: history_key | field | model}}
+plots: {}                         # [empty] name: {uri, params, inputs: {param: history_key | field | model},
+                                  #                sets: [train | valid | test], width, height}
+figures: null                     # [empty] {format: png | pdf | svg, width, height, dpi, style: kalfa | none}
+                                  # one place for the look of every plot; width and height are one panel, in inches
+                                  # not written means every plot keeps its own size and writes png [library: the lego]
 record: null                      # [required] the record directory; $datetime$ is built in (YYYYmmdd_HHMMSS)

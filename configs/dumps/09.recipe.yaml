@@ -46,4 +46,5 @@ flow:
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {amp: true}, 
         losses_keys: {ntx: {sets: [train]}}, metrics_keys: {}, predicts: simclr, epochs: 100, steps: null, rules: [], 
         stop: [], checkpoint: {uri: /checkpoint/kalfa/last}}}
-  after: {block: after, params: {report: last, predicts: simclr, targets: {}, generate: null, plots_keys: {loss_curve: {}}}}
+  after: {block: after, params: {report: last, figures: null, predicts: simclr, targets: {}, generate: null, plots_keys: {
+        loss_curve: {}}}}

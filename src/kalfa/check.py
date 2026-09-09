@@ -22,7 +22,7 @@ from .std.source import header as read_header
 from .std.split import sizes as split_sizes
 
 TOP_KEYS = ("plugins", "params", "seed", "device", "data", "model", "metrics", "losses", "optimizers", "training",
-            "generate", "plots", "sweep", "record", "alias")
+            "generate", "plots", "figures", "sweep", "record", "alias")
 TOP_REQUIRED = ("data", "model", "losses", "training", "record")
 DATA_KEYS = ("source", "filter", "split", "batch", "preprocessors", "drop", "fields", "feed")
 DATA_REQUIRED = ("source", "split", "batch", "fields", "feed")
@@ -35,7 +35,9 @@ COMPOSITE_FORBIDDEN = ("optimizer", "init", "ema", "trainable", "weights")
 ENTRY_KEYS = ("uri", "params", "every", "sets", "output", "target")
 OPTIMIZER_KEYS = ("uri", "params", "loss", "schedule")
 RULE_KEYS = ("name", "when", "set", "after")
-PLOT_KEYS = ("uri", "params", "inputs")
+PLOT_KEYS = ("uri", "params", "inputs", "sets", "width", "height")
+FIGURE_KEYS = ("format", "width", "height", "dpi", "style")
+FIGURE_FORMATS = ("png", "pdf", "svg")
 PRE_KEYS = ("uri", "params", "sets")
 FIELD_KEYS = ("preprocessors", "target")
 INIT_KEYS = ("weights", "bias", "scale", "patterns")
@@ -96,6 +98,7 @@ class Checker:
         self.definitions()
         self.training_section()
         self.plots_section()
+        self.figures_section()
         self.generate_section()
         self.sweep_section()
         self.structural = len(self.problems)
@@ -1033,6 +1036,28 @@ class Checker:
                 if prefix not in HISTORY_SETS or base.split("/")[0] not in {**self.losses, **self.metrics}:
                     self.error("unresolved_ref", f"plots input {param}: {name!r} is no history key",
                                path + ("inputs", param))
+
+    def figures_section(self):
+        figures = self.data.get("figures")
+        if figures is None:
+            return
+        if not self.keys(figures, FIGURE_KEYS, ("figures",)):
+            return
+        kind = figures.get("format")
+        if kind is not None and kind not in FIGURE_FORMATS:
+            self.error("invalid_value", f"figures.format must be one of {list(FIGURE_FORMATS)}, got {kind!r}",
+                       ("figures", "format"))
+        style = figures.get("style")
+        if style is not None and style not in ("kalfa", "none"):
+            self.error("invalid_value", f"figures.style must be kalfa or none, got {style!r}",
+                       ("figures", "style"))
+        for key in ("width", "height", "dpi"):
+            value = figures.get(key)
+            if value is None:
+                continue
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                self.error("invalid_value", f"figures.{key} must be a positive number, got {value!r}",
+                           ("figures", key))
 
     def generate_section(self):
         generate = self.data.get("generate")
