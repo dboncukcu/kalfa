@@ -7,13 +7,13 @@ import torch
 
 from ..registration import lego
 from .feed import sized
-from .log import clock, logger, since
+from .log import clock, logger_for, since
 
 from .runtime import (Context, active_entries, collect_results, expand_targets, named_outputs, call_model,
                       observe_all, resolve_model, set_modes, to_device, tracker_for, turn_generator)
 
-LOG = logger("training.eval")
-AFTER = logger("after")
+logger_eval = logger_for("training.eval")
+logger_after = logger_for("after")
 
 
 @lego("/lego/kalfa/evaluate", returns="metrics", bus=["device", "prep", "record"],
@@ -43,7 +43,7 @@ def evaluate(models, emas, composites, counters, effects, loader, set, losses, m
             observe_all(trackers, context)
     if not seen:
         return {}
-    LOG.debug(f"{set}: {seen} batches ({since(started)})")
+    logger_eval.debug(f"{set}: {seen} batches ({since(started)})")
     return collect_results(trackers)
 
 
@@ -139,7 +139,7 @@ def predict(models, composites, loader, prep, predicts, set, target_map=None, re
         target = Path(record)
         target.mkdir(parents=True, exist_ok=True)
         table.to_parquet(target / "predictions.parquet", index=False)
-        AFTER.info(f"predictions.parquet: {len(table)} rows")
+        logger_after.info(f"predictions.parquet: {len(table)} rows")
     return table
 
 
@@ -151,7 +151,7 @@ def generate(models, composites, prep, generate, record=None):
     samples = generate(models={**dict(composites or {}), **dict(models)}, prep=prep, rng=turn_generator())
     if record is not None and samples is not None:
         write_samples(samples, Path(record) / "samples")
-        AFTER.info(f"samples written under {Path(record) / 'samples'}")
+        logger_after.info(f"samples written under {Path(record) / 'samples'}")
     return None
 
 

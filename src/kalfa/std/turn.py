@@ -7,16 +7,16 @@ import warnings
 import torch
 
 from ..registration import lego
-from .log import logger
+from .log import logger_for
 from .runtime import (Context, active_entries, amp_context, amp_scaler, collect_results, entry_loss, loss_scalar,
                       observe_all, resolve_entries, set_modes, to_device, tracker_for, turn_generator)
 
 
-LOG = logger("training.turn")
+logger = logger_for("training.turn")
 
 
 def _log_steps(turn, taken, order, stepped_by, accumulate, grad_clip, amp):
-    if not LOG.isEnabledFor(logging.DEBUG):
+    if not logger.isEnabledFor(logging.DEBUG):
         return
     parts = [f"turn {turn}: {taken} steps"]
     if order:
@@ -27,7 +27,7 @@ def _log_steps(turn, taken, order, stepped_by, accumulate, grad_clip, amp):
         parts.append(f"grad_clip {grad_clip}")
     if amp:
         parts.append("amp")
-    LOG.debug(", ".join(parts))
+    logger.debug(", ".join(parts))
 
 
 def effective_loss(name, effects, optimizers):

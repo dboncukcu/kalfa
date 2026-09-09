@@ -22,12 +22,12 @@ from .driver import recipe
 from .record import (read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note)
 from .recipe import RUN_INPUTS, analyze, compile, dump, implicit_bindings
 from .std import checkpoint as checkpoints
-from .std.log import Progress, clock, logger, since, sink
+from .std.log import Progress, clock, logger_for, since, sink
 from .std.pre import read_prep
 from .std.runtime import resolve_model
 
 
-LOG = logger("run")
+logger = logger_for("run")
 
 
 class KalfaError(CirakError):
@@ -76,7 +76,7 @@ def prepare(paths, sets=None, inputs=RUN_INPUTS, dry=True) -> Prepared:
     if not blocking:
         checker.run()
         problems.extend(checker.problems)
-        LOG.debug(f"checked in {since(started)}: {len(problems)} problems")
+        logger.debug(f"checked in {since(started)}: {len(problems)} problems")
     prepared = Prepared(surface, problems)
     prepared.header = checker.header
     prepared.sizes = checker.sizes() if checker.header is not None else None
@@ -97,7 +97,7 @@ def prepare(paths, sets=None, inputs=RUN_INPUTS, dry=True) -> Prepared:
     built = clock()
     pipeline, tezgah_problems = compile(analysis, inputs, dry)
     problems.extend(tezgah_problems)
-    LOG.debug(f"compiled the flow in {since(built)}")
+    logger.debug(f"compiled the flow in {since(built)}")
     prepared.pipeline = pipeline
     if pipeline is not None and pipeline.resolved is not None:
         prepared.implicit = list(implicit_bindings(pipeline.resolved))
@@ -257,8 +257,8 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
         raise KalfaError(f"record directory {record} exists and is not empty; change record or remove it")
     seed_all(config.get("seed"))
     if config.get("seed") is not None:
-        LOG.debug(f"seed {config['seed']}")
-    LOG.info(f"record {record}")
+        logger.debug(f"seed {config['seed']}")
+    logger.info(f"record {record}")
     target.mkdir(parents=True, exist_ok=True)
     write_resolved(record, prepared.surface)
     copy_plugins(config.get("plugins"), target)
@@ -268,9 +268,9 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
         if old.is_dir():
             shutil.copytree(old, target / "checkpoints", dirs_exist_ok=True)
         write_resume_note(record, resume_from, resume)
-        LOG.info(f"resuming {resume_from} from {Path(resume).name}")
+        logger.info(f"resuming {resume_from} from {Path(resume).name}")
     device, uri, params = device_of(config)
-    LOG.info(f"device {device} ({uri})")
+    logger.info(f"device {device} ({uri})")
     write_device_note(record, device, uri, params)
     values = {"device": device, "record": record}
     if resume is not None:
@@ -281,7 +281,7 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
     finally:
         if Progress.current is not None:
             Progress.current.close()
-    LOG.info(f"finished in {since(started)}")
+    logger.info(f"finished in {since(started)}")
     return RunResult(record, report, device)
 
 
@@ -383,7 +383,7 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
             module.load_state_dict(payload["models"][name])
     name = model or document["flow"]["after"]["params"].get("predicts")
     target = resolve_model(name, models, composites)
-    LOG.info(f"predicting with {name} ({which} weights)")
+    logger.info(f"predicting with {name} ({which} weights)")
     device = build_device(device)[0] if device is not None else None
     to_device(models, device)
     to_device(composites, device)
@@ -404,7 +404,7 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
     table = prediction_table(target, loader, prep, loader.dataset, device, target_map)
     path = Path(run_dir) / f"predictions{tag}.parquet"
     table.to_parquet(path, index=False)
-    LOG.info(f"{len(table)} rows -> {path}")
+    logger.info(f"{len(table)} rows -> {path}")
     return Prediction(str(path), table, name)
 
 
@@ -452,7 +452,7 @@ def generate(run_dir, which=None, sets=None, device=None) -> Generated:
             ema.load_state_dict(state)
             everything[f"{name}.ema"] = ema
     sampler = store.resolve_params(document["flow"]["after"]["params"]["generate"])
-    LOG.info(f"generating with the {which} models")
+    logger.info(f"generating with the {which} models")
     device = build_device(device)[0] if device is not None else None
     to_device(everything, device)
     seed_all(config.get("seed"))

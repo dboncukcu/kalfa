@@ -8,9 +8,9 @@ from torch import nn
 
 from ..registration import lego
 from .deferred import DeferredLayer
-from .log import clock, logger, since
+from .log import clock, logger_for, since
 
-LOG = logger("models")
+logger = logger_for("models")
 
 NORMALIZATION = (nn.modules.batchnorm._BatchNorm, nn.LayerNorm, nn.GroupNorm)
 
@@ -230,11 +230,11 @@ def module(graph, seed=None, index=0, init=None, trainable=True, weights=None, m
     built = Module(graph, seed, index, init, trainable, weights, models, prep, train_loader)
     if weights is not None:
         state = load_weights(weights)
-        LOG.info(f"weights from {weights_path(weights)}")
+        logger.info(f"weights from {weights_path(weights)}")
         if built.initialized:
             built._load(state)
             built._settle()
         else:
             built.pending_state = dict(state)
-    LOG.debug(f"built a module under seed {seed} index {index} ({since(started)})")
+    logger.debug(f"built a module under seed {seed} index {index} ({since(started)})")
     return built

@@ -5,9 +5,9 @@ from pathlib import Path
 import cirak
 
 from ..registration import lego
-from .log import logger
+from .log import logger_for
 
-LOG = logger("after.plots")
+logger = logger_for("after.plots")
 
 SKIPPED = ("turn", "global_step", "rules")
 
@@ -172,7 +172,7 @@ def run_all(predictions, history, models, plots, keys=None, predicts=None, compo
     everything = {**dict(composites or {}), **dict(models or {})}
     loaders = {"valid": valid_loader, "test": test_loader}
     for name, plot in (plots or {}).items():
-        LOG.debug(f"drawing {name}")
+        logger.debug(f"drawing {name}")
         extra = plot_inputs(plot, (keys.get(name) or {}).get("inputs"), predictions, history, everything)
         if _accepts(plot, "loaders"):
             extra["loaders"] = loaders
@@ -182,7 +182,7 @@ def run_all(predictions, history, models, plots, keys=None, predicts=None, compo
             extra["name"] = name
         plot(predictions=predictions, history=history, models=everything, record=record, **extra)
     if plots:
-        LOG.info(f"plots: {', '.join(plots)}")
+        logger.info(f"plots: {', '.join(plots)}")
     return None
 
 

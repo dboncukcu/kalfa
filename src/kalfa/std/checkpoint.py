@@ -10,15 +10,15 @@ import numpy
 import torch
 
 from ..registration import lego
-from .log import logger, number
+from .log import logger_for, number
 
 STATE_KEYS = ("models", "optimizers", "emas", "counters", "rules")
 
-LOG = logger("training")
-MODELS = logger("models")
-OPTIMIZERS = logger("optimizers")
-CKPT = logger("training.ckpt")
-AFTER = logger("after")
+logger_training = logger_for("training")
+logger_models = logger_for("models")
+logger_optimizers = logger_for("optimizers")
+logger_checkpoint = logger_for("training.ckpt")
+logger_after = logger_for("after")
 
 
 def _model_line(name, model):
@@ -45,34 +45,34 @@ def _optimizer_line(name, optimizer):
 
 
 def _describe(state, total, left, steps):
-    if not LOG.isEnabledFor(logging.INFO):
+    if not logger_training.isEnabledFor(logging.INFO):
         return
     for name, model in (state.get("models") or {}).items():
-        MODELS.info(_model_line(name, model))
+        logger_models.info(_model_line(name, model))
     for name, optimizer in (state.get("optimizers") or {}).items():
-        OPTIMIZERS.info(_optimizer_line(name, optimizer))
+        logger_optimizers.info(_optimizer_line(name, optimizer))
     if steps is not None:
-        LOG.info(f"{steps['total']} steps, {steps['turn']} per turn, {left} turns left")
+        logger_training.info(f"{steps['total']} steps, {steps['turn']} per turn, {left} turns left")
     elif left != total:
-        LOG.info(f"{total} turns, {left} left")
+        logger_training.info(f"{total} turns, {left} left")
     else:
-        LOG.info(f"{total} turns")
+        logger_training.info(f"{total} turns")
 
 
 def _checkpoint_line(policy, tags, metrics):
     extra = [tag for tag in tags if tag != "last"]
     if extra:
-        CKPT.info("wrote " + ", ".join(f"{tag}.pt" for tag in tags))
+        logger_checkpoint.info("wrote " + ", ".join(f"{tag}.pt" for tag in tags))
         return
     monitor = getattr(policy, "monitor", None)
     if monitor is None:
-        CKPT.debug("wrote last.pt")
+        logger_checkpoint.debug("wrote last.pt")
         return
     value = (metrics or {}).get(monitor)
     if value is None:
-        CKPT.debug(f"wrote last.pt; {monitor} is not in this turn's metrics")
+        logger_checkpoint.debug(f"wrote last.pt; {monitor} is not in this turn's metrics")
     else:
-        CKPT.debug(f"wrote last.pt; {monitor} {number(value)} is no better than {number(policy.best)}")
+        logger_checkpoint.debug(f"wrote last.pt; {monitor} {number(value)} is no better than {number(policy.best)}")
 
 
 def rng_states():
@@ -222,7 +222,7 @@ def init_state(state, epochs, steps, resume=None, device=None):
     for ema in state["emas"].values():
         ema.to(target)
     if resume is not None:
-        LOG.info(f"resuming from {resume}")
+        logger_training.info(f"resuming from {resume}")
         load_into(state["models"], state["optimizers"], state["emas"], state["counters"], state["rules"],
                   load(resume))
     if epochs is not None:
@@ -261,7 +261,7 @@ def save_final(models, optimizers, emas, counters, rules, record=None):
     if record is None:
         return None
     save(Path(record) / "final" / "state.pt", payload(models, optimizers, emas, counters, rules))
-    AFTER.debug("final/state.pt written")
+    logger_after.debug("final/state.pt written")
     return None
 
 
@@ -275,7 +275,7 @@ def select(models, emas, which, record=None):
         if not path.exists():
             raise FileNotFoundError(f"report: best needs {path}, but the best checkpoint was never written")
         data = load(path)
-        AFTER.info(f"report best: the checkpoint of turn {data.get('turn')}")
+        logger_after.info(f"report best: the checkpoint of turn {data.get('turn')}")
         for name, state in data.get("models", {}).items():
             if name in copies:
                 copies[name].load_state_dict(state)
@@ -285,7 +285,7 @@ def select(models, emas, which, record=None):
     elif which != "last":
         raise ValueError(f"report must be best or last, got {which!r}")
     else:
-        AFTER.info("report last: the models as training left them")
+        logger_after.info("report last: the models as training left them")
     selected = dict(copies)
     for name, ema in ema_copies.items():
         selected[f"{name}.ema"] = ema

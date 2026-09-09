@@ -20,7 +20,7 @@ TAG_WIDTH = 14
 logging.getLogger(ROOT).addHandler(logging.NullHandler())
 
 
-def logger(name):
+def logger_for(name):
     return logging.getLogger(f"{ROOT}.{name}")
 
 
@@ -129,7 +129,7 @@ def echo_warnings(collected):
 
     def show(message, category, filename, lineno, file=None, line=None):
         collected.append(warnings.WarningMessage(message, category, filename, lineno, file, line))
-        logger("warning").warning(str(message))
+        logger_for("warning").warning(str(message))
 
     warnings.showwarning = show
 
@@ -178,8 +178,8 @@ def progress():
     return Progress()
 
 
-FLOW = logger("flow")
-TURN = logger("training.turn")
+logger_flow = logger_for("flow")
+logger_turn = logger_for("training.turn")
 _turn_started = [None]
 
 
@@ -199,15 +199,15 @@ def sink(event):
     elif kind == "iter_started" and "epochs" in path:
         _turn_started[0] = time.perf_counter()
     if kind == "failed":
-        FLOW.error(f"failed: {event.get('error')}", extra={"tag": node_path(path)})
-    elif not FLOW.isEnabledFor(logging.DEBUG):
+        logger_flow.error(f"failed: {event.get('error')}", extra={"tag": node_path(path)})
+    elif not logger_flow.isEnabledFor(logging.DEBUG):
         return
     elif kind == "started":
-        FLOW.debug("started", extra={"tag": node_path(path)})
+        logger_flow.debug("started", extra={"tag": node_path(path)})
     elif kind == "finished":
-        FLOW.debug(f"finished ({float(event.get('ms') or 0) / 1000:.2f}s)", extra={"tag": node_path(path)})
+        logger_flow.debug(f"finished ({float(event.get('ms') or 0) / 1000:.2f}s)", extra={"tag": node_path(path)})
     elif kind == "skipped":
-        FLOW.debug(f"skipped ({event.get('status')})", extra={"tag": node_path(path)})
+        logger_flow.debug(f"skipped ({event.get('status')})", extra={"tag": node_path(path)})
 
 
 def history_line(metrics, counters, optimizers, rules):
@@ -249,9 +249,9 @@ def history(progress, metrics=None, turn_index=None, counters_next=None, optimiz
         target.mkdir(parents=True, exist_ok=True)
         with (target / "history.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(line, default=float) + "\n")
-    if TURN.isEnabledFor(logging.INFO):
+    if logger_turn.isEnabledFor(logging.INFO):
         started = _turn_started[0]
-        TURN.info(turn_line(line, None if started is None else time.perf_counter() - started))
+        logger_turn.info(turn_line(line, None if started is None else time.perf_counter() - started))
     if progress is not None:
         progress.update(line)
     return None

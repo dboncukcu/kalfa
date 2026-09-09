@@ -12,11 +12,11 @@ import numpy
 
 from ..registration import lego
 from ..kinds import SETS
-from .log import clock, logger, since
+from .log import clock, logger_for, since
 from .samples import is_samples
 from .stream import is_stream
 
-LOG = logger("data.prep")
+logger = logger_for("data.prep")
 
 GLOB_CHARS = "*?["
 RESERVED_INPUT = "input"
@@ -498,12 +498,12 @@ def sets_of(keys):
 
 
 def _fitted(prep, started):
-    if LOG.isEnabledFor(logging.DEBUG):
+    if logger.isEnabledFor(logging.DEBUG):
         for name, entry in prep.fitted.items():
             columns = entry.columns if isinstance(entry, Grouped) else entry
-            LOG.debug(f"{name} on {len(columns)} columns")
-    LOG.info(f"{len(prep.fields)} fields -> {len(prep.features)} features, {len(prep.targets)} targets "
-             f"({since(started)})")
+            logger.debug(f"{name} on {len(columns)} columns")
+    logger.info(f"{len(prep.fields)} fields -> {len(prep.features)} features, {len(prep.targets)} targets "
+                f"({since(started)})")
     return prep
 
 
@@ -520,7 +520,7 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
         raise ValueError(f"fields name preprocessors {unknown} that data.preprocessors does not define")
     items = _resolve(df, fields or {}, drop)
     if templates:
-        LOG.info(f"fitting {len(templates)} preprocessors over {len(items)} fields")
+        logger.info(f"fitting {len(templates)} preprocessors over {len(items)} fields")
     sets = {name: list(allowed) for name, allowed in (sets or {}).items()}
     fitted = {}
     dtypes = {}
@@ -600,7 +600,7 @@ def read_prep(record):
 def apply(df, prep, set, keys=None):
     import pandas
 
-    LOG.debug(f"applying the chains to the {set} set")
+    logger.debug(f"applying the chains to the {set} set")
     sets = sets_of(keys) if keys is not None else prep.sets
     if is_stream(df):
         missing = [item.name for item in prep.fields if item.name not in df.columns]

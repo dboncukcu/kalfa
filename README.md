@@ -365,7 +365,7 @@ not available (`device: {uri: /device/acme/tpu}` then selects it).
 **Logging from a lego.** `logging.getLogger("kalfa.<stage>")` is the whole contract: nothing is declared, no fact,
 no parameter, and the line only appears when the user asked for it with `--log`. The stage is what the third column
 of a log line shows, so name it after the place in the run (`data.source`, `models`, `training.turn`,
-`after.plots`), not after the module. `kalfa.std.log` has `logger(stage)` for that, plus `clock()` and
+`after.plots`), not after the module. `kalfa.std.log` has `logger_for(stage)` for that, plus `clock()` and
 `since(started)` for the durations and `number(value)` for the metric formatting. INFO is what a user wants to see
 without asking for detail, DEBUG is the decision behind it; nothing per batch at any level, and a log line never
 computes a value the lego does not already have (guard it with `log.isEnabledFor(logging.DEBUG)` when it would).

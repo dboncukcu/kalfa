@@ -4,12 +4,12 @@ from pathlib import Path
 
 
 from ..registration import lego
-from .log import clock, logger, since
+from .log import clock, logger_for, since
 from .samples import Samples
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
 
-LOG = logger("data.source")
+logger = logger_for("data.source")
 
 
 @lego("/source/kalfa/parquet", returns="df", alias="parquet",
@@ -17,10 +17,10 @@ LOG = logger("data.source")
 def parquet(path):
     import pandas
 
-    LOG.info(f"reading {path}")
+    logger.info(f"reading {path}")
     started = clock()
     df = pandas.read_parquet(path)
-    LOG.info(f"{len(df)} rows, {len(df.columns)} columns ({since(started)})")
+    logger.info(f"{len(df)} rows, {len(df.columns)} columns ({since(started)})")
     return df
 
 
@@ -29,10 +29,10 @@ def parquet(path):
 def csv(path):
     import pandas
 
-    LOG.info(f"reading {path}")
+    logger.info(f"reading {path}")
     started = clock()
     df = pandas.read_csv(path)
-    LOG.info(f"{len(df)} rows, {len(df.columns)} columns ({since(started)})")
+    logger.info(f"{len(df)} rows, {len(df.columns)} columns ({since(started)})")
     return df
 
 
@@ -42,7 +42,7 @@ def csv(path):
 def parquet_stream(path, chunk=65536):
     from .stream import ParquetChunks, Stream
 
-    LOG.info(f"streaming {path} in chunks of {chunk} rows")
+    logger.info(f"streaming {path} in chunks of {chunk} rows")
     return Stream(ParquetChunks(path, chunk))
 
 
@@ -51,7 +51,7 @@ def parquet_stream(path, chunk=65536):
 def csv_stream(path, chunk=65536):
     from .stream import CsvChunks, Stream
 
-    LOG.info(f"streaming {path} in chunks of {chunk} rows")
+    logger.info(f"streaming {path} in chunks of {chunk} rows")
     return Stream(CsvChunks(path, chunk))
 
 
@@ -118,18 +118,18 @@ class TextLines:
 @lego("/source/kalfa/text_lines", returns="df", alias="text_lines",
             description="The lines of a text file as a Dataset with the field text")
 def text_lines(path):
-    LOG.info(f"reading {path}")
+    logger.info(f"reading {path}")
     source = TextLines(path)
-    LOG.info(f"{len(source)} lines")
+    logger.info(f"{len(source)} lines")
     return Samples(source)
 
 
 @lego("/source/kalfa/image_folder", returns="df", alias="image_folder",
             description="Images under root/<class>/ as a Dataset with fields image and label")
 def image_folder(path):
-    LOG.info(f"reading {path}")
+    logger.info(f"reading {path}")
     folder = ImageFolder(path)
-    LOG.info(f"{len(folder)} images in {len(folder.classes)} classes")
+    logger.info(f"{len(folder)} images in {len(folder.classes)} classes")
     return Samples(folder)
 
 

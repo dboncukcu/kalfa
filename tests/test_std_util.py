@@ -5,7 +5,7 @@ import logging
 from io import StringIO
 
 import kalfa  # noqa: F401
-from kalfa.std.log import Progress, console, history, history_line, logger, node_path, progress, sink, turn_line
+from kalfa.std.log import Progress, console, history, history_line, logger_for, node_path, progress, sink, turn_line
 from kalfa.std.optimizer import sgd
 from kalfa.std.util import const, identity, merge, pack
 from helpers import tiny_model
@@ -54,10 +54,10 @@ def test_turn_line_and_node_path():
 def test_console_writes_the_kalfa_lines_to_the_stream_until_it_stops():
     stream = StringIO()
     with console(logging.INFO, stream):
-        logger("data.source").info("reading x.parquet")
-        logger("data.source").debug("only at debug")
+        logger_for("data.source").info("reading x.parquet")
+        logger_for("data.source").debug("only at debug")
         sink({"kind": "started", "path": "data.source", "node": "source"})
-    logger("data.source").info("after the console closed")
+    logger_for("data.source").info("after the console closed")
     text = stream.getvalue()
     assert "INFO   data.source     reading x.parquet" in text
     assert "only at debug" not in text and "started" not in text

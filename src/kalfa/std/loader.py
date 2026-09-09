@@ -4,16 +4,16 @@
 from torch.utils.data import DataLoader, IterableDataset
 
 from ..registration import lego
-from .log import logger
+from .log import logger_for
 
-LOG = logger("data.loader")
+logger = logger_for("data.loader")
 
 
 def _built(loader, set, size):
     try:
-        LOG.info(f"{set}: {len(loader)} batches of {size}")
+        logger.info(f"{set}: {len(loader)} batches of {size}")
     except TypeError:
-        LOG.info(f"{set}: a stream in batches of {size}")
+        logger.info(f"{set}: a stream in batches of {size}")
     return loader
 
 

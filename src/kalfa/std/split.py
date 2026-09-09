@@ -3,11 +3,11 @@
 import logging
 
 from ..registration import lego
-from .log import logger
+from .log import logger_for
 from .samples import is_samples
 from .stream import is_stream
 
-LOG = logger("data.split")
+logger = logger_for("data.split")
 
 
 def _count(part):
@@ -21,9 +21,9 @@ def _count(part):
 
 
 def _sets(name, parts):
-    if LOG.isEnabledFor(logging.INFO):
-        LOG.info(f"{name}: train {_count(parts['train'])}, valid {_count(parts['valid'])}, "
-                 f"test {_count(parts['test'])}")
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(f"{name}: train {_count(parts['train'])}, valid {_count(parts['valid'])}, "
+                    f"test {_count(parts['test'])}")
     return parts
 
 
