@@ -1,6 +1,7 @@
 """The legos tidy needs beyond 01: torchmetrics metrics, l1_distance, the score plots and the myexample plugin."""
 
 import math
+import shutil
 import warnings
 
 import pandas
@@ -15,6 +16,17 @@ from kalfa.std.layer import l1_distance
 from kalfa.std.metric import binary_auroc, binary_average_precision
 from kalfa.std.plot import architecture, binary_precision_recall_curve, binary_roc, class_histogram
 from kalfa.std.runtime import Context
+from helpers import batch as make_batch
+from helpers import tiny_model
+
+
+class OneBatchLoader:
+    def __init__(self, batch):
+        self.batch = batch
+        self.dataset = list(range(len(next(iter(batch.values())))))
+
+    def __iter__(self):
+        return iter([self.batch])
 
 
 def test_torchmetrics_wrappers_and_nan_on_one_class():
@@ -51,6 +63,9 @@ def test_score_plots_write_files(tmp_path):
     for name in ("class_histogram.png", "binary_roc.png", "binary_precision_recall_curve.png", "architecture.txt"):
         assert (tmp_path / "plots" / name).exists(), name
     assert "Linear" in (tmp_path / "plots" / "architecture.txt").read_text()
+    assert not list((tmp_path / "plots").glob("architecture_*.png"))
+    architecture(predictions, [], {"m": nn.Linear(2, 1)}, str(tmp_path), loaders={"test": None})
+    assert not list((tmp_path / "plots").glob("architecture_*.png"))
     assert binary_roc(pandas.DataFrame({"row": [0], "is_anomaly": [1], "raw_s": [0.5]}), [], {}, str(tmp_path)) is None
     assert class_histogram(pandas.DataFrame(), [], {}, str(tmp_path)) is None
 
@@ -87,3 +102,13 @@ def test_myexample_objectives_register_with_facts_and_run():
     assert disc.shape == () and gen.shape == () and disc.requires_grad and gen.requires_grad
     disc.backward()
     assert models["encoder"].weight.grad is None and models["dxz"].layer.weight.grad is not None
+
+
+@pytest.mark.skipif(shutil.which("dot") is None, reason="the graphviz dot binary is not installed")
+def test_architecture_draws_every_model_the_batch_feeds(tmp_path):
+    pytest.importorskip("torchview")
+    loaders = {"test": OneBatchLoader(make_batch())}
+    architecture(None, [], {"m": tiny_model(), "plain": nn.Linear(3, 1)}, str(tmp_path), loaders=loaders)
+    assert (tmp_path / "plots" / "architecture.txt").exists()
+    assert (tmp_path / "plots" / "architecture_m.png").exists()
+    assert not (tmp_path / "plots" / "architecture_plain.png").exists()

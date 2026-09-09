@@ -223,7 +223,7 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, name=None)` | partial: True | The report models printed as text under plots/architecture.txt |
+| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, name=None)` | partial: True | The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed |
 | `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
 | `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels |
 | `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |

@@ -351,15 +351,49 @@ def binary_precision_recall_curve(predictions, history, models, record, name=Non
     return _binary_curve(predictions, record, "binary_precision_recall_curve", "recall", "precision", name)
 
 
+def _draw_models(models, loaders, record, stem):
+    import warnings
+
+    import torch
+
+    try:
+        from torchview import draw_graph
+    except ImportError:
+        logger.warning("architecture: torchview is not installed, so the models are written as text only; "
+                       "pip install torchview (and the graphviz dot binary) for the drawing")
+        return
+
+    loader = _report_loader(loaders)[1]
+    batch = next(iter(loader), None) if loader is not None else None
+    if batch is None:
+        logger.debug("architecture: no batch to trace with, the text is all there is")
+        return
+    for label, model in (models or {}).items():
+        wires = getattr(model, "inputs", None)
+        if not wires or any(wire not in batch for wire in wires):
+            continue
+        device = next(iter(model.parameters()), torch.zeros(1)).device
+        try:
+            drawing = draw_graph(model, input_data=[batch[wire][:2].to(device) for wire in wires],
+                                 graph_name=label, expand_nested=True)
+            drawing.visual_graph.render(str(_target(record, f"{stem}_{label}")), format="png", cleanup=True)
+            logger.debug(f"architecture: drew {label}")
+        except Exception as exc:
+            warnings.warn(f"architecture: torchview could not draw {label}: {type(exc).__name__}: {exc}")
+
+
 @lego("/plot/kalfa/architecture", partial=True, alias="architecture",
-            description="The report models printed as text under plots/architecture.txt")
-def architecture(predictions, history, models, record, name=None):
+            description="The report models printed as text under plots/architecture.txt, and drawn under "
+                        "plots/architecture_<model>.png when torchview and graphviz are installed")
+def architecture(predictions, history, models, record, loaders=None, name=None):
     lines = []
     for label, model in (models or {}).items():
         lines.append(f"== {label}")
         lines.append(repr(model))
         lines.append("")
-    _target(record, f"{name or 'architecture'}.txt").write_text("\n".join(lines))
+    stem = name or "architecture"
+    _target(record, f"{stem}.txt").write_text("\n".join(lines))
+    _draw_models(models, loaders, record, stem)
     return None
 
 
