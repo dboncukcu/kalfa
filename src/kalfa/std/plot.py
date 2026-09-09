@@ -375,7 +375,16 @@ def binary_precision_recall_curve(predictions, history, models, record, name=Non
     return _binary_curve(predictions, record, "binary_precision_recall_curve", "recall", "precision", name)
 
 
-def _draw_models(models, loaders, record, stem):
+def _because(exc):
+    """The exception and the chain of causes under it; torchview hides the real error one link down."""
+    parts = []
+    while exc is not None and len(parts) < 4:
+        parts.append(f"{type(exc).__name__}: {exc}")
+        exc = exc.__cause__
+    return " <- ".join(parts)
+
+
+def _draw_models(models, loaders, record, stem, device=None):
     import warnings
 
     import torch
@@ -396,20 +405,21 @@ def _draw_models(models, loaders, record, stem):
         wires = getattr(model, "inputs", None)
         if not wires or any(wire not in batch for wire in wires):
             continue
-        device = next(iter(model.parameters()), torch.zeros(1)).device
+        where = device if device is not None else next(iter(model.parameters()), torch.zeros(1)).device
         try:
-            drawing = draw_graph(model, input_data=[batch[wire][:2].to(device) for wire in wires],
-                                 graph_name=label, expand_nested=True)
+            drawing = draw_graph(model, input_data=[batch[wire][:2].to(where) for wire in wires],
+                                 device=where, graph_name=label, expand_nested=True)
             drawing.visual_graph.render(str(figure.target(record, f"{stem}_{label}")), format="png", cleanup=True)
             logger.debug(f"architecture: drew {label}")
         except Exception as exc:
-            warnings.warn(f"architecture: torchview could not draw {label}: {type(exc).__name__}: {exc}")
+            warnings.warn(f"architecture: torchview could not draw {label}: {_because(exc)}")
 
 
 @lego("/plot/kalfa/architecture", partial=True, alias="architecture",
             description="The report models printed as text under plots/architecture.txt, and drawn under "
-                        "plots/architecture_<model>.png when torchview and graphviz are installed")
-def architecture(predictions, history, models, record, loaders=None, name=None):
+                        "plots/architecture_<model>.png when torchview and graphviz are installed; the drawing "
+                        "runs on the device of the run, so a composite keeps its referenced models with it")
+def architecture(predictions, history, models, record, loaders=None, device=None, name=None):
     lines = []
     for label, model in (models or {}).items():
         lines.append(f"== {label}")
@@ -417,7 +427,7 @@ def architecture(predictions, history, models, record, loaders=None, name=None):
         lines.append("")
     stem = name or "architecture"
     figure.target(record, f"{stem}.txt").write_text("\n".join(lines))
-    _draw_models(models, loaders, record, stem)
+    _draw_models(models, loaders, record, stem, device)
     return None
 
 

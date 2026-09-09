@@ -223,7 +223,7 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, name=None)` | partial: True | The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed |
+| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, device=None, name=None)` | partial: True | The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed; the drawing runs on the device of the run, so a composite keeps its referenced models with it |
 | `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
 | `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
 | `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None)` | partial: True | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
