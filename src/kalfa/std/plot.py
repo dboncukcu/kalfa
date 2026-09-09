@@ -167,9 +167,20 @@ def _accepts(plot, name):
 def run_all(predictions, history, models, plots, keys=None, predicts=None, figures=None, bus=None, record=None):
     keys = keys or {}
     bus = dict(bus or {})
+    before = figure.settings()
     figure.configure(figures)
     everything = {**dict(bus.get("composites") or {}), **dict(models or {})}
     loaders = {name: bus.get(f"{name}_loader") for name in ("train", "valid", "test")}
+    try:
+        _draw_all(predictions, history, everything, plots, keys, predicts, figures, bus, loaders, record)
+    finally:
+        figure.configure(before)
+    if plots:
+        logger.info(f"plots: {', '.join(plots)}")
+    return None
+
+
+def _draw_all(predictions, history, everything, plots, keys, predicts, figures, bus, loaders, record):
     for name, plot in (plots or {}).items():
         logger.debug(f"drawing {name}")
         definition = keys.get(name) or {}
@@ -193,8 +204,6 @@ def run_all(predictions, history, models, plots, keys=None, predicts=None, figur
         finally:
             if size:
                 figure.configure(figures)
-    if plots:
-        logger.info(f"plots: {', '.join(plots)}")
     return None
 
 
@@ -839,22 +848,176 @@ def permutation_importance(predictions, history, models, record, loaders=None, p
     names = [prep.features[position] for position in order]
     values = [means[position] for position in order]
     spread = [deviations[position] for position in order]
-    table = dict(groups or {})
-    labels = [table.get(column, "feature") for column in names]
-    ordered = list(dict.fromkeys(labels))
-    colors = {label: figure.CATEGORICAL[position % len(figure.CATEGORICAL)]
-              for position, label in enumerate(ordered)}
     drawing, axes = figure.sized(figure.width_of(9.5), 0.34 * len(names) + 2.0)
     axis = axes[0][0]
-    axis.barh(names, values, xerr=spread, height=0.66, color=[colors[label] for label in labels],
-              error_kw={"ecolor": figure.INK_MUTED, "elinewidth": 1})
+    bars(axis, names, values, groups, spread)
+    figure.label(axis, "Permutation importance", "drop in R2 when the feature is shuffled", None,
+                 note=f"R2 = {base:.4f} on {len(matrix):,} points, {int(repeats)} repeats")
+    figure.save(drawing, record, name or "permutation_importance")
+    return None
+
+
+def bars(axis, names, values, groups=None, spread=None):
+    """Horizontal bars coloured by the group a name belongs to; returns the group order for the legend."""
+    table = dict(groups or {})
+    labels = [table.get(column, "") for column in names]
+    ordered = [label for label in dict.fromkeys(labels) if label]
+    colors = {label: figure.CATEGORICAL[position % len(figure.CATEGORICAL)]
+              for position, label in enumerate(ordered)}
+    painted = [colors.get(label, figure.CATEGORICAL[0]) for label in labels]
+    axis.barh(names, values, xerr=spread, height=0.66, color=painted,
+              error_kw={"ecolor": figure.INK_MUTED, "elinewidth": 1} if spread is not None else None)
     axis.axvline(0.0, color=figure.INK_MUTED, linewidth=1)
     axis.grid(axis="y", visible=False)
     if len(ordered) > 1:
         handles = [figure.pyplot().Line2D([], [], marker="s", linestyle="", markersize=8, color=colors[label],
                                           label=label) for label in ordered]
         axis.legend(handles=handles, loc="lower right")
-    figure.label(axis, "Permutation importance", "drop in R2 when the feature is shuffled", None,
-                 note=f"R2 = {base:.4f} on {len(matrix):,} points, {int(repeats)} repeats")
-    figure.save(drawing, record, name or "permutation_importance")
+    return ordered
+
+
+@lego("/plot/kalfa/feature_distributions", partial=True, alias="feature_distributions",
+            description="A histogram per feature column of a set, in the original units; log names the columns to "
+                        "draw on a log10 axis")
+def feature_distributions(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None,
+                          log=None, bins=80, limit=24, per_row=4, name=None):
+    set_name = first_set(sets, "train")
+    table = set_frame(loaders, prep, set_name)
+    if table is None:
+        return None
+    picked = columns_of(table, columns)[:int(limit)]
+    if not picked:
+        return None
+    width = max(1, min(int(per_row or 4), len(picked)))
+    rows = -(-len(picked) // width)
+    drawing, axes = figure.grid(rows, width, width=3.4, height=2.6)
+    panels = [axis for row in axes for axis in row]
+    for axis, column in zip(panels, picked):
+        values, shown = _logged(table[column].to_numpy(dtype="float64"), column, log)
+        values = figure.finite(values)[0]
+        if not len(values):
+            axis.axis("off")
+            continue
+        axis.hist(values, bins=int(bins), color=figure.CATEGORICAL[0], edgecolor="none")
+        axis.tick_params(labelsize=8)
+        figure.label(axis, shown, None, None)
+    for axis in panels[len(picked):]:
+        axis.axis("off")
+    figure.title(drawing, f"Column distributions ({set_name} set, {len(table):,} rows)")
+    drawing.tight_layout(rect=(0, 0, 1, 0.97))
+    figure.save(drawing, record, name or "feature_distributions")
+    return None
+
+
+@lego("/plot/kalfa/target_correlation", partial=True, alias="target_correlation", refs={"target": "field"},
+            description="The rank correlation of every column with the target, the strongest first; groups maps a "
+                        "column to a group name and colours the bars by it")
+def target_correlation(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None,
+                       method="spearman", columns=None, top=25, groups=None, name=None):
+    set_name = first_set(sets, "train")
+    table = set_frame(loaders, prep, set_name)
+    if table is None:
+        return None
+    field = target or next(iter(prep.targets), None)
+    if field is None or field not in table.columns:
+        return None
+    picked = columns_of(table, columns, skip=(field,) + tuple(prep.targets))
+    if not picked:
+        return None
+    truth = table[field]
+    found = [(column, float(table[column].corr(truth, method=method))) for column in picked]
+    found = [(column, value) for column, value in found if numpy.isfinite(value)]
+    found.sort(key=lambda item: abs(item[1]), reverse=True)
+    found = found[:int(top)][::-1]
+    if not found:
+        return None
+    names = [column for column, _ in found]
+    drawing, axes = figure.sized(figure.width_of(9.5), 0.34 * len(names) + 2.0)
+    axis = axes[0][0]
+    bars(axis, names, [value for _, value in found], groups)
+    figure.label(axis, f"Rank correlation with {field}", f"{method} rho", None,
+                 note=f"{len(table):,} rows of the {set_name} set, the {len(names)} strongest")
+    figure.save(drawing, record, name or "target_correlation")
+    return None
+
+
+def _seaborn(what):
+    try:
+        import seaborn
+    except ImportError:
+        logger.warning(f"{what}: seaborn is not installed, so the plot is skipped; pip install seaborn for it")
+        return None
+    return seaborn
+
+
+def _sampled(table, sample, seed=0):
+    if sample and len(table) > int(sample):
+        return table.sample(int(sample), random_state=int(seed))
+    return table
+
+
+@lego("/plot/seaborn/pairplot", partial=True, alias="pairplot",
+            description="seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; "
+                        "skipped with a warning when seaborn is not installed")
+def pairplot(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None,
+             sample=5000, kind="scatter", diagonal="hist", height=2.2, name=None):
+    seaborn = _seaborn("pairplot")
+    set_name = first_set(sets, "train")
+    table = set_frame(loaders, prep, set_name)
+    if seaborn is None or table is None:
+        return None
+    picked = columns_of(table, columns)[:8]
+    if len(picked) < 2:
+        return None
+    wanted = picked + ([hue] if hue and hue in table.columns and hue not in picked else [])
+    data = _sampled(table[wanted], sample)
+    grid = seaborn.pairplot(data, vars=picked, hue=hue if hue in data.columns else None, kind=kind,
+                            diag_kind=diagonal, height=float(height),
+                            palette=figure.CATEGORICAL if hue in data.columns else None,
+                            plot_kws={"color": figure.CATEGORICAL[0], "edgecolor": "none", "s": 12}
+                            if hue not in data.columns else None)
+    figure.title(grid.figure, f"Pairwise columns ({set_name} set, {len(data):,} rows)")
+    figure.save(grid.figure, record, name or "pairplot")
+    return None
+
+
+@lego("/plot/seaborn/violin", partial=True, alias="violin", refs={"value": "column", "group": "column"},
+            description="seaborn's violin of one column of a set, split by a grouping column when one is named; "
+                        "skipped with a warning when seaborn is not installed")
+def violin(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None,
+           sample=20000, name=None):
+    seaborn = _seaborn("violin")
+    set_name = first_set(sets, "train")
+    table = set_frame(loaders, prep, set_name)
+    if seaborn is None or table is None or value is None or value not in table.columns:
+        return None
+    data = _sampled(table, sample)
+    drawing, axis = figure.single(width=7.0, height=4.6)
+    seaborn.violinplot(data=data, x=group if group in data.columns else None, y=value, ax=axis,
+                       color=figure.CATEGORICAL[0], palette=figure.CATEGORICAL if group in data.columns else None,
+                       hue=group if group in data.columns else None, legend=False)
+    figure.label(axis, f"{value} by {group}" if group in data.columns else value, group, value,
+                 note=f"{len(data):,} rows of the {set_name} set")
+    figure.save(drawing, record, name or "violin")
+    return None
+
+
+@lego("/plot/seaborn/kde", partial=True, alias="kde", refs={"x": "column", "y": "column", "hue": "column"},
+            description="seaborn's kernel density of one column of a set, or of two as contours; skipped with a "
+                        "warning when seaborn is not installed")
+def kde(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None,
+        sample=20000, fill=True, name=None):
+    seaborn = _seaborn("kde")
+    set_name = first_set(sets, "train")
+    table = set_frame(loaders, prep, set_name)
+    if seaborn is None or table is None or x is None or x not in table.columns:
+        return None
+    data = _sampled(table, sample)
+    drawing, axis = figure.single(width=6.4, height=4.6)
+    seaborn.kdeplot(data=data, x=x, y=y if y in data.columns else None, hue=hue if hue in data.columns else None,
+                    fill=bool(fill), ax=axis, color=figure.CATEGORICAL[0],
+                    palette=figure.CATEGORICAL if hue in data.columns else None)
+    figure.label(axis, f"{x} and {y}" if y in data.columns else f"{x} density", x,
+                 y if y in data.columns else "density", note=f"{len(data):,} rows of the {set_name} set")
+    figure.save(drawing, record, name or "kde")
     return None

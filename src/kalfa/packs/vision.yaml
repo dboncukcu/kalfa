@@ -78,6 +78,11 @@ alias:
   residuals: /plot/kalfa/residuals
   error_map: /plot/kalfa/error_map
   permutation_importance: /plot/kalfa/permutation_importance
+  feature_distributions: /plot/kalfa/feature_distributions
+  target_correlation: /plot/kalfa/target_correlation
+  pairplot: /plot/seaborn/pairplot
+  violin: /plot/seaborn/violin
+  kde: /plot/seaborn/kde
   class_histogram: /plot/kalfa/class_histogram
   confusion_matrix: /plot/kalfa/confusion_matrix
   forecast_samples: /plot/kalfa/forecast_samples

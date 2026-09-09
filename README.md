@@ -133,6 +133,13 @@ written to `device.json` in the record and printed by `kalfa run`. `kalfa predic
 same choice as `--device` (a short name, or a lego call in quotes), so a record can be replayed on a GPU box; they
 stay on the cpu without it. Your own device lego (`/device/acme/tpu`) plugs into the same slot.
 
+The plots split in two: the ones that read `predictions.parquet` and the models (`pred_vs_true`, `residuals`,
+`error_map`, `permutation_importance`, `confusion_matrix`, the curves) and the ones that read the data itself
+(`target_vs_features`, `correlation_heatmap`, `feature_distributions`, `target_correlation`, and the seaborn
+wrappers `pairplot`, `violin`, `kde`). A data plot draws the set its definition names, `train` without one
+(`plots: {corr: {uri: correlation_heatmap, sets: [test]}}`), in the original units. seaborn is not a dependency of
+kalfa: its three plots say so in the log and are skipped when it is not installed.
+
 `figures` sets the look of every plot in one place: `{format: png | pdf | svg, width, height, dpi, style}`, where
 `width` and `height` are the size of one panel in inches. A single plot overrides them with the definition level
 keys `width` and `height`, and `--set figures.format=pdf` switches the whole run from the command line. The plots

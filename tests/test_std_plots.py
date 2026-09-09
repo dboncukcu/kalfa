@@ -1,5 +1,7 @@
 """Plots write their files under plots/."""
 
+import importlib.util
+
 import pandas
 import pytest
 
@@ -140,8 +142,7 @@ def test_a_plot_definition_overrides_the_figure_size(tmp_path):
     run_all(None, [], {}, {"one": plot}, keys={"one": {"width": 12.0, "height": 3.0}},
             figures={"width": 5.0}, record=str(tmp_path))
     assert seen["size"] == (12.0, 3.0)
-    assert figure.settings()["width"] == 5.0
-    figure.configure(None)
+    assert figure.settings()["width"] is None
 
 
 def test_the_data_and_diagnostic_plots_draw_from_a_run(workdir):
@@ -157,9 +158,13 @@ def test_the_data_and_diagnostic_plots_draw_from_a_run(workdir):
                        "corr": {"uri": "correlation_heatmap", "sets": ["train"], "width": 7.0},
                        "resid": {"uri": "residuals"},
                        "map": {"uri": "error_map", "params": {"x": "x0", "y": "x1", "bins": 8, "min_count": 2}},
-                       "importance": {"uri": "permutation_importance", "params": {"repeats": 2}}}
+                       "importance": {"uri": "permutation_importance", "params": {"repeats": 2}},
+                       "spread": {"uri": "feature_distributions", "params": {"per_row": 3}},
+                       "ranked": {"uri": "target_correlation"},
+                       "kde": {"uri": "kde", "params": {"x": "x0", "y": "price", "sample": 200}}}
     path = write_config(workdir / "cfg.yaml", config)
     record = Path(run([path], parse_sets([])).record) / "plots"
-    for drawn in ("tvf", "corr", "resid", "map", "importance"):
+    for drawn in ("tvf", "corr", "resid", "map", "importance", "spread", "ranked"):
         assert (record / f"{drawn}.pdf").exists(), drawn
     assert not list(record.glob("*.png"))
+    assert (record / "kde.pdf").exists() is (importlib.util.find_spec("seaborn") is not None)
