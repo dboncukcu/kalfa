@@ -79,9 +79,16 @@ def true_column(pred, targets):
     return max(matches, key=len) if matches else None
 
 
+def panel_title(pred, target, paired):
+    if paired.count(target) < 2 or pred == f"pred_{target}" or not pred.endswith(f"_{target}"):
+        return target
+    return f"{target} ({pred[len('pred_'):-len(target) - 1]})"
+
+
 @lego("/plot/kalfa/pred_vs_true", partial=True, alias="pred_vs_true",
             description="Predicted against true values of the test set, one panel per predicted field, laid out in "
-                        "a grid of columns panels per row and titled with the field name")
+                        "a grid of columns panels per row and titled with the field name, plus the output wire "
+                        "when two outputs predict the same field")
 def pred_vs_true(predictions, history, models, record, name=None, columns=4):
     import numpy
 
@@ -105,6 +112,7 @@ def pred_vs_true(predictions, history, models, record, name=None, columns=4):
     rows = -(-len(pairs) // width)
     figure, axes = pyplot.subplots(rows, width, figsize=(4.6 * width, 4.3 * rows), squeeze=False)
     panels = [axis for row in axes for axis in row]
+    paired = [field for _, field in pairs]
     for axis, (pred, target) in zip(panels, pairs):
         true = predictions[target].to_numpy()
         guess = predictions[pred].to_numpy()
@@ -112,7 +120,7 @@ def pred_vs_true(predictions, history, models, record, name=None, columns=4):
         low = float(numpy.nanmin([true.min(), guess.min()]))
         high = float(numpy.nanmax([true.max(), guess.max()]))
         axis.plot([low, high], [low, high], linestyle=":", color="gray")
-        axis.set_title(target)
+        axis.set_title(panel_title(pred, target, paired))
         axis.set_xlabel("true")
         axis.set_ylabel("predicted")
     for axis in panels[len(pairs):]:

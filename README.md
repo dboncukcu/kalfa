@@ -266,7 +266,9 @@ losses:
 
 The fields a selector names become one tensor, so `mse` is called once with two `(batch, 3)` sides; every column
 keeps its own fitted preprocessor, so the metrics and `predictions.parquet` invert each one with its own scale
-(`pred_y_hat_y_a`, `pred_y_hat_y_b`, ...) and `pred_vs_true` draws one titled panel per field. `kalfa describe`
+(`pred_y_hat_y_a`, `pred_y_hat_y_b`, ...) and `pred_vs_true` draws one titled panel per field; two outputs
+that predict the same field (a baseline wire and a corrected one) carry the wire in the title, `combined_z
+(combined_hat)`. `kalfa describe`
 prints the table and the place every column takes in its wire (`y_a → y_hat[0]`). `examples/15_multi_target` is
 the runnable version.
 

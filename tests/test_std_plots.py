@@ -4,7 +4,7 @@ import pandas
 import pytest
 
 import kalfa  # noqa: F401
-from kalfa.std.plot import loss_curve, pred_vs_true, run_all, series_of
+from kalfa.std.plot import loss_curve, panel_title, pred_vs_true, run_all, series_of
 
 
 def history():
@@ -25,6 +25,14 @@ def test_plots_write_files(tmp_path):
     assert (tmp_path / "plots" / "loss_curve.png").exists() and (tmp_path / "plots" / "pred_vs_true.png").exists()
     assert pred_vs_true(pandas.DataFrame(), history(), {}, str(tmp_path)) is None
     assert loss_curve(predictions, [], {}, str(tmp_path)) is None
+
+
+def test_panel_title_names_the_wire_only_when_two_outputs_share_a_field():
+    paired = ["combined_z", "combined_z", "z_a"]
+    assert panel_title("pred_combined_base_combined_z", "combined_z", paired) == "combined_z (combined_base)"
+    assert panel_title("pred_combined_hat_combined_z", "combined_z", paired) == "combined_z (combined_hat)"
+    assert panel_title("pred_z_hat_z_a", "z_a", paired) == "z_a"
+    assert panel_title("pred_combined_z", "combined_z", paired) == "combined_z"
 
 
 def test_run_all_calls_every_plot_and_resolves_inputs_by_refs(tmp_path):
