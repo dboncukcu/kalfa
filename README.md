@@ -15,9 +15,9 @@ kalfa --help
 ```
 
 The dependencies come with it: cirak and tezgah (the recipe compiler and the pipeline runner), torch, pandas,
-pyarrow, scikit-learn, torchmetrics, matplotlib, pillow, scipy, ruamel.yaml, tqdm. `pip install "kalfa[sweep]"`
-adds optuna for the fed back sweep strategy. The `architecture` plot draws the models when `torchview` and the
-graphviz `dot` binary are installed, and says so in the log when they are not; neither is a dependency of kalfa.
+pyarrow, scikit-learn, torchmetrics, matplotlib, pillow, scipy, ruamel.yaml, tqdm and optuna (the fed back sweep
+strategy); there are no optional extras. The `architecture` plot draws the models when `torchview` and the graphviz
+`dot` binary are installed, and says so in the log when they are not; neither is a dependency of kalfa.
 
 The reference configs, the examples and the test suite live in the repository:
 

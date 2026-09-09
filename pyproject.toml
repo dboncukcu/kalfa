@@ -28,6 +28,7 @@ dependencies = [
     "matplotlib>=3.8",
     "pillow>=10.0",
     "scipy>=1.12",
+    "optuna>=3.6",
 ]
 
 [project.urls]
@@ -41,14 +42,8 @@ kalfa = "kalfa.cli:main"
 [project.entry-points."cirak.plugins"]
 kalfa = "kalfa"
 
-[project.optional-dependencies]
-sweep = [
-    "optuna>=3.6",
-]
-
 [dependency-groups]
 dev = [
-    "optuna>=3.6",
     "pytest>=8",
 ]
 

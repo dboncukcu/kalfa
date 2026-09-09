@@ -173,7 +173,8 @@ class OptunaSearch:
             try:
                 import optuna
             except ImportError as exc:
-                raise ImportError("the optuna strategy needs the sweep extra: uv sync --extra sweep") from exc
+                raise ImportError("the optuna strategy needs optuna, which kalfa depends on; the environment "
+                                  "is missing it, reinstall it with uv sync") from exc
             optuna.logging.set_verbosity(optuna.logging.WARNING)
             if self.sampler == "random":
                 sampler = optuna.samplers.RandomSampler(seed=self.seed)

@@ -203,7 +203,7 @@ uv run kalfa collect /shared/sweep_housing
 ```
 
 A fed back strategy runs in the local loop only: `--set 'sweep.strategy={uri: optuna, params: {trials: 8, seed: 1}}'
---set 'sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}'` (`uv sync --extra sweep`).
+--set 'sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}'`.
 
 ## 15_multi_target
 
