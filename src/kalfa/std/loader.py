@@ -4,6 +4,17 @@
 from torch.utils.data import DataLoader, IterableDataset
 
 from ..registration import lego
+from .log import logger
+
+LOG = logger("data.loader")
+
+
+def _built(loader, set, size):
+    try:
+        LOG.info(f"{set}: {len(loader)} batches of {size}")
+    except TypeError:
+        LOG.info(f"{set}: a stream in batches of {size}")
+    return loader
 
 
 @lego("/loader/kalfa/torch",
@@ -22,13 +33,15 @@ def torch(data, set, batch):
         if train and hasattr(data, "shuffle"):
             data.shuffle = shuffle
             data.buffer = int(batch.get("buffer", 4096) or 4096)
-        return DataLoader(data, batch_size=size, drop_last=drop_last, num_workers=0, collate_fn=batch.get("collate"))
+        return _built(DataLoader(data, batch_size=size, drop_last=drop_last, num_workers=0,
+                                 collate_fn=batch.get("collate")), set, size)
     sampler = None
     if batch.get("balanced") and train and len(data):
         sampler = balanced_sampler(data)
         shuffle = False
-    return DataLoader(data, batch_size=size, shuffle=shuffle, drop_last=drop_last, sampler=sampler,
-                      num_workers=int(batch.get("workers", 0) or 0), collate_fn=batch.get("collate"))
+    return _built(DataLoader(data, batch_size=size, shuffle=shuffle, drop_last=drop_last, sampler=sampler,
+                             num_workers=int(batch.get("workers", 0) or 0), collate_fn=batch.get("collate")),
+                  set, size)
 
 
 def balanced_sampler(data):

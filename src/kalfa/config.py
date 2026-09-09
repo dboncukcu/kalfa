@@ -15,6 +15,10 @@ from cirak.merge import describe_layers, merge_layers
 from cirak.registry import registry
 from cirak.resolve import TOKEN
 
+from .std.log import logger
+
+LOG = logger("config")
+
 BUILTIN_VARIABLES = ("datetime",)
 SKIPPED_SECTIONS = ("params", "alias", "plugins", "include")
 REFERENCE_TYPES = ("criterion", "objective", "metric", "schedule", "init", "generate", "trigger")
@@ -82,6 +86,7 @@ def _import_plugins(names, problems):
         elif name not in sys.modules:
             try:
                 import_module(name)
+                LOG.info(f"plugin {name}")
             except Exception as exc:
                 problems.append(error("plugin_import_failed", f"cannot import plugin {name}: {exc}"))
 
@@ -133,10 +138,13 @@ def plugin_aliases():
 
 def load_surface(paths, sets=None) -> Surface:
     paths = [str(path) for path in paths]
+    LOG.info(f"config {', '.join(paths)}")
     layer, problems = load(paths, registry.fragments())
     if sets:
         layer = Layer(files=[], below=[layer, set_layer(sets)], label="")
     raw, provenance, overrides, merge_problems = merge_layers(layer)
+    if overrides:
+        LOG.debug(f"{len(overrides)} overridden leaves")
     problems = [*problems, *merge_problems]
     _extend_sys_path(layer)
     _import_plugins(raw.get("plugins"), problems)

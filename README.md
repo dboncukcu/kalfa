@@ -66,6 +66,7 @@ in `CONFIG.md` section 3).
 ```
 kalfa run cfg.yaml [--set path=value ...] [-p name=value ...]     # check, compile, train; opens the record directory
                     [--executor thread --workers N]               # serial by default; under thread an aliasing warning is an error
+                    [--log info|debug] [--no-progress]            # print what the run is doing; drop the progress bar
 kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--load]
                                                                   # only the problems; --load runs the data block
 kalfa describe cfg.yaml [--load] [--section data|model|...] [--wiring] [--save report.txt]
@@ -84,6 +85,39 @@ kalfa ls|docs [--plugin module ...] [--config cfg.yaml ...]       # the same lis
 `--set training.rules=[]`, `--set device=cuda`); a single segment can only be a top level key, any other bare name
 is an error with a hint. `-p name=value` (`--param`) is the shortcut for `params.name` (`-p lr=1e-4`). The value
 is read as YAML; lists are replaced wholesale, a rule list is rewritten with `--set training.rules=[...]`.
+
+`--log` prints to stderr what the run is doing at the moment it is doing it, so a long step is not a silent one.
+`--log info` (a bare `--log` means `info`) is the narrative: the config files and the plugins, the device, the
+record directory, the file as it is read, the set sizes, the preprocessors as they fit, the batch counts, the
+parameter counts, the optimizers, one line per turn with its values and how long it took, the checkpoints written,
+the rules that fired, why training stopped, the predictions and the plots. `--log debug` adds every node of the
+pipeline with its time and the decisions inside the legos (which preprocessor fitted how many columns, how many
+steps each optimizer took, why a turn was not the best, which rules did not fire). A line is `time level stage
+message`, the stage naming where it comes from (`data.source`, `models`, `training.turn`, `after.predict`); at
+`debug` a node line is tagged with its path in the flow (`training.epochs[3].turn`), the same path `events.jsonl`
+uses. `resume`, `predict` and `generate` take the same option.
+
+`--no-progress` (on `run` and `resume`) leaves the tqdm bar out: it is never created and tqdm is never imported.
+`--log info --no-progress` is then the plain form, one line per turn carrying every loss and metric of that turn
+and the learning rates, nothing redrawing itself; `--no-progress` on its own is a silent run that says only how it
+ended. The bar is not disabled on its own when stderr is not a terminal, because a notebook is exactly such a
+stream and that is where a bar is worth the most. The bar itself comes from `tqdm.auto`, so a notebook draws the
+ipywidgets one and a terminal the plain one.
+
+```
+12:03:41.204  INFO   data.source     reading housing.parquet
+12:03:41.412  INFO   data.source     10000 rows, 12 columns (0.21s)
+12:03:41.418  INFO   data.split      random: train 7000, valid 1500, test 1500
+12:03:42.130  INFO   data.loader     train 55 batches of 128
+12:03:42.310  INFO   models          model: 41,217 parameters, all trainable
+12:03:42.480  INFO   optimizers      model: adam lr 0.001 over model, loss loss_mse
+12:03:44.402  INFO   training.turn   turn 1  train/loss_mse 1.204  val/rmse 1.03  (2.1s)
+12:03:44.410  INFO   training.ckpt   wrote best.pt, last.pt
+```
+
+Nothing else changes: without the flag the output is the progress bar and the warning summary, as before, and the
+record directory gets no new file. The lines do land in `stderr.txt` of the record, because tezgah tees stderr
+while the run is live, and the node timings are in `events.jsonl` either way.
 
 Sweeps: the config gets `sweep: {strategy, space, objective, record}` (`grid`, `random`, `sobol` are deterministic
 by id; `optuna` is fed back), `kalfa sweep` runs every point as an ordinary run under `<root>/<id>/` in a
@@ -325,6 +359,14 @@ object with `update(...)` and `compute()`; a preprocessor an object with `apply`
 `apply(matrix, columns=None)`, `inverse(matrix, columns=None)`, `columns` naming the positions a slice holds), the
 sklearn way, and it keeps its statistics per column; a device lego (`/device/acme/tpu`) takes no inputs, returns a `torch.device` and raises when the device is
 not available (`device: {uri: /device/acme/tpu}` then selects it).
+
+**Logging from a lego.** `logging.getLogger("kalfa.<stage>")` is the whole contract: nothing is declared, no fact,
+no parameter, and the line only appears when the user asked for it with `--log`. The stage is what the third column
+of a log line shows, so name it after the place in the run (`data.source`, `models`, `training.turn`,
+`after.plots`), not after the module. `kalfa.std.log` has `logger(stage)` for that, plus `clock()` and
+`since(started)` for the durations and `number(value)` for the metric formatting. INFO is what a user wants to see
+without asking for detail, DEBUG is the decision behind it; nothing per batch at any level, and a log line never
+computes a value the lego does not already have (guard it with `log.isEnabledFor(logging.DEBUG)` when it would).
 
 **Plugin layout.** A module next to the config (or in a `plugins/` folder next to it) comes in with
 `plugins: [module]`; the run copies the modules it imported into `<record>/plugins/`, so `predict`, `generate` and

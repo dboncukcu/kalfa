@@ -7,9 +7,13 @@ import torch
 
 from ..registration import lego
 from .feed import sized
+from .log import clock, logger, since
 
 from .runtime import (Context, active_entries, collect_results, expand_targets, named_outputs, call_model,
                       observe_all, resolve_model, set_modes, to_device, tracker_for, turn_generator)
+
+LOG = logger("training.eval")
+AFTER = logger("after")
 
 
 @lego("/lego/kalfa/evaluate", returns="metrics", bus=["device", "prep", "record"],
@@ -28,16 +32,18 @@ def evaluate(models, emas, composites, counters, effects, loader, set, losses, m
     targets = list(getattr(loader.dataset, "targets", []))
     set_modes(models, train=False, composites=composites)
     rng = turn_generator(device)
-    seen = False
+    seen = 0
+    started = clock()
     with torch.no_grad():
         for batch in loader:
-            seen = True
+            seen += 1
             context = Context(to_device(batch, device), models, composites, emas, predicts, targets,
                               step=counters.get("global_step", 0), epoch=turn, rng=rng, prep=prep, set_name=set,
                               losses=losses, losses_keys=losses_keys, record=record)
             observe_all(trackers, context)
     if not seen:
         return {}
+    LOG.debug(f"{set}: {seen} batches ({since(started)})")
     return collect_results(trackers)
 
 
@@ -133,6 +139,7 @@ def predict(models, composites, loader, prep, predicts, set, target_map=None, re
         target = Path(record)
         target.mkdir(parents=True, exist_ok=True)
         table.to_parquet(target / "predictions.parquet", index=False)
+        AFTER.info(f"predictions.parquet: {len(table)} rows")
     return table
 
 
@@ -144,6 +151,7 @@ def generate(models, composites, prep, generate, record=None):
     samples = generate(models={**dict(composites or {}), **dict(models)}, prep=prep, rng=turn_generator())
     if record is not None and samples is not None:
         write_samples(samples, Path(record) / "samples")
+        AFTER.info(f"samples written under {Path(record) / 'samples'}")
     return None
 
 

@@ -1,7 +1,6 @@
 """The kalfa command line: run, check, predict, resume, collect, ls."""
 
 import argparse
-import os
 import sys
 import warnings
 
@@ -19,37 +18,8 @@ from .collect import collect as collect_runs
 from .describe import ALL_SECTIONS, DEFAULT_SECTIONS
 from .kinds import kalfa_kind
 from .config import parse_sets
-
-
-class Style:
-    def __init__(self, enabled):
-        self.enabled = enabled
-
-    def paint(self, text, code):
-        return f"\x1b[{code}m{text}\x1b[0m" if self.enabled else text
-
-    def bold(self, text):
-        return self.paint(text, "1")
-
-    def dim(self, text):
-        return self.paint(text, "2")
-
-    def red(self, text):
-        return self.paint(text, "31")
-
-    def green(self, text):
-        return self.paint(text, "32")
-
-    def yellow(self, text):
-        return self.paint(text, "33")
-
-    def cyan(self, text):
-        return self.paint(text, "36")
-
-
-def style_for(stream):
-    is_tty = stream.isatty() if hasattr(stream, "isatty") else False
-    return Style(is_tty and "NO_COLOR" not in os.environ)
+from .std.log import console, echo_warnings, level_of
+from .style import Style, style_for
 
 
 def main(argv=None) -> int:
@@ -74,6 +44,8 @@ def build_parser():
     _set_option(run_cmd)
     run_cmd.add_argument("--executor", default="serial")
     run_cmd.add_argument("--workers", type=int)
+    _log_option(run_cmd)
+    _progress_option(run_cmd)
     run_cmd.set_defaults(handler=cmd_run)
 
     check_cmd = commands.add_parser("check", help="report every problem without running")
@@ -109,6 +81,7 @@ def build_parser():
     predict_cmd.add_argument("--data", help="predict on this file instead of the run's test set")
     _device_option(predict_cmd)
     _set_option(predict_cmd)
+    _log_option(predict_cmd)
     predict_cmd.set_defaults(handler=cmd_predict)
 
     generate_cmd = commands.add_parser("generate", help="run the generate lego of a recorded run")
@@ -116,6 +89,7 @@ def build_parser():
     generate_cmd.add_argument("--which", choices=["best", "last"])
     _device_option(generate_cmd)
     _set_option(generate_cmd)
+    _log_option(generate_cmd)
     generate_cmd.set_defaults(handler=cmd_generate)
 
     resume_cmd = commands.add_parser("resume", help="continue a run from last.pt or final/ into a new directory")
@@ -123,6 +97,8 @@ def build_parser():
     _set_option(resume_cmd)
     resume_cmd.add_argument("--executor", default="serial")
     resume_cmd.add_argument("--workers", type=int)
+    _log_option(resume_cmd)
+    _progress_option(resume_cmd)
     resume_cmd.set_defaults(handler=cmd_resume)
 
     sweep_cmd = commands.add_parser("sweep", help="run the points of the config's sweep section: the local loop "
@@ -194,6 +170,19 @@ def _device_value(args):
     return parse_value(args.device)
 
 
+def _log_option(command):
+    command.add_argument("--log", nargs="?", const="info", choices=["info", "debug"], metavar="LEVEL",
+                         help="print to stderr what the run is doing while it does it: info is the narrative "
+                              "(device, data, models, one line per turn), debug adds every node of the pipeline "
+                              "with its time and the decisions inside the legos; bare --log means info")
+
+
+def _progress_option(command):
+    command.add_argument("--no-progress", action="store_true",
+                         help="no progress bar; with --log the turn lines take its place, without it the run says "
+                              "nothing until it ends")
+
+
 def _set_option(command):
     command.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
                          help="override a value at a dotted path from the document root (--set training.epochs=5, "
@@ -263,8 +252,10 @@ def cmd_check(args) -> int:
 
 def cmd_run(args) -> int:
     style = style_for(sys.stdout)
-    with warnings.catch_warnings(record=True) as caught:
+    with console(level_of(args.log), progress=not args.no_progress), \
+            warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
+        echo_warnings(caught)
         result = run_config(args.config, _layer(args), executor=args.executor, workers=args.workers)
     _print_warnings(caught)
     print(f"run {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
@@ -274,8 +265,10 @@ def cmd_run(args) -> int:
 
 def cmd_resume(args) -> int:
     style = style_for(sys.stdout)
-    with warnings.catch_warnings(record=True) as caught:
+    with console(level_of(args.log), progress=not args.no_progress), \
+            warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
+        echo_warnings(caught)
         result = resume_run(args.run, _layer(args), executor=args.executor, workers=args.workers)
     _print_warnings(caught)
     print(f"resumed {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
@@ -321,7 +314,7 @@ def cmd_describe(args) -> int:
 
 
 def cmd_predict(args) -> int:
-    with warnings.catch_warnings():
+    with console(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = predict_run(args.run, model=args.model, which=args.which, data=args.data, sets=_layer(args),
                              device=_device_value(args))
@@ -331,7 +324,7 @@ def cmd_predict(args) -> int:
 
 
 def cmd_generate(args) -> int:
-    with warnings.catch_warnings():
+    with console(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = generate_run(args.run, which=args.which, sets=_layer(args), device=_device_value(args))
     style = style_for(sys.stdout)

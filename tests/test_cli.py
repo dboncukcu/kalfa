@@ -145,3 +145,56 @@ def test_check_recipe_prints_the_driver_document(workdir, config_01, capsys):
     out = capsys.readouterr().out
     document = YAML(typ="safe").load(out.split("---\n", 1)[1])
     assert list(document) == ["losses", "metrics", "triggers", "plots", "progress", "blocks", "flow"]
+
+
+def test_run_log_info_narrates_the_run(workdir, capsys):
+    path = write_config(workdir / "cfg.yaml", minimal())
+    assert main(["run", path, "--log"]) == 0
+    err = capsys.readouterr().err
+    assert "INFO   data.source" in err and "reading housing.parquet" in err
+    assert "2000 rows, 9 columns" in err
+    assert "random: train 1400, valid 300, test 300" in err
+    assert "9 fields -> 8 features, 1 targets" in err
+    assert "train: 22 batches of 64" in err
+    assert "model: adam lr 0.01 over model, loss mse" in err
+    assert "turn 1" in err and "predictions.parquet: 300 rows" in err
+    assert "plots: loss_curve" in err and "finished in" in err
+    assert "training.epochs" not in err
+
+
+def test_run_log_debug_adds_the_nodes_and_the_decisions(workdir, capsys):
+    path = write_config(workdir / "cfg.yaml", minimal())
+    assert main(["run", path, "--log", "debug"]) == 0
+    err = capsys.readouterr().err
+    assert "DEBUG  data.source" in err and "started" in err
+    assert "training.epochs[0].turn" in err
+    assert "scale on 8 columns" in err
+    assert "applying the chains to the train set" in err
+    assert "turn 1: 22 steps" in err and "wrote last.pt" in err
+
+
+def test_run_no_progress_leaves_the_bar_out(workdir, capsys):
+    path = write_config(workdir / "cfg.yaml", minimal(record="runs/quiet"))
+    assert main(["run", path, "--no-progress"]) == 0
+    assert "%|" not in capsys.readouterr().err
+    path = write_config(workdir / "logged.yaml", minimal(record="runs/logged"))
+    assert main(["run", path, "--log", "--no-progress"]) == 0
+    err = capsys.readouterr().err
+    assert "turn 1" in err and "%|" not in err
+
+
+def test_run_without_log_prints_nothing_extra(workdir, capsys):
+    path = write_config(workdir / "cfg.yaml", minimal())
+    assert main(["run", path]) == 0
+    captured = capsys.readouterr()
+    assert "reading housing.parquet" not in captured.err and "INFO" not in captured.err
+    assert "reading housing.parquet" not in captured.out
+
+
+def test_predict_takes_the_log_option(workdir, capsys):
+    path = write_config(workdir / "cfg.yaml", minimal(record="runs/one"))
+    assert main(["run", path]) == 0
+    capsys.readouterr()
+    assert main(["predict", "runs/one", "--log", "info"]) == 0
+    err = capsys.readouterr().err
+    assert "predicting with model (last weights)" in err and "300 rows ->" in err

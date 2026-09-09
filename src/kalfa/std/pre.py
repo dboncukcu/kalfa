@@ -3,6 +3,7 @@
 import copy
 import fnmatch
 import json
+import logging
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,8 +12,11 @@ import numpy
 
 from ..registration import lego
 from ..kinds import SETS
+from .log import clock, logger, since
 from .samples import is_samples
 from .stream import is_stream
+
+LOG = logger("data.prep")
 
 GLOB_CHARS = "*?["
 RESERVED_INPUT = "input"
@@ -493,10 +497,21 @@ def sets_of(keys):
     return found
 
 
+def _fitted(prep, started):
+    if LOG.isEnabledFor(logging.DEBUG):
+        for name, entry in prep.fitted.items():
+            columns = entry.columns if isinstance(entry, Grouped) else entry
+            LOG.debug(f"{name} on {len(columns)} columns")
+    LOG.info(f"{len(prep.fields)} fields -> {len(prep.features)} features, {len(prep.targets)} targets "
+             f"({since(started)})")
+    return prep
+
+
 @lego("/lego/kalfa/fit", returns="prep", state=True, bus=["record"],
             description="Resolve the field globs and fit every preprocessor chain on the train set; keys carry the "
                         "sets a preprocessor is limited to")
 def fit(df, fields, preprocessors, drop, keys=None, record=None):
+    started = clock()
     sets = sets_of(keys)
     templates = dict(preprocessors or {})
     unknown = sorted({pre for spec in (fields or {}).values() for pre in ((spec or {}).get("preprocessors") or [])
@@ -504,6 +519,8 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
     if unknown:
         raise ValueError(f"fields name preprocessors {unknown} that data.preprocessors does not define")
     items = _resolve(df, fields or {}, drop)
+    if templates:
+        LOG.info(f"fitting {len(templates)} preprocessors over {len(items)} fields")
     sets = {name: list(allowed) for name, allowed in (sets or {}).items()}
     fitted = {}
     dtypes = {}
@@ -512,7 +529,7 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
         prep = Prep(items, fitted, sets, dtypes, list(drop or []))
         if record is not None:
             write_prep(prep, record)
-        return prep
+        return _fitted(prep, started)
     if is_samples(df):
         for item in items:
             kind = df.dtypes.get(item.name)
@@ -536,7 +553,7 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
         prep = Prep(items, fitted, sets, dtypes, list(drop or []))
         if record is not None:
             write_prep(prep, record)
-        return prep
+        return _fitted(prep, started)
     final = _fit_chains(items, lambda item: _values(df, item.name), templates, sets, fitted)
     for item in items:
         values = final[item.name]
@@ -550,7 +567,7 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
     prep = Prep(items, fitted, sets, dtypes, list(drop or []))
     if record is not None:
         write_prep(prep, record)
-    return prep
+    return _fitted(prep, started)
 
 
 def write_prep(prep, record):
@@ -583,6 +600,7 @@ def read_prep(record):
 def apply(df, prep, set, keys=None):
     import pandas
 
+    LOG.debug(f"applying the chains to the {set} set")
     sets = sets_of(keys) if keys is not None else prep.sets
     if is_stream(df):
         missing = [item.name for item in prep.fields if item.name not in df.columns]

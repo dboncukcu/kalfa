@@ -1,9 +1,30 @@
 """Splits: legos that cut the frame into the train, valid and test sets."""
 
+import logging
 
 from ..registration import lego
+from .log import logger
 from .samples import is_samples
 from .stream import is_stream
+
+LOG = logger("data.split")
+
+
+def _count(part):
+    rows = getattr(part, "rows", None)
+    if isinstance(rows, int):
+        return rows
+    try:
+        return len(part)
+    except TypeError:
+        return "?"
+
+
+def _sets(name, parts):
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info(f"{name}: train {_count(parts['train'])}, valid {_count(parts['valid'])}, "
+                 f"test {_count(parts['test'])}")
+    return parts
 
 
 def _take(df, positions):
@@ -34,8 +55,8 @@ def random(df, ratios, seed=None):
     generator = numpy.random.default_rng(seed)
     order = generator.permutation(len(df))
     first, second = _cuts(len(df), ratios)
-    return {"train": _take(df, order[:first]), "valid": _take(df, order[first:second]),
-            "test": _take(df, order[second:])}
+    return _sets("random", {"train": _take(df, order[:first]), "valid": _take(df, order[first:second]),
+                            "test": _take(df, order[second:])})
 
 
 def sizes(rows, ratios):
@@ -54,14 +75,16 @@ def sequential(df, ratios, group=None):
         if group is not None:
             raise ValueError("a stream source has no group column; drop group for a sequential split")
         first, second = _cuts(df.rows, ratios)
-        return {"train": df.window(0, first), "valid": df.window(first, second), "test": df.window(second, df.rows)}
+        return _sets("sequential", {"train": df.window(0, first), "valid": df.window(first, second),
+                                    "test": df.window(second, df.rows)})
     if is_samples(df):
         if group is not None:
             raise ValueError("a Dataset source has no group column; drop group for a sequential split")
         first, second = _cuts(len(df), ratios)
         positions = numpy_arange(len(df))
-        return {"train": df.subset(positions[:first]), "valid": df.subset(positions[first:second]),
-                "test": df.subset(positions[second:])}
+        return _sets("sequential", {"train": df.subset(positions[:first]),
+                                    "valid": df.subset(positions[first:second]),
+                                    "test": df.subset(positions[second:])})
     parts = {"train": [], "valid": [], "test": []}
     groups = [(None, df)] if group is None else list(df.groupby(group, sort=False))
     for _, part in groups:
@@ -69,7 +92,8 @@ def sequential(df, ratios, group=None):
         parts["train"].append(part.iloc[:first])
         parts["valid"].append(part.iloc[first:second])
         parts["test"].append(part.iloc[second:])
-    return {name: pandas.concat(pieces) if pieces else df.iloc[:0] for name, pieces in parts.items()}
+    return _sets("sequential",
+                 {name: pandas.concat(pieces) if pieces else df.iloc[:0] for name, pieces in parts.items()})
 
 
 def _fold_bounds(count, k):
@@ -106,7 +130,8 @@ def kfold(df, k, fold, val=None, seed=None):
     bounds = _fold_bounds(len(df), k)
     test = order[bounds[fold]:bounds[fold + 1]]
     rest = numpy.concatenate([order[:bounds[fold]], order[bounds[fold + 1]:]])
-    return {"train": _take(df, rest[carve:]), "valid": _take(df, rest[:carve]), "test": _take(df, test)}
+    return _sets(f"kfold {fold} of {k}", {"train": _take(df, rest[carve:]), "valid": _take(df, rest[:carve]),
+                                          "test": _take(df, test)})
 
 
 def kfold_sizes(rows, params):
@@ -146,5 +171,5 @@ def _read_like(df, path):
                         "source (a missing path means no set)")
 def given(df, valid=None, test=None):
     empty = df.empty() if is_stream(df) else df.subset([]) if is_samples(df) else df.iloc[:0]
-    return {"train": df, "valid": _read_like(df, valid) if valid is not None else empty,
-            "test": _read_like(df, test) if test is not None else empty}
+    return _sets("given", {"train": df, "valid": _read_like(df, valid) if valid is not None else empty,
+                           "test": _read_like(df, test) if test is not None else empty})

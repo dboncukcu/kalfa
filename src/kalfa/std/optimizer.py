@@ -128,6 +128,8 @@ def math_nan():
 def _make(torch_class):
     def factory(entries, defaults):
         return torch_class(entries, **defaults)
+
+    factory.name = torch_class.__name__.lower()
     return factory
 
 

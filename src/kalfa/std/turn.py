@@ -1,13 +1,33 @@
 """The std turn: alternating optimizers over the train loader, one turn per call (an epoch, or K steps)."""
 
 import functools
+import logging
 import warnings
 
 import torch
 
 from ..registration import lego
+from .log import logger
 from .runtime import (Context, active_entries, amp_context, amp_scaler, collect_results, entry_loss, loss_scalar,
                       observe_all, resolve_entries, set_modes, to_device, tracker_for, turn_generator)
+
+
+LOG = logger("training.turn")
+
+
+def _log_steps(turn, taken, order, stepped_by, accumulate, grad_clip, amp):
+    if not LOG.isEnabledFor(logging.DEBUG):
+        return
+    parts = [f"turn {turn}: {taken} steps"]
+    if order:
+        parts.append(", ".join(f"{name} x{stepped_by[name]}" for name in order))
+    if accumulate > 1:
+        parts.append(f"accumulate {accumulate}")
+    if grad_clip is not None:
+        parts.append(f"grad_clip {grad_clip}")
+    if amp:
+        parts.append("amp")
+    LOG.debug(", ".join(parts))
 
 
 def effective_loss(name, effects, optimizers):
@@ -215,6 +235,7 @@ def alternating(models, optimizers, emas, counters, composites, effects, loader,
         if cursor.exhausted:
             break
     counters["turn"] = turn
+    _log_steps(turn, taken, order, stepped_by, accumulate, grad_clip, amp)
     idle = [name for name in order if stepped_by[name] == 0]
     if idle and taken:
         warnings.warn(f"turn {turn}: optimizers {idle} took no step; the train loader ran out of batches before "

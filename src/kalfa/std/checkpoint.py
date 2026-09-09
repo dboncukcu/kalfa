@@ -1,6 +1,7 @@
 """Checkpoints: init (device, resume), the per turn checkpoint with its policy, final/ and the report selection."""
 
 import copy
+import logging
 import math
 import random
 from pathlib import Path
@@ -9,8 +10,69 @@ import numpy
 import torch
 
 from ..registration import lego
+from .log import logger, number
 
 STATE_KEYS = ("models", "optimizers", "emas", "counters", "rules")
+
+LOG = logger("training")
+MODELS = logger("models")
+OPTIMIZERS = logger("optimizers")
+CKPT = logger("training.ckpt")
+AFTER = logger("after")
+
+
+def _model_line(name, model):
+    if not getattr(model, "initialized", True):
+        return f"{name}: lazy, built on the first batch"
+    total = sum(item.numel() for item in model.parameters())
+    trainable = sum(item.numel() for item in model.parameters() if item.requires_grad)
+    if trainable == total:
+        return f"{name}: {total:,} parameters, all trainable"
+    return f"{name}: {total:,} parameters, {trainable:,} trainable"
+
+
+def _optimizer_line(name, optimizer):
+    kind = getattr(getattr(optimizer, "factory", None), "name", "optimizer")
+    lr = (getattr(optimizer, "params", None) or {}).get("lr")
+    text = f"{name}: {kind}" + (f" lr {lr}" if lr is not None else "")
+    models = ", ".join(getattr(optimizer, "models", None) or {})
+    if models:
+        text += f" over {models}"
+    loss = getattr(optimizer, "loss", None)
+    if loss is not None:
+        text += f", loss {loss}"
+    return text
+
+
+def _describe(state, total, left, steps):
+    if not LOG.isEnabledFor(logging.INFO):
+        return
+    for name, model in (state.get("models") or {}).items():
+        MODELS.info(_model_line(name, model))
+    for name, optimizer in (state.get("optimizers") or {}).items():
+        OPTIMIZERS.info(_optimizer_line(name, optimizer))
+    if steps is not None:
+        LOG.info(f"{steps['total']} steps, {steps['turn']} per turn, {left} turns left")
+    elif left != total:
+        LOG.info(f"{total} turns, {left} left")
+    else:
+        LOG.info(f"{total} turns")
+
+
+def _checkpoint_line(policy, tags, metrics):
+    extra = [tag for tag in tags if tag != "last"]
+    if extra:
+        CKPT.info("wrote " + ", ".join(f"{tag}.pt" for tag in tags))
+        return
+    monitor = getattr(policy, "monitor", None)
+    if monitor is None:
+        CKPT.debug("wrote last.pt")
+        return
+    value = (metrics or {}).get(monitor)
+    if value is None:
+        CKPT.debug(f"wrote last.pt; {monitor} is not in this turn's metrics")
+    else:
+        CKPT.debug(f"wrote last.pt; {monitor} {number(value)} is no better than {number(policy.best)}")
 
 
 def rng_states():
@@ -160,6 +222,7 @@ def init_state(state, epochs, steps, resume=None, device=None):
     for ema in state["emas"].values():
         ema.to(target)
     if resume is not None:
+        LOG.info(f"resuming from {resume}")
         load_into(state["models"], state["optimizers"], state["emas"], state["counters"], state["rules"],
                   load(resume))
     if epochs is not None:
@@ -168,7 +231,9 @@ def init_state(state, epochs, steps, resume=None, device=None):
         total = math.ceil(int(steps["total"]) / int(steps["turn"]))
     else:
         raise ValueError("training needs epochs or steps")
-    return max(total - int(state["counters"].get("turn", 0)), 0)
+    left = max(total - int(state["counters"].get("turn", 0)), 0)
+    _describe(state, total, left, steps)
+    return left
 
 
 @lego("/lego/kalfa/checkpoint", returns=None, bus=["metrics", "record"],
@@ -186,6 +251,7 @@ def checkpoint(state, policy, metrics=None, record=None):
                    parts.get("rules"), policy.state())
     for tag in tags:
         save(Path(record) / "checkpoints" / f"{tag}.pt", data)
+    _checkpoint_line(policy, tags, metrics)
     return None
 
 
@@ -195,6 +261,7 @@ def save_final(models, optimizers, emas, counters, rules, record=None):
     if record is None:
         return None
     save(Path(record) / "final" / "state.pt", payload(models, optimizers, emas, counters, rules))
+    AFTER.debug("final/state.pt written")
     return None
 
 
@@ -208,6 +275,7 @@ def select(models, emas, which, record=None):
         if not path.exists():
             raise FileNotFoundError(f"report: best needs {path}, but the best checkpoint was never written")
         data = load(path)
+        AFTER.info(f"report best: the checkpoint of turn {data.get('turn')}")
         for name, state in data.get("models", {}).items():
             if name in copies:
                 copies[name].load_state_dict(state)
@@ -216,6 +284,8 @@ def select(models, emas, which, record=None):
                 ema_copies[name].load_state_dict(state)
     elif which != "last":
         raise ValueError(f"report must be best or last, got {which!r}")
+    else:
+        AFTER.info("report last: the models as training left them")
     selected = dict(copies)
     for name, ema in ema_copies.items():
         selected[f"{name}.ema"] = ema

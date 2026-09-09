@@ -4,9 +4,12 @@ from pathlib import Path
 
 
 from ..registration import lego
+from .log import clock, logger, since
 from .samples import Samples
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
+
+LOG = logger("data.source")
 
 
 @lego("/source/kalfa/parquet", returns="df", alias="parquet",
@@ -14,7 +17,11 @@ IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
 def parquet(path):
     import pandas
 
-    return pandas.read_parquet(path)
+    LOG.info(f"reading {path}")
+    started = clock()
+    df = pandas.read_parquet(path)
+    LOG.info(f"{len(df)} rows, {len(df.columns)} columns ({since(started)})")
+    return df
 
 
 @lego("/source/kalfa/csv", returns="df", alias="csv",
@@ -22,7 +29,11 @@ def parquet(path):
 def csv(path):
     import pandas
 
-    return pandas.read_csv(path)
+    LOG.info(f"reading {path}")
+    started = clock()
+    df = pandas.read_csv(path)
+    LOG.info(f"{len(df)} rows, {len(df.columns)} columns ({since(started)})")
+    return df
 
 
 @lego("/source/kalfa/parquet_stream", returns="df",
@@ -31,6 +42,7 @@ def csv(path):
 def parquet_stream(path, chunk=65536):
     from .stream import ParquetChunks, Stream
 
+    LOG.info(f"streaming {path} in chunks of {chunk} rows")
     return Stream(ParquetChunks(path, chunk))
 
 
@@ -39,6 +51,7 @@ def parquet_stream(path, chunk=65536):
 def csv_stream(path, chunk=65536):
     from .stream import CsvChunks, Stream
 
+    LOG.info(f"streaming {path} in chunks of {chunk} rows")
     return Stream(CsvChunks(path, chunk))
 
 
@@ -105,13 +118,19 @@ class TextLines:
 @lego("/source/kalfa/text_lines", returns="df", alias="text_lines",
             description="The lines of a text file as a Dataset with the field text")
 def text_lines(path):
-    return Samples(TextLines(path))
+    LOG.info(f"reading {path}")
+    source = TextLines(path)
+    LOG.info(f"{len(source)} lines")
+    return Samples(source)
 
 
 @lego("/source/kalfa/image_folder", returns="df", alias="image_folder",
             description="Images under root/<class>/ as a Dataset with fields image and label")
 def image_folder(path):
-    return Samples(ImageFolder(path))
+    LOG.info(f"reading {path}")
+    folder = ImageFolder(path)
+    LOG.info(f"{len(folder)} images in {len(folder.classes)} classes")
+    return Samples(folder)
 
 
 def header(uri, params):

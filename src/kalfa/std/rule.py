@@ -1,8 +1,22 @@
 """Rules: the effects of the previous turn, the rule chain and the stop decision."""
 
 import copy
+import logging
 
 from ..registration import lego
+from .log import logger
+
+LOG = logger("training.rule")
+
+
+def _brief(value):
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return getattr(value, "__name__", type(value).__name__)
+
+
+def _effects(targets):
+    return ", ".join(f"{key}={_brief(value)}" for key, value in (targets or {}).items())
 
 
 @lego("/rule/kalfa/effects", returns="effects",
@@ -31,6 +45,7 @@ def rule(rules, name, when, set, after=None, metrics=None, turn_index=None):
         pending.update(set or {})
         return out
     if after is not None and after not in (out.get("ready") or []):
+        LOG.debug(f"{name} waits for {after}")
         return out
     states = out.setdefault("triggers", {})
     fired, state = when(metrics, turn_index, states.get(name, {}))
@@ -39,6 +54,9 @@ def rule(rules, name, when, set, after=None, metrics=None, turn_index=None):
         sticky.append(name)
         out.setdefault("fired", []).append(name)
         pending.update(set or {})
+        LOG.info(f"{name} fired" + (f": {_effects(set)}" if set else ""))
+    elif LOG.isEnabledFor(logging.DEBUG):
+        LOG.debug(f"{name} not fired")
     return out
 
 
@@ -58,6 +76,9 @@ def stop(rules, triggers, metrics=None):
         fired.append(bool(hit))
     out["stop"] = states
     out["stop_fired"] = [position for position, hit in enumerate(fired) if hit]
+    if out["stop_fired"]:
+        LOG.info("stopping after this turn: stop trigger "
+                 + ", ".join(str(position) for position in out["stop_fired"]) + " fired")
     out["effects"] = dict(out.pop("pending", {}))
     out.pop("ready", None)
     return {"rules": out, "stop": any(fired)}
