@@ -38,7 +38,7 @@ def test_labels_are_decoded_and_the_best_is_by_f1(trained):
     agreement = float((predictions["churned"] == predictions["pred_logits"]).mean())
     assert agreement > 0.6
     assert (record / "plots" / "confusion.png").exists() and (record / "plots" / "loss_curve.png").exists()
-    plan = (record / "preprocessors" / "plan.json").read_text()
+    plan = (record / "fitted" / "preprocessors" / "plan.json").read_text()
     assert "cat_a_north" in plan and "label" in plan
     prediction = predict(result.record, data="new.parquet")
     assert len(prediction.table) == 100 and set(prediction.table["pred_logits"]) <= {"yes", "no"}

@@ -57,6 +57,10 @@ def data_section(prepared, style, width, probe=None):
         if after:
             text += f"  {DOT}  after the split: " + ", ".join(after)
         lines.append(field_line("transforms", text, style))
+    frames = ((params.get("frames") or {}).get("params") or {}).get("frames") or []
+    if frames:
+        lines.append(field_line("frames", ", ".join(call_text(item, style=style) for item in frames)
+                                          + f"  {style.dim('fitted on train')}", style))
     _, drop, _ = field_plan(prepared)
     if drop:
         lines.append(field_line("drop", ", ".join(str(name) for name in drop), style))

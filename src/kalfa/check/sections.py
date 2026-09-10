@@ -47,6 +47,14 @@ class SectionRules:
                     self.sets_of(item.get("sets"), path)
             elif not isinstance(item, str):
                 self.error("invalid_value", "a transform is a query string or a lego call {uri, params, sets}", path)
+        for position, item in enumerate(data.get("frame") or []):
+            path = ("data", "frame", position)
+            uri = self.call_of(item, path, ("frame",), f"data.frame[{position}]")
+            if uri is not None and isinstance(item, dict):
+                self.refs_of(uri, item.get("params"), path)
+        if data.get("frame") and self.fact_of(data.get("source"), "samples"):
+            self.error("frame_needs_table", "a Dataset source has no frame to transform; data.frame needs a table",
+                       ("data", "frame"))
         split = data.get("split")
         if isinstance(split, dict) and "uri" in split:
             uri = self.call_of(split, ("data", "split"), ("split",), "data.split")

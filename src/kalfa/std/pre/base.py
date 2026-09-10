@@ -570,7 +570,7 @@ def report_fitted(prep, started):
 
 
 def write_prep(prep, record):
-    target = Path(record) / "preprocessors"
+    target = Path(record) / "fitted" / "preprocessors"
     target.mkdir(parents=True, exist_ok=True)
     for name, per_column in prep.fitted.items():
         with (target / f"{name}.pkl").open("wb") as stream:
@@ -579,7 +579,7 @@ def write_prep(prep, record):
 
 
 def read_prep(record):
-    target = Path(record) / "preprocessors"
+    target = Path(record) / "fitted" / "preprocessors"
     plan = json.loads((target / "plan.json").read_text())
     fitted = {}
     for item in plan["fields"]:

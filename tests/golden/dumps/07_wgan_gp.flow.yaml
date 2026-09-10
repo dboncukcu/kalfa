@@ -46,9 +46,13 @@ flow:
     source: {uri: /source/kalfa/image_folder, params: {path: data/celeba64}, outputs: [df_0]}
     split: {uri: /split/kalfa/random, params: {ratios: [0.95, 0.05, 0.0], seed: 7}, inputs: {df: df_0}, outputs: {train: train_df_0, valid: valid_df_0, test: 
           test_df_0}}
-    set_transform_train: {uri: /lego/kalfa/transform_set, params: {set: train, transforms: []}, inputs: {df: train_df_0}, outputs: [train_df]}
-    set_transform_valid: {uri: /lego/kalfa/transform_set, params: {set: valid, transforms: []}, inputs: {df: valid_df_0}, outputs: [valid_df]}
-    set_transform_test: {uri: /lego/kalfa/transform_set, params: {set: test, transforms: []}, inputs: {df: test_df_0}, outputs: [test_df]}
+    set_transform_train: {uri: /lego/kalfa/transform_set, params: {set: train, transforms: []}, inputs: {df: train_df_0}, outputs: [train_df_1]}
+    set_transform_valid: {uri: /lego/kalfa/transform_set, params: {set: valid, transforms: []}, inputs: {df: valid_df_0}, outputs: [valid_df_1]}
+    set_transform_test: {uri: /lego/kalfa/transform_set, params: {set: test, transforms: []}, inputs: {df: test_df_0}, outputs: [test_df_1]}
+    frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}, outputs: [frames]}  # implicit: record
+    framed_train: {uri: /lego/kalfa/apply_frames, inputs: {df: train_df_1, frames: frames}, outputs: [train_df]}
+    framed_valid: {uri: /lego/kalfa/apply_frames, inputs: {df: valid_df_1, frames: frames}, outputs: [valid_df]}
+    framed_test: {uri: /lego/kalfa/apply_frames, inputs: {df: test_df_1, frames: frames}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [to_signed]}, label: {target: true}}, preprocessors: {to_signed: {uri: 
               /pre/kalfa/to_tensor_signed}}, drop: [], keys: {to_signed: {}}}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
     frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {to_signed: {}}}, inputs: {df: train_df, prep: prep}, outputs: [train_frame]}

@@ -265,7 +265,7 @@ never written into (an error).
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |
 | `checkpoints/` | `best.pt`, `last.pt` (by policy); models, optimizers, EMAs, counters, rule states, RNG |
 | `final/state.pt` | always, once the run ends, with the same scope |
-| `preprocessors/` | the fitted preprocessors (one file per name) and `plan.json`; `kalfa predict` reads from here |
+| `fitted/` | the fitted state: `preprocessors/` (one file per name and `plan.json`, the column chains) and `frames/` (the frame transforms); `predict`, `plots` and `resume` read from here |
 | `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>`; with `training.targets` one column per predicted field, `pred_<output>_<field>` |
 | `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`, or the format `figures` asks for; `architecture` writes text); `kalfa plots` redraws them from the record and `predict --plots` writes them with the suffix of its predictions file (`roc_new.png`) |
 | `samples/` | the output of `generate`: `samples.pt` (for images `grid.png` too), `samples.txt` for text; `turn_<n>.*` from `sample_writer` |

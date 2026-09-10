@@ -30,7 +30,9 @@ from .std.common.log import Monitor, clock, logger_for, since
 from .std.common.prediction import prediction_table
 from .std.common.rng import seed_all
 from .std.common.runtime import call_model, named_outputs, resolve_model
+from .std.frame.base import read_frames
 from .std.lego.kalfa.apply import apply
+from .std.lego.kalfa.apply_frames import apply_frames
 from .std.lego.kalfa.clone import Ema
 from .std.lego.kalfa.run_all import run_all
 from .std.lego.kalfa.select import select
@@ -355,6 +357,7 @@ class Opened:
     analysis: Analysis
     store: ComponentStore
     prep: Prep
+    frames: list = field(default_factory=list)
     models: dict | None = None
     composites: dict | None = None
     payload: dict | None = None
@@ -388,7 +391,7 @@ def open_record(run_dir, which=None, sets=None, contract=None) -> Opened:
     gate(analysis.problems)
     store = build_components(analysis.data, analysis.expansions, registry)
     return Opened(str(run_dir), contract, surface, which or config["training"].get("report", "last"), document,
-                  analysis, store, read_prep(run_dir))
+                  analysis, store, read_prep(run_dir), read_frames(run_dir))
 
 
 def record_loaders(document, contract=None):
@@ -404,7 +407,7 @@ def new_loader(opened, data):
         source = opened.config["data"]["source"]
         df = registry.resolve(source["uri"])(**{**(source.get("params") or {}), "path": data})
     params = opened.document["flow"]["data"]["params"]
-    df = replay_transforms(opened, df, params)
+    df = apply_frames(replay_transforms(opened, df, params), opened.frames)
     frame = apply(df, opened.prep, "test")
     feed = params["feed"]
     dataset = registry.resolve(feed["uri"])(frame, None, **(feed.get("params") or {}))

@@ -17,6 +17,7 @@ The legos a config writes, by kind.
 | `source` | data.source | 6 |
 | `transform` | data.transform | 5 |
 | `split` | data.split | 4 |
+| `frame` | data.frame | 2 |
 | `pre` | data.preprocessors | 27 |
 | `feed` | data.feed | 3 |
 | `layer` | model nodes | 18 |
@@ -67,6 +68,13 @@ The legos a config writes, by kind.
 | `/split/kalfa/kfold` | `kfold` | `(df, k, fold, val=None, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/kfold_sizes; needs_table: True | k folds of a seeded permutation: the held out fold is the test set, val carves the valid set from the rest; without val there is no valid set |
 | `/split/kalfa/random` | `random_split` | `(df, ratios, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/ratio_sizes; needs_table: True | Shuffle the rows with a seed and cut them by ratios into train, valid and test; the short form of a split without a uri |
 | `/split/kalfa/sequential` | `sequential` | `(df, ratios, group=None)` | returns: train, valid, test; refs: group=column; sizes: /lego/kalfa/ratio_sizes | Cut the rows in their order by ratios; with a group column every group is cut on its own |
+
+### frame
+
+| URI | Alias | Signature | Facts | Description |
+|---|---|---|---|---|
+| `/frame/kalfa/group_statistic` | `group_statistic` | `(by, column, statistic='mean', name=None)` | refs: by=column; needs_table: True | A statistic of a column per group, learned on the train set and mapped onto every set as a new column (name, or <column>_<statistic>_by_<by>); a group the train set never saw takes the statistic over the whole train set |
+| `/frame/kalfa/target_encoding` | `target_encoding` | `(column, target, smoothing=1.0, name=None)` | refs: column=column; needs_table: True | The train mean of the target per category of a column, smoothed toward the overall mean by smoothing pseudo counts, as a new column (name, or <column>_target); a category the train set never saw takes the overall mean |
 
 ### pre
 
@@ -316,6 +324,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 |---|---|---|---|---|
 | `/builder/kalfa/module` |  | `(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)` | bus: prep=prep, train_loader=train_loader; roles: weights, bias, scale | Build a model graph into an nn.Module in the stream the rng lego derives from the seed, the name and the index, apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader |
 | `/lego/kalfa/apply` |  | `(df, prep, set, keys=None)` |  | Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to |
+| `/lego/kalfa/apply_frames` |  | `(df, frames)` |  | Apply the fitted frame transforms to one set, in the order they were fitted |
 | `/lego/kalfa/checkpoint` |  | `(state, policy, metrics=None, record=None)` | returns: None; bus: metrics=metrics, record=record | Write the checkpoint files the policy asks for; nothing without a policy |
 | `/lego/kalfa/clone` |  | `(model, decay)` | state: True | An exponential moving average copy of a model with the given decay |
 | `/lego/kalfa/const` |  | `(value)` |  | A fresh copy of a constant value |
@@ -323,6 +332,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/evaluate` |  | `(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)` | returns: metrics; bus: device=device, prep=prep, record=record | Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files |
 | `/lego/kalfa/figures` |  | `(format='png', width=None, height=None, dpi=150, style='kalfa')` |  | The look of every plot of a run: the file format, the size of one panel in inches, the dpi and the style (kalfa, or none for matplotlib's own); the figures section is its params and the built object reaches every plot that names figures |
 | `/lego/kalfa/fit` |  | `(df, fields, preprocessors, drop, keys=None, record=None)` | returns: prep; bus: record=record; state: True | Resolve the field globs and fit every preprocessor chain on the train set; keys carry the sets a preprocessor is limited to |
+| `/lego/kalfa/fit_frames` |  | `(df, frames, record=None)` | returns: frames; bus: record=record; state: True | Fit the frame transforms on the train set, each on what the ones before it produced, and keep them in the record under fitted/frames |
 | `/lego/kalfa/generate` |  | `(models, composites, prep, generate, record=None)` | returns: None; bus: record=record | Run the generate lego with the report models; nothing without a generate section |
 | `/lego/kalfa/given_sizes` |  | `(rows, valid=None, test=None, header=None)` |  | The set sizes of a given split: the source rows for train, the header of every given file for the other sets (header reads a path like the source) |
 | `/lego/kalfa/history` |  | `(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)` | returns: None; bus: monitor=monitor, metrics=metrics, turn_index=turn_index, counters_next=counters_next, optimizers_next=optimizers_next, rules_next=rules_next, record=record | Append the turn's line to history.jsonl and hand it to the monitor |
@@ -335,6 +345,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/parquet_header` |  | `(path, chunk=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata |
 | `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict the test set with the report model, invert the target chain, write predictions.parquet |
 | `/lego/kalfa/ratio_sizes` |  | `(rows, ratios, seed=None, group=None)` |  | The set sizes a split by ratios produces from rows rows; without rows, which sets it produces |
+| `/lego/kalfa/read_frames` |  | `(record)` | returns: frames | The fitted frame transforms of a record, read from fitted/frames |
 | `/lego/kalfa/read_prep` |  | `(record)` | returns: prep | The fitted preprocessing plan of a record, read from its preprocessors directory |
 | `/lego/kalfa/run_all` |  | `(predictions, history, models, plots, keys=None, predicts=None, bus=None, record=None, figures=None, suffix='')` | returns: None; bus: record=record, figures=figures | Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height) and the lego of the plot, whose refs type the inputs and whose needs name the bus keys it cannot work without (skipped with a log line when one is missing); bus carries everything else the run has and a plot receives whatever its signature names, plus loaders, predicts, sets, name (with the suffix of the predictions it draws) and figures, the look of the run's plots sized for the definition |
 | `/lego/kalfa/save_final` |  | `(models, optimizers, emas, counters, rules, record=None)` | returns: None; bus: record=record | Write final/state.pt with the full state once training ends |
@@ -360,6 +371,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
+| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
+| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
@@ -445,6 +458,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
+| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
+| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
@@ -532,6 +547,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
+| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
+| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
@@ -645,6 +662,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
+| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
+| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
@@ -754,6 +773,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
+| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
+| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |

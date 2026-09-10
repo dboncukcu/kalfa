@@ -37,12 +37,12 @@ def test_steps_mode_the_tokenizer_resume_and_sampling(trained):
     assert [line["global_step"] for line in history] == [2, 4, 6, 8]
     assert {"train/lm", "train/perplexity", "val/lm", "val/perplexity", "lr/main"} <= set(history[0])
     assert all(line["val/perplexity"] > 1.0 for line in history)
-    assert (record / "preprocessors" / "tokenizer.pkl").exists()
+    assert (record / "fitted" / "preprocessors" / "tokenizer.pkl").exists()
     text = (record / "samples" / "samples.txt").read_text()
     assert text.startswith("ROMEO:") and len(text) == len("ROMEO:") + 20
     payload = torch.load(record / "checkpoints" / "last.pt", weights_only=False)
     assert payload["counters"] == {"global_step": 8, "turn": 4}
-    with (record / "preprocessors" / "tokenizer.pkl").open("rb") as stream:
+    with (record / "fitted" / "preprocessors" / "tokenizer.pkl").open("rb") as stream:
         tokenizer = pickle.load(stream)["text"]
     head = next(name for name in payload["models"]["gpt"] if name.endswith("weight") and "nodes.s2" in name)
     assert payload["models"]["gpt"][head].shape[0] == tokenizer.size

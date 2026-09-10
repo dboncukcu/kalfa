@@ -53,7 +53,8 @@ def test_run_on_the_stream(workdir):
     table = pandas.read_parquet(record / "predictions.parquet")
     assert table["row"].tolist() == list(range(1700, 2000))
     assert list(table.columns) == ["row", "price", "raw_y", "pred_y"]
-    assert (record / "preprocessors" / "std_scaler.pkl").exists() and (record / "plots" / "loss_curve.png").exists()
+    assert (record / "fitted" / "preprocessors" / "std_scaler.pkl").exists()
+    assert (record / "plots" / "loss_curve.png").exists()
     write_housing(workdir / "new.parquet", rows=50, seed=9)
     fresh = predict(result.record, data="new.parquet")
     assert len(fresh.table) == 50 and fresh.table["row"].tolist() == list(range(50))

@@ -269,6 +269,13 @@ def loaders_of(batch, contract):
             for name in contract.sets}
 
 
+def frames_of(data, contract, record=None):
+    if record is not None:
+        return {"uri": contract.wiring["read_frames"], "params": {"record": str(record)}, "inputs": {}}
+    frames = [call_with_params(entry) for entry in data.get("frame") or []]
+    return {"uri": contract.wiring["fit_frames"], "params": {"frames": frames}, "inputs": {"df": "train_df_1"}}
+
+
 def prep_of(data, preprocessors, keys, contract, record=None):
     if record is not None:
         return {"uri": contract.wiring["read_prep"], "params": {"record": str(record)}, "inputs": {}}
@@ -295,6 +302,7 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
             "set_transforms": set_transforms,
             "split": split,
             "loaders": loaders_of(data["batch"], contract),
+            "frames": frames_of(data, contract, record),
             "prep": prep_of(data, preprocessors, keys, contract, record),
             "preprocessors_keys": keys,
             "feed": call_with_params(data["feed"])}

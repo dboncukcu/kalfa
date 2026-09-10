@@ -29,8 +29,9 @@ def test_record_directory_contents(trained):
     record = Path(result.record)
     assert record == Path("runs/housing_fixed")
     for name in ("resolved.yaml", "flow.yaml", "history.jsonl", "events.jsonl", "run.json", "stdout.txt",
-                 "checkpoints/best.pt", "checkpoints/last.pt", "final/state.pt", "preprocessors/plan.json",
-                 "preprocessors/std_scaler.pkl", "preprocessors/target_std.pkl", "predictions.parquet",
+                 "checkpoints/best.pt", "checkpoints/last.pt", "final/state.pt", "fitted/preprocessors/plan.json",
+                 "fitted/preprocessors/std_scaler.pkl", "fitted/preprocessors/target_std.pkl",
+                 "fitted/frames/frames.pkl", "predictions.parquet",
                  "plots/loss_curve.png", "plots/pred_vs_true.png"):
         assert (record / name).exists(), name
     resolved = (record / "resolved.yaml").read_text()

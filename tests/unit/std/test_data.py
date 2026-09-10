@@ -258,7 +258,8 @@ def test_fit_and_apply_scale_features_and_invert_the_target(tmp_path):
     assert train.data.dtypes["x0"] == "float32"
     restored = prep.inverse("price", train.data["price"].to_numpy())
     assert numpy.allclose(restored, data["price"].to_numpy(), atol=1e-3)
-    assert (tmp_path / "preprocessors" / "s.pkl").exists() and (tmp_path / "preprocessors" / "plan.json").exists()
+    fitted = tmp_path / "fitted" / "preprocessors"
+    assert (fitted / "s.pkl").exists() and (fitted / "plan.json").exists()
     again = read_prep(str(tmp_path))
     assert again.features == prep.features and again.targets == prep.targets
     assert numpy.allclose(apply(data, again, "test").data["x3"].to_numpy(), train.data["x3"].to_numpy())

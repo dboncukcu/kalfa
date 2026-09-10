@@ -43,7 +43,7 @@ def test_every_wire_is_cut_into_its_fields(trained):
     for column in ("y_a", "y_b", "y_c", "z"):
         observed = predictions[column].to_numpy()
         assert numpy.allclose(observed, source[column].iloc[predictions["row"]].to_numpy(), atol=1e-4)
-    plan = json.loads((record / "preprocessors" / "plan.json").read_text())
+    plan = json.loads((record / "fitted" / "preprocessors" / "plan.json").read_text())
     assert [item["name"] for item in plan["fields"] if item["target"]] == ["y_a", "y_b", "y_c", "z", "z_tail"]
     assert (record / "plots" / "pred_vs_true.png").exists()
     prediction = predict(result.record)

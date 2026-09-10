@@ -117,7 +117,8 @@ def render(uris=None, plugins=None):
     lines.append("| Kind | Where it is written | Count |")
     lines.append("|---|---|---|")
     places = {
-        "source": "data.source", "transform": "data.transform", "split": "data.split", "pre": "data.preprocessors",
+        "source": "data.source", "transform": "data.transform", "split": "data.split", "frame": "data.frame",
+        "pre": "data.preprocessors",
         "feed": "data.feed",
         "loader": "the contract", "layer": "model nodes", "init": "model init", "criterion": "losses, metrics",
         "objective": "losses", "metric": "metrics", "adapter": "the driver", "optimizer": "optimizers",

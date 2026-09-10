@@ -193,4 +193,4 @@ def test_text_source_tokenizer_and_next_token(tmp_path):
     metric = Perplexity()
     metric.update(torch.zeros(2, 3, 5), torch.zeros(2, 3, dtype=torch.long))
     assert metric.compute() == pytest.approx(5.0)
-    assert (tmp_path / "rec" / "preprocessors" / "tok.pkl").exists()
+    assert (tmp_path / "rec" / "fitted" / "preprocessors" / "tok.pkl").exists()

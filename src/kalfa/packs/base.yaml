@@ -9,6 +9,9 @@ alias:
   # split
   sequential: /split/kalfa/sequential
   given: /split/kalfa/given
+  # frame
+  group_statistic: /frame/kalfa/group_statistic
+  target_encoding: /frame/kalfa/target_encoding
   # pre
   standard_scaler: /pre/sklearn/standard_scaler
   minmax_scaler: /pre/sklearn/minmax_scaler

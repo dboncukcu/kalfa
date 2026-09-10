@@ -35,11 +35,12 @@ flow:
           test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [1.0, 0.0, 0.0], seed: 
             7}}, loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256, drop_last: true}},
         valid: {uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 256, drop_last: true}}, test: {uri: 
-            /loader/kalfa/torch, set: test, params: {set: test, size: 256, drop_last: true}}}, prep: {uri: 
-          /lego/kalfa/fit, params: {fields: {image: {preprocessors: [two_views, to_tensor]}}, preprocessors: {simclr_aug: {
-              uri: /pre/kalfa/simclr_aug, params: {size: 96}}, two_views: {uri: /pre/kalfa/two_views, params: {transform: {
-                  uri: /pre/kalfa/simclr_aug, params: {size: 96}}}}, to_tensor: {uri: /pre/kalfa/to_tensor}}, drop: [], 
-            keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}}, inputs: {df: train_df}}, 
+            /loader/kalfa/torch, set: test, params: {set: test, size: 256, drop_last: true}}}, frames: {uri: 
+          /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
+          fields: {image: {preprocessors: [two_views, to_tensor]}}, preprocessors: {simclr_aug: {uri: 
+                /pre/kalfa/simclr_aug, params: {size: 96}}, two_views: {uri: /pre/kalfa/two_views, params: {transform: {
+                    uri: /pre/kalfa/simclr_aug, params: {size: 96}}}}, to_tensor: {uri: /pre/kalfa/to_tensor}}, drop: [],
+          keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}}, inputs: {df: train_df}}, 
         preprocessors_keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}, feed: {uri: /feed/kalfa/table, 
           params: {}}}}
   models: {block: models, params: {trained_items: [{name: backbone, index: 0, init: null, trainable: true, weights: null},

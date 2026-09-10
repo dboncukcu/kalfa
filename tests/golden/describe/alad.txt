@@ -85,15 +85,15 @@ config.yaml                                                                     
   record      runs/alad_$datetime$
 
 ── COLUMNS ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  column      dtype   field       preprocessors                           role     tensor
-  ───────────────────────────────────────────────────────────────────────────────────────────
-  x1          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
-  x2          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
-  x3          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
-  x4          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
-  xx1         double  xx*         abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
-  xx2         double  xx*         abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
-  xx6         double  —           —                                       dropped  —
-  xx7         double  —           —                                       dropped  —
-  is_anomaly  int64   is_anomaly  cast_int                                target   is_anomaly
+  column      dtype    field       preprocessors                           role     tensor
+  ────────────────────────────────────────────────────────────────────────────────────────────
+  x1          float64  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  x2          float64  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  x3          float64  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  x4          float64  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  xx1         float64  xx*         abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  xx2         float64  xx*         abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  xx6         float64  —           —                                       dropped  —
+  xx7         float64  —           —                                       dropped  —
+  is_anomaly  int64    is_anomaly  cast_int                                target   is_anomaly
   the produced widths and the tensor slots need --load

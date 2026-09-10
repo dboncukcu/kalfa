@@ -52,12 +52,13 @@ flow:
             transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.7, 0.15, 0.15], seed: 7}}, loaders: {
         train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256}}, valid: {uri: /loader/kalfa/torch,
           set: valid, params: {set: valid, size: 256}}, test: {uri: /loader/kalfa/torch, set: test, params: {set: test, 
-              size: 256}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {y_*: {target: true, preprocessors: [y_scaler]},
-            z: {target: true, preprocessors: [y_scaler]}, z_tail: {target: true, preprocessors: [to_float]}, x*: {
-                preprocessors: [x_scaler]}}, preprocessors: {x_scaler: {uri: /pre/sklearn/standard_scaler}, y_scaler: {
-                uri: /pre/sklearn/standard_scaler}, to_float: {uri: /pre/kalfa/cast, params: {dtype: float32}}}, drop: [],
-          keys: {x_scaler: {}, y_scaler: {}, to_float: {}}}, inputs: {df: train_df}}, preprocessors_keys: {x_scaler: {}, 
-          y_scaler: {}, to_float: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
+              size: 256}}}, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {
+        uri: /lego/kalfa/fit, params: {fields: {y_*: {target: true, preprocessors: [y_scaler]}, z: {target: true, 
+                preprocessors: [y_scaler]}, z_tail: {target: true, preprocessors: [to_float]}, x*: {preprocessors: [
+                  x_scaler]}}, preprocessors: {x_scaler: {uri: /pre/sklearn/standard_scaler}, y_scaler: {uri: 
+                /pre/sklearn/standard_scaler}, to_float: {uri: /pre/kalfa/cast, params: {dtype: float32}}}, drop: [], 
+            keys: {x_scaler: {}, y_scaler: {}, to_float: {}}}, inputs: {df: train_df}}, preprocessors_keys: {x_scaler: {},
+        y_scaler: {}, to_float: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: head, index: 0, init: null, trainable: true, weights: null}, {
             name: combine, index: 1, init: null, trainable: true, weights: null}, {name: tail, index: 2, init: null, 
             trainable: true, weights: null}], composite_items: [name: full], ema_items: [], trained_refs: {head: head, 

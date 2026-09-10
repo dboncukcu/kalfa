@@ -22,8 +22,9 @@ flow:
             transforms: []}}, split: {uri: /split/kalfa/sequential, params: {ratios: [0.7, 0.15, 0.15], group: site_id}},
       loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64}}, valid: {uri: 
             /loader/kalfa/torch, set: valid, params: {set: valid, size: 64}}, test: {uri: /loader/kalfa/torch, set: test,
-          params: {set: test, size: 64}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [
-                  std_scaler]}, load: {target: true, preprocessors: [target_std]}}, preprocessors: {std_scaler: {uri: 
+          params: {set: test, size: 64}}}, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: 
+            train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [std_scaler]}, load: {
+                target: true, preprocessors: [target_std]}}, preprocessors: {std_scaler: {uri: 
                 /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], keys: {
               std_scaler: {}, target_std: {}}}, inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, target_std: {}},
       feed: {uri: /feed/kalfa/window, params: {size: 168, horizon: 24, context: true, group: site_id}}}}

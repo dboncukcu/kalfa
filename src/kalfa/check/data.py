@@ -1,10 +1,55 @@
 from pathlib import Path
 
+import pandas
+
 from ..std.common.runtime import parameter_names
 from ..std.pre.base import assign_fields, torch_dtype
 
 
+def empty_table(header):
+    columns = {}
+    for name in header["columns"]:
+        try:
+            columns[name] = pandas.Series(dtype=header["dtypes"].get(name, "object"))
+        except TypeError:
+            columns[name] = pandas.Series(dtype=object)
+    return pandas.DataFrame(columns)
+
+
 class DataRules:
+    def train_steps(self, data):
+        steps = []
+        for item in data.get("transform") or []:
+            if isinstance(item, str):
+                steps.append({"uri": self.contract.wiring["filter"], "params": {"query": item}})
+            elif isinstance(item, dict) and isinstance(item.get("uri"), str) \
+                    and (not item.get("sets") or "train" in item["sets"]):
+                steps.append(item)
+        return steps
+
+    def foreseen_header(self, header):
+        data = self.data.get("data") or {}
+        steps = self.train_steps(data)
+        frames = [item for item in data.get("frame") or []
+                  if isinstance(item, dict) and isinstance(item.get("uri"), str)]
+        if header is None or not (steps or frames):
+            return header
+        table = empty_table(header)
+        try:
+            for call in steps:
+                table = self.registry.resolve(call["uri"])(table, **(call.get("params") or {}))
+            for call in frames:
+                built = self.registry.resolve(call["uri"])(**(call.get("params") or {}))
+                built.fit(table)
+                table = built.apply(table)
+        except Exception as exception:
+            self.warning("columns_unforeseen", f"the columns after the transforms cannot be foreseen on an empty "
+                                               f"table: {type(exception).__name__}: {exception}",
+                         ("data", "transform"))
+            return header
+        return {"columns": list(table.columns), "dtypes": {name: str(table[name].dtype) for name in table.columns},
+                "rows": header["rows"]}
+
     def grouped_order(self, data):
         grouped = {name for name, entry in self.preprocessors.items()
                    if isinstance(entry, dict) and isinstance(entry.get("uri"), str)
@@ -39,6 +84,9 @@ class DataRules:
                        ("data", "batch"), hint=hint)
         if self.fact_of(data.get("feed"), "needs_table"):
             self.error("lazy_feed", "the feed needs the table in memory", ("data", "feed"), hint=hint)
+        if data.get("frame"):
+            self.error("lazy_frame", "a stream source cannot fit a frame transform; it needs the table in memory",
+                       ("data", "frame"), hint=hint)
         for position, item in enumerate(data.get("transform") or []):
             if isinstance(item, dict) and self.fact_of(item, "needs_table"):
                 self.error("lazy_transform", f"transform {position} ({item.get('uri')}) needs the table in memory; "
@@ -90,6 +138,8 @@ class DataRules:
         calls = [("split", data.get("split")), ("feed", data.get("feed"))]
         for name, entry in (data.get("preprocessors") or {}).items():
             calls.append((f"preprocessors.{name}", entry))
+        for position, entry in enumerate(data.get("frame") or []):
+            calls.append((f"frame.{position}", entry))
         for label, call in calls:
             if not isinstance(call, dict) or not isinstance(call.get("uri"), str):
                 continue
@@ -143,7 +193,7 @@ class DataRules:
 
     def data_header(self):
         data = self.data.get("data") or {}
-        header = self.source_header()
+        header = self.foreseen_header(self.source_header())
         if header is None:
             return
         self.header = header

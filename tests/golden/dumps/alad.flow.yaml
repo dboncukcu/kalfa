@@ -122,9 +122,13 @@ flow:
     split: {uri: /split/kalfa/random, params: {ratios: [0.7, 0.1, 0.2], seed: 42}, inputs: {df: df_1}, outputs: {train: train_df_0, valid: valid_df_0, test: 
           test_df_0}}
     set_transform_train: {uri: /lego/kalfa/transform_set, params: {set: train, transforms: [{uri: /transform/kalfa/filter, params: {query: is_anomaly == 0}}]}, 
-        inputs: {df: train_df_0}, outputs: [train_df]}
-    set_transform_valid: {uri: /lego/kalfa/transform_set, params: {set: valid, transforms: []}, inputs: {df: valid_df_0}, outputs: [valid_df]}
-    set_transform_test: {uri: /lego/kalfa/transform_set, params: {set: test, transforms: []}, inputs: {df: test_df_0}, outputs: [test_df]}
+        inputs: {df: train_df_0}, outputs: [train_df_1]}
+    set_transform_valid: {uri: /lego/kalfa/transform_set, params: {set: valid, transforms: []}, inputs: {df: valid_df_0}, outputs: [valid_df_1]}
+    set_transform_test: {uri: /lego/kalfa/transform_set, params: {set: test, transforms: []}, inputs: {df: test_df_0}, outputs: [test_df_1]}
+    frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}, outputs: [frames]}  # implicit: record
+    framed_train: {uri: /lego/kalfa/apply_frames, inputs: {df: train_df_1, frames: frames}, outputs: [train_df]}
+    framed_valid: {uri: /lego/kalfa/apply_frames, inputs: {df: valid_df_1, frames: frames}, outputs: [valid_df]}
+    framed_test: {uri: /lego/kalfa/apply_frames, inputs: {df: test_df_1, frames: frames}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {x?: {preprocessors: [abs_scaler, log_scaler, std_scaler]}, xx*: {preprocessors: [abs_scaler, log_scaler, 
                 std_scaler]}, is_anomaly: {target: true, preprocessors: [cast_int]}}, preprocessors: {abs_scaler: {uri: /pre/kalfa/abs}, log_scaler: {uri: 
               /pre/kalfa/log, params: {base: 10, norm: 1200}}, std_scaler: {uri: /pre/sklearn/standard_scaler}, cast_int: {uri: /pre/kalfa/cast, params: {dtype: 

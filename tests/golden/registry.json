@@ -25,6 +25,7 @@
     "source",
     "transform",
     "split",
+    "frame",
     "pre",
     "feed",
     "loader",
@@ -289,6 +290,34 @@
       "kind": "feed",
       "signature": "(frame, frames, size, horizon, context=False, group=None)"
     },
+    "/frame/kalfa/group_statistic": {
+      "alias": [
+        "group_statistic"
+      ],
+      "description": "A statistic of a column per group, learned on the train set and mapped onto every set as a new column (name, or <column>_<statistic>_by_<by>); a group the train set never saw takes the statistic over the whole train set",
+      "facts": {
+        "needs_table": true,
+        "refs": {
+          "by": "column"
+        }
+      },
+      "kind": "frame",
+      "signature": "(by, column, statistic='mean', name=None)"
+    },
+    "/frame/kalfa/target_encoding": {
+      "alias": [
+        "target_encoding"
+      ],
+      "description": "The train mean of the target per category of a column, smoothed toward the overall mean by smoothing pseudo counts, as a new column (name, or <column>_target); a category the train set never saw takes the overall mean",
+      "facts": {
+        "needs_table": true,
+        "refs": {
+          "column": "column"
+        }
+      },
+      "kind": "frame",
+      "signature": "(column, target, smoothing=1.0, name=None)"
+    },
     "/generate/kalfa/ddpm_sampler": {
       "alias": [
         "ddpm_sampler"
@@ -535,6 +564,13 @@
       "kind": "lego",
       "signature": "(df, prep, set, keys=None)"
     },
+    "/lego/kalfa/apply_frames": {
+      "alias": [],
+      "description": "Apply the fitted frame transforms to one set, in the order they were fitted",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(df, frames)"
+    },
     "/lego/kalfa/checkpoint": {
       "alias": [],
       "description": "Write the checkpoint files the policy asks for; nothing without a policy",
@@ -604,6 +640,19 @@
       },
       "kind": "lego",
       "signature": "(df, fields, preprocessors, drop, keys=None, record=None)"
+    },
+    "/lego/kalfa/fit_frames": {
+      "alias": [],
+      "description": "Fit the frame transforms on the train set, each on what the ones before it produced, and keep them in the record under fitted/frames",
+      "facts": {
+        "bus": {
+          "record": "record"
+        },
+        "returns": "frames",
+        "state": true
+      },
+      "kind": "lego",
+      "signature": "(df, frames, record=None)"
     },
     "/lego/kalfa/generate": {
       "alias": [],
@@ -734,6 +783,15 @@
       "facts": {},
       "kind": "lego",
       "signature": "(rows, ratios, seed=None, group=None)"
+    },
+    "/lego/kalfa/read_frames": {
+      "alias": [],
+      "description": "The fitted frame transforms of a record, read from fitted/frames",
+      "facts": {
+        "returns": "frames"
+      },
+      "kind": "lego",
+      "signature": "(record)"
     },
     "/lego/kalfa/read_prep": {
       "alias": [],
@@ -2147,6 +2205,7 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
@@ -2187,6 +2246,7 @@
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
+      "target_encoding": "/frame/kalfa/target_encoding",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchview": "/plot/torchview/architecture",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
@@ -2230,6 +2290,7 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
@@ -2271,6 +2332,7 @@
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
+      "target_encoding": "/frame/kalfa/target_encoding",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchview": "/plot/torchview/architecture",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
@@ -2320,6 +2382,7 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
@@ -2378,6 +2441,7 @@
       "table": "/feed/kalfa/table",
       "tanh": "/pre/kalfa/tanh",
       "target_correlation": "/plot/kalfa/target_correlation",
+      "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchview": "/plot/torchview/architecture",
@@ -2430,6 +2494,7 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
@@ -2482,6 +2547,7 @@
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "target_correlation": "/plot/kalfa/target_correlation",
+      "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "text_lines": "/source/kalfa/text_lines",
       "time_budget": "/trigger/kalfa/time_budget",
@@ -2541,6 +2607,7 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "image_folder": "/source/kalfa/image_folder",
@@ -2603,6 +2670,7 @@
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "target_correlation": "/plot/kalfa/target_correlation",
+      "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "time_budget": "/trigger/kalfa/time_budget",
       "to_tensor": "/pre/kalfa/to_tensor",

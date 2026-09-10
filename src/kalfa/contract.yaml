@@ -4,7 +4,7 @@
 # access). The expanded graph is the flow.yaml dump of the resolved run.
 # Rules: no template looks at a config value; only the item count and the presence of a key. Everything that needs a
 # choice is inside a lego (transform_set applies what names its set, evaluate returns empty on an empty set, rule reads its after link).
-# Bus keys: df_i, <set>_df, prep, <set>_frame, <set>_data, <set>_loader, <model name>, <model name>_ema,
+# Bus keys: df_i, <set>_df_0, <set>_df_1, frames, <set>_df, prep, <set>_frame, <set>_data, <set>_loader, <model name>, <model name>_ema,
 # models, emas, composites, opt_<name>, optimizers, counters, rules, epochs_left, *_next, train_metrics, valid_metrics,
 # test_metrics, metrics, effects, rules_0..n, rules_ruled, stop, history, models_final, optimizers_final, emas_final, counters_final, rules_final, selected, predictions. The set name on the bus is valid, the history
 # prefix val/. A foreach node is named <foreach name>_<key>, <foreach name>_<index> without a key; a chain key is <chain>_<index>,
@@ -28,6 +28,8 @@ wiring:
   default_rng: /rng/kalfa/derived                # the model seed rule when the config writes none
   fit: /lego/kalfa/fit                           # the prep step of a run
   read_prep: /lego/kalfa/read_prep               # the prep step of a command over a record
+  fit_frames: /lego/kalfa/fit_frames             # the frame transforms fitted on the train set in a run
+  read_frames: /lego/kalfa/read_frames           # the fitted frame transforms of a record
   run_inputs: [device, record, monitor]          # the values a command hands to the run
   history_prefix: {train: train, valid: val, test: test}   # the sets and their prefixes in history.jsonl
   loader: /loader/kalfa/torch                    # the batch section is its params
@@ -45,6 +47,7 @@ blocks:
       source: {required: true}          # {uri, params}
       transform_pre: {default: []}      # [{uri, params}] before the split, in the order written
       set_transforms: {required: true}  # {set: {set, transforms: [{uri, params}]}} after the split, per set
+      frames: {required: true}          # {uri, params, inputs}: fit_frames with the frame list for a run, read_frames with the record for a command over one
       split: {required: true}           # {uri, params}
       loaders: {required: true}         # {set: {uri, params, set}}; the loader of wiring with the batch section as its params
       prep: {required: true}            # {uri, params, inputs}: fit with the field plan for a run, read_prep with the record for a command over one
@@ -61,7 +64,11 @@ blocks:
       set_transform:
         foreach: {over: $set_transforms$, item: entry,
                   node: {uri: /lego/kalfa/transform_set, params: {set: $entry.set$, transforms: $entry.transforms$},
-                         inputs: {df: $entry.set$_df_0}, outputs: [$entry.set$_df]}}
+                         inputs: {df: $entry.set$_df_0}, outputs: [$entry.set$_df_1]}}
+      frames: {uri: $frames.uri$, params: $frames.params$, inputs: $frames.inputs$, outputs: [frames]}
+      framed:
+        foreach: {over: $sets$, item: set, key: $set$,
+                  node: {uri: /lego/kalfa/apply_frames, inputs: {df: $set$_df_1, frames: frames}, outputs: [$set$_df]}}
       prep: {uri: $prep.uri$, params: $prep.params$, inputs: $prep.inputs$, outputs: [prep]}
       frame:
         foreach: {over: $sets$, item: set, key: $set$,
