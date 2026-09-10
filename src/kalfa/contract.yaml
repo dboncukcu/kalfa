@@ -55,14 +55,15 @@ blocks:
       prep: {required: true}            # {uri, params, inputs}: fit with the field plan for a run, read_prep with the record for a command over one
       preprocessors_keys: {default: {}} # {name: {sets}}; the definition level keys
       feed: {required: true}            # {uri, params}
-      sets: {default: [train, valid, test]}
+      sets: {required: true}            # the sets the split lego returns (its returns fact); train first
+      split_outputs: {required: true}   # {set: <set>_df_0}
+      frame_refs: {required: true}      # {set: <set>_frame}
     flow:
       source: {uri: $source.uri$, params: $source.params$, outputs: [df_0]}
       pre:
         foreach: {over: $transform_pre$, index: i, count: n, chain: df,
                   node: {uri: $item.uri$, params: $item.params$}}
-      split: {uri: $split.uri$, params: $split.params$, inputs: {df: df_$n$},
-              outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0}}
+      split: {uri: $split.uri$, params: $split.params$, inputs: {df: df_$n$}, outputs: $split_outputs$}
       set_transform:
         foreach: {over: $set_transforms$, item: entry,
                   node: {uri: /lego/kalfa/transform_set, params: {set: $entry.set$, transforms: $entry.transforms$},
@@ -80,7 +81,7 @@ blocks:
       feed:
         foreach: {over: $sets$, item: set, key: $set$,
                   node: {uri: $feed.uri$, params: $feed.params$,
-                         inputs: {frame: $set$_frame, frames: {train: train_frame, valid: valid_frame, test: test_frame}},
+                         inputs: {frame: $set$_frame, frames: $frame_refs$},
                          outputs: [$set$_data]}}
       loader:
         foreach: {over: $loaders$, item: loader,
@@ -155,8 +156,8 @@ blocks:
       stop: {default: []}               # the list of triggers
       # "@checkpoint" is the checkpoint policy of the driver document, one object for init and the checkpoint step; an empty
       # section without a policy
-      sets: {default: [valid, test]}    # the evaluation sets (train is in the turn)
-      history_prefix: {required: true}  # {set: prefix} from the contract's wiring
+      sets: {default: [valid, test]}    # the evaluation sets (train is in the turn); a set the wiring does not know joins them
+      history_prefix: {required: true}  # {set: prefix}: wiring.history_prefix, a set without an entry keeps its name
     flow:
       counters: {uri: /lego/kalfa/const, params: {value: {global_step: 0, turn: 0}}}
       rules:    {uri: /lego/kalfa/const, params: {value: {}}}
@@ -212,6 +213,8 @@ blocks:
       figures: {required: true}         # {uri, params}: the figures lego of wiring with the figures section as its params
       plot_bus: {required: true}        # wiring.plot_bus, {key: wire}
       losses_keys: {default: {}}        # the table training.losses_keys, for the plots that draw the losses
+      loader_refs: {required: true}     # {set: <set>_loader}
+      extra_sets: {default: []}         # the sets beyond the wiring's, predicted into predictions_<set>.parquet
       # "@plots" is a group reference to the plots section of the driver document, not a block variable
     flow:
       final:   {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: rules_final}}
@@ -219,13 +222,18 @@ blocks:
       # "@calibrate" is the calibrate section of the driver document: what the run learns at the end that is neither
       # weights nor a column transform, fitted on the report models and the sets, kept under fitted/calibrate
       calibrate: {uri: /lego/kalfa/calibrate, params: {calibrations: "@calibrate", predicts: $predicts$},
-                  inputs: {models: selected, composites: composites, prep: prep,
-                           loaders: {train: train_loader, valid: valid_loader, test: test_loader}},
+                  inputs: {models: selected, composites: composites, prep: prep, loaders: $loader_refs$},
                   outputs: [calibrations]}
       predict: {uri: /lego/kalfa/predict, params: {predicts: $predicts$, set: test, target_map: $targets$},
                 inputs: {models: selected, composites: composites, loader: test_loader, prep: prep,
                          calibrations: calibrations},
                 outputs: [predictions]}
+      predict_more:
+        foreach: {over: $extra_sets$, item: set, key: $set$,
+                  node: {uri: /lego/kalfa/predict, params: {predicts: $predicts$, set: $set$, target_map: $targets$},
+                         inputs: {models: selected, composites: composites, loader: $set$_loader, prep: prep,
+                                  calibrations: calibrations},
+                         outputs: [$set$_predictions]}}
       figures: {uri: $figures.uri$, params: $figures.params$, outputs: [figures]}
       losses:  {uri: /lego/kalfa/identity, params: {value: "@losses"}, outputs: [losses]}
       losses_keys: {uri: /lego/kalfa/const, params: {value: $losses_keys$}, outputs: [losses_keys]}

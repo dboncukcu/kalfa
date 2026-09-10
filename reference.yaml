@@ -20,6 +20,7 @@ data:
                                   # without sets before the split, with sets after it on those sets; never fitted; predict --data replays what the test set went through
   frame: []                       # [empty] fitted frame transforms in order, {uri: group_statistic | target_encoding | your own, params}: fit(train) after the split, apply per set, kept under fitted/frames and replayed by predict --data
   split: null                     # [required] {ratios: [.7, .15, .15], seed: $seed$} (no uri: the random split, {uri: random_split, params: {ratios, seed}} written out) | {uri: sequential, params: {ratios, group}}
+                                  # the sets are what the split returns (its returns fact); a split of your own may return a fourth, which every step follows
                                   # | {uri: kfold, params: {k: 5, fold: $fold$, val: 0.15, seed}} (the held out fold is test; val from the training part, without it no valid)
                                   # | {uri: given, params: {valid: b.parquet, test: c.parquet}}
                                   # ratios always has three entries (train, valid, test); 0.0 means no set; a missing set is not in the history

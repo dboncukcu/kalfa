@@ -44,6 +44,13 @@ class Contract:
     def sets(self):
         return list(self.history_prefix)
 
+    def prefixes(self, sets):
+        table = self.history_prefix
+        return {name: table.get(name, name) for name in sets}
+
+    def default_of(self, block, name):
+        return ((self.blocks.get(block) or {}).get("variables") or {}).get(name, {}).get("default")
+
     @property
     def run_inputs(self):
         return list(self.wiring["run_inputs"])

@@ -18,17 +18,19 @@ blocks: {model: {inputs: [x], outputs: [y], spec: [{uri: /layer/torch/gru, param
           /layer/torch/last_step, {uri: /layer/kalfa/linear, params: {out_features: 24}}]}}
 flow:
   outputs: [history, predictions]
-  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: energy.parquet}}, transform_pre: [], 
-        set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, test: {set: test, 
-            transforms: []}}, split: {uri: /split/kalfa/sequential, params: {ratios: [0.7, 0.15, 0.15], group: site_id}},
-      loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64}}, valid: {uri: 
-            /loader/kalfa/torch, set: valid, params: {set: valid, size: 64}}, test: {uri: /loader/kalfa/torch, set: test,
-          params: {set: test, size: 64}}}, mask: null, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, 
-          inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [std_scaler]}, 
-              load: {target: true, preprocessors: [target_std]}}, preprocessors: {std_scaler: {uri: 
-                /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], keys: {
-              std_scaler: {}, target_std: {}}}, inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, target_std: {}},
-      feed: {uri: /feed/kalfa/window, params: {size: 168, horizon: 24, context: true, group: site_id}}}}
+  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: energy.parquet}}, sets: [train, valid,
+        test], transform_pre: [], set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []},
+        test: {set: test, transforms: []}}, split: {uri: /split/kalfa/sequential, params: {ratios: [0.7, 0.15, 0.15], 
+            group: site_id}}, split_outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0}, frame_refs: {train: 
+          train_frame, valid: valid_frame, test: test_frame}, loaders: {train: {uri: /loader/kalfa/torch, set: train, 
+            params: {set: train, size: 64}}, valid: {uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 64}},
+        test: {uri: /loader/kalfa/torch, set: test, params: {set: test, size: 64}}}, mask: null, frames: {uri: 
+          /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
+          fields: {x*: {preprocessors: [std_scaler]}, load: {target: true, preprocessors: [target_std]}}, preprocessors: {
+            std_scaler: {uri: /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], 
+            keys: {std_scaler: {}, target_std: {}}}, inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, 
+          target_std: {}}, feed: {uri: /feed/kalfa/window, params: {size: 168, horizon: 24, context: true, group: 
+            site_id}}}}
   models: {block: models, params: {trained_items: [{name: model, index: 0, init: null, trainable: true, weights: null}], 
         composite_items: [], ema_items: [], trained_refs: {model: model}, composite_refs: {}, ema_refs: {}, seed: 7, rng: {
         uri: /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}
@@ -36,10 +38,11 @@ flow:
               0.001}, loss: loss_mse, schedule: null, models: {model: model}}], optimizer_refs: {model: opt_model}}}
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {
           loss_mse: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model, epochs: 30, steps: null, rules: [], stop: ['@triggers.stop_0'],
-      history_prefix: {train: train, valid: val, test: test}}}
+      sets: [valid, test], history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: best, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: model, targets: {},
       generate: null, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, forecast: {lego: 
             /plot/kalfa/forecast_samples}}, plot_bus: {prep: prep, train_loader: train_loader, valid_loader: 
           valid_loader, test_loader: test_loader, composites: composites, device: device, counters: counters_final, 
           optimizers: optimizers_final, emas: emas_final, rules: rules_final, losses: losses, losses_keys: losses_keys, 
-          data_report: data_report, train_df: train_df, train_frame: train_frame}, losses_keys: {loss_mse: {}}}}
+          data_report: data_report, train_df: train_df, train_frame: train_frame}, loader_refs: {train: train_loader, 
+          valid: valid_loader, test: test_loader}, extra_sets: [], losses_keys: {loss_mse: {}}}}

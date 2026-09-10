@@ -370,7 +370,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/merge` |  | `(parts, prefixes)` |  | Merge the per set metrics under the prefixes of the sets (train/, val/, test/) |
 | `/lego/kalfa/pack` |  | `(items)` | aliases: items | A mapping of the given items |
 | `/lego/kalfa/parquet_header` |  | `(path, chunk=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata |
-| `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict the test set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet |
+| `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict a set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet for the test set and predictions_<set>.parquet for another |
 | `/lego/kalfa/ratio_sizes` |  | `(rows, ratios, seed=None, group=None)` |  | The set sizes a split by ratios produces from rows rows; without rows, which sets it produces |
 | `/lego/kalfa/read_frames` |  | `(record)` | returns: frames | The fitted frame transforms of a record, read from fitted/frames |
 | `/lego/kalfa/read_prep` |  | `(record)` | returns: prep | The fitted preprocessing plan of a record, read from its preprocessors directory |

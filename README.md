@@ -271,7 +271,7 @@ never written into (an error).
 | `checkpoints/` | `best.pt`, `last.pt` (by policy); models, optimizers, EMAs, counters, rule states, RNG |
 | `final/state.pt` | always, once the run ends, with the same scope |
 | `fitted/` | the fitted state: `preprocessors/` (one file per name and `plan.json`, the column chains), `frames/` (the frame transforms) and `calibrate/` (the calibrations and their notes); `predict`, `plots` and `resume` read from here |
-| `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>`; with `training.targets` one column per predicted field, `pred_<output>_<field>` |
+| `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>`, the calibration flags; with `training.targets` one column per predicted field, `pred_<output>_<field>`; `predictions_<set>.parquet` for a set beyond the three the std splits return |
 | `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`, or the format `figures` asks for; `architecture` writes text); `kalfa plots` redraws them from the record and `predict --plots` writes them with the suffix of its predictions file (`roc_new.png`) |
 | `samples/` | the output of `generate`: `samples.pt` (for images `grid.png` too), `samples.txt` for text; `turn_<n>.*` from `sample_writer` |
 | `plugins/` | copies of the plugin modules the run imported, so predict, generate and resume work from the record |

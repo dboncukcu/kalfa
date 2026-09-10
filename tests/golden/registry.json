@@ -899,7 +899,7 @@
     },
     "/lego/kalfa/predict": {
       "alias": [],
-      "description": "Predict the test set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet",
+      "description": "Predict a set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet for the test set and predictions_<set>.parquet for another",
       "facts": {
         "bus": {
           "device": "device",

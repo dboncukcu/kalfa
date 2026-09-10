@@ -2,7 +2,7 @@ from cirak.registry import registry
 
 from .config import resolve_alias
 from .contract import Contract
-from .kinds import kalfa_kind
+from .kinds import kalfa_kind, names_of
 from .schema import Schema
 
 
@@ -247,13 +247,13 @@ def plots_keys_of(plots):
     return table
 
 
-def transforms_of(data, contract):
+def transforms_of(data, contract, sets):
     entries = [{"uri": contract.wiring["filter"], "params": {"query": item}} if isinstance(item, str) else item
                for item in data.get("transform") or []]
     pre = [call_with_params(entry) for entry in entries if not entry.get("sets")]
     per_set = {name: {"set": name, "transforms": [call_with_params(entry) for entry in entries
                                                    if name in (entry.get("sets") or [])]}
-               for name in contract.sets}
+               for name in sets}
     return pre, per_set
 
 
@@ -263,10 +263,33 @@ def rng_of(config, contract):
     return {"uri": contract.wiring["default_rng"], "params": {}}
 
 
-def loaders_of(batch, contract):
+def split_call(data, contract):
+    split = data.get("split")
+    if isinstance(split, dict) and isinstance(split.get("uri"), str):
+        return split["uri"]
+    return contract.wiring["default_split"]
+
+
+def split_sets(data, contract, catalog=None):
+    catalog = catalog if catalog is not None else registry
+    uri = split_call(data, contract)
+    if catalog.lookup(uri) is None:
+        return contract.sets
+    sets = list(names_of(catalog.facts(uri).get("returns")))
+    if "train" not in sets:
+        raise ValueError(f"the split {uri} returns {sets}; a split must return a train set")
+    return sets
+
+
+def eval_sets(sets, contract):
+    default = names_of(contract.default_of("training", "sets"))
+    return [name for name in sets if name in default or name not in contract.sets]
+
+
+def loaders_of(batch, contract, sets):
     batch = {"size": batch} if not isinstance(batch, dict) else dict(batch)
     return {name: {"uri": contract.wiring["loader"], "set": name, "params": {"set": name, **batch}}
-            for name in contract.sets}
+            for name in sets}
 
 
 def frames_of(data, contract, record=None):
@@ -288,7 +311,8 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
     catalog = catalog if catalog is not None else registry
     contract = contract or Contract.load()
     aliases = aliases or {}
-    transform_pre, set_transforms = transforms_of(data, contract)
+    sets = split_sets(data, contract, catalog)
+    transform_pre, set_transforms = transforms_of(data, contract, sets)
     split = data["split"]
     if isinstance(split, dict) and "uri" in split:
         split = call_with_params(split)
@@ -298,10 +322,13 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
     preprocessors = {name: call_resolved(entry, aliases, catalog, table) for name, entry in table.items()}
     keys = keys_of(data.get("preprocessors"))
     return {"source": call_with_params(data["source"]),
+            "sets": sets,
             "transform_pre": transform_pre,
             "set_transforms": set_transforms,
             "split": split,
-            "loaders": loaders_of(data.get("batch"), contract),
+            "split_outputs": {name: f"{name}_df_0" for name in sets},
+            "frame_refs": {name: f"{name}_frame" for name in sets},
+            "loaders": loaders_of(data.get("batch"), contract, sets),
             "mask": data.get("mask"),
             "frames": frames_of(data, contract, record),
             "prep": prep_of(data, preprocessors, keys, contract, record),
@@ -318,6 +345,7 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
     trained, composites = trained_and_composites(models)
     emas = ema_items(models)
     optimizers = optimizers_of(config, models)
+    sets = split_sets(config["data"], contract, catalog)
     predicts = predicts_of(training, trained, composites)
     losses = config.get("losses") or {}
     rules = [{"name": rule["name"], "when": f"@triggers.{rule['name']}",
@@ -362,7 +390,8 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
                 "steps": training.get("steps"),
                 "rules": rules,
                 "stop": [f"@triggers.stop_{position}" for position in range(len(training.get("stop") or []))],
-                "history_prefix": contract.history_prefix}},
+                "sets": eval_sets(sets, contract),
+                "history_prefix": contract.prefixes(sets)}},
             "after": {"block": "after", "params": {
                 "report": training.get("report"),
                 "figures": {"uri": contract.wiring["figures"], "params": dict(config.get("figures") or {})},
@@ -370,7 +399,9 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
                 "targets": targets,
                 "generate": None if generate is None else call_resolved(generate, aliases, catalog),
                 "plots_keys": plots_keys_of(config.get("plots")),
-                "plot_bus": contract.plot_bus,
+                "plot_bus": {**contract.plot_bus, **{f"{name}_loader": f"{name}_loader" for name in sets}},
+                "loader_refs": {name: f"{name}_loader" for name in sets},
+                "extra_sets": [name for name in sets if name not in contract.sets],
                 "losses_keys": keys_of(losses, targets)}},
         },
     }

@@ -58,6 +58,7 @@ class Prepared:
     implicit: list = field(default_factory=list)
     loaded: dict | None = None
     aliasing: list = field(default_factory=list)
+    sets: list = field(default_factory=list)
 
     @property
     def errors(self):
@@ -110,6 +111,7 @@ def prepare(paths, sets=None, inputs=None, dry=True, contract=None) -> Prepared:
         problems.extend(checker.problems)
         logger.debug(f"checked in {since(started)}: {len(problems)} problems")
     prepared = Prepared(surface, problems, contract)
+    prepared.sets = list(checker.sets)
     prepared.header = checker.header
     prepared.sizes = checker.sizes() if checker.header is not None else None
     if blocking or has_errors(checker.problems) and not checker.header_only_errors():
@@ -152,10 +154,14 @@ def check(paths, sets=None, load=False, contract=None) -> Prepared:
     return prepared
 
 
+def document_sets(document):
+    return list(document["flow"]["data"]["params"]["sets"])
+
+
 def loaded_sizes(document, contract=None):
-    contract = contract or Contract.load()
-    outputs = data_outputs(document, [f"{name}_loader" for name in contract.sets], contract)
-    return {name: outputs[f"{name}_loader"].dataset.count() for name in contract.sets}
+    sets = document_sets(document)
+    outputs = data_outputs(document, [f"{name}_loader" for name in sets], contract)
+    return {name: outputs[f"{name}_loader"].dataset.count() for name in sets}
 
 
 @dataclass
@@ -169,10 +175,10 @@ class Probe:
 
 
 def probe(document, contract=None) -> Probe:
-    contract = contract or Contract.load()
+    sets = document_sets(document)
     outputs = flow_outputs(document, ("data", "models"),
-                           ["prep", *[f"{name}_loader" for name in contract.sets], "models", "composites"], contract)
-    found = Probe(sizes={name: outputs[f"{name}_loader"].dataset.count() for name in contract.sets},
+                           ["prep", *[f"{name}_loader" for name in sets], "models", "composites"], contract)
+    found = Probe(sizes={name: outputs[f"{name}_loader"].dataset.count() for name in sets},
                   prep=outputs.get("prep"))
     if found.prep is not None:
         found.features = len(found.prep.features)
@@ -424,9 +430,9 @@ def open_record(run_dir, which=None, sets=None, contract=None) -> Opened:
 
 
 def record_loaders(document, contract=None):
-    contract = contract or Contract.load()
-    outputs = data_outputs(document, [f"{name}_loader" for name in contract.sets], contract)
-    return {name: outputs[f"{name}_loader"] for name in contract.sets}
+    sets = document_sets(document)
+    outputs = data_outputs(document, [f"{name}_loader" for name in sets], contract)
+    return {name: outputs[f"{name}_loader"] for name in sets}
 
 
 def new_loader(opened, data):
@@ -527,7 +533,7 @@ def plots(run_dir, only=None, sets=None, device=None, contract=None) -> Plots:
     opened = open_record(run_dir, None, sets, contract)
     contract = opened.contract
     wanted = ["prep", "models", "emas", "composites", "optimizers", "data_report", "train_df", "train_frame",
-              *[f"{name}_loader" for name in contract.sets]]
+              *[f"{name}_loader" for name in document_sets(opened.document)]]
     outputs = flow_outputs(opened.document, ("data", "models", "optimizers"), wanted, contract)
     counters = {}
     rules = {}

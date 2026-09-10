@@ -441,7 +441,8 @@ class SectionRules:
         prefix, name = monitor.split("/", 1)
         base = name.split("/", 1)[0]
         if prefix not in self.history_sets:
-            self.error("invalid_value", f"monitor {monitor!r} must start with train/, val/ or test/", path)
+            self.error("invalid_value", f"monitor {monitor!r} must start with one of "
+                                        f"{', '.join(f'{name}/' for name in self.history_sets)}", path)
             return
         if strict and prefix == "test":
             self.error("test_monitor", f"{monitor!r}: stop and checkpoint cannot watch the test set", path)

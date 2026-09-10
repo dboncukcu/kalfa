@@ -51,7 +51,7 @@ def data_section(prepared, style, width, probe=None):
     lines.append(field_line("source", f"{pad(text, 44)}{shape}", style))
     sizes = (probe.sizes if probe is not None and probe.sizes else None) or prepared.sizes
     lines.append(field_line("split", f"{pad(split_text(params.get('split'), style), 44)}"
-                                     f"{sizes_line(sizes, style, prepared.contract.sets)}", style))
+                                     f"{sizes_line(sizes, style, prepared.sets)}", style))
     size = batch_size(params)
     lines.append(field_line("batch", f"{pad(batch_text(size, style), 44)}{style.dim('feed')}  "
                                     f"{call_text(params.get('feed'), style=style)}", style))
@@ -73,7 +73,7 @@ def data_section(prepared, style, width, probe=None):
     lines.append("")
     lines.extend(fields_table(prepared, style, width))
     lines.append("")
-    lines.extend(data_tree(prepared, params, sizes, style, probe, prepared.contract.sets))
+    lines.extend(data_tree(prepared, params, sizes, style, probe, prepared.sets))
     return lines
 
 
@@ -145,5 +145,5 @@ def load_text(prepared, style, sizes=None):
             lines.append(f"  {ARROW} {step}")
         else:
             lines[-1] += f"  {piece}" if lines[-1] == "loaded the data block:" else f" {piece}"
-    lines.append(f"sets after filters: {sizes_line(sizes, style, prepared.contract.sets)}")
+    lines.append(f"sets after filters: {sizes_line(sizes, style, prepared.sets)}")
     return "\n".join(lines)

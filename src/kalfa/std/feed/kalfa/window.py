@@ -6,14 +6,12 @@ from kalfa.std.feed.base import Dataset
 from kalfa.std.pre.base import StreamFrame
 
 
-SET_ORDER = ("train", "valid", "test")
-
-
 def previous_frames(frame, frames):
-    if not frames or frame.set not in SET_ORDER:
+    order = list(frames or {})
+    if frame.set not in order:
         return []
-    position = SET_ORDER.index(frame.set)
-    return [frames[name] for name in SET_ORDER[:position] if frames.get(name) is not None and len(frames[name])]
+    position = order.index(frame.set)
+    return [frames[name] for name in order[:position] if frames.get(name) is not None and len(frames[name])]
 
 
 class WindowDataset(Dataset):

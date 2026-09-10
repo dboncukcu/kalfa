@@ -12,8 +12,9 @@ logger_after = logger_for("after")
 
 
 @lego("/lego/kalfa/predict", returns="predictions", bus=["record", "device"],
-      description="Predict the test set with the report model, invert the target chain, apply the fitted "
-                  "calibrations, write predictions.parquet")
+      description="Predict a set with the report model, invert the target chain, apply the fitted "
+                  "calibrations, write predictions.parquet for the test set and predictions_<set>.parquet for "
+                  "another")
 def predict(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None,
             device=None):
     if loader is None or loader.dataset.size() == 0 or predicts is None:
@@ -27,6 +28,7 @@ def predict(models, composites, loader, prep, predicts, set, target_map=None, ca
     if record is not None:
         target = Path(record)
         target.mkdir(parents=True, exist_ok=True)
-        table.to_parquet(target / "predictions.parquet", index=False)
-        logger_after.info(f"predictions.parquet: {len(table)} rows")
+        name = "predictions.parquet" if set == "test" else f"predictions_{set}.parquet"
+        table.to_parquet(target / name, index=False)
+        logger_after.info(f"{name}: {len(table)} rows")
     return table

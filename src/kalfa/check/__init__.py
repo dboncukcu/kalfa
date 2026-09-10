@@ -4,6 +4,7 @@ import inspect
 from cirak.errors import error, warning
 
 from ..contract import Contract
+from ..driver import split_sets
 from ..kinds import kalfa_kind
 from .data import DataRules
 from .refs import RefRules
@@ -17,8 +18,8 @@ class Checker(SectionRules, DataRules, RefRules):
         self.raw = surface.raw
         self.registry = registry
         self.contract = contract or Contract.load()
-        self.sets = self.contract.sets
-        self.history_sets = {prefix: name for name, prefix in self.contract.history_prefix.items()}
+        self.sets = self.split_sets()
+        self.history_sets = {prefix: name for name, prefix in self.contract.prefixes(self.sets).items()}
         self.problems = []
         self.templates = {}
         self.models = {}
@@ -63,6 +64,14 @@ class Checker(SectionRules, DataRules, RefRules):
             self.definition_target(section, name, entry, path)
         for name, definition, weights, path in self.weight_checks:
             self.weights_of(name, definition, weights, path)
+
+    def split_sets(self):
+        data = self.data.get("data") if isinstance(self.data, dict) else None
+        try:
+            return split_sets(data if isinstance(data, dict) else {}, self.contract, self.registry)
+        except ValueError as exception:
+            self.error("invalid_value", str(exception), ("data", "split"))
+            return self.contract.sets
 
     def header_only_errors(self):
         return not any(problem.severity == "error" for problem in self.problems[:self.structural])

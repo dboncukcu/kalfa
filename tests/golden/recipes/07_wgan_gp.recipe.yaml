@@ -42,10 +42,12 @@ blocks:
       score: {uri: /layer/dcgan/critic, params: {channels: 64, cond_dim: 64}, inputs: [image, y]}
 flow:
   outputs: [history, predictions]
-  data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/celeba64}}, transform_pre: [],
-      set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, test: {set: test, 
-            transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.95, 0.05, 0.0], seed: 7}}, loaders: {
-        train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64, drop_last: true}}, valid: {uri: 
+  data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/celeba64}}, sets: [train, 
+          valid, test], transform_pre: [], set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, 
+            transforms: []}, test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [
+              0.95, 0.05, 0.0], seed: 7}}, split_outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0}, 
+        frame_refs: {train: train_frame, valid: valid_frame, test: test_frame}, loaders: {train: {uri: 
+            /loader/kalfa/torch, set: train, params: {set: train, size: 64, drop_last: true}}, valid: {uri: 
             /loader/kalfa/torch, set: valid, params: {set: valid, size: 64, drop_last: true}}, test: {uri: 
             /loader/kalfa/torch, set: test, params: {set: test, size: 64, drop_last: true}}}, mask: null, frames: {uri: 
           /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
@@ -65,7 +67,7 @@ flow:
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {order: [d, g], steps: {d: 5, g: 1}, 
             fresh_batch: true}}, turn_params: {}, losses_keys: {wgan_d: {sets: [train]}, wgan_g: {}}, metrics_keys: {fid: {
           sets: [valid], every: 5}, samples: {sets: [valid], every: 5}}, predicts: null, epochs: 100, steps: null, rules: [],
-      stop: [], history_prefix: {train: train, valid: val, test: test}}}
+      stop: [], sets: [valid, test], history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: best, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: null, targets: {},
       generate: {uri: /generate/kalfa/gan_sampler, params: {model: generator.ema, latent: 128, conditional: true, 
             n_classes: 10, n: 64}}, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, samples_gif: {lego: 
@@ -73,4 +75,5 @@ flow:
           train_loader: train_loader, valid_loader: valid_loader, test_loader: test_loader, composites: composites, 
           device: device, counters: counters_final, optimizers: optimizers_final, emas: emas_final, rules: rules_final, 
           losses: losses, losses_keys: losses_keys, data_report: data_report, train_df: train_df, train_frame: 
-          train_frame}, losses_keys: {wgan_d: {sets: [train]}, wgan_g: {}}}}
+          train_frame}, loader_refs: {train: train_loader, valid: valid_loader, test: test_loader}, extra_sets: [], 
+        losses_keys: {wgan_d: {sets: [train]}, wgan_g: {}}}}

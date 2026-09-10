@@ -102,7 +102,7 @@ def training_section(prepared, style, width, probe=None):
     active = {item.get("loss") for item in optimizers}
     losses = group_of(document, "losses")
     notes = {name: "active at turn 1" if name in active else "held for the rules" for name in losses}
-    sets = prepared.contract.sets
+    sets = prepared.sets
     lines.extend(definition_table("loss", losses, params.get("losses_keys"), style, width, notes, sets))
     lines.extend(definition_table("metric", group_of(document, "metrics"), params.get("metrics_keys"), style,
                                   width, {}, sets))
