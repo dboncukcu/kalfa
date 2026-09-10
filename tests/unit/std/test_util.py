@@ -5,9 +5,14 @@ import logging
 from io import StringIO
 
 import kalfa  # noqa: F401
-from kalfa.std.log import Progress, console, history, history_line, logger_for, node_path, progress, sink, turn_line
-from kalfa.std.optimizer import sgd
-from kalfa.std.util import const, identity, merge, pack
+from kalfa.std.common.log import Progress, console, logger_for, node_path, sink
+from kalfa.std.lego.kalfa.history import history, history_line, turn_line
+from kalfa.std.lego.kalfa.progress import progress
+from kalfa.std.optimizer.torch.sgd import sgd
+from kalfa.std.lego.kalfa.const import const
+from kalfa.std.lego.kalfa.identity import identity
+from kalfa.std.lego.kalfa.merge import merge
+from kalfa.std.lego.kalfa.pack import pack
 from helpers import tiny_model
 
 

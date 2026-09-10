@@ -15,7 +15,7 @@ from cirak.merge import describe_layers, merge_layers
 from cirak.registry import registry
 from cirak.resolve import TOKEN
 
-from .std.log import logger_for
+from .std.common.log import logger_for
 
 logger = logger_for("config")
 
@@ -134,6 +134,17 @@ def plugin_aliases():
     from .std import STD_URIS
 
     return {name: uri for name, uri in registry.aliases().items() if uri not in STD_URIS}
+
+
+def pack_tables():
+    tables = {}
+    for uri, path in sorted(registry.fragments().items()):
+        if not uri.startswith("/alias/"):
+            continue
+        layer, _ = load([str(path)], registry.fragments())
+        raw, _, _, _ = merge_layers(layer)
+        tables[uri] = {name: target for name, target in (raw.get("alias") or {}).items()}
+    return tables
 
 
 def load_surface(paths, sets=None) -> Surface:

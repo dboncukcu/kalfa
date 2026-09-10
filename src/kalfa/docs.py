@@ -5,6 +5,7 @@ from pathlib import Path
 
 from cirak.registry import registry
 
+from .config import pack_tables
 from .kinds import KINDS, kalfa_kind
 
 HEADER = """# kalfa lego reference
@@ -74,16 +75,6 @@ def template_uris():
 
     walk(YAML(typ="safe").load(Path(TEMPLATE).read_text()))
     return found
-
-
-def pack_tables():
-    from ruamel.yaml import YAML
-
-    tables = {}
-    for uri, path in sorted(registry.fragments().items()):
-        if uri.startswith("/alias/"):
-            tables[uri] = (YAML(typ="safe").load(Path(path).read_text()) or {}).get("alias") or {}
-    return tables
 
 
 def plugin_uris():

@@ -10,14 +10,17 @@ from torch import nn
 
 import kalfa  # noqa: F401
 from helpers import batch, frame, tiny_model
-from kalfa.std.adapter import criterion as criterion_adapter
-from kalfa.std.criterion import mae, mse
-from kalfa.std.layer import conv2d, maxpool
-from kalfa.std.metric import recon_error
-from kalfa.std.objective import weighted_sum
-from kalfa.std.plot import image_grid, run_all
-from kalfa.std.runtime import Context, entry_loss
-from kalfa.std.split import given
+from kalfa.std.adapter.kalfa.criterion import criterion as criterion_adapter
+from kalfa.std.criterion.kalfa.mae import mae
+from kalfa.std.criterion.kalfa.mse import mse
+from kalfa.std.layer.torch.conv2d import conv2d
+from kalfa.std.layer.torch.maxpool import maxpool
+from kalfa.std.metric.kalfa.recon_error import recon_error
+from kalfa.std.objective.kalfa.weighted_sum import weighted_sum
+from kalfa.std.plot.kalfa.image_grid import image_grid
+from kalfa.std.lego.kalfa.run_all import run_all
+from kalfa.std.common.runtime import Context, entry_loss
+from kalfa.std.split.kalfa.given import given
 from kalfa.synthetic import housing_frame, write_image_folder
 
 
@@ -32,7 +35,7 @@ def test_given_split_reads_the_other_sets_like_the_source(tmp_path):
     assert len(parts["valid"]) == 0 and len(parts["test"]) == 0 and list(parts["valid"].columns) == list(train.columns)
     with pytest.raises(ValueError, match="parquet or .csv"):
         given(train, valid=str(tmp_path / "valid.json"))
-    from kalfa.std.source import image_folder
+    from kalfa.std.source.kalfa.image_folder import image_folder
 
     write_image_folder(tmp_path / "a", classes=("x", "y"), per_class=3, size=8)
     write_image_folder(tmp_path / "b", classes=("x", "y"), per_class=2, size=8)
@@ -75,10 +78,12 @@ def test_recon_error_is_the_mean_per_sample_squared_error():
 
 
 def test_image_grid_and_run_all_name_files_after_the_definition(tmp_path):
-    from kalfa.std.feed import table
-    from kalfa.std.loader import torch as torch_loader
-    from kalfa.std.pre import apply, fit, to_tensor
-    from kalfa.std.source import image_folder
+    from kalfa.std.feed.kalfa.table import table
+    from kalfa.std.loader.kalfa.torch import torch as torch_loader
+    from kalfa.std.lego.kalfa.apply import apply
+    from kalfa.std.lego.kalfa.fit import fit
+    from kalfa.std.pre.kalfa.to_tensor import to_tensor
+    from kalfa.std.source.kalfa.image_folder import image_folder
 
     write_image_folder(tmp_path / "imgs", classes=("x",), per_class=4, size=8)
     samples = image_folder(str(tmp_path / "imgs"))
@@ -100,10 +105,10 @@ def test_image_grid_and_run_all_name_files_after_the_definition(tmp_path):
 
 
 def test_turn_warns_when_an_optimizer_takes_no_step():
-    from kalfa.std.feed import table
-    from kalfa.std.loader import torch as torch_loader
-    from kalfa.std.optimizer import sgd
-    from kalfa.std.turn import alternating
+    from kalfa.std.feed.kalfa.table import table
+    from kalfa.std.loader.kalfa.torch import torch as torch_loader
+    from kalfa.std.optimizer.torch.sgd import sgd
+    from kalfa.std.turn.kalfa.alternating import alternating
 
     first, second = tiny_model(seed=1), tiny_model(seed=2)
     optimizers = {"a": sgd({"first": first}, {"lr": 0.01}, None, "mse"),

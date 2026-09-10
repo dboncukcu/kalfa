@@ -3,8 +3,15 @@
 import functools
 
 import kalfa  # noqa: F401
-from kalfa.std.rule import effects, open, rule, stop
-from kalfa.std.trigger import after_turn, metric_above, metric_below, plateau, time_budget
+from kalfa.std.rule.kalfa.effects import effects
+from kalfa.std.rule.kalfa.open import open
+from kalfa.std.rule.kalfa.rule import rule
+from kalfa.std.rule.kalfa.stop import stop
+from kalfa.std.trigger.kalfa.after_turn import after_turn
+from kalfa.std.trigger.kalfa.metric_above import metric_above
+from kalfa.std.trigger.kalfa.metric_below import metric_below
+from kalfa.std.trigger.kalfa.plateau import plateau
+from kalfa.std.trigger.kalfa.time_budget import time_budget
 
 
 def test_after_turn_counts_updates_not_the_index():

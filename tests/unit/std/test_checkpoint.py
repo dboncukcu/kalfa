@@ -5,8 +5,15 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import tiny_model
-from kalfa.std.checkpoint import best, checkpoint, init_state, last, load, save_final, select, snapshot
-from kalfa.std.optimizer import sgd
+from kalfa.std.checkpoint.kalfa.best import best
+from kalfa.std.lego.kalfa.checkpoint import checkpoint
+from kalfa.std.lego.kalfa.init_state import init_state
+from kalfa.std.checkpoint.kalfa.last import last
+from kalfa.std.checkpoint.base import load
+from kalfa.std.lego.kalfa.save_final import save_final
+from kalfa.std.lego.kalfa.select import select
+from kalfa.std.checkpoint.kalfa.snapshot import snapshot
+from kalfa.std.optimizer.torch.sgd import sgd
 
 
 def state_of(seed=1):

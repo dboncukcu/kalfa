@@ -5,16 +5,24 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.data import filter_set
-from kalfa.std.feed import SampleDataset, table
-from kalfa.std.layer import unflatten
-from kalfa.std.loader import balanced_sampler, torch as torch_loader
-from kalfa.std.plot import image_pairs
-from kalfa.std.pre import (apply, fit, normalize, random_crop_flip, resize, standard_scaler, to_tensor,
-                           to_tensor_signed)
-from kalfa.std.samples import Samples
-from kalfa.std.source import header, image_folder
-from kalfa.std.split import kfold, random as random_split
+from kalfa.std.lego.kalfa.filter_set import filter_set
+from kalfa.std.feed.kalfa.table import SampleDataset, table
+from kalfa.std.layer.kalfa.unflatten import unflatten
+from kalfa.std.loader.kalfa.torch import balanced_sampler, torch as torch_loader
+from kalfa.std.plot.kalfa.image_pairs import image_pairs
+from kalfa.std.lego.kalfa.apply import apply
+from kalfa.std.lego.kalfa.fit import fit
+from kalfa.std.pre.kalfa.normalize import normalize
+from kalfa.std.pre.kalfa.random_crop_flip import random_crop_flip
+from kalfa.std.pre.kalfa.resize import resize
+from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+from kalfa.std.pre.kalfa.to_tensor import to_tensor
+from kalfa.std.pre.kalfa.to_tensor_signed import to_tensor_signed
+from kalfa.std.common.samples import Samples
+from kalfa.std.source.base import header
+from kalfa.std.source.kalfa.image_folder import image_folder
+from kalfa.std.split.kalfa.kfold import kfold
+from kalfa.std.split.kalfa.random import random as random_split
 from kalfa.synthetic import write_image_folder
 
 
@@ -131,8 +139,9 @@ def test_image_pairs_draws_from_the_valid_set_when_test_is_empty(folder, tmp_pat
 
 
 def test_two_views_and_simclr_aug(folder):
-    from kalfa.std.objective import ntxent
-    from kalfa.std.pre import simclr_aug, two_views
+    from kalfa.std.objective.kalfa.ntxent import ntxent
+    from kalfa.std.pre.kalfa.simclr_aug import simclr_aug
+    from kalfa.std.pre.kalfa.two_views import two_views
     from torch import nn
 
     samples = image_folder(str(folder))
@@ -161,10 +170,11 @@ def test_two_views_and_simclr_aug(folder):
 
 
 def test_text_source_tokenizer_and_next_token(tmp_path):
-    from kalfa.std.feed import next_token
-    from kalfa.std.metric import perplexity
-    from kalfa.std.pre import char_tokenizer
-    from kalfa.std.source import header, text_lines
+    from kalfa.std.feed.kalfa.next_token import next_token
+    from kalfa.std.metric.kalfa.perplexity import perplexity
+    from kalfa.std.pre.kalfa.char_tokenizer import char_tokenizer
+    from kalfa.std.source.base import header
+    from kalfa.std.source.kalfa.text_lines import text_lines
     from kalfa.synthetic import write_text
 
     path = write_text(tmp_path / "corpus.txt", lines=12)

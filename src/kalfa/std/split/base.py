@@ -1,0 +1,72 @@
+import logging
+
+from kalfa.std.common.log import logger_for
+from kalfa.std.common.samples import is_samples
+
+
+logger = logger_for("data.split")
+
+
+def count_of(part):
+    rows = getattr(part, "rows", None)
+    if isinstance(rows, int):
+        return rows
+    try:
+        return len(part)
+    except TypeError:
+        return "?"
+
+
+def report_sets(name, parts):
+    if logger.isEnabledFor(logging.INFO):
+        logger.info(f"{name}: train {count_of(parts['train'])}, valid {count_of(parts['valid'])}, "
+                    f"test {count_of(parts['test'])}")
+    return parts
+
+
+def take_rows(df, positions):
+    """Rows by position, for a frame or a Dataset source."""
+    if is_samples(df):
+        return df.subset(positions)
+    return df.iloc[positions]
+
+
+def cuts_of(count, ratios):
+    if len(ratios) != 3:
+        raise ValueError(f"ratios must have three entries (train, valid, test), got {ratios!r}")
+    if any(part < 0 for part in ratios) or abs(sum(ratios) - 1.0) > 1e-6:
+        raise ValueError(f"ratios must be non negative and sum to 1, got {ratios!r}")
+    first = int(round(count * ratios[0]))
+    second = first + int(round(count * ratios[1]))
+    return first, min(second, count)
+
+
+def sizes(rows, ratios):
+    """The set sizes a random split of ``rows`` rows produces, for the check's set table."""
+    first, second = cuts_of(rows, ratios)
+    return {"train": first, "valid": second - first, "test": rows - second}
+
+
+def fold_bounds(count, k):
+    sizes = [count // k + (1 if position < count % k else 0) for position in range(k)]
+    bounds = [0]
+    for size in sizes:
+        bounds.append(bounds[-1] + size)
+    return bounds
+
+
+def kfold_counts(count, k, fold, val):
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2:
+        raise ValueError(f"kfold needs an integer k >= 2, got {k!r}")
+    if not isinstance(fold, int) or isinstance(fold, bool) or not 0 <= fold < k:
+        raise ValueError(f"fold must be an integer in [0, {k - 1}], got {fold!r}")
+    bounds = fold_bounds(count, k)
+    held = bounds[fold + 1] - bounds[fold]
+    rest = count - held
+    carve = int(round(rest * float(val or 0.0)))
+    return held, carve, rest - carve
+
+
+def kfold_sizes(rows, params):
+    held, carve, train = kfold_counts(rows, params.get("k"), params.get("fold"), params.get("val"))
+    return {"train": train, "valid": carve, "test": held}

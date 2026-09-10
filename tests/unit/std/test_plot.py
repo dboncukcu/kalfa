@@ -6,8 +6,11 @@ import pandas
 import pytest
 
 import kalfa  # noqa: F401
-from kalfa.std import figure
-from kalfa.std.plot import loss_curve, panel_title, pred_vs_true, run_all, series_of
+from kalfa.std.common import figure
+from kalfa.std.plot.kalfa.loss_curve import loss_curve
+from kalfa.std.plot.base import panel_title, series_of
+from kalfa.std.plot.kalfa.pred_vs_true import pred_vs_true
+from kalfa.std.lego.kalfa.run_all import run_all
 
 
 def history():
@@ -67,8 +70,9 @@ def test_sample_writer_and_the_sample_plots(tmp_path):
     import torch
     from torch import nn
 
-    from kalfa.std.metric import sample_writer
-    from kalfa.std.plot import samples_gif, samples_matrix
+    from kalfa.std.metric.kalfa.sample_writer import sample_writer
+    from kalfa.std.plot.kalfa.samples_gif import samples_gif
+    from kalfa.std.plot.kalfa.samples_matrix import samples_matrix
 
     def sampler(models, prep, rng, n=4):
         return torch.rand(n, 1, 8, 8, generator=rng)

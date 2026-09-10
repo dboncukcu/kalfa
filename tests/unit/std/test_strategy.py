@@ -4,7 +4,10 @@ import pytest
 from ruamel.yaml import YAML
 
 from kalfa import sweep as sweeper
-from kalfa.std.strategy import Grid, RandomSearch, SobolSearch, grid_values, parse_space
+from kalfa.std.strategy.kalfa.grid import Grid
+from kalfa.std.strategy.kalfa.random import RandomSearch
+from kalfa.std.strategy.kalfa.sobol import SobolSearch
+from kalfa.std.strategy.base import grid_values, parse_space
 
 
 def test_space_parsing_and_grid_points():

@@ -8,14 +8,17 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import frame, tiny_model
-from kalfa.std.adapter import criterion as criterion_adapter
-from kalfa.std.adapter import metric as metric_adapter
-from kalfa.std.criterion import huber, mae, mse
-from kalfa.std.feed import table
-from kalfa.std.loader import torch as torch_loader
-from kalfa.std.metric import rmse
-from kalfa.std.optimizer import sgd
-from kalfa.std.turn import alternating, apply_effects, effective_loss
+from kalfa.std.adapter.kalfa.criterion import criterion as criterion_adapter
+from kalfa.std.adapter.kalfa.metric import metric as metric_adapter
+from kalfa.std.criterion.kalfa.huber import huber
+from kalfa.std.criterion.kalfa.mae import mae
+from kalfa.std.criterion.kalfa.mse import mse
+from kalfa.std.feed.kalfa.table import table
+from kalfa.std.loader.kalfa.torch import torch as torch_loader
+from kalfa.std.metric.kalfa.rmse import rmse
+from kalfa.std.optimizer.torch.sgd import sgd
+from kalfa.std.turn.kalfa.alternating import alternating
+from kalfa.std.turn.base import apply_effects, effective_loss
 
 
 def setup(seed=1, rows=32, lazy=False):

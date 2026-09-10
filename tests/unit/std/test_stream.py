@@ -6,14 +6,24 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.data import filter as filter_rows
-from kalfa.std.data import filter_set
-from kalfa.std.feed import StreamDataset, dataset_size, sized, table, window
-from kalfa.std.loader import torch as torch_loader
-from kalfa.std.pre import apply, fit, one_hot, standard_scaler
-from kalfa.std.source import csv_stream, header, parquet_stream
-from kalfa.std.split import given, kfold, random as random_split, sequential
-from kalfa.std.stream import positions
+from kalfa.std.lego.kalfa.filter import filter as filter_rows
+from kalfa.std.lego.kalfa.filter_set import filter_set
+from kalfa.std.feed.kalfa.table import StreamDataset, table
+from kalfa.std.feed.base import dataset_size, sized
+from kalfa.std.feed.kalfa.window import window
+from kalfa.std.loader.kalfa.torch import torch as torch_loader
+from kalfa.std.lego.kalfa.apply import apply
+from kalfa.std.lego.kalfa.fit import fit
+from kalfa.std.pre.kalfa.one_hot import one_hot
+from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+from kalfa.std.source.kalfa.csv_stream import csv_stream
+from kalfa.std.source.base import header
+from kalfa.std.source.kalfa.parquet_stream import parquet_stream
+from kalfa.std.split.kalfa.given import given
+from kalfa.std.split.kalfa.kfold import kfold
+from kalfa.std.split.kalfa.random import random as random_split
+from kalfa.std.split.kalfa.sequential import sequential
+from kalfa.std.common.stream import positions
 from kalfa.synthetic import housing_frame
 
 

@@ -46,10 +46,14 @@ def test_labels_are_decoded_and_the_best_is_by_f1(trained):
 
 
 def test_class_weights_and_encoders(dataset):
-    from kalfa.std.data import class_weights
-    from kalfa.std.feed import table
-    from kalfa.std.loader import torch as torch_loader
-    from kalfa.std.pre import apply, fit, label_encoder, one_hot, standard_scaler
+    from kalfa.std.data.kalfa.class_weights import class_weights
+    from kalfa.std.feed.kalfa.table import table
+    from kalfa.std.loader.kalfa.torch import torch as torch_loader
+    from kalfa.std.lego.kalfa.apply import apply
+    from kalfa.std.lego.kalfa.fit import fit
+    from kalfa.std.pre.kalfa.label_encoder import label_encoder
+    from kalfa.std.pre.kalfa.one_hot import one_hot
+    from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
 
     dataset("02_mlp_classification")
     data = pandas.read_parquet("churn.parquet")

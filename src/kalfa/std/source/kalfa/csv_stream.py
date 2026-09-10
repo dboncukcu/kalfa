@@ -1,0 +1,14 @@
+from kalfa.registration import lego
+from kalfa.std.common.log import logger_for
+
+
+logger = logger_for("data.source")
+
+
+@lego("/source/kalfa/csv_stream", returns="df",
+      description="Read a CSV file in chunks (the lazy set)")
+def csv_stream(path, chunk=65536):
+    from kalfa.std.common.stream import CsvChunks, Stream
+
+    logger.info(f"streaming {path} in chunks of {chunk} rows")
+    return Stream(CsvChunks(path, chunk))

@@ -7,11 +7,17 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import batch, tiny_model
-from kalfa.std.adapter import criterion as criterion_adapter
-from kalfa.std.adapter import metric as metric_adapter
-from kalfa.std.criterion import bce_logits, cross_entropy, huber, log_cosh, mae, mse
-from kalfa.std.metric import recon_error, rmse
-from kalfa.std.runtime import Context
+from kalfa.std.adapter.kalfa.criterion import criterion as criterion_adapter
+from kalfa.std.adapter.kalfa.metric import metric as metric_adapter
+from kalfa.std.criterion.kalfa.bce_logits import bce_logits
+from kalfa.std.criterion.kalfa.cross_entropy import cross_entropy
+from kalfa.std.criterion.kalfa.huber import huber
+from kalfa.std.criterion.kalfa.log_cosh import log_cosh
+from kalfa.std.criterion.kalfa.mae import mae
+from kalfa.std.criterion.kalfa.mse import mse
+from kalfa.std.metric.kalfa.recon_error import recon_error
+from kalfa.std.metric.kalfa.rmse import rmse
+from kalfa.std.common.runtime import Context
 
 
 def test_criterion_values():
@@ -69,7 +75,7 @@ def test_criterion_adapter_reads_output_and_target_from_the_definition_keys():
 
 
 def test_activity_and_trackers():
-    from kalfa.std.runtime import active_entries, entry_active
+    from kalfa.std.common.runtime import active_entries, entry_active
 
     model = tiny_model(seed=1)
     keys = {"every": 2, "sets": ["valid"]}
@@ -103,7 +109,9 @@ def test_with_param_rebuilds_the_partial():
 
 def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
     import numpy
-    from kalfa.std.pre import apply, fit, standard_scaler
+    from kalfa.std.lego.kalfa.apply import apply
+    from kalfa.std.lego.kalfa.fit import fit
+    from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
     from kalfa.synthetic import scores_frame
 
     data = scores_frame(rows=40)
@@ -142,7 +150,9 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
 
 def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     import numpy
-    from kalfa.std.pre import apply, fit, standard_scaler
+    from kalfa.std.lego.kalfa.apply import apply
+    from kalfa.std.lego.kalfa.fit import fit
+    from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
     from kalfa.synthetic import housing_frame
 
     data = housing_frame(rows=40)
@@ -186,10 +196,12 @@ def test_vae_objective_and_schedules():
 
     from torch import nn
 
-    from kalfa.std.objective import vae
-    from kalfa.std.schedule import linear_warmup, step_decay, warmup_cosine
-    from kalfa.std.layer import reparam
-    from kalfa.std.turn import with_param
+    from kalfa.std.objective.kalfa.vae import vae
+    from kalfa.std.schedule.kalfa.linear_warmup import linear_warmup
+    from kalfa.std.schedule.kalfa.step_decay import step_decay
+    from kalfa.std.schedule.kalfa.warmup_cosine import warmup_cosine
+    from kalfa.std.layer.kalfa.reparam import reparam
+    from kalfa.std.turn.base import with_param
 
     class Encoder(nn.Module):
         inputs = ["image"]
@@ -239,8 +251,9 @@ def test_vae_objective_and_schedules():
 def test_wgan_objectives_and_fid():
     from torch import nn
 
-    from kalfa.std.metric import Fid, frechet_distance
-    from kalfa.std.objective import wgan_g, wgan_gp_d
+    from kalfa.std.metric.kalfa.fid import Fid, frechet_distance
+    from kalfa.std.objective.kalfa.wgan_g import wgan_g
+    from kalfa.std.objective.kalfa.wgan_gp_d import wgan_gp_d
 
     class Generator(nn.Module):
         inputs = ["z"]
@@ -287,9 +300,10 @@ def test_ddpm_objective_and_sampler():
 
     from torch import nn
 
-    from kalfa.std.generate import ddpm_sampler
-    from kalfa.std.objective import ddpm, diffusion_steps, noise_schedule
-    from kalfa.std.schedule import linear_betas
+    from kalfa.std.generate.kalfa.ddpm_sampler import ddpm_sampler
+    from kalfa.std.objective.kalfa.ddpm import ddpm
+    from kalfa.std.common.diffusion import diffusion_steps, noise_schedule
+    from kalfa.std.schedule.kalfa.linear_betas import linear_betas
 
     class Net(nn.Module):
         inputs = ["image", "t"]

@@ -1,5 +1,5 @@
 config.yaml                                                                                         kalfa 0.2.4
-  layers      config.yaml, /alias/kalfa/vision
+  layers      config.yaml, /alias/kalfa/base, /alias/kalfa/vision
   params
     epochs       20       backbone_lr  1e-05    seed         7
     lr           0.001    unfreeze_at  5

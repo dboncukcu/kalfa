@@ -1,0 +1,44 @@
+from pathlib import Path
+
+import torch
+
+
+def write_samples(samples, target):
+    """Samples under samples/: tensors as samples.pt (images also as grid.png), text as samples.txt."""
+    write_sample_files(samples, target, "samples", "grid")
+
+
+def write_turn_samples(samples, target, turn):
+    """The samples of one turn under samples/: turn_<n>.pt and turn_<n>.png, or turn_<n>.txt for text."""
+    stem = f"turn_{int(turn):04d}"
+    write_sample_files(samples, target, stem, stem)
+
+
+def write_sample_files(samples, target, stem, image_stem):
+    target = Path(target)
+    target.mkdir(parents=True, exist_ok=True)
+    if isinstance(samples, str):
+        (target / f"{stem}.txt").write_text(samples)
+        return
+    torch.save(samples, target / f"{stem}.pt")
+    if isinstance(samples, torch.Tensor) and samples.ndim == 4:
+        write_grid(samples, target / f"{image_stem}.png")
+
+
+def write_grid(images, path):
+    """An image grid of at most eight columns, saved as png."""
+    from kalfa.std.common import figure
+    from kalfa.std.common.figure import image_tile
+
+    count = len(images)
+    columns = min(8, count)
+    rows = (count + columns - 1) // columns
+    drawing, axes = figure.tiles(rows, columns)
+    for position in range(rows * columns):
+        axis = axes[position // columns][position % columns]
+        if position < count:
+            image_tile(axis, images[position])
+        else:
+            axis.axis("off")
+    drawing.savefig(path, bbox_inches="tight")
+    figure.pyplot().close(drawing)

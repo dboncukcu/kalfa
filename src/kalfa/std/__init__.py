@@ -1,21 +1,22 @@
-"""kalfa's standard legos, registered with cirak on import; the kinds and the facts are declared first."""
+from importlib import import_module
+from pathlib import Path
 
 from cirak import declare_facts, declare_kinds
 from cirak.registry import registry
 
-from ..kinds import FACTS, KINDS
+from kalfa.kinds import FACTS, KINDS
 
 declare_kinds(*[kind for kind in KINDS if kind not in ("builder", "data")])
 declare_facts(*FACTS)
 
-_before = set(registry.uris())
 
-from . import (adapter, builder, checkpoint, criterion, data, device, eval, feed, figure, generate, init, layer,  # noqa: E402
-               loader, log, metric, model, objective, optimizer, plot, pre, rule, schedule, source, split, strategy,
-               trigger, turn, util)
+def discover():
+    before = set(registry.uris())
+    root = Path(__file__).parent
+    for path in sorted(root.glob("*/*/*.py")):
+        if path.name not in ("__init__.py", "base.py"):
+            import_module(f"{__name__}.{path.parent.parent.name}.{path.parent.name}.{path.stem}")
+    return frozenset(set(registry.uris()) - before)
 
-STD_URIS = frozenset(set(registry.uris()) - _before)
 
-__all__ = ["STD_URIS", "adapter", "builder", "checkpoint", "criterion", "data", "device", "eval", "feed", "figure", "generate", "init",
-           "layer", "loader", "log", "metric", "model", "objective", "optimizer", "plot", "pre", "rule", "schedule", "source", "split",
-           "strategy", "trigger", "turn", "util"]
+STD_URIS = discover()

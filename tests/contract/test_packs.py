@@ -1,14 +1,15 @@
-"""The alias packs agree with the legos' alias facts."""
+"""The alias packs agree with the legos' alias facts; the four packs layer over the base pack."""
 
 from ruamel.yaml import YAML
 from cirak.registry import registry
 
 import kalfa
+from kalfa.config import pack_tables
 from kalfa.std import STD_URIS
 
 
 def test_tabular_pack_is_flat_and_matches_the_facts():
-    table = YAML(typ="safe").load((kalfa.PACKS / "tabular.yaml").read_text())["alias"]
+    table = pack_tables()["/alias/kalfa/tabular"]
     assert "/alias/kalfa/tabular" in registry.fragments()
     for name, uri in table.items():
         entry = registry.lookup(uri)
@@ -21,6 +22,28 @@ def test_tabular_pack_is_flat_and_matches_the_facts():
                  "l1_distance", "class_histogram", "architecture", "random_split"):
         assert name in table
     assert table["random_split"] == "/split/kalfa/random" and table["random"] == "/strategy/kalfa/random"
+
+
+def test_the_four_packs_layer_over_the_base_pack():
+    tables = pack_tables()
+    base = tables["/alias/kalfa/base"]
+    packs = {name: tables[f"/alias/kalfa/{name}"] for name in ("tabular", "vision", "text", "lazy")}
+    for name, table in packs.items():
+        own = YAML(typ="safe").load((kalfa.PACKS / f"{name}.yaml").read_text())
+        assert own["include"] == ["/alias/kalfa/base"]
+        assert not (set(own["alias"]) - set(table))
+        for alias, uri in base.items():
+            if alias not in own["alias"]:
+                assert table[alias] == uri, (name, alias)
+    shared = {alias for alias, uri in base.items()
+              if all(table.get(alias) == uri for table in packs.values())}
+    assert shared == set(base)
+    assert packs["lazy"]["parquet"] == "/source/kalfa/parquet_stream"
+    assert packs["tabular"]["parquet"] == "/source/kalfa/parquet"
+    for name in ("cast", "table", "linear", "mse", "rmse", "adam", "supervised", "best", "loss_curve"):
+        assert name in base
+    assert "image_folder" not in base and "image_folder" in packs["vision"]
+    assert "parquet" not in base and "random_split" not in base
 
 
 def test_the_random_split_alias_is_the_written_out_short_form(workdir):

@@ -15,11 +15,11 @@ from cirak.registry import registry as default_registry
 
 from .driver import MODEL_KEYS, is_composite, is_shortcut, models_of
 from .kinds import kalfa_kind, names_of, RESERVED_BLOCKS, SETS, TRAINING_FIXED
-from .std.pre import RESERVED_FEATURES, RESERVED_INPUT, assign_fields, torch_dtype
-from .std.runtime import expand_targets
-from .std.source import STREAM_SOURCES
-from .std.source import header as read_header
-from .std.split import sizes as split_sizes
+from .std.pre.base import RESERVED_FEATURES, RESERVED_INPUT, assign_fields, torch_dtype
+from .std.common.runtime import expand_targets
+from .std.source.base import STREAM_SOURCES
+from .std.source.base import header as read_header
+from .std.split.base import sizes as split_sizes
 
 TOP_KEYS = ("plugins", "params", "seed", "device", "data", "model", "metrics", "losses", "optimizers", "training",
             "generate", "plots", "figures", "sweep", "record", "alias")
@@ -432,7 +432,7 @@ class Checker:
     def weights_of(self, name, definition, weights, path):
         """The source run of a weights spec: its resolved model block must match this model's structure."""
         from .record import read_resolved
-        from .std.builder import weights_path
+        from .std.builder.base import weights_path
 
         run = weights.get("run")
         if weights.get("which") not in ("best", "last", "final"):
@@ -977,7 +977,7 @@ class Checker:
                     nameless[uri] = name
 
     def sweep_section(self):
-        from .std.strategy import Choices, grid_values, parse_space
+        from .std.strategy.base import Choices, grid_values, parse_space
         from .sweep import OBJECTIVE_KEYS, SWEEP_KEYS
 
         section = self.data.get("sweep")
@@ -1146,7 +1146,7 @@ class Checker:
                 return None
         if isinstance(split, dict) and split.get("uri") == "/split/kalfa/kfold" and isinstance(params, dict):
             try:
-                from .std.split import kfold_sizes
+                from .std.split.base import kfold_sizes
 
                 return kfold_sizes(header["rows"], params)
             except (ValueError, TypeError, KeyError):
@@ -1156,7 +1156,7 @@ class Checker:
         return {"train": None, "valid": None, "test": None}
 
     def given_sizes(self, header, params):
-        from .std.source import header as source_header
+        from .std.source.base import header as source_header
 
         found = {"train": header["rows"]}
         source = (self.data.get("data") or {}).get("source") or {}

@@ -316,11 +316,12 @@ kalfa describe config.yaml --section columns
 
 ## Alias packs and plugins
 
-`include: [/alias/kalfa/tabular]` (or `/alias/kalfa/vision` and `/alias/kalfa/text`, which contain tabular;
-`/alias/kalfa/lazy` for large tables) brings the short names (`parquet`, `standard_scaler`, `linear_relu`, `mse`,
-`rmse`, `adam`, `supervised`, `plateau`, `best`, `loss_curve` ...). The table is flat, a full URI is valid
-everywhere; `kalfa ls /alias/kalfa/tabular` prints the contents, `kalfa ls tokenizer` searches names and
-descriptions. Your own lego is registered with `@kalfa.lego` in a Python module next to the config and comes in
+`include: [/alias/kalfa/tabular]` brings the short names (`parquet`, `standard_scaler`, `linear_relu`, `mse`,
+`rmse`, `adam`, `supervised`, `plateau`, `best`, `loss_curve` ...). There are four packs, `tabular`, `vision`,
+`text` and `lazy` (large tables read in chunks), and every one of them includes `/alias/kalfa/base`, the names
+they all share; a pack adds only its own names, so a config that wants tables and images includes two packs. The
+table is flat, a full URI is valid everywhere; `kalfa ls /alias/kalfa/tabular` prints the resolved contents,
+`kalfa ls tokenizer` searches names and descriptions. Your own lego is registered with `@kalfa.lego` in a Python module next to the config and comes in
 with `plugins: [module]`; `examples/alad/myexample.py` (the ALAD objectives of that example) and the plugin
 modules of the other examples show how. `kalfa ls alad --plugin myexample` and `kalfa docs --config cfg.yaml` import those modules before the
 listing, so your own legos come with their signature and facts (`docs` prints them in a separate `Plugin legos`
@@ -380,15 +381,16 @@ not available (`device: {uri: /device/acme/tpu}` then selects it).
 **Writing a plot.** A plot lego takes `predictions, history, models, record` and, by naming them in its
 signature, anything else the run holds: `prep`, `train_loader`, `valid_loader`, `test_loader`, `loaders` (the
 three in one mapping), `predicts`, `sets`, `name`, `device`, `counters`, `optimizers`, `emas`, `rules`. Draw with
-`kalfa.std.figure` (`single`, `grid`, `label`, `density`, `profile`, `binned`, `colorbar`, `save` and the palette)
-and the figure comes out in the run's own style and format. `kalfa.std.plot.set_frame(loaders, prep, set)` gives
+`kalfa.std.common.figure` (`single`, `grid`, `label`, `density`, `profile`, `binned`, `colorbar`, `save` and the
+palette) and the figure comes out in the run's own style and format. `kalfa.std.plot.base.set_frame(loaders, prep,
+set)` gives
 the columns of one set as a DataFrame in the original units, features and targets together, which is what
 `target_vs_features` and `correlation_heatmap` draw.
 
 **Logging from a lego.** `logging.getLogger("kalfa.<stage>")` is the whole contract: nothing is declared, no fact,
 no parameter, and the line only appears when the user asked for it with `--log`. The stage is what the third column
 of a log line shows, so name it after the place in the run (`data.source`, `models`, `training.turn`,
-`after.plots`), not after the module. `kalfa.std.log` has `logger_for(stage)` for that, plus `clock()` and
+`after.plots`), not after the module. `kalfa.std.common.log` has `logger_for(stage)` for that, plus `clock()` and
 `since(started)` for the durations and `number(value)` for the metric formatting. INFO is what a user wants to see
 without asking for detail, DEBUG is the decision behind it; nothing per batch at any level, and a log line never
 computes a value the lego does not already have (guard it with `log.isEnabledFor(logging.DEBUG)` when it would).
@@ -399,6 +401,19 @@ computes a value the lego does not already have (guard it with `log.isEnabledFor
 `cirak.plugins` entry point (`[project.entry-points."cirak.plugins"] acme = "acme_legos"` in its `pyproject.toml`),
 then `plugins: [acme_legos]` works anywhere the package is installed. Aliases declared by plugin legos are usable
 without a pack.
+
+**The std tree.** The URI of a std lego is its path: `/pre/sklearn/standard_scaler` is
+`src/kalfa/std/pre/sklearn/standard_scaler.py`, one lego per file, the registered thing last in the file.
+`src/kalfa/std/__init__.py` imports every `std/<kind>/<pack>/<name>.py`, so adding a lego is adding a file; a
+contract test checks that every file registers the lego its path names and nothing else. Code two legos of a kind
+share sits in the kind's `base.py` (`std/pre/base.py`: the field plan, `Prep`, the frames, the base classes
+`Preprocessor`, `Scaler`, `Encoder`, `Tokenizer`), code two legos of one pack share in the pack's `base.py`
+(`std/pre/sklearn/base.py`), and code that crosses kinds in `std/common/` (`runtime`, `figure`, `log`, `samples`,
+`stream`, `deferred`, `prediction`, `generation`, `diffusion`). `common/` never imports a lego module, a `base.py`
+imports `common/`, a lego module imports `common/` and its bases. The base classes the legos build on are
+`Preprocessor` (`pre/base.py`), `Metric` (`metric/base.py`), `Loss` (`common/runtime.py`), `Model`
+(`builder/base.py`), `Dataset` (`feed/base.py`), `Policy` (`checkpoint/base.py`), `Optimizer`
+(`optimizer/base.py`) and `Strategy` (`strategy/base.py`); a plugin subclasses them.
 
 **Adding an example.** Write `examples/<nn>_<name>/config.yaml` with a comment header (aliases from a pack, paths
 relative to the folder), `make_data.py` on top of `kalfa.synthetic`, the plugin module next to them when the

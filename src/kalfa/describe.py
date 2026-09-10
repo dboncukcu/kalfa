@@ -3,7 +3,7 @@ import shutil
 from pathlib import Path
 
 from .kinds import SETS
-from .std.pre import assign_fields
+from .std.pre.base import assign_fields
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -226,7 +226,7 @@ def target_fields(prepared, probe=None):
 
 def target_slots(prepared, probe=None):
     """The place every target field takes in the output wire that predicts it, from training.targets."""
-    from .std.runtime import expand_targets
+    from .std.common.runtime import expand_targets
 
     mapping = block_params(prepared, "after").get("targets") or {}
     fields = target_fields(prepared, probe)
@@ -562,7 +562,7 @@ def training_section(prepared, style, width, probe=None):
                                     f"{style.dim('predicts')} {params.get('predicts') or '—'}", style))
     if extra:
         lines.append(field_line("", extra, style))
-    from .std.runtime import expand_targets
+    from .std.common.runtime import expand_targets
 
     mapping = block_params(prepared, "after").get("targets") or {}
     if mapping:

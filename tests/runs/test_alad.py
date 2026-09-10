@@ -17,7 +17,7 @@ def test_check_the_plugin_config(dataset):
     assert [problem.kind for problem in prepared.problems] == ["unused_output"] * 4
     assert all(problem.severity == "warning" for problem in prepared.problems)
     assert prepared.sizes == {"train": 1400, "valid": 200, "test": 400}
-    from kalfa.std.split import sizes as split_sizes
+    from kalfa.std.split.base import sizes as split_sizes
 
     kept = int((anomaly_frame()["is_anomaly"] != 5).sum())
     expected = split_sizes(kept, [0.7, 0.1, 0.2])

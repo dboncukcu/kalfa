@@ -6,11 +6,17 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.feed import WindowDataset, previous_frames, window
-from kalfa.std.layer import gru, last_step
-from kalfa.std.plot import forecast_samples
-from kalfa.std.pre import Frame, apply, fit, standard_scaler
-from kalfa.std.split import kfold, kfold_sizes, sequential
+from kalfa.std.feed.kalfa.window import WindowDataset, previous_frames, window
+from kalfa.std.layer.torch.gru import gru
+from kalfa.std.layer.torch.last_step import last_step
+from kalfa.std.plot.kalfa.forecast_samples import forecast_samples
+from kalfa.std.pre.base import Frame
+from kalfa.std.lego.kalfa.apply import apply
+from kalfa.std.lego.kalfa.fit import fit
+from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+from kalfa.std.split.kalfa.kfold import kfold
+from kalfa.std.split.base import kfold_sizes
+from kalfa.std.split.kalfa.sequential import sequential
 from kalfa.synthetic import energy_frame
 
 
@@ -75,7 +81,7 @@ def test_window_never_crosses_a_group_boundary():
 def test_gru_and_last_step_are_lazy_and_seeded():
     from helpers import linear_graph
     from cirak.build import Graph, GraphNode
-    from kalfa.std.builder import Module
+    from kalfa.std.builder.kalfa.module import Module
 
     def build(seed):
         graph = Graph(("x",), ("y",), (GraphNode("g", gru(4), ("x",), ("h",)), GraphNode("l", last_step(), ("h",), ("s",)),

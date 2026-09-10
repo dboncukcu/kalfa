@@ -17,8 +17,8 @@ from .api import run as run_config
 from .collect import collect as collect_runs
 from .describe import ALL_SECTIONS, DEFAULT_SECTIONS
 from .kinds import kalfa_kind
-from .config import parse_sets
-from .std.log import console, echo_warnings, level_of
+from .config import pack_tables, parse_sets
+from .std.common.log import console, echo_warnings, level_of
 from .style import Style, style_for
 
 
@@ -396,11 +396,12 @@ def cmd_ls(args) -> int:
         _print_entries(entries, style, aliases=True)
         return code
     if prefix is None or prefix.startswith("/alias/"):
+        tables = pack_tables()
         for uri, path in sorted(registry.fragments().items()):
             if not uri.startswith("/alias/") or (prefix is not None and not uri.startswith(prefix.rstrip("/"))):
                 continue
             print(style.bold(uri) + "  " + style.dim(str(path)))
-            _print_pack(path, style, args.kind)
+            _print_pack(tables[uri], style, args.kind)
         if prefix is not None:
             return code
         print()
@@ -429,26 +430,14 @@ def search_entries(word, kind=None):
 
 def pack_members():
     """Alias name and pack per URI, read from the registered alias packs."""
-    from pathlib import Path
-
-    from ruamel.yaml import YAML
-
     members = {}
-    for uri, path in sorted(registry.fragments().items()):
-        if not uri.startswith("/alias/"):
-            continue
-        table = (YAML(typ="safe").load(Path(path).read_text()) or {}).get("alias") or {}
+    for uri, table in pack_tables().items():
         for name, target in table.items():
             members.setdefault(target, []).append((name, uri.rsplit("/", 1)[-1]))
     return members
 
 
-def _print_pack(path, style, kind):
-    from pathlib import Path
-
-    from ruamel.yaml import YAML
-
-    table = (YAML(typ="safe").load(Path(path).read_text()) or {}).get("alias") or {}
+def _print_pack(table, style, kind):
     width = max((len(name) for name in table), default=0)
     for name, uri in table.items():
         found = kalfa_kind(uri)

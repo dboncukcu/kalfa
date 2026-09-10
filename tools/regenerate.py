@@ -15,7 +15,7 @@ from ruamel.yaml import YAML
 
 import kalfa
 from kalfa.api import check
-from kalfa.config import load_surface, parse_sets
+from kalfa.config import load_surface, pack_tables, parse_sets
 from kalfa.describe import report
 from kalfa.docs import render as render_docs
 from kalfa.driver import recipe
@@ -116,11 +116,7 @@ def write_registry():
         legos[uri] = {"kind": entry.facts.kind, "alias": list(entry.facts.alias),
                       "signature": signature_of(registry.resolve(uri)), "facts": facts,
                       "description": entry.description}
-    packs = {}
-    for uri, path in sorted(registry.fragments().items()):
-        if uri.startswith("/alias/"):
-            packs[uri] = (YAML(typ="safe").load(Path(path).read_text()) or {}).get("alias") or {}
-    document = {"kinds": registry.kinds, "facts": registry.declared_facts, "legos": legos, "packs": packs,
+    document = {"kinds": registry.kinds, "facts": registry.declared_facts, "legos": legos, "packs": pack_tables(),
                 "plot_bus": plot_bus()}
     return {GOLDEN / "registry.json": json.dumps(document, indent=2, sort_keys=True) + "\n"}
 

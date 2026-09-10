@@ -1,5 +1,5 @@
 config.yaml                                                                          kalfa 0.2.4
-  layers      config.yaml, /alias/kalfa/tabular
+  layers      config.yaml, /alias/kalfa/base, /alias/kalfa/tabular
   params
     epochs  30
     lr      0.001

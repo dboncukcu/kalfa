@@ -11,11 +11,15 @@ from cirak.registry import registry
 from torch import nn
 
 import kalfa  # noqa: F401
-from kalfa.std.adapter import metric as metric_adapter
-from kalfa.std.layer import l1_distance
-from kalfa.std.metric import binary_auroc, binary_average_precision
-from kalfa.std.plot import architecture, binary_precision_recall_curve, binary_roc, class_histogram
-from kalfa.std.runtime import Context
+from kalfa.std.adapter.kalfa.metric import metric as metric_adapter
+from kalfa.std.layer.kalfa.l1_distance import l1_distance
+from kalfa.std.metric.torchmetrics.binary_auroc import binary_auroc
+from kalfa.std.metric.torchmetrics.binary_average_precision import binary_average_precision
+from kalfa.std.plot.kalfa.architecture import architecture
+from kalfa.std.plot.torchmetrics.binary_precision_recall_curve import binary_precision_recall_curve
+from kalfa.std.plot.torchmetrics.binary_roc import binary_roc
+from kalfa.std.plot.kalfa.class_histogram import class_histogram
+from kalfa.std.common.runtime import Context
 from helpers import batch as make_batch
 from helpers import tiny_model
 
@@ -85,7 +89,7 @@ class Two(nn.Module):
 
 def test_myexample_objectives_register_with_facts_and_run():
     import myexample  # noqa: F401
-    from kalfa.std.criterion import bce_logits
+    from kalfa.std.criterion.kalfa.bce_logits import bce_logits
 
     facts = registry.facts("/objective/myexample/alad_discriminator")
     assert facts.kind == "objective" and facts.partial and facts.refs == {"criterion": "criterion"}

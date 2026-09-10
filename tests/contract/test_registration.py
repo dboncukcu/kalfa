@@ -46,3 +46,25 @@ def test_every_std_uri_follows_the_rule():
         assert kalfa_kind(uri) is not None, uri
         stored = registry.facts(uri).kind
         assert stored == cirak_kind(kalfa_kind(uri)), uri
+
+
+def test_the_uri_is_the_path():
+    from pathlib import Path
+
+    from kalfa.std import STD_URIS
+
+    root = Path(kalfa.std.__file__).parent
+    files = sorted(path for path in root.glob("*/*/*.py") if path.name not in ("__init__.py", "base.py"))
+    assert len(files) == len(STD_URIS) == 161
+    modules = {}
+    for path in files:
+        kind, pack, name = path.relative_to(root).with_suffix("").parts
+        uri = f"/{kind}/{pack}/{name}"
+        assert uri in STD_URIS, f"{path} registers no lego"
+        modules[uri] = f"kalfa.std.{kind}.{pack}.{name}"
+    for uri in STD_URIS:
+        target = registry.lookup(uri).target
+        assert target.__module__ == modules[uri], (uri, target.__module__)
+    packages = {path.parent for path in root.rglob("*.py")}
+    for directory in packages:
+        assert (directory / "__init__.py").exists(), directory

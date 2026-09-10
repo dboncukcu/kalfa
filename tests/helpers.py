@@ -9,8 +9,8 @@ from cirak.build import Graph, GraphNode
 from ruamel.yaml import YAML
 from torch import nn
 
-from kalfa.std.builder import Module
-from kalfa.std.pre import Frame
+from kalfa.std.builder.kalfa.module import Module
+from kalfa.std.pre.base import Frame
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"

@@ -17,7 +17,7 @@ from cirak.registry import registry
 from .config import load_surface, parse_sets, resolve_alias
 from .kinds import kalfa_kind
 from .record import read_history
-from .std.strategy import parse_space
+from .std.strategy.base import parse_space
 
 SWEEP_KEYS = ("strategy", "space", "objective", "record")
 OBJECTIVE_KEYS = ("monitor", "mode", "at")

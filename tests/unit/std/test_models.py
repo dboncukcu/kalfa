@@ -7,11 +7,21 @@ from torch import nn
 
 import kalfa  # noqa: F401
 from helpers import linear_graph, tiny_model
-from kalfa.std.builder import Module, apply_roles, model_seed, module
-from kalfa.std.init import normal, xavier, zeros
-from kalfa.std.layer import (concat, dropout, flatten, l2_normalize, leaky_relu, linear, linear_relu,
-                             polynomial, relu, torch_linear)
-from kalfa.std.model import clone
+from kalfa.std.builder.kalfa.module import Module, apply_roles, model_seed, module
+from kalfa.std.init.torch.normal import normal
+from kalfa.std.init.torch.xavier import xavier
+from kalfa.std.init.torch.zeros import zeros
+from kalfa.std.layer.torch.concat import concat
+from kalfa.std.layer.torch.dropout import dropout
+from kalfa.std.layer.torch.flatten import flatten
+from kalfa.std.layer.kalfa.l2_normalize import l2_normalize
+from kalfa.std.layer.torch.leaky_relu import leaky_relu
+from kalfa.std.layer.kalfa.linear import linear
+from kalfa.std.layer.kalfa.linear_relu import linear_relu
+from kalfa.std.layer.kalfa.polynomial import polynomial
+from kalfa.std.layer.torch.relu import relu
+from kalfa.std.layer.torch.linear import torch_linear
+from kalfa.std.lego.kalfa.clone import clone
 
 
 def test_layers():

@@ -1,5 +1,5 @@
 config.yaml                                                                                                          kalfa 0.2.4
-  layers      config.yaml, /alias/kalfa/text
+  layers      config.yaml, /alias/kalfa/base, /alias/kalfa/text
   params
     total_steps  20000     lr           0.0003    seed         7
     turn_steps   200       seq_len      128

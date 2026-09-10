@@ -1,5 +1,5 @@
 config.yaml                                                                                                                     kalfa 0.2.4
-  layers      config.yaml, /alias/kalfa/vision
+  layers      config.yaml, /alias/kalfa/base, /alias/kalfa/vision
   params
     epochs           200
     lr               0.0002

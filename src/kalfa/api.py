@@ -21,10 +21,10 @@ from .config import load_surface
 from .driver import recipe
 from .record import (read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note)
 from .recipe import RUN_INPUTS, analyze, compile, dump, implicit_bindings
-from .std import checkpoint as checkpoints
-from .std.log import Progress, clock, logger_for, since, sink
-from .std.pre import read_prep
-from .std.runtime import resolve_model
+from .std.checkpoint import base as checkpoints
+from .std.common.log import Progress, clock, logger_for, since, sink
+from .std.pre.base import read_prep
+from .std.common.runtime import resolve_model
 
 
 logger = logger_for("run")
@@ -125,7 +125,7 @@ def check(paths, sets=None, load=False) -> Prepared:
 
 def loaded_sizes(document):
     """The set sizes the data block of a recipe produces: the loaders are built and their datasets measured."""
-    from .std.feed import dataset_size
+    from .std.feed.base import dataset_size
 
     outputs = _data_outputs(document, ["train_loader", "valid_loader", "test_loader"])
     return {name: dataset_size(outputs[f"{name}_loader"].dataset) for name in ("train", "valid", "test")}
@@ -144,8 +144,8 @@ class Probe:
 def probe(document) -> Probe:
     """Run the data and models blocks of a recipe: the real set sizes, the fitted plan and the models built on one
     batch, so that lazy layers have their shapes and the parameters can be counted. Nothing is written."""
-    from .std.feed import dataset_size
-    from .std.runtime import call_model, named_outputs
+    from .std.feed.base import dataset_size
+    from .std.common.runtime import call_model, named_outputs
 
     outputs = _flow_outputs(document, ("data", "models"),
                             ["prep", "train_loader", "valid_loader", "test_loader", "models", "composites"])
@@ -360,9 +360,9 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
 
     ``device`` is a device lego value (a short name or ``{uri, params}``); without it the models stay on the cpu.
     """
-    from .std.eval import prediction_table
-    from .std.loader import torch as torch_loader
-    from .std.pre import apply
+    from .std.common.prediction import prediction_table
+    from .std.loader.kalfa.torch import torch as torch_loader
+    from .std.lego.kalfa.apply import apply
 
     resolved = Path(run_dir) / "resolved.yaml"
     if not resolved.exists():
@@ -419,10 +419,10 @@ def generate(run_dir, which=None, sets=None, device=None) -> Generated:
 
     ``device`` is a device lego value (a short name or ``{uri, params}``); without it the models stay on the cpu.
     """
-    from .std.checkpoint import load as load_payload
-    from .std.eval import write_samples
-    from .std.pre import read_prep
-    from .std.runtime import turn_generator
+    from .std.checkpoint.base import load as load_payload
+    from .std.common.generation import write_samples
+    from .std.pre.base import read_prep
+    from .std.common.runtime import turn_generator
 
     resolved = Path(run_dir) / "resolved.yaml"
     if not resolved.exists():
@@ -444,7 +444,7 @@ def generate(run_dir, which=None, sets=None, device=None) -> Generated:
         if name in payload.get("models", {}):
             module.load_state_dict(payload["models"][name])
     everything = {**composites, **models}
-    from .std.model import clone
+    from .std.lego.kalfa.clone import clone
 
     for name, state in payload.get("emas", {}).items():
         if name in models:
