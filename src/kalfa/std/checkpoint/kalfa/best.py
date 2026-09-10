@@ -4,8 +4,12 @@ from kalfa.registration import lego
 from kalfa.std.checkpoint.base import Policy
 
 
+@lego("/checkpoint/kalfa/best", alias="best",
+      description="Write best.pt when the monitored value improves and last.pt every turn")
 class Best(Policy):
-    def __init__(self, monitor, mode):
+    def __init__(self, monitor, mode="min"):
+        if mode not in ("min", "max"):
+            raise ValueError(f"mode must be min or max, got {mode!r}")
         self.monitor = monitor
         self.mode = mode
         self.best = None
@@ -27,11 +31,3 @@ class Best(Policy):
     def restore(self, state):
         if state and "best" in state:
             self.best = state["best"]
-
-
-@lego("/checkpoint/kalfa/best", alias="best",
-      description="Write best.pt when the monitored value improves and last.pt every turn")
-def best(monitor, mode="min"):
-    if mode not in ("min", "max"):
-        raise ValueError(f"mode must be min or max, got {mode!r}")
-    return Best(monitor, mode)

@@ -2,19 +2,16 @@ import logging
 
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.samples import is_samples
+from kalfa.std.common.stream import is_stream
 
 
 logger = logger_for("data.split")
 
 
 def count_of(part):
-    rows = getattr(part, "rows", None)
-    if isinstance(rows, int):
-        return rows
-    try:
-        return len(part)
-    except TypeError:
-        return "?"
+    if is_stream(part):
+        return part.rows
+    return len(part)
 
 
 def report_sets(name, parts):
@@ -25,7 +22,6 @@ def report_sets(name, parts):
 
 
 def take_rows(df, positions):
-    """Rows by position, for a frame or a Dataset source."""
     if is_samples(df):
         return df.subset(positions)
     return df.iloc[positions]
@@ -42,7 +38,6 @@ def cuts_of(count, ratios):
 
 
 def sizes(rows, ratios):
-    """The set sizes a random split of ``rows`` rows produces, for the check's set table."""
     first, second = cuts_of(rows, ratios)
     return {"train": first, "valid": second - first, "test": rows - second}
 

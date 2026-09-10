@@ -11,17 +11,17 @@ from kalfa.std.builder.kalfa.module import Module, apply_roles, model_seed, modu
 from kalfa.std.init.torch.normal import normal
 from kalfa.std.init.torch.xavier import xavier
 from kalfa.std.init.torch.zeros import zeros
-from kalfa.std.layer.torch.concat import concat
+from kalfa.std.layer.torch.concat import Concat
 from kalfa.std.layer.torch.dropout import dropout
 from kalfa.std.layer.torch.flatten import flatten
-from kalfa.std.layer.kalfa.l2_normalize import l2_normalize
+from kalfa.std.layer.kalfa.l2_normalize import L2Normalize
 from kalfa.std.layer.torch.leaky_relu import leaky_relu
 from kalfa.std.layer.kalfa.linear import linear
 from kalfa.std.layer.kalfa.linear_relu import linear_relu
-from kalfa.std.layer.kalfa.polynomial import polynomial
+from kalfa.std.layer.kalfa.polynomial import Polynomial
 from kalfa.std.layer.torch.relu import relu
 from kalfa.std.layer.torch.linear import torch_linear
-from kalfa.std.lego.kalfa.clone import clone
+from kalfa.std.lego.kalfa.clone import Ema
 
 
 def test_layers():
@@ -29,7 +29,7 @@ def test_layers():
     stack = linear_relu(4)
     assert isinstance(stack[0], nn.LazyLinear) and isinstance(stack[1], nn.ReLU)
     assert torch_linear(3, 2).weight.shape == (2, 3)
-    assert concat(1)(torch.ones(2, 1), torch.zeros(2, 2)).shape == (2, 3)
+    assert Concat(1)(torch.ones(2, 1), torch.zeros(2, 2)).shape == (2, 3)
     assert flatten()(torch.ones(2, 3, 4)).shape == (2, 12)
     assert relu()(torch.tensor([-1.0, 1.0])).tolist() == [0.0, 1.0]
     assert isinstance(leaky_relu(0.2), nn.LeakyReLU) and isinstance(dropout(0.1), nn.Dropout)
@@ -112,25 +112,25 @@ def test_polynomial_expands_the_feature_vector_like_sklearn():
     values = numpy.random.default_rng(0).normal(size=(5, 4))
     for degree in (2, 3):
         for interaction_only in (False, True):
-            ours = polynomial(degree=degree, interaction_only=interaction_only)(torch.tensor(values)).numpy()
+            ours = Polynomial(degree=degree, interaction_only=interaction_only)(torch.tensor(values)).numpy()
             reference = sklearn_pre.PolynomialFeatures(degree=degree, interaction_only=interaction_only,
                                                        include_bias=False).fit_transform(values)
             assert ours.shape == reference.shape
             assert numpy.allclose(numpy.sort(ours, axis=1), numpy.sort(reference, axis=1))
-    products = polynomial(keep=False, bias=True)(torch.tensor([[2.0, 3.0]]))
+    products = Polynomial(keep=False, bias=True)(torch.tensor([[2.0, 3.0]]))
     assert products.tolist() == [[1.0, 4.0, 6.0, 9.0]]
-    assert polynomial()(torch.tensor([[2.0, 3.0]])).tolist() == [[2.0, 3.0, 4.0, 6.0, 9.0]]
+    assert Polynomial()(torch.tensor([[2.0, 3.0]])).tolist() == [[2.0, 3.0, 4.0, 6.0, 9.0]]
 
 
 def test_l2_normalize_divides_every_sample_by_its_own_norm():
-    out = l2_normalize()(torch.tensor([[3.0, 4.0], [0.0, 0.0]]))
+    out = L2Normalize()(torch.tensor([[3.0, 4.0], [0.0, 0.0]]))
     assert out[0].tolist() == pytest.approx([0.6, 0.8]) and out[1].tolist() == [0.0, 0.0]
     assert float(out[0].norm().detach()) == pytest.approx(1.0)
 
 
 def test_clone_shifts_towards_the_model():
     model = tiny_model(seed=1)
-    ema = clone(model, 0.5)
+    ema = Ema(model, 0.5)
     with torch.no_grad():
         model.nodes["layer"].weight.fill_(1.0)
     before = ema.model.nodes["layer"].weight.clone()

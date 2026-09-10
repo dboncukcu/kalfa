@@ -2,20 +2,16 @@ from kalfa.registration import lego
 from kalfa.std.common.samples import is_samples
 from kalfa.std.common.stream import is_stream
 from kalfa.std.split.base import report_sets
+import pandas
+from kalfa.std.common.samples import Samples
+from kalfa.std.common.stream import like
 
 
 def read_like(df, path):
-    """A set read from a path the way the train data was read: a Dataset source of the same class, or a table by
-    its suffix (parquet, csv)."""
     if is_stream(df):
-        from kalfa.std.common.stream import like
-
         return like(df, path)
     if is_samples(df):
-        from kalfa.std.common.samples import Samples
-
         return Samples(type(df.source)(path))
-    import pandas
 
     suffix = str(path).rsplit(".", 1)[-1].lower()
     if suffix == "parquet":

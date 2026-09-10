@@ -4,13 +4,13 @@ from kalfa.registration import lego
 from kalfa.std.pre.base import Preprocessor, pil_image
 
 
+@lego("/pre/kalfa/random_crop_flip", alias="random_crop_flip",
+      description="Random crop of size after padding and a random horizontal flip")
 class RandomCropFlip(Preprocessor):
-    """Pad by four pixels, crop a random size by size window, flip horizontally half of the time (train time
-    augmentation, limited to sets with the definition's sets key)."""
+    padding = 4
 
-    def __init__(self, size, padding=4):
+    def __init__(self, size):
         self.size = int(size)
-        self.padding = int(padding)
 
     def apply(self, value):
         from PIL import Image, ImageOps
@@ -23,9 +23,3 @@ class RandomCropFlip(Preprocessor):
         if numpy.random.random() < 0.5:
             image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         return image
-
-
-@lego("/pre/kalfa/random_crop_flip", alias="random_crop_flip",
-      description="Random crop of size after padding and a random horizontal flip")
-def random_crop_flip(size):
-    return RandomCropFlip(size)

@@ -6,8 +6,10 @@
 # the comments are tezgah's resolution: implicit bindings, pattern matches, derived reads and exports).
 components:
   losses:
-    wgan_d: {uri: /objective/kalfa/wgan_gp_d, params: {generator: generator, critic: critic, latent: 128, gp_weight: 10, conditional: true}}
-    wgan_g: {uri: /objective/kalfa/wgan_g, params: {generator: generator, critic: critic, latent: 128, conditional: true}}
+    wgan_d: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/wgan_gp_d, params: {generator: generator, critic: critic, latent: 128, 
+              gp_weight: 10, conditional: true}}}}
+    wgan_g: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/wgan_g, params: {generator: generator, critic: critic, latent: 128, 
+              conditional: true}}}}
   metrics:
     fid: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/kalfa/fid, params: {model: generator.ema, latent: 128, conditional: true, n: 2000}}}}
     samples: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/kalfa/sample_writer, params: {sampler: {uri: /generate/kalfa/gan_sampler, params: {

@@ -4,10 +4,10 @@ from kalfa.registration import lego
 from kalfa.std.pre.base import Scaler
 
 
+@lego("/pre/kalfa/log", alias="log",
+      description="log1p of a column divided by norm, in the given base")
 class Log(Scaler):
-    rescales = True
-
-    def __init__(self, base, norm):
+    def __init__(self, base=10.0, norm=1.0):
         self.base = base
         self.norm = norm
 
@@ -17,9 +17,3 @@ class Log(Scaler):
 
     def inverse(self, values):
         return numpy.expm1(numpy.asarray(values, dtype="float64") * numpy.log(self.base)) * self.norm
-
-
-@lego("/pre/kalfa/log", alias="log",
-      description="log1p of a column divided by norm, in the given base")
-def log(base=10.0, norm=1.0):
-    return Log(base, norm)

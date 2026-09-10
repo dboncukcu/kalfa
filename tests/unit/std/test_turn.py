@@ -8,25 +8,26 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import frame, tiny_model
-from kalfa.std.adapter.kalfa.criterion import criterion as criterion_adapter
-from kalfa.std.adapter.kalfa.metric import metric as metric_adapter
+from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
+from kalfa.std.common.device import Device
+from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
 from kalfa.std.criterion.kalfa.huber import huber
 from kalfa.std.criterion.kalfa.mae import mae
 from kalfa.std.criterion.kalfa.mse import mse
 from kalfa.std.feed.kalfa.table import table
-from kalfa.std.loader.kalfa.torch import torch as torch_loader
-from kalfa.std.metric.kalfa.rmse import rmse
-from kalfa.std.optimizer.torch.sgd import sgd
+from kalfa.std.loader.kalfa.torch import torch_loader
+from kalfa.std.metric.kalfa.rmse import Rmse
+from kalfa.std.optimizer.torch.sgd import Sgd
 from kalfa.std.turn.kalfa.alternating import alternating
 from kalfa.std.turn.base import apply_effects, effective_loss
 
 
 def setup(seed=1, rows=32, lazy=False):
     model = tiny_model(seed=seed, lazy=lazy)
-    optimizer = sgd({"model": model}, {"lr": 0.05}, None, "loss_mse")
+    optimizer = Sgd({"model": model}, {"lr": 0.05}, None, "loss_mse")
     losses = {"loss_mse": criterion_adapter(mse), "loss_mae": criterion_adapter(mae),
               "loss_huber": criterion_adapter(functools.partial(huber, delta=1.0))}
-    metrics = {"rmse": metric_adapter(rmse())}
+    metrics = {"rmse": metric_adapter(Rmse())}
     loader = torch_loader(table(frame(rows=rows)), "train", {"size": 8})
     counters = {"global_step": 0, "turn": 0}
     return model, optimizer, losses, metrics, loader, counters
@@ -36,7 +37,7 @@ def run_turn(model, optimizer, losses, metrics, loader, counters, effects=None, 
              losses_keys=None, metrics_keys=None):
     return alternating({"model": model}, {"model": optimizer}, {}, counters, {}, effects or {}, loader,
                        params or {}, extra or {}, losses, metrics, losses_keys or {}, metrics_keys or {}, "model", None,
-                       device="cpu")
+                       device=Device.cpu())
 
 
 def test_one_turn_changes_weights_and_reports_running_means():
@@ -89,7 +90,7 @@ def test_apply_effects_on_params_and_trainable():
                           {"model": optimizer}, losses)
     assert table["loss_huber"].criterion.keywords == {"delta": 0.2} and table["loss_mse"] is losses["loss_mse"]
     assert optimizer.params["lr"] == 0.01
-    assert not model.kalfa_trainable and all(not parameter.requires_grad for parameter in model.parameters())
+    assert not model.trainable and all(not parameter.requires_grad for parameter in model.parameters())
     with pytest.raises(KeyError):
         apply_effects({"ghost.x": 1}, {"model": model}, {"model": optimizer}, losses)
 
@@ -97,8 +98,8 @@ def test_apply_effects_on_params_and_trainable():
 def test_two_optimizers_update_only_their_own_models():
     a = tiny_model(seed=1, index=0)
     b = tiny_model(seed=1, index=1)
-    opt_a = sgd({"a": a}, {"lr": 0.1}, None, "l")
-    opt_b = sgd({"b": b}, {"lr": 0.0}, None, "l")
+    opt_a = Sgd({"a": a}, {"lr": 0.1}, None, "l")
+    opt_b = Sgd({"b": b}, {"lr": 0.0}, None, "l")
     loader = torch_loader(table(frame(rows=16)), "train", {"size": 8})
     losses = {"l": criterion_adapter(mse)}
     before_b = b.nodes["layer"].weight.clone()
@@ -123,24 +124,24 @@ def test_turn_rejects_unknown_order_and_counts_steps_with_accumulate_and_amp():
 def test_steps_mode_keeps_the_stream_across_turns():
     model, optimizer, losses, metrics, loader, counters = setup(rows=24)
     out = alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses, metrics,
-                      {}, {}, "model", {"total": 8, "turn": 2}, device="cpu")
+                      {}, {}, "model", {"total": 8, "turn": 2}, device=Device.cpu())
     assert counters == {"global_step": 2, "turn": 1} and "loss_mse" in out["metrics"]
     cursor = loader.kalfa_cursor
     assert cursor is not None and not cursor.exhausted
     alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses, metrics,
-                {}, {}, "model", {"total": 8, "turn": 2}, device="cpu")
+                {}, {}, "model", {"total": 8, "turn": 2}, device=Device.cpu())
     assert counters == {"global_step": 4, "turn": 2} and loader.kalfa_cursor is cursor
     for _ in range(3):
         alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses, metrics,
-                    {}, {}, "model", {"total": 8, "turn": 2}, device="cpu")
+                    {}, {}, "model", {"total": 8, "turn": 2}, device=Device.cpu())
     assert counters["global_step"] == 10
 
 
 def test_fresh_batch_and_per_optimizer_steps_consume_batches():
     a = tiny_model(seed=1, index=0)
     b = tiny_model(seed=1, index=1)
-    opt_a = sgd({"a": a}, {"lr": 0.01}, None, "l")
-    opt_b = sgd({"b": b}, {"lr": 0.01}, None, "l")
+    opt_a = Sgd({"a": a}, {"lr": 0.01}, None, "l")
+    opt_b = Sgd({"b": b}, {"lr": 0.01}, None, "l")
     loader = torch_loader(table(frame(rows=48)), "train", {"size": 8})
     losses = {"l": criterion_adapter(mse), "lb": criterion_adapter(mse)}
     counters = {"global_step": 0, "turn": 0}
@@ -153,7 +154,7 @@ def test_fresh_batch_and_per_optimizer_steps_consume_batches():
 
 def test_untrainable_model_stays_in_eval_mode():
     model = tiny_model(trainable=False)
-    optimizer = sgd({"model": model}, {"lr": 0.1}, None, "l")
+    optimizer = Sgd({"model": model}, {"lr": 0.1}, None, "l")
     loader = torch_loader(table(frame(rows=8)), "train", {"size": 8})
     with pytest.raises(ValueError, match="no gradient"):
         alternating({"model": model}, {"model": optimizer}, {}, {"global_step": 0, "turn": 0}, {}, {}, loader, {}, {},

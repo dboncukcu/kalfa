@@ -10,7 +10,6 @@ from kalfa.style import style_for
 
 
 ROOT = "kalfa"
-LEVELS = {"info": logging.INFO, "debug": logging.DEBUG}
 TAG_WIDTH = 14
 logging.getLogger(ROOT).addHandler(logging.NullHandler())
 
@@ -23,7 +22,10 @@ logger_flow = logger_for("flow")
 
 
 def level_of(name):
-    return LEVELS.get(name) if name else None
+    if not name:
+        return None
+    level = logging.getLevelName(name.upper())
+    return level if isinstance(level, int) else None
 
 
 def clock():
@@ -66,7 +68,7 @@ class Handler(logging.Handler):
         try:
             stream = self.stream if self.stream is not None else sys.stderr
             text = self.format(record)
-            if getattr(Progress.current, "bar", None) is not None:
+            if Progress.current is not None and Progress.current.bar is not None:
                 from tqdm.auto import tqdm
 
                 tqdm.write(text, file=stream)
@@ -133,12 +135,6 @@ def echo_warnings(collected):
 
 
 class Progress:
-    """A tqdm bar over the turns; the total arrives from the loop's started event through ``expect``.
-
-    The bar comes from ``tqdm.auto``, so a notebook draws the ipywidgets one and a terminal the plain one.
-    ``enabled`` is the ``--no-progress`` switch: the bar is never created and tqdm never imported.
-    """
-
     current = None
     enabled = True
 
@@ -181,7 +177,6 @@ def node_path(path):
 
 
 def sink(event):
-    """A tezgah event sink: the loop's turn total for the progress display, every node for the console log."""
     kind = event.get("kind")
     path = event.get("path") or ""
     if kind == "started" and path.endswith("training.epochs") and "total" in event:

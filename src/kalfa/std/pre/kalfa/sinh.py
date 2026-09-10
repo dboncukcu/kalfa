@@ -4,9 +4,10 @@ from kalfa.registration import lego
 from kalfa.std.pre.base import Scaler
 
 
+@lego("/pre/kalfa/sinh", alias="sinh",
+      description="sinh(x / scale), the direction opposite to asinh: it stretches the tails instead of "
+                  "compressing them; a value past overflow is an error, where sinh leaves float64")
 class Sinh(Scaler):
-    rescales = True
-
     def __init__(self, scale=1.0, overflow=700.0):
         if scale <= 0.0:
             raise ValueError(f"sinh: scale must be positive, got {scale!r}")
@@ -22,10 +23,3 @@ class Sinh(Scaler):
 
     def inverse(self, values):
         return numpy.arcsinh(numpy.asarray(values, dtype="float64")) * self.scale
-
-
-@lego("/pre/kalfa/sinh", alias="sinh",
-      description="sinh(x / scale), the direction opposite to asinh: it stretches the tails instead of "
-                  "compressing them; a value past overflow is an error, where sinh leaves float64")
-def sinh(scale=1.0, overflow=700.0):
-    return Sinh(scale, overflow)

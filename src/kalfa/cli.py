@@ -1,37 +1,31 @@
-"""The kalfa command line: run, check, predict, resume, collect, ls."""
-
 import argparse
+import json
 import sys
 import warnings
+from pathlib import Path
 
 from cirak.errors import CirakError, ConfigError
+from cirak.loader import parse_value
 from cirak.registry import registry
 from tezgah import TezgahError
 
-from . import PACKS
-from .api import check as check_config
-from .api import generate as generate_run
-from .api import predict as predict_run
-from .api import resume as resume_run
-from .api import run as run_config
-from .collect import collect as collect_runs
-from .describe import ALL_SECTIONS, DEFAULT_SECTIONS
+from . import api, collect, describe, docs, sweep
+from .config import import_plugins, pack_tables, parse_sets
 from .kinds import kalfa_kind
-from .config import pack_tables, parse_sets
+from .recipe import recipe_text
 from .std.common.log import console, echo_warnings, level_of
 from .style import Style, style_for
-
 
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
         return args.handler(args)
-    except ConfigError as exc:
-        print_problems(exc.problems, sys.stderr)
+    except ConfigError as exception:
+        print_problems(exception.problems, sys.stderr)
         return 1
-    except (CirakError, TezgahError, ValueError, FileNotFoundError) as exc:
-        print(style_for(sys.stderr).red(str(exc)), file=sys.stderr)
+    except (CirakError, TezgahError, ValueError, FileNotFoundError) as exception:
+        print(style_for(sys.stderr).red(str(exception)), file=sys.stderr)
         return 1
 
 
@@ -41,16 +35,16 @@ def build_parser():
 
     run_cmd = commands.add_parser("run", help="check, compile and train; the record directory holds everything")
     run_cmd.add_argument("config", nargs="+")
-    _set_option(run_cmd)
+    set_option(run_cmd)
     run_cmd.add_argument("--executor", default="serial")
     run_cmd.add_argument("--workers", type=int)
-    _log_option(run_cmd)
-    _progress_option(run_cmd)
+    log_option(run_cmd)
+    progress_option(run_cmd)
     run_cmd.set_defaults(handler=cmd_run)
 
     check_cmd = commands.add_parser("check", help="report every problem without running")
     check_cmd.add_argument("config", nargs="+")
-    _set_option(check_cmd)
+    set_option(check_cmd)
     check_cmd.add_argument("--layers", action="store_true", help="print the layer tree and the overridden leaves")
     check_cmd.add_argument("--dump", action="store_true", help="print the expanded flow the way flow.yaml records it")
     check_cmd.add_argument("--recipe", action="store_true", help="print the driver document the templates open")
@@ -61,11 +55,11 @@ def build_parser():
     describe_cmd = commands.add_parser("describe", help="the config as an analysis: data, model, training, after "
                                                        "and the columns, after the same checks")
     describe_cmd.add_argument("config", nargs="+")
-    _set_option(describe_cmd)
+    set_option(describe_cmd)
     describe_cmd.add_argument("--load", action="store_true",
                               help="run the data and model blocks: the real set sizes, the fitted column widths and "
                                    "the parameter counts")
-    describe_cmd.add_argument("--section", action="append", default=[], choices=list(ALL_SECTIONS),
+    describe_cmd.add_argument("--section", action="append", default=[], choices=list(describe.ALL_SECTIONS),
                               help="print this section only (repeatable)")
     describe_cmd.add_argument("--wiring", action="store_true",
                               help="add the implicit bindings of the compiled pipeline")
@@ -79,33 +73,33 @@ def build_parser():
     predict_cmd.add_argument("--model", help="any model of the run, composites and .ema copies included")
     predict_cmd.add_argument("--which", choices=["best", "last"])
     predict_cmd.add_argument("--data", help="predict on this file instead of the run's test set")
-    _device_option(predict_cmd)
-    _set_option(predict_cmd)
-    _log_option(predict_cmd)
+    device_option(predict_cmd)
+    set_option(predict_cmd)
+    log_option(predict_cmd)
     predict_cmd.set_defaults(handler=cmd_predict)
 
     generate_cmd = commands.add_parser("generate", help="run the generate lego of a recorded run")
     generate_cmd.add_argument("run")
     generate_cmd.add_argument("--which", choices=["best", "last"])
-    _device_option(generate_cmd)
-    _set_option(generate_cmd)
-    _log_option(generate_cmd)
+    device_option(generate_cmd)
+    set_option(generate_cmd)
+    log_option(generate_cmd)
     generate_cmd.set_defaults(handler=cmd_generate)
 
     resume_cmd = commands.add_parser("resume", help="continue a run from last.pt or final/ into a new directory")
     resume_cmd.add_argument("run")
-    _set_option(resume_cmd)
+    set_option(resume_cmd)
     resume_cmd.add_argument("--executor", default="serial")
     resume_cmd.add_argument("--workers", type=int)
-    _log_option(resume_cmd)
-    _progress_option(resume_cmd)
+    log_option(resume_cmd)
+    progress_option(resume_cmd)
     resume_cmd.set_defaults(handler=cmd_resume)
 
     sweep_cmd = commands.add_parser("sweep", help="run the points of the config's sweep section: the local loop "
                                                   "(every point in a subprocess), --id N for one point, --count, "
                                                   "--show N")
     sweep_cmd.add_argument("config", nargs="+")
-    _set_option(sweep_cmd)
+    set_option(sweep_cmd)
     sweep_cmd.add_argument("--record", help="root directory of the points (overrides sweep.record)")
     sweep_cmd.add_argument("--count", action="store_true", help="print the number of points and stop")
     sweep_cmd.add_argument("--show", type=int, metavar="N", help="print point N and stop (strategies deterministic "
@@ -124,19 +118,19 @@ def build_parser():
     docs_cmd = commands.add_parser("docs", help="print the lego reference generated from the registry, or write it "
                                                 "with --write DOCS.md")
     docs_cmd.add_argument("--write", metavar="PATH", help="write the reference to this file instead of printing it")
-    _plugin_option(docs_cmd)
+    plugin_option(docs_cmd)
     docs_cmd.set_defaults(handler=cmd_docs)
 
     ls_cmd = commands.add_parser("ls", help="list alias packs and legos with their kinds and facts; a word without "
                                             "a leading slash searches names, aliases and descriptions")
     ls_cmd.add_argument("prefix", nargs="?", default=None, metavar="PREFIX|WORD")
     ls_cmd.add_argument("--kind")
-    _plugin_option(ls_cmd)
+    plugin_option(ls_cmd)
     ls_cmd.set_defaults(handler=cmd_ls)
     return parser
 
 
-def _plugin_option(command):
+def plugin_option(command):
     command.add_argument("--plugin", action="append", default=[], metavar="MODULE",
                          help="import this module before listing, so that its legos come with; a module name on "
                               "sys.path or next to the working directory, or a path to a .py file (repeatable)")
@@ -145,10 +139,9 @@ def _plugin_option(command):
                               "read, not validated (repeatable)")
 
 
-def _load_plugins(args):
+def load_plugins(args):
     if not args.plugin and not args.config:
         return False
-    from .config import import_plugins
 
     problems = import_plugins(args.config, args.plugin)
     if problems:
@@ -156,34 +149,32 @@ def _load_plugins(args):
     return any(problem.severity == "error" for problem in problems)
 
 
-def _device_option(command):
+def device_option(command):
     command.add_argument("--device", metavar="DEVICE",
                          help="run on this device: a short name (cuda, mps, cpu, auto) or a lego call "
                               "('{uri: cuda, params: {index: 1}}'); the cpu without it")
 
 
-def _device_value(args):
-    from cirak.loader import parse_value
-
+def device_value(args):
     if getattr(args, "device", None) is None:
         return None
     return parse_value(args.device)
 
 
-def _log_option(command):
+def log_option(command):
     command.add_argument("--log", nargs="?", const="info", choices=["info", "debug"], metavar="LEVEL",
                          help="print to stderr what the run is doing while it does it: info is the narrative "
                               "(device, data, models, one line per turn), debug adds every node of the pipeline "
                               "with its time and the decisions inside the legos; bare --log means info")
 
 
-def _progress_option(command):
+def progress_option(command):
     command.add_argument("--no-progress", action="store_true",
                          help="no progress bar; with --log the turn lines take its place, without it the run says "
                               "nothing until it ends")
 
 
-def _set_option(command):
+def set_option(command):
     command.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
                          help="override a value at a dotted path from the document root (--set training.epochs=5, "
                               "--set device=cuda); the value is read as YAML")
@@ -191,14 +182,14 @@ def _set_option(command):
                          help="override a params entry (-p lr=1e-4 is --set params.lr=1e-4)")
 
 
-def _layer(args):
+def layer_of(args):
     try:
         return parse_sets(args.set, args.param)
-    except ValueError as exc:
-        raise SystemExit(_usage(str(exc)))
+    except ValueError as exception:
+        raise SystemExit(usage(str(exception)))
 
 
-def _usage(message):
+def usage(message):
     print(f"kalfa: error: {message}", file=sys.stderr)
     return 2
 
@@ -220,7 +211,7 @@ def print_problems(problems, stream):
 def cmd_check(args) -> int:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        prepared = check_config(args.config, _layer(args), load=args.load)
+        prepared = api.check(args.config, layer_of(args), load=args.load)
     style = style_for(sys.stdout)
     if args.layers:
         print(prepared.surface.layers_text())
@@ -229,15 +220,11 @@ def cmd_check(args) -> int:
     else:
         print(style.green("no problems found"))
     if prepared.loaded is not None:
-        from .describe import load_text
-
-        print(load_text(prepared, style))
+        print(describe.load_text(prepared, style))
     if args.recipe:
         if prepared.document is None:
             print(style.red("the config could not be shaped, no recipe"), file=sys.stderr)
         else:
-            from .recipe import recipe_text
-
             sys.stdout.write("---\n")
             sys.stdout.write(recipe_text(prepared.document))
     if args.dump:
@@ -256,8 +243,8 @@ def cmd_run(args) -> int:
             warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         echo_warnings(caught)
-        result = run_config(args.config, _layer(args), executor=args.executor, workers=args.workers)
-    _print_warnings(caught)
+        result = api.run(args.config, layer_of(args), executor=args.executor, workers=args.workers)
+    print_warnings(caught)
     print(f"run {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
           f"record {style.cyan(result.record)}")
     return 0
@@ -269,19 +256,17 @@ def cmd_resume(args) -> int:
             warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         echo_warnings(caught)
-        result = resume_run(args.run, _layer(args), executor=args.executor, workers=args.workers)
-    _print_warnings(caught)
+        result = api.resume(args.run, layer_of(args), executor=args.executor, workers=args.workers)
+    print_warnings(caught)
     print(f"resumed {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
           f"record {style.cyan(result.record)}")
     return 0
 
 
 def cmd_describe(args) -> int:
-    from .describe import render, report
-
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        prepared = check_config(args.config, _layer(args))
+        prepared = api.check(args.config, layer_of(args))
     style = style_for(sys.stdout)
     if prepared.problems:
         print_problems(prepared.problems, sys.stdout)
@@ -293,31 +278,27 @@ def cmd_describe(args) -> int:
             print(style.yellow("--load needs a config without errors; describing the config as written"),
                   file=sys.stderr)
         else:
-            from .api import probe
-
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                found = probe(prepared.document)
+                found = api.probe(prepared.document)
     sections = list(args.section) if args.section else None
     if args.wiring and "wiring" not in (sections or ()):
-        sections = list(sections or DEFAULT_SECTIONS) + ["wiring"]
+        sections = list(sections or describe.DEFAULT_SECTIONS) + ["wiring"]
     if args.save:
-        from pathlib import Path
-
-        Path(args.save).write_text(report(prepared, Style(False), sections, found))
+        Path(args.save).write_text(describe.report(prepared, Style(False), sections, found))
         print(f"wrote {args.save}")
     elif style.enabled:
-        sys.stdout.write(render(prepared, style, sections, found))
+        sys.stdout.write(describe.render(prepared, style, sections, found))
     else:
-        sys.stdout.write(report(prepared, style, sections, found))
+        sys.stdout.write(describe.report(prepared, style, sections, found))
     return 1 if prepared.errors else 0
 
 
 def cmd_predict(args) -> int:
     with console(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = predict_run(args.run, model=args.model, which=args.which, data=args.data, sets=_layer(args),
-                             device=_device_value(args))
+        result = api.predict(args.run, model=args.model, which=args.which, data=args.data, sets=layer_of(args),
+                             device=device_value(args))
     style = style_for(sys.stdout)
     print(f"predicted {len(result.table)} rows with {style.bold(result.model)}: {style.cyan(result.path)}")
     return 0
@@ -326,14 +307,14 @@ def cmd_predict(args) -> int:
 def cmd_generate(args) -> int:
     with console(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = generate_run(args.run, which=args.which, sets=_layer(args), device=_device_value(args))
+        result = api.generate(args.run, which=args.which, sets=layer_of(args), device=device_value(args))
     style = style_for(sys.stdout)
     print(f"generated: {style.cyan(result.path)}")
     return 0
 
 
 def cmd_collect(args) -> int:
-    kind, text, target = collect_runs(args.runs, args.out)
+    kind, text, target = collect.collect(args.runs, args.out)
     sys.stdout.write(text)
     files = "sweep.csv, sweep.json and sweep.md" if kind == "sweep" else "cv.json and cv.md"
     print(f"wrote {files} under {target}")
@@ -341,31 +322,27 @@ def cmd_collect(args) -> int:
 
 
 def cmd_sweep(args) -> int:
-    import json
-
-    from . import sweep as sweeper
-
     style = style_for(sys.stdout)
-    plan = sweeper.plan(args.config, _layer(args), record=args.record)
+    plan = sweep.plan(args.config, layer_of(args), record=args.record)
     if args.count:
         print(plan.total)
         return 0
     if args.show is not None:
-        print(json.dumps(sweeper.point_of(plan, args.show)))
+        print(json.dumps(sweep.point_of(plan, args.show)))
         return 0
     if args.point_id is not None:
         point = json.loads(args.point) if args.point else None
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            entry = sweeper.run_point(args.config, args.set, args.param, plan, args.point_id, point)
-        _print_warnings(caught)
+            entry = sweep.run_point(args.config, args.set, args.param, plan, args.point_id, point)
+        print_warnings(caught)
         objective = entry["objective"]
         print(f"point {entry['id']} {entry['point']}: {objective['monitor']}={objective['value']:.6g} at turn "
               f"{objective['turn']}; record {style.cyan(entry['record'])}")
         return 0
     if args.point is not None:
-        raise SystemExit(_usage("--point needs --id"))
-    entries = sweeper.local_loop(args.config, args.set, args.param, plan, log=print)
+        raise SystemExit(usage("--point needs --id"))
+    entries = sweep.local_loop(args.config, args.set, args.param, plan, log=print)
     finished = [entry for entry in entries if entry]
     print(f"{len(finished)}/{plan.total} points finished under {style.cyan(str(plan.root))}; "
           f"summarize with: kalfa collect {plan.root}")
@@ -373,13 +350,9 @@ def cmd_sweep(args) -> int:
 
 
 def cmd_docs(args) -> int:
-    from .docs import plugin_uris, render
-
-    failed = _load_plugins(args)
-    text = render(plugins=plugin_uris() if args.plugin or args.config else None)
+    failed = load_plugins(args)
+    text = docs.render(plugins=docs.plugin_uris() if args.plugin or args.config else None)
     if args.write:
-        from pathlib import Path
-
         Path(args.write).write_text(text)
         print(f"wrote {args.write}")
     else:
@@ -389,11 +362,11 @@ def cmd_docs(args) -> int:
 
 def cmd_ls(args) -> int:
     style = style_for(sys.stdout)
-    code = 1 if _load_plugins(args) else 0
+    code = 1 if load_plugins(args) else 0
     prefix = args.prefix
     if prefix is not None and not prefix.startswith("/"):
         entries = search_entries(prefix, args.kind)
-        _print_entries(entries, style, aliases=True)
+        print_entries(entries, style, aliases=True)
         return code
     if prefix is None or prefix.startswith("/alias/"):
         tables = pack_tables()
@@ -401,19 +374,18 @@ def cmd_ls(args) -> int:
             if not uri.startswith("/alias/") or (prefix is not None and not uri.startswith(prefix.rstrip("/"))):
                 continue
             print(style.bold(uri) + "  " + style.dim(str(path)))
-            _print_pack(tables[uri], style, args.kind)
+            print_pack(tables[uri], style, args.kind)
         if prefix is not None:
             return code
         print()
     entries = registry.ls(prefix or "/")
     if args.kind is not None:
         entries = [entry for entry in entries if kalfa_kind(entry.uri) == args.kind]
-    _print_entries(entries, style)
+    print_entries(entries, style)
     return code
 
 
 def search_entries(word, kind=None):
-    """Registered legos whose URI, alias names or description contain the word (case insensitive)."""
     needle = word.lower()
     found = []
     for uri in sorted(registry.uris()):
@@ -429,7 +401,6 @@ def search_entries(word, kind=None):
 
 
 def pack_members():
-    """Alias name and pack per URI, read from the registered alias packs."""
     members = {}
     for uri, table in pack_tables().items():
         for name, target in table.items():
@@ -437,7 +408,7 @@ def pack_members():
     return members
 
 
-def _print_pack(table, style, kind):
+def print_pack(table, style, kind):
     width = max((len(name) for name in table), default=0)
     for name, uri in table.items():
         found = kalfa_kind(uri)
@@ -446,7 +417,7 @@ def _print_pack(table, style, kind):
         print(f"  {style.cyan(name.ljust(width))}  {style.yellow((found or '').ljust(10))}  {uri}")
 
 
-def _print_entries(entries, style, aliases=False):
+def print_entries(entries, style, aliases=False):
     entries = [entry for entry in entries if not entry.fragment]
     if not entries:
         print(style.dim("nothing found"))
@@ -456,10 +427,11 @@ def _print_entries(entries, style, aliases=False):
     kinds = [kalfa_kind(entry.uri) or entry.facts.kind or "" for entry in entries]
     kind_width = max(len(kind) for kind in kinds)
     for entry, kind in zip(entries, kinds):
-        line = f"{style.cyan(entry.uri.ljust(width))}  {style.yellow(kind.ljust(kind_width))}  {style.dim(entry.description)}"
+        line = (f"{style.cyan(entry.uri.ljust(width))}  {style.yellow(kind.ljust(kind_width))}  "
+                f"{style.dim(entry.description)}")
         facts = {name: value for name, value in entry.facts.declared().items() if name != "kind"}
         if facts:
-            line += "  " + style.dim(_facts_text(facts))
+            line += "  " + style.dim(facts_text(facts))
         print(line)
         if aliases:
             names = {}
@@ -472,7 +444,7 @@ def _print_entries(entries, style, aliases=False):
                 print(f"  {style.dim('alias:')} {text}")
 
 
-def _facts_text(facts):
+def facts_text(facts):
     parts = []
     for name, value in facts.items():
         if isinstance(value, list):
@@ -484,7 +456,7 @@ def _facts_text(facts):
     return "[" + "; ".join(parts) + "]"
 
 
-def _print_warnings(caught):
+def print_warnings(caught):
     style = style_for(sys.stderr)
     for entry in caught:
         print(style.yellow(f"warning: {entry.message}"), file=sys.stderr)

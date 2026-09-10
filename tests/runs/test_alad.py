@@ -5,7 +5,7 @@ import pytest
 
 from kalfa.api import check, predict
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 from kalfa.synthetic import anomaly_frame
 
 pytestmark = pytest.mark.slow
@@ -28,14 +28,15 @@ def test_check_the_plugin_config(dataset):
     assert document["flow"]["data"]["params"]["filter_pre"] == ["(is_anomaly > -4) & (is_anomaly < 4)"]
     assert document["flow"]["data"]["params"]["filter_set"] == [{"query": "is_anomaly == 0", "sets": ["train"]}]
     assert document["flow"]["training"]["params"]["checkpoint"] is None
-    assert document["losses"]["adv_d"]["params"]["criterion"] == {"uri": "/criterion/kalfa/bce_logits"}
+    adv_d = document["losses"]["adv_d"]["params"]["objective"]
+    assert adv_d["params"]["criterion"] == {"uri": "/criterion/kalfa/bce_logits"}
 
 
 def test_two_optimizers_five_models_and_the_score_plots(trained):
     result = trained("alad")
     record = Path(result.record)
     assert record == Path("runs/alad_fixed")
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2]
     assert {"train/adv_d", "train/adv_g", "val/adv_d", "val/adv_g", "val/auroc", "test/auroc", "val/average_precision",
             "test/average_precision", "lr/g", "lr/d"} <= set(history[0])

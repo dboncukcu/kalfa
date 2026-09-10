@@ -10,7 +10,7 @@ from helpers import example, minimal, write_config
 from kalfa.aliasing import aliasing_problems, keys_of
 from kalfa.api import prepare, run
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 
 
 @kalfa.lego("/lego/test/mutate", mutates=["thing"], returns=["thing"])
@@ -76,6 +76,6 @@ def test_thread_executor_gives_the_serial_history(workdir):
     path = write_config(workdir / "cfg.yaml", config)
     serial = run([str(path)], parse_sets([]), when="serial")
     threaded = run([str(path)], parse_sets([]), executor="thread", workers=3, when="thread")
-    first = read_history(serial.record)
-    second = read_history(threaded.record)
+    first = History.read(serial.record)
+    second = History.read(threaded.record)
     assert [line["val/rmse"] for line in first] == [line["val/rmse"] for line in second]

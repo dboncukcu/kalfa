@@ -6,63 +6,67 @@ from torch import nn
 
 from kalfa.registration import lego
 from kalfa.std.builder.base import Model, weights_path
+from kalfa.std.checkpoint.base import load
 from kalfa.std.common.deferred import DeferredLayer
 from kalfa.std.common.log import clock, logger_for, since
+from kalfa.std.layer.base import LazyLayer
 
 
 logger = logger_for("models")
 
 
-NORMALIZATION = (nn.modules.batchnorm._BatchNorm, nn.LayerNorm, nn.GroupNorm)
-
-
 def is_lazy(module):
-    return isinstance(module, nn.modules.lazy.LazyModuleMixin) or getattr(module, "kalfa_lazy", False)
+    return isinstance(module, (nn.modules.lazy.LazyModuleMixin, LazyLayer))
 
 
 def model_seed(seed, index):
-    """A distinct seed per model index derived from the global seed; adding a model changes no other."""
     digest = hashlib.sha256(f"{seed}:{index}".encode()).digest()
     return int.from_bytes(digest[:8], "big") % (2 ** 63)
 
 
-def role_of(module, name, parameter):
+def role_of(name, parameter):
     if parameter.dim() >= 2:
         return "weights"
-    if name.endswith("bias"):
+    if "bias" in name:
         return "bias"
-    if isinstance(module, NORMALIZATION) and name.endswith("weight"):
-        return "scale"
-    return None
+    return "scale"
 
 
 def apply_roles(root, roles, patterns=()):
-    """Apply role initializers, then the pattern list in order, to the parameters of ``root``."""
     owners = {}
     for module_name, module in root.named_modules():
         for name, parameter in module.named_parameters(recurse=False):
-            owners[f"{module_name}.{name}" if module_name else name] = (module, name, parameter)
-    for full, (module, name, parameter) in owners.items():
-        role = role_of(module, name, parameter)
-        initializer = (roles or {}).get(role)
+            owners[f"{module_name}.{name}" if module_name else name] = (name, parameter)
+    for full, (name, parameter) in owners.items():
+        initializer = (roles or {}).get(role_of(name, parameter))
         if initializer is not None:
             with torch.no_grad():
                 initializer(parameter)
     for entry in patterns or []:
-        match = entry.get("match")
-        for full, (module, name, parameter) in owners.items():
-            if not fnmatch.fnmatchcase(full, match):
+        for full, (name, parameter) in owners.items():
+            if not fnmatch.fnmatchcase(full, entry.get("match")):
                 continue
-            role = role_of(module, name, parameter)
-            initializer = entry.get(role)
+            initializer = entry.get(role_of(name, parameter))
             if initializer is not None:
                 with torch.no_grad():
                     initializer(parameter)
 
 
-class Module(Model):
-    """A model graph as a module: nodes run in order over named wires; reference nodes call other models."""
+class Seeded:
+    def __init__(self, context, seed):
+        self.context = context
+        self.seed = seed
 
+    def __enter__(self):
+        self.context.__enter__()
+        torch.manual_seed(self.seed)
+        return self
+
+    def __exit__(self, *error):
+        return self.context.__exit__(*error)
+
+
+class Module(Model):
     def __init__(self, graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None,
                  train_loader=None):
         super().__init__()
@@ -83,84 +87,85 @@ class Module(Model):
         self.seed = None if seed is None else model_seed(seed, index)
         self.init = dict(init or {})
         self.node_init = {node.name: node.extra["init"] for node in graph.nodes if "init" in node.extra}
-        self.kalfa_trainable = bool(trainable)
+        self.trainable = bool(trainable)
         self.weights = weights
         self.pending_state = None
         self.initialized = False
         self.settled = False
         if not any(is_lazy(module) for module in self.nodes.modules()):
-            self._build()
+            self.build()
 
-    def _seeded(self):
+    def seeded(self):
         if self.seed is None:
             return torch.random.fork_rng(devices=[], enabled=False)
-        context = torch.random.fork_rng(devices=[])
-        return Seeded(context, self.seed)
+        return Seeded(torch.random.fork_rng(devices=[]), self.seed)
 
-    def _build(self):
-        with self._seeded():
+    def reset_parameters(self):
+        for module in self.nodes.modules():
+            reset = getattr(module, "reset_parameters", None)
+            if callable(reset) and not is_lazy(module):
+                reset()
+
+    def build(self):
+        with self.seeded():
             if self.seed is not None:
-                for module in self.nodes.modules():
-                    reset = getattr(module, "reset_parameters", None)
-                    if callable(reset) and not is_lazy(module):
-                        reset()
-            roles = {role: fn for role, fn in self.init.items() if role != "patterns"}
+                self.reset_parameters()
+            roles = {role: function for role, function in self.init.items() if role != "patterns"}
             apply_roles(self.nodes, roles, self.init.get("patterns"))
             for name, spec in self.node_init.items():
-                roles = {role: fn for role, fn in (spec or {}).items() if role != "patterns"}
+                roles = {role: function for role, function in (spec or {}).items() if role != "patterns"}
                 apply_roles(self.nodes[self.safe[name]], roles, (spec or {}).get("patterns"))
         self.initialized = True
         if self.pending_state is not None:
             state, self.pending_state = self.pending_state, None
-            self._load(state)
-        self._settle()
+            self.load(state)
+        self.settle()
 
-    def _load(self, state):
+    def load(self, state):
         try:
             super().load_state_dict(state, strict=True)
-        except RuntimeError as exc:
-            raise ValueError(f"the weights do not fit the model: {exc}") from None
+        except RuntimeError as error:
+            raise ValueError(f"the weights do not fit the model: {error}") from None
 
-    def _settle(self):
+    def settle(self):
         for parameter in self.nodes.parameters():
-            parameter.requires_grad_(self.kalfa_trainable)
-        if not self.kalfa_trainable:
+            parameter.requires_grad_(self.trainable)
+        if not self.trainable:
             self.eval()
         self.settled = True
 
     def train(self, mode=True):
-        if mode and not self.kalfa_trainable:
+        if mode and not self.trainable:
             mode = False
         return super().train(mode)
 
-    def _materialize(self, args):
+    def materialize(self, arguments):
         was_training = self.training
         super().train(False)
-        with self._seeded(), torch.no_grad():
-            self._run(args)
+        with self.seeded(), torch.no_grad():
+            self.run(arguments)
         super().train(was_training)
-        self._build()
+        self.build()
 
     def load_state_dict(self, state_dict, strict=True, assign=False):
-        if not self.initialized and any(is_lazy(module) for module in self.nodes.modules()) \
-                and not all(isinstance(module, nn.modules.lazy.LazyModuleMixin) or not is_lazy(module)
-                            for module in self.nodes.modules()):
+        modules = list(self.nodes.modules())
+        if not self.initialized and any(isinstance(module, LazyLayer) for module in modules):
             self.pending_state = dict(state_dict)
             return None
         result = super().load_state_dict(state_dict, strict=strict, assign=assign)
         self.initialized = True
-        self._settle()
+        self.settle()
         return result
 
-    def forward(self, *args):
+    def forward(self, *arguments):
         if not self.initialized:
-            self._materialize(args)
-        return self._run(args)
+            self.materialize(arguments)
+        return self.run(arguments)
 
-    def _run(self, args):
-        if len(args) != len(self.inputs):
-            raise ValueError(f"model takes {len(self.inputs)} inputs {self.inputs}, got {len(args)}")
-        values = dict(zip(self.inputs, args))
+    def run(self, arguments):
+        if len(arguments) != len(self.inputs):
+            raise ValueError(f"model takes {len(self.inputs)} inputs {self.inputs}, got {len(arguments)}")
+        values = dict(zip(self.inputs, arguments))
         for node in self.graph.nodes:
             inputs = [values[wire] for wire in node.inputs]
             if node.ref is not None:
@@ -179,29 +184,11 @@ class Module(Model):
         return tuple(values[wire] for wire in self.outputs)
 
 
-class Seeded:
-    def __init__(self, context, seed):
-        self.context = context
-        self.seed = seed
-
-    def __enter__(self):
-        self.context.__enter__()
-        torch.manual_seed(self.seed)
-        return self
-
-    def __exit__(self, *exc):
-        return self.context.__exit__(*exc)
-
-
 def load_weights(spec):
-    """The state dict of the named model in the named run's checkpoint."""
-    from kalfa.std.checkpoint.base import load
-
     path = weights_path(spec)
     if not path.exists():
         raise FileNotFoundError(f"weights: {path} does not exist")
-    payload = load(path)
-    states = payload.get("models", {})
+    states = load(path).get("models", {})
     if spec.get("model") not in states:
         raise KeyError(f"weights: run {spec['run']!r} has no model {spec.get('model')!r}; it has {sorted(states)}")
     return states[spec["model"]]
@@ -219,8 +206,8 @@ def module(graph, seed=None, index=0, init=None, trainable=True, weights=None, m
         state = load_weights(weights)
         logger.info(f"weights from {weights_path(weights)}")
         if built.initialized:
-            built._load(state)
-            built._settle()
+            built.load(state)
+            built.settle()
         else:
             built.pending_state = dict(state)
     logger.debug(f"built a module under seed {seed} index {index} ({since(started)})")

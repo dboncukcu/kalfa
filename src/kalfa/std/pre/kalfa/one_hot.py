@@ -4,6 +4,8 @@ from kalfa.registration import lego
 from kalfa.std.pre.base import Encoder
 
 
+@lego("/pre/kalfa/one_hot", state=True, alias="one_hot",
+      description="One hot columns <field>_<category> of a categorical column; unknown categories give zeros")
 class OneHot(Encoder):
     def fit(self, values):
         from sklearn.preprocessing import OneHotEncoder
@@ -17,9 +19,3 @@ class OneHot(Encoder):
 
     def columns(self, name):
         return [f"{name}_{category}" for category in self.categories]
-
-
-@lego("/pre/kalfa/one_hot", state=True, alias="one_hot",
-      description="One hot columns <field>_<category> of a categorical column; unknown categories give zeros")
-def one_hot():
-    return OneHot()

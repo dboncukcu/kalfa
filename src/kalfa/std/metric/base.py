@@ -2,10 +2,10 @@ import torch
 
 
 class Metric:
-    def reset(self):
+    def reset(self) -> None:
         pass
 
-    def update(self, predictions, targets):
+    def update(self, predictions, targets) -> None:
         raise NotImplementedError
 
     def compute(self):

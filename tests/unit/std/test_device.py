@@ -37,9 +37,9 @@ def test_std_device_legos_check_availability(monkeypatch):
 def test_device_of_builds_the_config_lego(monkeypatch):
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     monkeypatch.setattr(torch.backends.mps, "is_available", lambda: False)
-    assert device_of({})[0] == torch.device("cpu")
-    device, uri, params = device_of({"device": "/device/kalfa/auto"})
-    assert device == torch.device("cpu") and uri == "/device/kalfa/auto" and params == {}
+    assert device_of({}).torch == torch.device("cpu")
+    device = device_of({"device": "/device/kalfa/auto"})
+    assert device.torch == torch.device("cpu") and device.uri == "/device/kalfa/auto" and device.params == {}
     with pytest.raises(KalfaError, match="cuda is not available"):
         device_of({"device": {"uri": "/device/kalfa/cuda", "params": {"index": 1}}})
 
@@ -62,7 +62,7 @@ def test_a_custom_device_lego_runs_and_the_choice_is_recorded(workdir, monkeypat
 
     path = write_config(workdir / "cfg.yaml", {**minimal(), "device": {"uri": "/device/test/fake", "params": {"flavor": "x"}}})
     result = run([str(path)], parse_sets([]), when="fake")
-    assert result.device == torch.device("cpu")
+    assert result.device.torch == torch.device("cpu")
     note = json.loads((Path(result.record) / "device.json").read_text())
     assert note == {"device": "cpu", "uri": "/device/test/fake", "params": {"flavor": "x"}}
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
@@ -94,10 +94,10 @@ def test_predict_takes_a_device(workdir, monkeypatch):
 def test_the_device_flag_reads_yaml():
     from argparse import Namespace
 
-    from kalfa.cli import _device_value
+    from kalfa.cli import device_value
 
-    assert _device_value(Namespace(device=None)) is None
-    assert _device_value(Namespace(device="cuda")) == "cuda"
-    assert _device_value(Namespace(device="{uri: cuda, params: {index: 1}}")) == {"uri": "cuda",
+    assert device_value(Namespace(device=None)) is None
+    assert device_value(Namespace(device="cuda")) == "cuda"
+    assert device_value(Namespace(device="{uri: cuda, params: {index: 1}}")) == {"uri": "cuda",
                                                                                   "params": {"index": 1}}
-    assert build_device("cpu")[1] == "/device/kalfa/cpu"
+    assert build_device("cpu").uri == "/device/kalfa/cpu"

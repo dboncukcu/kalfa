@@ -3,7 +3,8 @@
 #   uv run python tools/regenerate.py recipes
 include: [../../../src/kalfa/templates/kalfa.yaml]
 losses:
-  kd: {uri: /objective/kalfa/distill, params: {student: student, teacher: teacher, temperature: 4.0, alpha: 0.7}}
+  kd: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/distill, params: {student: student, 
+            teacher: teacher, temperature: 4.0, alpha: 0.7}}}}
 metrics:
   accuracy: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/torchmetrics/accuracy}}}
 triggers:

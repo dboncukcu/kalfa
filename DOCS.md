@@ -23,7 +23,7 @@ The legos a config writes, by kind.
 | `criterion` | losses, metrics | 6 |
 | `objective` | losses | 7 |
 | `metric` | metrics | 9 |
-| `adapter` | the driver | 2 |
+| `adapter` | the driver | 3 |
 | `optimizer` | optimizers | 3 |
 | `schedule` | optimizer schedule | 4 |
 | `turn` | training.turn | 1 |
@@ -169,6 +169,7 @@ The legos a config writes, by kind.
 |---|---|---|---|---|
 | `/adapter/kalfa/criterion` |  | `(criterion)` | uses: predicts | Feed a criterion the predicts model's output wire and the target field named by the definition's keys |
 | `/adapter/kalfa/metric` |  | `(metric)` | uses: predicts | Feed a metric the predicts model's output wire and the target field named by the definition's keys |
+| `/adapter/kalfa/objective` |  | `(objective)` |  | Call an objective with every model of the run and the batch, plus the step, epoch, rng, scaler and losses view its signature names |
 
 ### optimizer
 
@@ -240,9 +241,9 @@ The legos a config writes, by kind.
 | `/plot/kalfa/samples_matrix` | `samples_matrix` | `(predictions, history, models, record, name=None, n=8)` | partial: True | A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; skipped with a warning when there are none |
 | `/plot/kalfa/target_correlation` | `target_correlation` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, method='spearman', columns=None, top=25, groups=None, name=None)` | partial: True; refs: target=field | The rank correlation of every column with the target, the strongest first; groups maps a column to a group name and colours the bars by it |
 | `/plot/kalfa/target_vs_features` | `target_vs_features` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None)` | partial: True; refs: target=field | One panel per feature: the target against it as a hexbin density with the median profile over equal count bins; it reads the set the definition names (train without one) and draws in the original units |
-| `/plot/seaborn/kde` | `kde` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None)` | partial: True; refs: x=column, y=column, hue=column | seaborn's kernel density of one column of a set, or of two as contours; skipped with a warning when seaborn is not installed |
-| `/plot/seaborn/pairplot` | `pairplot` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None)` | partial: True | seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; skipped with a warning when seaborn is not installed |
-| `/plot/seaborn/violin` | `violin` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None)` | partial: True; refs: value=column, group=column | seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed |
+| `/plot/seaborn/kde` | `kde` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None)` | partial: True; refs: x=column, y=column, hue=column; requires: seaborn | seaborn's kernel density of one column of a set, or of two as contours; skipped with a warning when seaborn is not installed |
+| `/plot/seaborn/pairplot` | `pairplot` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None)` | partial: True; requires: seaborn | seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; skipped with a warning when seaborn is not installed |
+| `/plot/seaborn/violin` | `violin` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None)` | partial: True; refs: value=column, group=column; requires: seaborn | seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed |
 | `/plot/torchmetrics/binary_precision_recall_curve` |  | `(predictions, history, models, record, name=None)` | partial: True | Precision recall curve of the raw test scores against the binary target |
 | `/plot/torchmetrics/binary_roc` |  | `(predictions, history, models, record, name=None)` | partial: True | ROC curve of the raw test scores against the binary target |
 
@@ -280,11 +281,12 @@ The legos a config writes, by kind.
 
 ## Skeleton steps
 
-These are the skeleton steps `src/kalfa/templates/kalfa.yaml` calls; they are not written in a config, the
-template places them and the driver fills their params from the config sections. The list is derived from the URIs
-the template mentions, so it cannot drift. Two more legos are inserted by the driver rather than by the template
-and stay in the catalog above: the adapters (`/adapter/kalfa/criterion` and `/adapter/kalfa/metric`, which wrap the
-criteria and metrics of a config) and the progress component (`/lego/kalfa/progress`).
+These are the skeleton steps `src/kalfa/templates/kalfa.yaml` calls; they are not written in a config,
+the template places them and the driver fills their params from the config sections. The list is derived from the
+URIs the template mentions, so it cannot drift. Four more legos are inserted by the driver rather than by the
+template and stay in the catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and
+`/adapter/kalfa/objective`, which wrap the losses and metrics entries of a config by kind) and the progress
+component (`/lego/kalfa/progress`).
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|

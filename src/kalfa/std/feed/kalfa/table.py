@@ -1,14 +1,11 @@
 import numpy
 import torch
-from torch.utils import data
 
 from kalfa.registration import lego
-from kalfa.std.feed.base import Dataset
+from kalfa.std.feed.base import Dataset, IterableDataset
 
 
 class TableDataset(Dataset):
-    """Rows of a table: the feature columns as one tensor ``x``, every target field under its own name."""
-
     def __init__(self, frame):
         self.frame = frame
         self.inputs = ["x"]
@@ -41,19 +38,14 @@ class TableDataset(Dataset):
         return self.fields[name]
 
 
-class StreamDataset(data.IterableDataset, Dataset):
-    """Rows of a stream frame, one pass per iteration: the feature tensor ``x`` and every target by name; the train
-    pass shuffles through a buffer; the row ids of the last full pass are kept for the prediction table."""
-
+class StreamDataset(IterableDataset):
     def __init__(self, frame):
         self.frame = frame
         self.inputs = ["x"]
         self.targets = list(frame.targets)
-        self.shuffle = False
-        self.buffer = 4096
         self.last_rows = []
 
-    def _items(self, index, data):
+    def items_of(self, index, data):
         if len(self.frame.features):
             x = torch.from_numpy(numpy.array(data[self.frame.features].to_numpy(dtype="float32"), copy=True))
         else:
@@ -75,7 +67,7 @@ class StreamDataset(data.IterableDataset, Dataset):
         buffer = []
         count = 0
         for index, data in self.frame.stream.chunks():
-            for row, item in self._items(index, data):
+            for row, item in self.items_of(index, data):
                 count += 1
                 if not self.shuffle:
                     rows.append(row)
@@ -119,8 +111,6 @@ def tensor_of(value, dtype):
 
 
 class SampleDataset(Dataset):
-    """Items of a Dataset source: every field under its own name, the chains applied per item."""
-
     def __init__(self, frame):
         self.frame = frame
         self.targets = [name for name in frame.fields if name in frame.targets]
@@ -134,8 +124,8 @@ class SampleDataset(Dataset):
         out = {}
         for name in self.frame.fields:
             value = item[name]
-            for obj in self.frame.chains.get(name, []):
-                value = obj.apply(value)
+            for preprocessor in self.frame.chains.get(name, []):
+                value = preprocessor.apply(value)
             out[name] = tensor_of(value, self.frame.dataset.dtypes.get(name))
         return out
 
@@ -144,8 +134,8 @@ class SampleDataset(Dataset):
 
     def labels(self, name):
         values = numpy.asarray(self.frame.dataset.column(name))
-        for obj in self.frame.chains.get(name, []):
-            values = numpy.asarray(obj.apply(values))
+        for preprocessor in self.frame.chains.get(name, []):
+            values = numpy.asarray(preprocessor.apply(values))
         return torch.as_tensor(values)
 
 

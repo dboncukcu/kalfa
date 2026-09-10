@@ -1,14 +1,11 @@
 import fnmatch
+import math
 
 
 class Optimizer:
-    """A torch optimizer created on first use, once every lazy layer has its parameters.
+    torch_class = None
 
-    Carries the name of the loss it minimizes and its schedule; zero_grad clears only its own parameters.
-    """
-
-    def __init__(self, factory, models, params, schedule, loss):
-        self.factory = factory
+    def __init__(self, models, params=None, schedule=None, loss=None):
         self.models = dict(models)
         self.params = dict(params or {})
         self.schedule = schedule
@@ -18,6 +15,10 @@ class Optimizer:
         self.updates = 0
         self.base = None
 
+    @property
+    def name(self) -> str:
+        return self.torch_class.__name__.lower()
+
     def named_parameters(self):
         for model_name, model in self.models.items():
             for name, parameter in model.named_parameters():
@@ -26,7 +27,7 @@ class Optimizer:
     def parameters(self):
         return [parameter for _, parameter in self.named_parameters()]
 
-    def _groups(self):
+    def groups(self):
         groups = self.params.get("groups") or []
         defaults = {key: value for key, value in self.params.items() if key != "groups"}
         buckets = [[] for _ in groups]
@@ -43,24 +44,21 @@ class Optimizer:
             entries.append({"params": bucket, **{key: value for key, value in group.items() if key != "match"}})
         return entries, defaults
 
-    def _ensure(self):
-        if self.real is None:
-            entries, defaults = self._groups()
-            if not entries[0]["params"] and len(entries) == 1:
-                raise ValueError("the optimizer has no parameters; its models have none yet")
-            self.real = self.factory([entry for entry in entries if entry["params"]], defaults)
-            self.base = [group["lr"] for group in self.real.param_groups]
-            if self.pending is not None:
-                self.real.load_state_dict(self.pending)
-                self.pending = None
-            self._schedule()
+    def torch(self):
+        if self.real is not None:
+            return self.real
+        entries, defaults = self.groups()
+        if not entries[0]["params"] and len(entries) == 1:
+            raise ValueError("the optimizer has no parameters; its models have none yet")
+        self.real = self.torch_class([entry for entry in entries if entry["params"]], **defaults)
+        self.base = [group["lr"] for group in self.real.param_groups]
+        if self.pending is not None:
+            self.real.load_state_dict(self.pending)
+            self.pending = None
+        self.reschedule()
         return self.real
 
-    def torch(self):
-        """The torch optimizer itself, for loss scalers and schedulers."""
-        return self._ensure()
-
-    def _schedule(self):
+    def reschedule(self):
         if self.schedule is None or self.real is None:
             return
         factor = float(self.schedule(self.updates))
@@ -72,17 +70,17 @@ class Optimizer:
             parameter.grad = None
 
     def step(self):
-        self._ensure().step()
+        self.torch().step()
         self.updates += 1
-        self._schedule()
+        self.reschedule()
 
     @property
     def param_groups(self):
-        return self._ensure().param_groups
+        return self.torch().param_groups
 
-    def lr(self):
+    def lr(self) -> float:
         if self.real is None:
-            return float(self.params.get("lr", math_nan()))
+            return float(self.params.get("lr", math.nan))
         return float(self.real.param_groups[0]["lr"])
 
     def set_param(self, name, value):
@@ -92,7 +90,7 @@ class Optimizer:
                 group[name] = value
                 if name == "lr":
                     self.base[position] = value
-            self._schedule()
+            self.reschedule()
 
     def state_dict(self):
         inner = self.pending if self.real is None else self.real.state_dict()
@@ -112,16 +110,4 @@ class Optimizer:
             self.pending = state
         else:
             self.real.load_state_dict(state)
-            self._schedule()
-
-
-def math_nan():
-    return float("nan")
-
-
-def torch_factory(torch_class):
-    def factory(entries, defaults):
-        return torch_class(entries, **defaults)
-
-    factory.name = torch_class.__name__.lower()
-    return factory
+            self.reschedule()

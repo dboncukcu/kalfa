@@ -7,19 +7,19 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import frame
-from kalfa.std.lego.kalfa.filter import filter as filter_rows
+from kalfa.std.lego.kalfa.filter import filter_rows
 from kalfa.std.lego.kalfa.filter_set import filter_set
 from kalfa.std.feed.kalfa.table import table
-from kalfa.std.loader.kalfa.torch import torch as torch_loader
+from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.pre.base import Prep, assign_fields, read_prep, specificity, torch_dtype, write_prep
 from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.sklearn.minmax_scaler import minmax_scaler
-from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+from kalfa.std.pre.sklearn.minmax_scaler import MinMaxScaler
+from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 from kalfa.std.source.kalfa.csv import csv
 from kalfa.std.source.base import header
 from kalfa.std.source.kalfa.parquet import parquet
-from kalfa.std.split.kalfa.random import random as random_split
+from kalfa.std.split.kalfa.random import random_split
 from kalfa.std.split.base import sizes
 from kalfa.synthetic import housing_frame
 
@@ -80,48 +80,48 @@ def test_dtype_table():
 
 
 def test_the_elementwise_scale_transforms_invert_themselves():
-    from kalfa.std.pre.kalfa.asinh import asinh
-    from kalfa.std.pre.kalfa.atanh import atanh
-    from kalfa.std.pre.kalfa.sinh import sinh
-    from kalfa.std.pre.kalfa.tanh import tanh
+    from kalfa.std.pre.kalfa.asinh import Asinh
+    from kalfa.std.pre.kalfa.atanh import Atanh
+    from kalfa.std.pre.kalfa.sinh import Sinh
+    from kalfa.std.pre.kalfa.tanh import Tanh
 
     heavy = numpy.array([-5000.0, -1.0, 0.0, 0.3, 7.5, 1200.0])
-    assert numpy.allclose(asinh(2.0).inverse(asinh(2.0).apply(heavy)), heavy)
-    assert numpy.allclose(asinh(2.0).apply(heavy)[2], 0.0) and asinh(1.0).apply(heavy)[0] < 0
+    assert numpy.allclose(Asinh(2.0).inverse(Asinh(2.0).apply(heavy)), heavy)
+    assert numpy.allclose(Asinh(2.0).apply(heavy)[2], 0.0) and Asinh(1.0).apply(heavy)[0] < 0
     mild = numpy.array([-6.0, 0.0, 1.5])
-    assert numpy.allclose(sinh(2.0).inverse(sinh(2.0).apply(mild)), mild)
-    assert numpy.allclose(tanh(2.0).inverse(tanh(2.0).apply(numpy.array([-20.0, 0.0, 7.5]))),
+    assert numpy.allclose(Sinh(2.0).inverse(Sinh(2.0).apply(mild)), mild)
+    assert numpy.allclose(Tanh(2.0).inverse(Tanh(2.0).apply(numpy.array([-20.0, 0.0, 7.5]))),
                           numpy.array([-20.0, 0.0, 7.5]))
     inside = numpy.array([-9.0, 0.0, 3.0])
-    assert numpy.allclose(atanh(10.0).inverse(atanh(10.0).apply(inside)), inside)
-    assert all(getattr(lego(1.0), "rescales", False) for lego in (asinh, sinh, tanh, atanh))
+    assert numpy.allclose(Atanh(10.0).inverse(Atanh(10.0).apply(inside)), inside)
+    assert all(getattr(lego(1.0), "rescales", False) for lego in (Asinh, Sinh, Tanh, Atanh))
 
 
 def test_the_elementwise_scale_transforms_say_where_they_break():
-    from kalfa.std.pre.kalfa.atanh import atanh
-    from kalfa.std.pre.kalfa.sinh import sinh
-    from kalfa.std.pre.kalfa.tanh import tanh
+    from kalfa.std.pre.kalfa.atanh import Atanh
+    from kalfa.std.pre.kalfa.sinh import Sinh
+    from kalfa.std.pre.kalfa.tanh import Tanh
 
     with pytest.raises(ValueError, match="overflows"):
-        sinh(1.0).apply(numpy.array([800.0]))
+        Sinh(1.0).apply(numpy.array([800.0]))
     with pytest.raises(ValueError, match="inside"):
-        atanh(1.0).apply(numpy.array([1.5]))
+        Atanh(1.0).apply(numpy.array([1.5]))
     with pytest.raises(ValueError, match="scale must be positive"):
-        tanh(0.0)
-    saturated = tanh(2.0).inverse(tanh(2.0).apply(numpy.array([500.0])))
+        Tanh(0.0)
+    saturated = Tanh(2.0).inverse(Tanh(2.0).apply(numpy.array([500.0])))
     assert 30.0 < float(saturated[0]) < 40.0                 # beyond about 19 scale the inverse saturates
 
 
 def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
     import sklearn.preprocessing as sklearn_pre
-    from kalfa.std.pre.sklearn.max_abs_scaler import max_abs_scaler
-    from kalfa.std.pre.sklearn.power_transformer import power_transformer
-    from kalfa.std.pre.sklearn.quantile_transformer import quantile_transformer
-    from kalfa.std.pre.sklearn.robust_scaler import robust_scaler
+    from kalfa.std.pre.sklearn.max_abs_scaler import MaxAbsScaler
+    from kalfa.std.pre.sklearn.power_transformer import PowerTransformer
+    from kalfa.std.pre.sklearn.quantile_transformer import QuantileTransformer
+    from kalfa.std.pre.sklearn.robust_scaler import RobustScaler
 
     values = numpy.random.default_rng(0).normal(size=(200, 3)) * [1.0, 50.0, 0.01] + [0.0, 3.0, -1.0]
-    for built, reference in ((max_abs_scaler(), sklearn_pre.MaxAbsScaler()),
-                             (robust_scaler(), sklearn_pre.RobustScaler())):
+    for built, reference in ((MaxAbsScaler(), sklearn_pre.MaxAbsScaler()),
+                             (RobustScaler(), sklearn_pre.RobustScaler())):
         built.fit(values)
         out = built.apply(values)
         assert numpy.allclose(out, reference.fit(values).transform(values))
@@ -129,7 +129,7 @@ def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
         assert numpy.allclose(built.apply(values[:, 1], columns=[1]), out[:, 1])
         assert built.grouped and built.rescales
     column = values[:, 1]
-    for built in (quantile_transformer(output="normal"), power_transformer()):
+    for built in (QuantileTransformer(output="normal"), PowerTransformer()):
         built.fit(column)
         out = built.apply(column)
         assert numpy.allclose(built.inverse(out), column)
@@ -138,23 +138,23 @@ def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
 
 def test_the_widening_preprocessors_name_the_columns_they_produce():
     import sklearn.preprocessing as sklearn_pre
-    from kalfa.std.pre.sklearn.kbins_discretizer import kbins_discretizer
-    from kalfa.std.pre.sklearn.spline_transformer import spline_transformer
+    from kalfa.std.pre.sklearn.kbins_discretizer import KBins
+    from kalfa.std.pre.sklearn.spline_transformer import Spline
 
     values = numpy.random.default_rng(0).normal(size=200)
-    bins = kbins_discretizer(bins=4)
+    bins = KBins(bins=4)
     bins.fit(values)
     out = bins.apply(values)
     assert out.shape == (200, 4) and bins.columns("x0") == [f"x0_bin{position}" for position in range(4)]
     assert numpy.allclose(out.sum(axis=1), 1.0)
     reference = sklearn_pre.KBinsDiscretizer(n_bins=4, encode="onehot-dense", strategy="quantile")
     assert numpy.allclose(out, reference.fit_transform(values.reshape(-1, 1)))
-    ordinal = kbins_discretizer(bins=4, encode="ordinal")
+    ordinal = KBins(bins=4, encode="ordinal")
     ordinal.fit(values)
     assert ordinal.apply(values).shape == (200,) and ordinal.columns("x0") == ["x0_bin0"]
     assert sorted(set(ordinal.apply(values).tolist())) == [0.0, 1.0, 2.0, 3.0]
 
-    spline = spline_transformer()
+    spline = Spline()
     spline.fit(values)
     produced = spline.apply(values)
     assert produced.shape[0] == 200 and spline.columns("x0") == [f"x0_spline{position}"
@@ -165,12 +165,12 @@ def test_the_widening_preprocessors_name_the_columns_they_produce():
 
 
 def test_a_widening_preprocessor_expands_the_feature_layout(tmp_path):
-    from kalfa.std.pre.sklearn.kbins_discretizer import kbins_discretizer
+    from kalfa.std.pre.sklearn.kbins_discretizer import KBins
 
     data = housing_frame(rows=200)
     prep = fit(data, {"x0": {"preprocessors": ["bins"]}, "x*": {"preprocessors": ["s"]},
                       "price": {"target": True}},
-               {"bins": kbins_discretizer(bins=3), "s": standard_scaler()}, [], record=str(tmp_path))
+               {"bins": KBins(bins=3), "s": StandardScaler()}, [], record=str(tmp_path))
     assert prep.features[:3] == ["x0_bin0", "x0_bin1", "x0_bin2"]
     train = apply(data, prep, "train")
     assert list(train.data.columns)[:3] == ["x0_bin0", "x0_bin1", "x0_bin2"]
@@ -182,11 +182,11 @@ def test_a_widening_preprocessor_expands_the_feature_layout(tmp_path):
 def test_a_grouped_preprocessor_is_one_object_over_all_its_columns(tmp_path):
     data = housing_frame(rows=200)
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["s"]}},
-               {"s": standard_scaler()}, [], record=str(tmp_path))
+               {"s": StandardScaler()}, [], record=str(tmp_path))
     grouped = prep.fitted["s"]
     assert grouped.columns == [f"x{position}" for position in range(8)] + ["price"]
-    assert grouped.obj.scaler.mean_.shape == (9,)
-    assert float(grouped.obj.scaler.mean_[-1]) == pytest.approx(float(data["price"].mean()))
+    assert grouped.preprocessor.scaler.mean_.shape == (9,)
+    assert float(grouped.preprocessor.scaler.mean_[-1]) == pytest.approx(float(data["price"].mean()))
     train = apply(data, prep, "train")
     assert abs(float(train.data["price"].mean())) < 1e-6 and abs(float(train.data["x3"].mean())) < 1e-6
     restored = prep.inverse("price", train.data["price"].to_numpy())
@@ -198,11 +198,11 @@ def test_a_grouped_preprocessor_is_one_object_over_all_its_columns(tmp_path):
 
 
 def test_a_grouped_preprocessor_waits_for_the_per_column_steps_before_it(tmp_path):
-    from kalfa.std.pre.kalfa.cast import cast
+    from kalfa.std.pre.kalfa.cast import Cast
 
     data = housing_frame(rows=50)
     prep = fit(data, {"x*": {"preprocessors": ["c", "s"]}, "price": {"target": True}},
-               {"c": cast("float32"), "s": standard_scaler()}, [])
+               {"c": Cast("float32"), "s": StandardScaler()}, [])
     assert sorted(prep.fitted["c"]) == [f"x{position}" for position in range(8)]
     assert prep.fitted["s"].columns == [f"x{position}" for position in range(8)]
     train = apply(data, prep, "train")
@@ -212,7 +212,6 @@ def test_a_grouped_preprocessor_waits_for_the_per_column_steps_before_it(tmp_pat
 def test_the_grouped_fact_matches_the_object_the_lego_builds():
     from cirak.registry import registry
 
-    from kalfa.std.pre.base import is_grouped
 
     for uri in sorted(registry.uris()):
         if not uri.startswith("/pre/"):
@@ -222,9 +221,9 @@ def test_the_grouped_fact_matches_the_object_the_lego_builds():
             continue
         try:
             built = registry.resolve(uri)()
-        except TypeError:                                   # the lego needs params (cast, resize, normalize)
+        except TypeError:                                   # the lego needs params (Cast, resize, normalize)
             continue
-        assert is_grouped(built) == registry.facts(uri).get("grouped", False), uri
+        assert built.grouped == registry.facts(uri).get("grouped", False), uri
 
 
 def test_grouped_preprocessors_written_in_different_orders_are_an_error():
@@ -232,24 +231,24 @@ def test_grouped_preprocessors_written_in_different_orders_are_an_error():
     fields = {"x0": {"preprocessors": ["a", "b"]}, "x1": {"preprocessors": ["b", "a"]},
               "x*": {"preprocessors": ["a"]}, "price": {"target": True}}
     with pytest.raises(ValueError, match="different orders"):
-        fit(data, fields, {"a": standard_scaler(), "b": minmax_scaler()}, [])
+        fit(data, fields, {"a": StandardScaler(), "b": MinMaxScaler()}, [])
 
 
 def test_a_grouped_preprocessor_needs_one_column_wide_input():
-    from kalfa.std.pre.kalfa.one_hot import one_hot
+    from kalfa.std.pre.kalfa.one_hot import OneHot
 
     data = housing_frame(rows=40)
     data["kind"] = ["a", "b"] * 20
     fields = {"kind": {"preprocessors": ["hot", "s"]}, "x*": {}, "price": {"target": True}}
     with pytest.raises(ValueError, match="one column wide"):
-        fit(data, fields, {"hot": one_hot(), "s": standard_scaler()}, [])
+        fit(data, fields, {"hot": OneHot(), "s": StandardScaler()}, [])
 
 
 def test_fit_and_apply_scale_features_and_invert_the_target(tmp_path):
     data = housing_frame(rows=200)
-    scaler = standard_scaler()
+    scaler = StandardScaler()
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},
-               {"s": scaler, "t": standard_scaler()}, [], record=str(tmp_path))
+               {"s": scaler, "t": StandardScaler()}, [], record=str(tmp_path))
     assert prep.features == [f"x{i}" for i in range(8)] and prep.targets == {"price": ["price"]}
     assert set(prep.fitted["s"].columns) == set(prep.features) and set(prep.fitted["t"].columns) == {"price"}
     train = apply(data, prep, "train")
@@ -279,7 +278,7 @@ def test_preprocessor_sets_limit_where_a_chain_applies():
     data = housing_frame(rows=30)
     keys = {"s": {"sets": ["train"]}, "t": {}}
     prep = fit(data, {"x0": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},
-               {"s": standard_scaler(), "t": standard_scaler()}, [], keys=keys)
+               {"s": StandardScaler(), "t": StandardScaler()}, [], keys=keys)
     assert prep.sets == {"s": ["train"]}
     train = apply(data, prep, "train", keys)
     valid = apply(data, prep, "valid", keys)

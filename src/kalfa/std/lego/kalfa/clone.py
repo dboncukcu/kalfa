@@ -7,8 +7,7 @@ from kalfa.std.builder.base import Model
 
 
 def ready(model):
-    """Whether a model has real parameters: built, and none of them lazy and uninitialized."""
-    if not getattr(model, "initialized", True):
+    if not model.initialized:
         return False
     return not any(isinstance(parameter, torch.nn.parameter.UninitializedParameter)
                    for parameter in model.parameters())
@@ -23,25 +22,20 @@ def freeze(module):
 
 def frozen_copy(model):
     copied = copy.deepcopy(model)
-    if hasattr(copied, "kalfa_trainable"):
-        copied.kalfa_trainable = False
+    copied.trainable = False
     freeze(copied)
     return copied
 
 
+@lego("/lego/kalfa/clone", state=True,
+      description="An exponential moving average copy of a model with the given decay")
 class Ema(Model):
-    """An exponential moving average copy of a model, shifted after every real optimizer step.
-
-    The copy is taken as soon as the model has real parameters: at build time, or after the first batch of a lazy
-    model; until then the EMA has no weights.
-    """
-
     def __init__(self, model, decay):
         super().__init__()
         self.decay = float(decay)
         object.__setattr__(self, "source", model)
-        self.inputs = list(getattr(model, "inputs", []))
-        self.outputs = list(getattr(model, "outputs", []))
+        self.inputs = list(model.inputs)
+        self.outputs = list(model.outputs)
         self.model = None
         if ready(model):
             self.model = frozen_copy(model)
@@ -63,10 +57,10 @@ class Ema(Model):
     def train(self, mode=True):
         return super().train(False)
 
-    def forward(self, *args):
+    def forward(self, *arguments):
         if self.model is None:
             raise ValueError("the EMA copy has no weights yet: its model has not taken a batch")
-        return self.model(*args)
+        return self.model(*arguments)
 
     def load_state_dict(self, state_dict, strict=True, assign=False):
         inner = {key[len("model."):]: value for key, value in state_dict.items() if key.startswith("model.")}
@@ -77,9 +71,3 @@ class Ema(Model):
         result = self.model.load_state_dict(inner, strict=strict)
         freeze(self.model)
         return result
-
-
-@lego("/lego/kalfa/clone", state=True,
-      description="An exponential moving average copy of a model with the given decay")
-def clone(model, decay):
-    return Ema(model, decay)

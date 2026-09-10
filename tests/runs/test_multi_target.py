@@ -7,7 +7,7 @@ import pandas
 import pytest
 
 from kalfa.api import check, predict
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 
 pytestmark = pytest.mark.slow
 
@@ -29,7 +29,7 @@ def test_check_resolves_the_target_table(dataset):
 def test_every_wire_is_cut_into_its_fields(trained):
     result = trained("15_multi_target")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3, 4]
     keys = set(history[0])
     assert {"train/l_y", "train/l_z", "train/l_tail", "val/rmse_y", "val/rmse_z", "val/auroc_tail"} <= keys
@@ -52,14 +52,14 @@ def test_every_wire_is_cut_into_its_fields(trained):
 
 def test_every_target_keeps_its_own_scale(dataset):
     from kalfa.std.lego.kalfa.fit import fit
-    from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+    from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 
     dataset("15_multi_target")
     source = pandas.read_parquet("scores.parquet")
-    prep = fit(source, {"y_*": {"target": True, "preprocessors": ["s"]}}, {"s": standard_scaler()}, [])
+    prep = fit(source, {"y_*": {"target": True, "preprocessors": ["s"]}}, {"s": StandardScaler()}, [])
     grouped = prep.fitted["s"]
     assert grouped.columns == ["y_a", "y_b", "y_c"]
-    means = [float(grouped.obj.scaler.mean_[position]) for position in range(3)]
+    means = [float(grouped.preprocessor.scaler.mean_[position]) for position in range(3)]
     assert len(set(round(value, 6) for value in means)) == 3
     values = prep.inverse("y_b", [0.0, 1.0])
     assert abs(values[0] - means[1]) < 1e-6

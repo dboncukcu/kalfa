@@ -2,6 +2,8 @@ from kalfa.registration import lego
 from kalfa.std.checkpoint.base import Policy
 
 
+@lego("/checkpoint/kalfa/snapshot", alias="snapshot",
+      description="Write snapshot_<n>.pt every n turns and last.pt every turn")
 class Snapshot(Policy):
     def __init__(self, every):
         self.every = int(every)
@@ -20,9 +22,3 @@ class Snapshot(Policy):
     def restore(self, state):
         if state and "seen" in state:
             self.seen = int(state["seen"])
-
-
-@lego("/checkpoint/kalfa/snapshot", alias="snapshot",
-      description="Write snapshot_<n>.pt every n turns and last.pt every turn")
-def snapshot(every):
-    return Snapshot(every)

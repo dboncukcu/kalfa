@@ -1,20 +1,9 @@
-"""The aliasing check: bus keys that name the same mutable object, and unordered siblings that touch one of them
-while another mutates it.
-
-A serial run orders nodes by their bus dependencies alone, so two siblings without a dependency run in an order
-that happens to be right; the thread executor runs them side by side and the outcome depends on timing. The alias
-table comes from the legos' facts: ``mutates`` (the objects come back under the output of the same name) and
-``aliases`` (the output holds the inputs), plus the loop carry and the frame renames.
-"""
-
 import functools
 
 from cirak.errors import warning
 
 
 class Groups:
-    """Union find over key names: keys in one group name the same object."""
-
     def __init__(self):
         self.parent = {}
 
@@ -35,7 +24,6 @@ class Groups:
 
 
 def keys_of(binding):
-    """Every bus key a binding spec names: a key, a bundle mapping, a list."""
     if isinstance(binding, str):
         return [binding]
     if isinstance(binding, dict):
@@ -45,10 +33,10 @@ def keys_of(binding):
     return []
 
 
-def unwrap(fn):
-    while isinstance(fn, functools.partial):
-        fn = fn.func
-    return fn
+def unwrap(function):
+    while isinstance(function, functools.partial):
+        function = function.func
+    return function
 
 
 class Analysis:
@@ -63,8 +51,8 @@ class Analysis:
             if entry is not None and not entry.fragment:
                 self.targets[id(entry.target)] = entry.facts
 
-    def facts_of(self, fn):
-        return self.targets.get(id(unwrap(fn)))
+    def facts_of(self, function):
+        return self.targets.get(id(unwrap(function)))
 
     def visit(self, resolution, path):
         kind = getattr(resolution, "kind", None)
@@ -128,7 +116,6 @@ class Analysis:
 
 
 def ancestors_of(deps):
-    """The transitive upstream set of every node of a frame."""
     found = {}
 
     def visit(name, seen):
@@ -149,7 +136,6 @@ def ancestors_of(deps):
 
 
 def aliasing_problems(pipeline, registry):
-    """Warnings for every pair of unordered siblings where one mutates an object the other touches."""
     resolved = getattr(pipeline, "resolved", None)
     if resolved is None:
         return []
@@ -164,7 +150,7 @@ def aliasing_problems(pipeline, registry):
                 if first in ancestors.get(second, ()) or second in ancestors.get(first, ()):
                     continue
                 for writer, reader in ((first, second), (second, first)):
-                    shared = _shared(analysis, frame.table[writer], frame.table[reader])
+                    shared = shared_keys(analysis, frame.table[writer], frame.table[reader])
                     if shared:
                         where = f"{path}." if path else ""
                         problems.append(warning(
@@ -176,7 +162,7 @@ def aliasing_problems(pipeline, registry):
     return problems
 
 
-def _shared(analysis, writer, reader):
+def shared_keys(analysis, writer, reader):
     groups = analysis.groups
     mutated = {groups.find(key): key for key in analysis.mutated[id(writer)]}
     touched = groups.of(analysis.touched[id(reader)])

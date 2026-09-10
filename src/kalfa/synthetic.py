@@ -1,6 +1,3 @@
-"""Synthetic data for the examples and the tests: small tables, image folders and a text corpus that every
-reference config can train on in a minute on a laptop CPU."""
-
 from pathlib import Path
 
 
@@ -84,7 +81,6 @@ def write_energy(path, sites=3, steps=600, seed=0):
 
 
 def anomaly_frame(rows=2000, seed=0):
-    """The ALAD table of examples/alad: x1..x4, xx1, xx2, xx6, xx7 and is_anomaly in 0, 1 and a few 5."""
     generator = numpy.random.default_rng(seed)
     label = generator.choice([0, 1, 5], size=rows, p=[0.88, 0.09, 0.03])
     frame = pandas.DataFrame({f"x{position}": generator.normal(size=rows) for position in range(1, 5)})
@@ -103,9 +99,6 @@ def write_anomaly(path, rows=2000, seed=0):
 
 
 def write_image_folder(root, classes=("zero", "one"), per_class=24, size=28, channels=1, seed=0):
-    """A tiny image folder: root/<class>/<n>.png, one bright blob per class at a class specific corner."""
-    from pathlib import Path
-
     from PIL import Image
 
     generator = numpy.random.default_rng(seed)
@@ -125,7 +118,6 @@ def write_image_folder(root, classes=("zero", "one"), per_class=24, size=28, cha
 
 
 def write_text(path, lines=200, seed=0):
-    """A small text corpus: lines of a few words drawn from a tiny vocabulary, a ROMEO line now and then."""
     generator = numpy.random.default_rng(seed)
     words = ["love", "night", "sun", "moon", "sword", "fair", "verona", "friend", "death", "light"]
     rows = []

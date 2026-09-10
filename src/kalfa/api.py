@@ -1,5 +1,3 @@
-"""kalfa's commands as functions: check, run, resume, predict; collect lives in collect.py."""
-
 import json
 import random
 import shutil
@@ -8,8 +6,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy
+import pandas
 import tezgah
 import torch
+from cirak.api import Analysis
 from cirak.build import build_components
 from cirak.errors import CirakError, CirakWarning, ConfigError, render_problems
 from cirak.registry import registry
@@ -17,14 +17,22 @@ from cirak.registry import registry
 from .aliasing import aliasing_problems
 from .check import Checker
 from .kinds import kalfa_kind
-from .config import load_surface
+from .config import Surface, load_surface
 from .driver import recipe
 from .record import (read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note)
 from .recipe import RUN_INPUTS, analyze, compile, dump, implicit_bindings
-from .std.checkpoint import base as checkpoints
+from .std.checkpoint.base import load
+from .std.common.device import Device
+from .std.common.generation import write_samples
 from .std.common.log import Progress, clock, logger_for, since, sink
-from .std.pre.base import read_prep
-from .std.common.runtime import resolve_model
+from .std.common.prediction import prediction_table
+from .std.common.runtime import call_model, named_outputs, resolve_model
+from .std.lego.kalfa.apply import apply
+from .std.lego.kalfa.clone import Ema
+from .std.loader.kalfa.torch import torch_loader
+from .std.pre.base import Prep, read_prep
+import sys
+from cirak.errors import error
 
 
 logger = logger_for("run")
@@ -36,13 +44,13 @@ class KalfaError(CirakError):
 
 @dataclass
 class Prepared:
-    surface: object
+    surface: Surface
     problems: list
     sizes: dict | None = None
     header: dict | None = None
     document: dict | None = None
-    analysis: object = None
-    pipeline: object = None
+    analysis: Analysis | None = None
+    pipeline: tezgah.Pipeline | None = None
     implicit: list = field(default_factory=list)
     loaded: dict | None = None
     aliasing: list = field(default_factory=list)
@@ -67,7 +75,6 @@ def has_errors(problems):
 
 
 def prepare(paths, sets=None, inputs=RUN_INPUTS, dry=True) -> Prepared:
-    """Load, check and compile a config: the surface, the recipe on cirak, the pipeline on tezgah."""
     started = clock()
     surface = load_surface(paths, sets)
     checker = Checker(surface, registry)
@@ -84,10 +91,8 @@ def prepare(paths, sets=None, inputs=RUN_INPUTS, dry=True) -> Prepared:
         return prepared
     try:
         prepared.document = recipe(surface.data, registry, surface.aliases)
-    except (KeyError, TypeError, ValueError, AttributeError) as exc:
-        from cirak.errors import error
-
-        problems.append(error("driver_failed", f"the driver cannot shape this config: {exc!r}"))
+    except (KeyError, TypeError, ValueError, AttributeError) as exception:
+        problems.append(error("driver_failed", f"the driver cannot shape this config: {exception!r}"))
         return prepared
     analysis = analyze(prepared.document)
     prepared.analysis = analysis
@@ -116,7 +121,6 @@ def gate(problems):
 
 
 def check(paths, sets=None, load=False) -> Prepared:
-    """Check a config; with ``load`` the data block runs and the real set sizes (after filters) are reported."""
     prepared = prepare(paths, sets, dry=True)
     if load and prepared.document is not None and not prepared.errors:
         prepared.loaded = loaded_sizes(prepared.document)
@@ -124,17 +128,14 @@ def check(paths, sets=None, load=False) -> Prepared:
 
 
 def loaded_sizes(document):
-    """The set sizes the data block of a recipe produces: the loaders are built and their datasets measured."""
-    from .std.feed.base import dataset_size
-
-    outputs = _data_outputs(document, ["train_loader", "valid_loader", "test_loader"])
-    return {name: dataset_size(outputs[f"{name}_loader"].dataset) for name in ("train", "valid", "test")}
+    outputs = data_outputs(document, ["train_loader", "valid_loader", "test_loader"])
+    return {name: outputs[f"{name}_loader"].dataset.count() for name in ("train", "valid", "test")}
 
 
 @dataclass
 class Probe:
     sizes: dict | None = None
-    prep: object = None
+    prep: Prep | None = None
     features: int | None = None
     parameters: dict = field(default_factory=dict)
     shapes: dict = field(default_factory=dict)
@@ -142,14 +143,9 @@ class Probe:
 
 
 def probe(document) -> Probe:
-    """Run the data and models blocks of a recipe: the real set sizes, the fitted plan and the models built on one
-    batch, so that lazy layers have their shapes and the parameters can be counted. Nothing is written."""
-    from .std.feed.base import dataset_size
-    from .std.common.runtime import call_model, named_outputs
-
-    outputs = _flow_outputs(document, ("data", "models"),
+    outputs = flow_outputs(document, ("data", "models"),
                             ["prep", "train_loader", "valid_loader", "test_loader", "models", "composites"])
-    found = Probe(sizes={name: dataset_size(outputs[f"{name}_loader"].dataset) for name in ("train", "valid", "test")},
+    found = Probe(sizes={name: outputs[f"{name}_loader"].dataset.count() for name in ("train", "valid", "test")},
                   prep=outputs.get("prep"))
     if found.prep is not None:
         found.features = len(found.prep.features)
@@ -161,10 +157,10 @@ def probe(document) -> Probe:
                 with torch.no_grad():
                     result = named_outputs(module, call_model(module, batch))
                 found.shapes[name] = {wire: tuple(value.shape) for wire, value in result.items()
-                                      if hasattr(value, "shape")}
-            except Exception as exc:
-                found.notes[name] = f"not built on the batch: {type(exc).__name__} {exc}"
-        if getattr(module, "initialized", True):
+                                      if isinstance(value, torch.Tensor)}
+            except Exception as exception:
+                found.notes[name] = f"not built on the batch: {type(exception).__name__} {exception}"
+        if module.initialized:
             found.parameters[name] = (sum(item.numel() for item in module.parameters()),
                                       sum(item.numel() for item in module.parameters() if item.requires_grad))
     return found
@@ -183,18 +179,18 @@ def seed_all(seed):
 @dataclass
 class RunResult:
     record: str
-    report: object
-    device: object = None
+    report: tezgah.Report
+    device: Device | None = None
 
 
 DEFAULT_DEVICE = "/device/kalfa/cpu"
 
 
 def build_device(call):
-    """A torch device from a device value: a short name (``cuda``), a ``{uri, params}`` call, or a torch.device
-    (kept as it is). Returns the device, the URI and the params."""
+    if isinstance(call, Device):
+        return call
     if isinstance(call, torch.device):
-        return call, str(call), {}
+        return Device(call, str(call))
     if isinstance(call, str):
         uri, params = call, {}
     elif isinstance(call, dict) and isinstance(call.get("uri"), str):
@@ -213,42 +209,27 @@ def build_device(call):
         raise KalfaError(f"{uri} is a {kalfa_kind(uri)} lego, device needs a device lego")
     try:
         device = registry.resolve(uri)(**params)
-    except RuntimeError as exc:
-        raise KalfaError(str(exc)) from exc
+    except RuntimeError as exception:
+        raise KalfaError(str(exception)) from exception
     if not isinstance(device, torch.device):
         raise KalfaError(f"device lego {uri} returned {type(device).__name__}, not a torch.device")
-    return device, uri, params
+    return Device(device, uri, params)
 
 
 def device_of(config):
-    """The torch device of a config: its device lego built (cpu when nothing is written); returns the device, the
-    URI and the params."""
     return build_device(config.get("device") if config.get("device") is not None else DEFAULT_DEVICE)
 
 
-def to_device(modules, device):
-    """Move every module of a mapping to the device; nothing happens without one."""
-    if device is None:
-        return modules
-    for module in modules.values():
-        module.to(device)
-    return modules
-
-
-def write_device_note(record, device, uri, params):
-    (Path(record) / "device.json").write_text(json.dumps({"device": str(device), "uri": uri, "params": params},
-                                                           indent=2))
+def write_device_note(record, device):
+    (Path(record) / "device.json").write_text(json.dumps(device.note(), indent=2))
 
 
 def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None) -> RunResult:
-    """Run a config: check, compile, open the record directory, run on tezgah."""
     started = clock()
     inputs = list(RUN_INPUTS) + (["resume"] if resume is not None else [])
     prepared = prepare(paths, sets, inputs=inputs, dry=False)
     gate(prepared.problems)
     if executor != "serial" and prepared.aliasing:
-        from cirak.errors import error
-
         gate([error(problem.kind, problem.message, hint=problem.hint) for problem in prepared.aliasing])
     config = prepared.surface.data
     record = record_dir(config, when)
@@ -269,9 +250,9 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
             shutil.copytree(old, target / "checkpoints", dirs_exist_ok=True)
         write_resume_note(record, resume_from, resume)
         logger.info(f"resuming {resume_from} from {Path(resume).name}")
-    device, uri, params = device_of(config)
-    logger.info(f"device {device} ({uri})")
-    write_device_note(record, device, uri, params)
+    device = device_of(config)
+    logger.info(f"device {device} ({device.uri})")
+    write_device_note(record, device)
     values = {"device": device, "record": record}
     if resume is not None:
         values["resume"] = str(resume)
@@ -286,10 +267,6 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
 
 
 def copy_plugins(names, record):
-    """Copy the plugin modules the run imported into <record>/plugins, so that predict, generate and resume on the
-    record directory find them without the original config next to it."""
-    import sys
-
     for name in names or []:
         module = sys.modules.get(name)
         file = getattr(module, "__file__", None)
@@ -315,8 +292,6 @@ def resume(run_dir, sets=None, executor="serial", workers=None, when=None) -> Ru
 
 
 def rebuild_models(analysis, store, prep=None):
-    """The models of a run built again from its recipe: trained models first, composites from them; ``prep`` feeds
-    the kind data components among the layer params."""
     models = {}
     composites = {}
     for name, node in (analysis.flow.get("models") or {}).items():
@@ -351,19 +326,11 @@ def weights_of(run_dir, which):
 @dataclass
 class Prediction:
     path: str | None
-    table: object
+    table: pandas.DataFrame
     model: str
 
 
 def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) -> Prediction:
-    """Predict with a recorded run: the report model on the run's test set, or any model on new data.
-
-    ``device`` is a device lego value (a short name or ``{uri, params}``); without it the models stay on the cpu.
-    """
-    from .std.common.prediction import prediction_table
-    from .std.loader.kalfa.torch import torch as torch_loader
-    from .std.lego.kalfa.apply import apply
-
     resolved = Path(run_dir) / "resolved.yaml"
     if not resolved.exists():
         raise KalfaError(f"{run_dir} has no resolved.yaml")
@@ -377,16 +344,16 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
     store = build_components(analysis.data, analysis.expansions, registry)
     prep = read_prep(run_dir)
     models, composites = rebuild_models(analysis, store, prep)
-    payload = checkpoints.load(weights_of(run_dir, which))
+    payload = load(weights_of(run_dir, which))
     for name, module in models.items():
         if name in payload.get("models", {}):
             module.load_state_dict(payload["models"][name])
     name = model or document["flow"]["after"]["params"].get("predicts")
     target = resolve_model(name, models, composites)
     logger.info(f"predicting with {name} ({which} weights)")
-    device = build_device(device)[0] if device is not None else None
-    to_device(models, device)
-    to_device(composites, device)
+    device = build_device(device) if device is not None else Device.cpu()
+    device.place(models)
+    device.place(composites)
     if data is not None:
         source = config["data"]["source"]
         df = registry.resolve(source["uri"])(**{**(source.get("params") or {}), "path": data})
@@ -396,7 +363,7 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
         loader = torch_loader(dataset, "test", document["flow"]["data"]["params"]["batch"])
         tag = f"_{Path(data).stem}"
     else:
-        loader = _test_loader(document)
+        loader = test_loader(document)
         tag = ""
     if model is not None:
         tag += f"_{model}"
@@ -411,19 +378,10 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
 @dataclass
 class Generated:
     path: str | None
-    samples: object
+    samples: torch.Tensor | str
 
 
 def generate(run_dir, which=None, sets=None, device=None) -> Generated:
-    """Run the generate lego of a recorded run with its report models; samples land under samples/.
-
-    ``device`` is a device lego value (a short name or ``{uri, params}``); without it the models stay on the cpu.
-    """
-    from .std.checkpoint.base import load as load_payload
-    from .std.common.generation import write_samples
-    from .std.pre.base import read_prep
-    from .std.common.runtime import turn_generator
-
     resolved = Path(run_dir) / "resolved.yaml"
     if not resolved.exists():
         raise KalfaError(f"{run_dir} has no resolved.yaml")
@@ -439,37 +397,33 @@ def generate(run_dir, which=None, sets=None, device=None) -> Generated:
     store = build_components(analysis.data, analysis.expansions, registry)
     prep = read_prep(run_dir)
     models, composites = rebuild_models(analysis, store, prep)
-    payload = load_payload(weights_of(run_dir, which))
+    payload = load(weights_of(run_dir, which))
     for name, module in models.items():
         if name in payload.get("models", {}):
             module.load_state_dict(payload["models"][name])
     everything = {**composites, **models}
-    from .std.lego.kalfa.clone import clone
-
     for name, state in payload.get("emas", {}).items():
         if name in models:
-            ema = clone(models[name], 1.0)
+            ema = Ema(models[name], 1.0)
             ema.load_state_dict(state)
             everything[f"{name}.ema"] = ema
     sampler = store.resolve_params(document["flow"]["after"]["params"]["generate"])
     logger.info(f"generating with the {which} models")
-    device = build_device(device)[0] if device is not None else None
-    to_device(everything, device)
+    device = build_device(device) if device is not None else Device.cpu()
+    device.place(everything)
     seed_all(config.get("seed"))
-    samples = sampler(models=everything, prep=prep, rng=turn_generator(device))
+    samples = sampler(models=everything, prep=prep, rng=device.generator())
     target = Path(run_dir) / "samples"
     write_samples(samples, target)
     path = target / ("samples.txt" if isinstance(samples, str) else "samples.pt")
     return Generated(str(path), samples)
 
 
-def _data_outputs(document, names):
-    """Outputs of the data block of a recipe run on its own (no record, nothing written)."""
-    return _flow_outputs(document, ("data",), names)
+def data_outputs(document, names):
+    return flow_outputs(document, ("data",), names)
 
 
-def _flow_outputs(document, blocks, names):
-    """Outputs of the named flow blocks of a recipe run on their own (no record, nothing written)."""
+def flow_outputs(document, blocks, names):
     flow = {"outputs": list(names)}
     for block in blocks:
         flow[block] = document["flow"][block]
@@ -483,9 +437,8 @@ def _flow_outputs(document, blocks, names):
     return report.outputs
 
 
-def _test_loader(document):
-    """The run's own test loader, produced by the data block of its recipe."""
-    return _data_outputs(document, ["test_loader"])["test_loader"]
+def test_loader(document):
+    return data_outputs(document, ["test_loader"])["test_loader"]
 
 
 __all__ = ["Generated", "KalfaError", "Prepared", "Prediction", "Probe", "RunResult", "check", "generate",

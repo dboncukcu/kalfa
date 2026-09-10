@@ -1,15 +1,17 @@
 from kalfa.registration import lego
 from kalfa.std.common import figure
 from kalfa.std.plot.base import first_set, set_frame
-from kalfa.std.plot.seaborn.base import sampled, seaborn_module
+from kalfa.std.common.optional import load
+from kalfa.std.plot.seaborn.base import sampled
 
 
-@lego("/plot/seaborn/violin", partial=True, alias="violin", refs={"value": "column", "group": "column"},
+@lego("/plot/seaborn/violin", partial=True, alias="violin", requires="seaborn",
+      refs={"value": "column", "group": "column"},
       description="seaborn's violin of one column of a set, split by a grouping column when one is named; "
                   "skipped with a warning when seaborn is not installed")
 def violin(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None,
            sample=20000, name=None):
-    seaborn = seaborn_module("violin")
+    seaborn = load("seaborn", "violin")
     set_name = first_set(sets, "train")
     table = set_frame(loaders, prep, set_name)
     if seaborn is None or table is None or value is None or value not in table.columns:

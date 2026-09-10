@@ -48,6 +48,17 @@ def test_every_std_uri_follows_the_rule():
         assert stored == cirak_kind(kalfa_kind(uri)), uri
 
 
+@pytest.mark.subprocess
+def test_importing_kalfa_loads_no_specialised_library():
+    import subprocess
+    import sys
+
+    code = ("import sys, kalfa; print(sorted(name for name in ('sklearn', 'torchmetrics', 'matplotlib', 'PIL', "
+            "'scipy', 'optuna', 'seaborn', 'torchview') if name in sys.modules))")
+    found = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert found.stdout.strip() == "[]"
+
+
 def test_the_uri_is_the_path():
     from pathlib import Path
 
@@ -55,7 +66,7 @@ def test_the_uri_is_the_path():
 
     root = Path(kalfa.std.__file__).parent
     files = sorted(path for path in root.glob("*/*/*.py") if path.name not in ("__init__.py", "base.py"))
-    assert len(files) == len(STD_URIS) == 161
+    assert len(files) == len(STD_URIS) == 162
     modules = {}
     for path in files:
         kind, pack, name = path.relative_to(root).with_suffix("").parts

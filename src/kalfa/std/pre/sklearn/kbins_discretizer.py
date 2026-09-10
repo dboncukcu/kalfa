@@ -4,8 +4,11 @@ from kalfa.registration import lego
 from kalfa.std.pre.base import Encoder
 
 
+@lego("/pre/sklearn/kbins_discretizer", state=True, alias="kbins_discretizer",
+      description="Cut a column into bins and write them as one hot columns <field>_bin<n> (encode: ordinal "
+                  "for one integer column); strategy quantile, uniform or kmeans (sklearn KBinsDiscretizer)")
 class KBins(Encoder):
-    def __init__(self, bins, strategy, encode):
+    def __init__(self, bins=5, strategy="quantile", encode="onehot"):
         self.bins = int(bins)
         self.strategy = strategy
         self.encode = encode
@@ -25,10 +28,3 @@ class KBins(Encoder):
 
     def columns(self, name):
         return [f"{name}_bin{position}" for position in range(self.width)]
-
-
-@lego("/pre/sklearn/kbins_discretizer", state=True, alias="kbins_discretizer",
-      description="Cut a column into bins and write them as one hot columns <field>_bin<n> (encode: ordinal "
-                  "for one integer column); strategy quantile, uniform or kmeans (sklearn KBinsDiscretizer)")
-def kbins_discretizer(bins=5, strategy="quantile", encode="onehot"):
-    return KBins(bins, strategy, encode)

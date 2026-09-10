@@ -1,18 +1,30 @@
-from kalfa.kinds import SETS
+import functools
+
+from cirak import Deferred
 
 
 def wires(keys):
-    """The output wire and the target field a definition names; both None when it names nothing."""
     keys = keys or {}
     return keys.get("output"), keys.get("target")
 
 
 def observed(value):
-    """A tensor as an observation: off the graph. Metrics never backpropagate, and a metric that accumulates a
-    tensor carrying gradients keeps the graph of every batch alive."""
     detach = getattr(value, "detach", None)
     return detach() if callable(detach) else value
 
 
-def all_sets():
-    return list(SETS)
+def rebound(function, name, value):
+    keywords = dict(getattr(function, "keywords", None) or {})
+    base = getattr(function, "func", function)
+    keywords[name] = value
+    return functools.partial(base, **keywords)
+
+
+def built(function, **available):
+    keywords = dict(getattr(function, "keywords", None) or {})
+    if not any(isinstance(value, Deferred) for value in keywords.values()):
+        return function
+    base = getattr(function, "func", function)
+    resolved = {key: value.build(**available) if isinstance(value, Deferred) else value
+                for key, value in keywords.items()}
+    return functools.partial(base, **resolved)

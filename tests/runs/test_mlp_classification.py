@@ -18,11 +18,11 @@ def test_check_reads_the_header_and_accepts_the_chains(dataset):
 
 
 def test_labels_are_decoded_and_the_best_is_by_f1(trained):
-    from kalfa.record import read_history
+    from kalfa.std.common.history import History
 
     result = trained("02_mlp_classification")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3]
     keys = set(history[0])
     assert {"train/ce", "train/accuracy", "train/f1", "val/ce", "val/accuracy", "val/f1", "test/f1", "lr/net"} <= keys
@@ -48,18 +48,18 @@ def test_labels_are_decoded_and_the_best_is_by_f1(trained):
 def test_class_weights_and_encoders(dataset):
     from kalfa.std.data.kalfa.class_weights import class_weights
     from kalfa.std.feed.kalfa.table import table
-    from kalfa.std.loader.kalfa.torch import torch as torch_loader
+    from kalfa.std.loader.kalfa.torch import torch_loader
     from kalfa.std.lego.kalfa.apply import apply
     from kalfa.std.lego.kalfa.fit import fit
-    from kalfa.std.pre.kalfa.label_encoder import label_encoder
-    from kalfa.std.pre.kalfa.one_hot import one_hot
-    from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+    from kalfa.std.pre.kalfa.label_encoder import LabelEncoder
+    from kalfa.std.pre.kalfa.one_hot import OneHot
+    from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 
     dataset("02_mlp_classification")
     data = pandas.read_parquet("churn.parquet")
     prep = fit(data, {"num_*": {"preprocessors": ["s"]}, "cat_*": {"preprocessors": ["o"]},
                       "churned": {"target": True, "preprocessors": ["l"]}},
-               {"s": standard_scaler(), "o": one_hot(), "l": label_encoder()}, [])
+               {"s": StandardScaler(), "o": OneHot(), "l": LabelEncoder()}, [])
     assert [column for column in prep.features if column.startswith("cat_a")] == ["cat_a_east", "cat_a_north",
                                                                                  "cat_a_south"]
     frame = apply(data, prep, "train")

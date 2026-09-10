@@ -4,9 +4,9 @@ from kalfa.registration import lego
 from kalfa.std.pre.base import Tokenizer
 
 
+@lego("/pre/kalfa/char_tokenizer", state=True, alias="char_tokenizer",
+      description="Character level tokenizer fitted on the train text; the vocabulary goes into the record")
 class CharTokenizer(Tokenizer):
-    """Characters to ids in sorted order, fitted on the train text; the newline is always in the vocabulary."""
-
     dtype = "int64"
 
     def fit(self, values):
@@ -31,9 +31,3 @@ class CharTokenizer(Tokenizer):
     @property
     def size(self):
         return len(self.chars)
-
-
-@lego("/pre/kalfa/char_tokenizer", state=True, alias="char_tokenizer",
-      description="Character level tokenizer fitted on the train text; the vocabulary goes into the record")
-def char_tokenizer():
-    return CharTokenizer()

@@ -1,18 +1,14 @@
 import inspect
 
 from torch import nn
+from cirak import Deferred
 
 
 def is_deferred(value):
-    from cirak import Deferred
-
     return isinstance(value, Deferred)
 
 
 class DeferredLayer(nn.Module):
-    """A layer whose params include a kind data component; the model builder builds it with prep and the train
-    loader at hand."""
-
     def __init__(self, factory, params):
         super().__init__()
         self.factory = factory
@@ -25,14 +21,12 @@ class DeferredLayer(nn.Module):
 
 
 def later(factory, **params):
-    """``factory(**params)`` now, or a DeferredLayer when a param is a kind data component."""
     if any(is_deferred(value) for value in params.values()):
         return DeferredLayer(factory, params)
     return factory(**params)
 
 
 def build_deferred(deferred, **available):
-    """Build a kind data component with the data its signature asks for (prep, loader, train_loader)."""
     try:
         names = set(inspect.signature(deferred.target).parameters)
     except (TypeError, ValueError):

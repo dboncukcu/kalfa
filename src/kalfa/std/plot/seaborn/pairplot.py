@@ -1,15 +1,16 @@
 from kalfa.registration import lego
 from kalfa.std.common import figure
 from kalfa.std.plot.base import columns_of, first_set, set_frame
-from kalfa.std.plot.seaborn.base import sampled, seaborn_module
+from kalfa.std.common.optional import load
+from kalfa.std.plot.seaborn.base import sampled
 
 
-@lego("/plot/seaborn/pairplot", partial=True, alias="pairplot",
+@lego("/plot/seaborn/pairplot", partial=True, alias="pairplot", requires="seaborn",
       description="seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; "
                   "skipped with a warning when seaborn is not installed")
 def pairplot(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None,
              sample=5000, kind="scatter", diagonal="hist", height=2.2, name=None):
-    seaborn = seaborn_module("pairplot")
+    seaborn = load("seaborn", "pairplot")
     set_name = first_set(sets, "train")
     table = set_frame(loaders, prep, set_name)
     if seaborn is None or table is None:

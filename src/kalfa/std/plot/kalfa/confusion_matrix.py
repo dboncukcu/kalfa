@@ -15,12 +15,12 @@ def confusion_matrix(predictions, history, models, record, name=None):
                if not column.startswith(("pred_", "raw_")) and column != "row"]
     if not preds or not targets:
         return None
-    from sklearn.metrics import confusion_matrix as sk_confusion
+    from sklearn import metrics
 
     truth = predictions[targets[0]].astype(str).to_numpy()
     guess = predictions[preds[0]].astype(str).to_numpy()
     labels = sorted(set(truth.tolist()) | set(guess.tolist()))
-    matrix = sk_confusion(truth, guess, labels=labels)
+    matrix = metrics.confusion_matrix(truth, guess, labels=labels)
     shares = matrix / numpy.maximum(matrix.sum(axis=1, keepdims=True), 1)
     side = 1.8 + 0.8 * len(labels)
     drawing, axes = figure.sized(side, side * 0.86)

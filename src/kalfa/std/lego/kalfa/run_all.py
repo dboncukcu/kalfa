@@ -1,15 +1,14 @@
 from kalfa.registration import lego
 from kalfa.std.common import figure
 from kalfa.std.common.log import logger_for
+import inspect
+from cirak.registry import registry
 
 
 logger = logger_for("after.plots")
 
 
 def uri_of(plot):
-    """The registry URI of a built plot (a function or a partial of one), None when it is not registered."""
-    from cirak.registry import registry
-
     base = getattr(plot, "func", plot)
     for uri in registry.uris():
         entry = registry.lookup(uri)
@@ -19,9 +18,6 @@ def uri_of(plot):
 
 
 def plot_inputs(plot, inputs, predictions, history, models):
-    """The extra inputs of a plot resolved by the types its refs fact declares: history keys, fields, models."""
-    from cirak.registry import registry
-
     uri = uri_of(plot)
     refs = registry.facts(uri).refs if isinstance(uri, str) else {}
     resolved = {}
@@ -39,8 +35,6 @@ def plot_inputs(plot, inputs, predictions, history, models):
 
 
 def accepts(plot, name):
-    import inspect
-
     try:
         parameters = inspect.signature(plot).parameters
     except (TypeError, ValueError):

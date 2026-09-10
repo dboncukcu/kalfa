@@ -7,13 +7,13 @@ import torch
 
 import kalfa  # noqa: F401
 from kalfa.std.feed.kalfa.window import WindowDataset, previous_frames, window
-from kalfa.std.layer.torch.gru import gru
-from kalfa.std.layer.torch.last_step import last_step
+from kalfa.std.layer.torch.gru import Gru
+from kalfa.std.layer.torch.last_step import LastStep
 from kalfa.std.plot.kalfa.forecast_samples import forecast_samples
 from kalfa.std.pre.base import Frame
 from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 from kalfa.std.split.kalfa.kfold import kfold
 from kalfa.std.split.base import kfold_sizes
 from kalfa.std.split.kalfa.sequential import sequential
@@ -33,7 +33,7 @@ def test_sequential_split_cuts_every_group_in_order():
 
 
 def frames_of(data, group="site_id"):
-    prep = fit(data, {"x*": {"preprocessors": ["s"]}, "load": {"target": True}}, {"s": standard_scaler()}, [])
+    prep = fit(data, {"x*": {"preprocessors": ["s"]}, "load": {"target": True}}, {"s": StandardScaler()}, [])
     parts = sequential(data, [0.6, 0.2, 0.2], group=group)
     return prep, {name: apply(parts[name], prep, name) for name in parts}
 
@@ -84,7 +84,7 @@ def test_gru_and_last_step_are_lazy_and_seeded():
     from kalfa.std.builder.kalfa.module import Module
 
     def build(seed):
-        graph = Graph(("x",), ("y",), (GraphNode("g", gru(4), ("x",), ("h",)), GraphNode("l", last_step(), ("h",), ("s",)),
+        graph = Graph(("x",), ("y",), (GraphNode("g", Gru(4), ("x",), ("h",)), GraphNode("l", LastStep(), ("h",), ("s",)),
                                        GraphNode("o", torch.nn.LazyLinear(2), ("s",), ("y",))))
         return Module(graph, seed=seed)
 

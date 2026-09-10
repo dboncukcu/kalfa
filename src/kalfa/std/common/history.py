@@ -1,0 +1,77 @@
+import json
+import math
+from pathlib import Path
+
+
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def is_series(key, value):
+    return "/" in key and not key.startswith("lr/") and is_number(value)
+
+
+class History:
+    def __init__(self, lines=()):
+        self.lines = list(lines or [])
+
+    @classmethod
+    def read(cls, record):
+        path = Path(record) / "history.jsonl"
+        if not path.exists():
+            return cls()
+        return cls(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
+    @staticmethod
+    def line(metrics, counters, optimizers, rules):
+        found = {"turn": int((counters or {}).get("turn", 0)),
+                 "global_step": int((counters or {}).get("global_step", 0))}
+        found.update(metrics or {})
+        for name, optimizer in (optimizers or {}).items():
+            found[f"lr/{name}"] = optimizer.lr()
+        found["rules"] = list((rules or {}).get("fired") or [])
+        return found
+
+    @staticmethod
+    def append(record, line):
+        target = Path(record)
+        target.mkdir(parents=True, exist_ok=True)
+        with (target / "history.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(line, default=float) + "\n")
+
+    def __len__(self):
+        return len(self.lines)
+
+    def __iter__(self):
+        return iter(self.lines)
+
+    def __getitem__(self, position):
+        return self.lines[position]
+
+    def __eq__(self, other):
+        return isinstance(other, History) and self.lines == other.lines
+
+    def series(self, names=None):
+        found = {}
+        for line in self.lines:
+            for key, value in line.items():
+                if is_series(key, value):
+                    found.setdefault(key, []).append(value)
+        if names:
+            missing = [name for name in names if name not in found]
+            if missing:
+                raise ValueError(f"{missing} are not in the history; the series are {sorted(found)}")
+            found = {name: found[name] for name in names}
+        return found
+
+    def last(self, prefixes=("test/",)):
+        if not self.lines:
+            return {}
+        return {key: value for key, value in self.lines[-1].items() if is_number(value) and key.startswith(prefixes)}
+
+    def best(self, monitor, mode="min", at="best"):
+        lines = [line for line in self.lines if is_number(line.get(monitor)) and not math.isnan(line[monitor])]
+        if not lines:
+            raise ValueError(f"the history has no value for {monitor!r}")
+        line = lines[-1] if at == "last" else (min if mode == "min" else max)(lines, key=lambda entry: entry[monitor])
+        return float(line[monitor]), int(line.get("turn", len(lines)))

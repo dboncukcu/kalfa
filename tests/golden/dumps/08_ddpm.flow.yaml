@@ -6,7 +6,8 @@
 # the comments are tezgah's resolution: implicit bindings, pattern matches, derived reads and exports).
 components:
   losses:
-    ddpm: {uri: /objective/kalfa/ddpm, params: {model: unet, schedule: {uri: /schedule/kalfa/linear_betas, params: {steps: 1000}}}}
+    ddpm: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/ddpm, params: {model: unet, schedule: {uri: /schedule/kalfa/linear_betas, 
+                params: {steps: 1000}}}}}}
   metrics:
     samples: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/kalfa/sample_writer, params: {sampler: {uri: /generate/kalfa/ddpm_sampler, params: {
                   model: unet.ema, schedule: {uri: /schedule/kalfa/linear_betas, params: {steps: 1000}}, shape: [3, 32, 32], n: 64}}, n: 16}}}}

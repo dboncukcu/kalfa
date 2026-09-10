@@ -1,9 +1,3 @@
-"""Loading the user's config: layers and --set through cirak's loader, then kalfa's alias and $param$ resolution.
-
-The loaded config keeps the user's shape; only lego names become full URIs and ``$param$`` placeholders
-become values. ``$datetime$`` stays literal here and is filled when a record directory is opened.
-"""
-
 import sys
 from dataclasses import dataclass, field
 from importlib import import_module
@@ -16,6 +10,8 @@ from cirak.registry import registry
 from cirak.resolve import TOKEN
 
 from .std.common.log import logger_for
+from cirak.errors import render_problems
+from .std import STD_URIS
 
 logger = logger_for("config")
 
@@ -29,8 +25,6 @@ SHORT_CALL_PATHS = (("training", "turn"), ("training", "checkpoint"), ("data", "
 
 @dataclass
 class Surface:
-    """The user's config as loaded: raw (merged) and resolved trees, provenance, overrides and aliases."""
-
     data: dict
     raw: dict
     provenance: dict
@@ -56,7 +50,6 @@ TOP_KEYS = ("plugins", "params", "seed", "device", "data", "model", "metrics", "
 
 
 def parse_set(text):
-    """``--set path=value``: a dotted path from the document root; a single segment must be a top level key."""
     path, separator, value = text.partition("=")
     if not separator or not path:
         raise ValueError(f"--set expects PATH=VALUE, got {text!r}")
@@ -67,7 +60,6 @@ def parse_set(text):
 
 
 def parse_param(text):
-    """``-p name=value``: the params entry ``name``."""
     name, separator, value = text.partition("=")
     if not separator or not name:
         raise ValueError(f"-p expects NAME=VALUE, got {text!r}")
@@ -75,11 +67,10 @@ def parse_param(text):
 
 
 def parse_sets(sets=None, params=None):
-    """The top layer of a run from ``--set`` and ``-p`` texts, in the order given."""
     return [parse_set(text) for text in sets or []] + [parse_param(text) for text in params or []]
 
 
-def _import_plugins(names, problems):
+def import_named(names, problems):
     for name in names or []:
         if not isinstance(name, str):
             problems.append(error("plugin_import_failed", f"plugin entries must be strings, got {name!r}"))
@@ -87,33 +78,31 @@ def _import_plugins(names, problems):
             try:
                 import_module(name)
                 logger.info(f"plugin {name}")
-            except Exception as exc:
-                problems.append(error("plugin_import_failed", f"cannot import plugin {name}: {exc}"))
+            except Exception as exception:
+                problems.append(error("plugin_import_failed", f"cannot import plugin {name}: {exception}"))
 
 
-def _add_to_sys_path(directory):
+def add_to_sys_path(directory):
     if directory.is_dir() and str(directory) not in sys.path:
         sys.path.insert(0, str(directory))
 
 
-def _extend_sys_path(layer):
-    """Plugins import from the directory of every config file and from a plugins/ folder next to it (a record
-    directory keeps the copies of the modules its run imported)."""
+def extend_sys_path(layer):
     for loaded in layer.walk():
         if loaded.file == "--set":
             continue
         parent = Path(loaded.file).parent
         for directory in (parent / "plugins", parent):
-            _add_to_sys_path(directory)
+            add_to_sys_path(directory)
 
 
-def _module_name(text):
+def module_name(text):
     path = Path(text)
     if path.suffix == ".py":
-        _add_to_sys_path(path.resolve().parent)
+        add_to_sys_path(path.resolve().parent)
         return path.stem
     for directory in (Path.cwd() / "plugins", Path.cwd()):
-        _add_to_sys_path(directory)
+        add_to_sys_path(directory)
     return text
 
 
@@ -123,16 +112,13 @@ def import_plugins(paths=(), modules=()):
         layer, load_problems = load([str(path)], registry.fragments())
         raw, _, _, merge_problems = merge_layers(layer)
         problems.extend([*load_problems, *merge_problems])
-        _extend_sys_path(layer)
-        _import_plugins(raw.get("plugins"), problems)
-    _import_plugins([_module_name(name) for name in modules or ()], problems)
+        extend_sys_path(layer)
+        import_named(raw.get("plugins"), problems)
+    import_named([module_name(name) for name in modules or ()], problems)
     return problems
 
 
 def plugin_aliases():
-    """Short names declared by legos outside kalfa's std, usable without a pack."""
-    from .std import STD_URIS
-
     return {name: uri for name, uri in registry.aliases().items() if uri not in STD_URIS}
 
 
@@ -157,8 +143,8 @@ def load_surface(paths, sets=None) -> Surface:
     if overrides:
         logger.debug(f"{len(overrides)} overridden leaves")
     problems = [*problems, *merge_problems]
-    _extend_sys_path(layer)
-    _import_plugins(raw.get("plugins"), problems)
+    extend_sys_path(layer)
+    import_named(raw.get("plugins"), problems)
     aliases = dict(plugin_aliases())
     table = raw.get("alias")
     if isinstance(table, dict):
@@ -168,7 +154,6 @@ def load_surface(paths, sets=None) -> Surface:
 
 
 def resolve_alias(text, aliases):
-    """Follow a short name to its URI; a text starting with / is already one. None when unknown."""
     seen = []
     current = text
     while not current.startswith("/"):
@@ -181,7 +166,7 @@ def resolve_alias(text, aliases):
 
 def resolve_surface(raw, provenance, aliases, problems):
     globals_ = raw.get("params") if isinstance(raw.get("params"), dict) else {}
-    resolver = _Resolver(aliases, globals_, provenance, problems)
+    resolver = Resolver(aliases, globals_, provenance, problems)
     out = {}
     for key, value in raw.items():
         if key in SKIPPED_SECTIONS:
@@ -196,8 +181,6 @@ def resolve_surface(raw, provenance, aliases, problems):
 
 
 def resolve_rule_sets(data, aliases):
-    """Rule set values that name a lego by alias (the target loss param has a refs type of a lego kind) are written
-    as URIs, like the params themselves, so that resolved.yaml reloads without the alias packs."""
     losses = data.get("losses") if isinstance(data.get("losses"), dict) else {}
     training = data.get("training") if isinstance(data.get("training"), dict) else {}
     for rule in training.get("rules") or []:
@@ -221,7 +204,7 @@ def resolve_rule_sets(data, aliases):
                     rule["set"][key] = resolved
 
 
-class _Resolver:
+class Resolver:
     def __init__(self, aliases, globals_, provenance, problems):
         self.aliases = aliases
         self.globals = globals_
@@ -249,8 +232,6 @@ class _Resolver:
         return value
 
     def reference_params(self, out):
-        """A lego call's params that name another lego by alias (refs of a lego type), written as URIs so that
-        resolved.yaml stands alone; names that resolve to nothing stay for check to report."""
         uri = out.get("uri")
         params = out.get("params")
         if not isinstance(uri, str) or not uri.startswith("/") or not isinstance(params, dict):
@@ -268,8 +249,6 @@ class _Resolver:
         return out
 
     def template_variables(self, template, path):
-        """The variable names of a model template; inside the template body they stay literal for cirak and win
-        over a param of the same name, outside it the param applies."""
         declared = template.get("variables") if isinstance(template.get("variables"), dict) else {}
         return frozenset(str(name) for name in declared)
 
@@ -326,13 +305,10 @@ class _Resolver:
 
 
 def written_config(data):
-    """The resolved config as resolved.yaml writes it: no alias table, everything else as loaded."""
     return {key: value for key, value in data.items() if key != "alias"}
 
 
 def problems_text(problems):
-    from cirak.errors import render_problems
-
     return render_problems(list(problems))
 
 

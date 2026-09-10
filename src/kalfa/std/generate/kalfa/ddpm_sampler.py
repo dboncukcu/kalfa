@@ -2,13 +2,12 @@ import torch
 
 from kalfa.registration import lego
 from kalfa.std.generate.base import pick_model
+from kalfa.std.common.diffusion import diffusion_steps, noise_schedule
 
 
 @lego("/generate/kalfa/ddpm_sampler", partial=True, refs={"model": "model", "schedule": "schedule"},
       alias="ddpm_sampler", description="n samples by the reverse diffusion of the noise schedule from pure noise")
 def ddpm_sampler(models, prep, rng, model, schedule, shape, n=64):
-    from kalfa.std.common.diffusion import diffusion_steps, noise_schedule
-
     net = pick_model(models, model)
     net.eval()
     device = next(iter(net.parameters()), torch.zeros(1)).device

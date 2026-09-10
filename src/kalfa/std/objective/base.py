@@ -2,7 +2,7 @@ import torch
 
 
 def input_of(model, batch):
-    wires = list(getattr(model, "inputs", []))
+    wires = list(model.inputs)
     if not wires or wires[0] not in batch:
         raise KeyError(f"the objective needs the model's first input wire in the batch; wires {wires}, "
                        f"batch {sorted(batch)}")

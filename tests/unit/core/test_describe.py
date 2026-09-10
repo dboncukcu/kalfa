@@ -6,7 +6,7 @@ import pytest
 from helpers import example, examples
 from kalfa.api import check, probe
 from kalfa.cli import main
-from kalfa.describe import render
+from kalfa.describe import Plain, render
 from kalfa.synthetic import write_churn
 
 CONFIG_01 = Path(example("01_mlp_regression"))
@@ -177,10 +177,6 @@ def test_params_are_a_block(workdir, capsys):
 
 
 def test_render_takes_a_section_list(workdir):
-    class Plain:
-        def __getattr__(self, name):
-            return lambda text: text
-
     prepared = check([str(CONFIG_01)])
     text = render(prepared, Plain(), ["data"], None, width=100)
     assert text.startswith("\n── DATA ") and "── MODEL " not in text

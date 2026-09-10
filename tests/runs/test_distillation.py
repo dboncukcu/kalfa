@@ -5,7 +5,7 @@ import torch
 
 from kalfa.api import check, run
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 from runs.conftest import SMALL
 
 pytestmark = pytest.mark.slow
@@ -42,7 +42,7 @@ def test_the_frozen_teacher_and_the_cooled_student(teacher):
               "value: -1.0}}, set: {main.lr: 1.0e-4}}]")
     result = run(["config.yaml"], parse_sets(SETS + [forced], PARAMS), when="fixed")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2]
     assert {"train/kd", "train/kd/ce", "train/kd/kl", "val/kd/kl", "val/accuracy", "lr/main"} <= set(history[0])
     assert [line["rules"] for line in history] == [["cool_down"], []]

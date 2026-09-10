@@ -22,53 +22,32 @@ from kalfa.std.pre.base import (
 logger = logger_for("data.prep")
 
 
-@lego("/lego/kalfa/fit", returns="prep", state=True, bus=["record"],
-      description="Resolve the field globs and fit every preprocessor chain on the train set; keys carry the "
-                  "sets a preprocessor is limited to")
-def fit(df, fields, preprocessors, drop, keys=None, record=None):
-    started = clock()
-    sets = sets_of(keys)
-    templates = dict(preprocessors or {})
-    unknown = sorted({pre for spec in (fields or {}).values() for pre in ((spec or {}).get("preprocessors") or [])
-                      if pre not in templates})
-    if unknown:
-        raise ValueError(f"fields name preprocessors {unknown} that data.preprocessors does not define")
-    items = resolve_fields(df, fields or {}, drop)
-    if templates:
-        logger.info(f"fitting {len(templates)} preprocessors over {len(items)} fields")
-    sets = {name: list(allowed) for name, allowed in (sets or {}).items()}
+def fit_samples(items, df, templates, dtypes):
     fitted = {}
-    dtypes = {}
-    if is_stream(df):
-        fit_stream(items, df, templates, sets, fitted, dtypes)
-        prep = Prep(items, fitted, sets, dtypes, list(drop or []))
-        if record is not None:
-            write_prep(prep, record)
-        return report_fitted(prep, started)
-    if is_samples(df):
-        for item in items:
-            kind = df.dtypes.get(item.name)
-            for pre in item.chain:
-                obj = copy.deepcopy(templates[pre])
-                if hasattr(obj, "fit"):
-                    try:
-                        values = df.column(item.name)
-                    except ValueError:
-                        raise ValueError(f"preprocessor {pre!r} fits on a column, but field {item.name!r} of the "
-                                         f"Dataset source cannot be read as one") from None
-                    obj.fit(values)
-                fitted.setdefault(pre, {})[item.name] = obj
-                kind = getattr(obj, "dtype", kind)
-            item.columns = [item.name]
-            resolved = torch_dtype(kind)
-            if resolved is None:
-                raise TypeError(f"field {item.name!r} has dtype {kind} after its chain; add a preprocessor that turns "
-                                f"it into a tensor (to_tensor)")
-            dtypes[item.name] = resolved
-        prep = Prep(items, fitted, sets, dtypes, list(drop or []))
-        if record is not None:
-            write_prep(prep, record)
-        return report_fitted(prep, started)
+    for item in items:
+        kind = df.dtypes.get(item.name)
+        for name in item.chain:
+            preprocessor = copy.deepcopy(templates[name])
+            if preprocessor.fits:
+                try:
+                    values = df.column(item.name)
+                except ValueError:
+                    raise ValueError(f"preprocessor {name!r} fits on a column, but field {item.name!r} of the "
+                                     f"Dataset source cannot be read as one") from None
+                preprocessor.fit(values)
+            fitted.setdefault(name, {})[item.name] = preprocessor
+            kind = preprocessor.dtype or kind
+        item.columns = [item.name]
+        resolved = torch_dtype(kind)
+        if resolved is None:
+            raise TypeError(f"field {item.name!r} has dtype {kind} after its chain; add a preprocessor that turns "
+                            f"it into a tensor (to_tensor)")
+        dtypes[item.name] = resolved
+    return fitted
+
+
+def fit_table(items, df, templates, sets, dtypes):
+    fitted = {}
     final = fit_chains(items, lambda item: values_of(df, item.name), templates, sets, fitted)
     for item in items:
         values = final[item.name]
@@ -79,6 +58,31 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
         item.columns = columns_of(item, values, fitted)
         for column in item.columns:
             dtypes[column] = kind
+    return fitted
+
+
+@lego("/lego/kalfa/fit", returns="prep", state=True, bus=["record"],
+      description="Resolve the field globs and fit every preprocessor chain on the train set; keys carry the "
+                  "sets a preprocessor is limited to")
+def fit(df, fields, preprocessors, drop, keys=None, record=None):
+    started = clock()
+    templates = dict(preprocessors or {})
+    unknown = sorted({name for spec in (fields or {}).values() for name in ((spec or {}).get("preprocessors") or [])
+                      if name not in templates})
+    if unknown:
+        raise ValueError(f"fields name preprocessors {unknown} that data.preprocessors does not define")
+    items = resolve_fields(df, fields or {}, drop)
+    if templates:
+        logger.info(f"fitting {len(templates)} preprocessors over {len(items)} fields")
+    sets = {name: list(allowed) for name, allowed in sets_of(keys).items()}
+    dtypes = {}
+    if is_stream(df):
+        fitted = {}
+        fit_stream(items, df, templates, sets, fitted, dtypes)
+    elif is_samples(df):
+        fitted = fit_samples(items, df, templates, dtypes)
+    else:
+        fitted = fit_table(items, df, templates, sets, dtypes)
     prep = Prep(items, fitted, sets, dtypes, list(drop or []))
     if record is not None:
         write_prep(prep, record)

@@ -4,9 +4,10 @@ from kalfa.registration import lego
 from kalfa.std.strategy.base import Choices, Strategy
 
 
+@lego("/strategy/kalfa/optuna", alias="optuna",
+      description="trials points proposed by optuna (tpe or random sampler) from the objectives fed back; "
+                  "local loop only, no --id")
 class OptunaSearch(Strategy):
-    """trials points proposed one by one by optuna's sampler from the objectives fed back; local loop only."""
-
     deterministic = False
 
     def __init__(self, trials, seed=0, sampler="tpe"):
@@ -18,13 +19,13 @@ class OptunaSearch(Strategy):
     def total(self, space):
         return self.trials
 
-    def _study(self, mode):
+    def ensure_study(self, mode):
         if self.study is None:
             try:
                 import optuna
-            except ImportError as exc:
+            except ImportError as exception:
                 raise ImportError("the optuna strategy needs optuna, which kalfa depends on; the environment "
-                                  "is missing it, reinstall it with uv sync") from exc
+                                  "is missing it, reinstall it with uv sync") from exception
             optuna.logging.set_verbosity(optuna.logging.WARNING)
             if self.sampler == "random":
                 sampler = optuna.samplers.RandomSampler(seed=self.seed)
@@ -34,7 +35,7 @@ class OptunaSearch(Strategy):
         return self.study
 
     def ask(self, space, mode="min"):
-        study = self._study(mode)
+        study = self.ensure_study(mode)
         trial = study.ask()
         point = {}
         for name, entry in space.items():
@@ -53,10 +54,3 @@ class OptunaSearch(Strategy):
             self.study.tell(trial, state=optuna.trial.TrialState.FAIL)
         else:
             self.study.tell(trial, float(value))
-
-
-@lego("/strategy/kalfa/optuna", alias="optuna",
-      description="trials points proposed by optuna (tpe or random sampler) from the objectives fed back; "
-                  "local loop only, no --id")
-def optuna(trials, seed=0, sampler="tpe"):
-    return OptunaSearch(trials, seed, sampler)

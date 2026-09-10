@@ -2,9 +2,9 @@ from kalfa.registration import lego
 from kalfa.std.strategy.base import Strategy, grid_values
 
 
+@lego("/strategy/kalfa/grid", alias="grid",
+      description="Every combination of the space's choices (a range needs steps); deterministic by id")
 class Grid(Strategy):
-    """Every combination of the choices, the last name varying fastest."""
-
     deterministic = True
 
     def total(self, space):
@@ -24,9 +24,3 @@ class Grid(Strategy):
             remaining, position = divmod(remaining, len(values))
             picks[name] = values[position]
         return {name: picks[name] for name in space}
-
-
-@lego("/strategy/kalfa/grid", alias="grid",
-      description="Every combination of the space's choices (a range needs steps); deterministic by id")
-def grid():
-    return Grid()

@@ -2,13 +2,18 @@ import torch
 
 from kalfa.registration import lego
 from kalfa.std.metric.base import Metric
+from pathlib import Path
+from kalfa.std.common.generation import write_turn_samples
+from kalfa.std.common.runtime import call_model, named_outputs, parameter_names, resolve_model
 
 
+@lego("/metric/kalfa/sample_writer", state=True, alias="sample_writer",
+      refs={"sampler": "generate"}, uses=["models"],
+      description="A metric that writes n samples per pass under samples/turn_<n> (png and pt, or txt) from "
+                  "the sampler (sampler: generate takes the generate section) or the predicts model; it "
+                  "reports no value, use every and sets to pace it")
 class SampleWriter(Metric):
-    """Writes n samples once per pass under samples/turn_<n>: from the sampler (the generate section's call) or,
-    without one, the predicts model's outputs on the batch; reports nothing to the history."""
-
-    def __init__(self, n, sampler):
+    def __init__(self, n=16, sampler=None):
         self.n = int(n)
         self.sampler = sampler
         self.reset()
@@ -17,11 +22,6 @@ class SampleWriter(Metric):
         self.done = False
 
     def update(self, models, predicts, rng, record, turn, batch=None, prep=None):
-        from pathlib import Path
-
-        from kalfa.std.common.generation import write_turn_samples
-        from kalfa.std.common.runtime import call_model, named_outputs, parameter_names, resolve_model
-
         if self.done or record is None:
             return
         self.done = True
@@ -40,12 +40,3 @@ class SampleWriter(Metric):
 
     def compute(self):
         return None
-
-
-@lego("/metric/kalfa/sample_writer", state=True, alias="sample_writer",
-      refs={"sampler": "generate"}, uses=["models"],
-      description="A metric that writes n samples per pass under samples/turn_<n> (png and pt, or txt) from "
-                  "the sampler (sampler: generate takes the generate section) or the predicts model; it "
-                  "reports no value, use every and sets to pace it")
-def sample_writer(n=16, sampler=None):
-    return SampleWriter(n, sampler)

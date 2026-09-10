@@ -3,11 +3,10 @@ import math
 import torch
 
 from kalfa.std.metric.base import Metric
+import warnings
 
 
 class TorchMetric(Metric):
-    """A torchmetrics metric under kalfa's interface; an undefined value is NaN with one warning."""
-
     def __init__(self, factory, name):
         self.factory = factory
         self.name = name
@@ -25,8 +24,6 @@ class TorchMetric(Metric):
         self.metric.update(predictions.detach().reshape(-1).float(), labels)
 
     def compute(self):
-        import warnings
-
         value = math.nan
         if len(self.classes) >= 2:
             try:
@@ -46,8 +43,6 @@ class TorchMetric(Metric):
 
 
 class ClassMetric(Metric):
-    """Accuracy or F1 of class logits: argmax over the last dimension, a single logit thresholded at zero."""
-
     def __init__(self, name, average):
         self.name = name
         self.average = average

@@ -1,13 +1,11 @@
 from pathlib import Path
+import pandas
 
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp")
 
 
 class ImageFolder:
-    """root/<class>/<file>: one item per image with fields ``image`` (a PIL image, loaded on access) and ``label``
-    (the class index in sorted class order)."""
-
     fields = ["image", "label"]
     dtypes = {"image": "image", "label": "int64"}
 
@@ -41,8 +39,6 @@ class ImageFolder:
 
 
 class TextLines:
-    """The non empty lines of a text file, one item per line with the field ``text``."""
-
     fields = ["text"]
     dtypes = {"text": "string"}
 
@@ -65,7 +61,6 @@ class TextLines:
 
 
 def header(uri, params):
-    """Column names, dtypes and the row count of a source, read from the file header only."""
     path = params.get("path")
     if uri in ("/source/kalfa/parquet", "/source/kalfa/parquet_stream"):
         import pyarrow.parquet
@@ -82,8 +77,6 @@ def header(uri, params):
         lines = TextLines(path)
         return {"columns": ["text"], "dtypes": {"text": "string"}, "rows": len(lines)}
     if uri in ("/source/kalfa/csv", "/source/kalfa/csv_stream"):
-        import pandas
-
         head = pandas.read_csv(path, nrows=64)
         with open(path, "rb") as stream:
             rows = max(sum(1 for _ in stream) - 1, 0)

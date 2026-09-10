@@ -329,24 +329,32 @@ section, `DOCS.md` stays the reference of what kalfa ships). Details in the Deve
 
 ## Development
 
-**Writing a lego.** A lego is a plain Python callable registered with `kalfa.lego`; its kind is the first segment
+**Writing a lego.** A lego is a function or a class registered with `kalfa.lego`; its kind is the first segment
 of the URI (`/criterion/`, `/objective/`, `/metric/`, `/layer/`, `/pre/`, `/source/`, `/split/`, `/feed/`,
 `/init/`, `/optimizer/`, `/schedule/`, `/turn/`, `/trigger/`, `/checkpoint/`, `/generate/`, `/plot/`,
 `/strategy/`, `/data/`, `/lego/`; the list is `kalfa.kinds.KINDS`), and `check` decides from it where the lego may be
-written. The facts a lego declares: `alias` (short names), `partial` (built with its params at compile time, called
-later), `state` (stateful, goes into the record), `returns` (the outputs of a flow step), `bus` (bus keys bound to
-defaulted parameters), `mutates` (inputs changed in place and returned under the same name), `aliases` (the output
-holds the inputs), `refs` (which params are references and of what type: `model`, `loss`, `criterion`,
-`schedule`, `preprocessor`, `generate`, `field`, `column`), `uses` (`predicts` when the lego needs the prediction
-model), `needs_grad` (an objective that needs gradients in the evaluation pass), `extras` (the training keys a turn
-accepts), `grouped` (a preprocessor fitted once over every column that names it). The last five are kalfa's own
-vocabulary, declared to cirak at import (`kalfa.kinds.FACTS` through `cirak.declare_facts`); cirak stores them and
-reads none of them, and a fact kalfa never declared stays a `RegistryError`, so a misspelled one is still caught. A `/data/` lego is a run time component: `{uri: name}` as a param value, built once the data exists with
-the parameters its signature names (`loader`, `prep`, `target`). The turn contract is the signature of
-`/turn/kalfa/alternating` (`models, optimizers, emas, counters, composites, effects, loader, params, extra, losses,
-metrics, losses_keys, metrics_keys, predicts, steps` plus the bus keys `device`, `prep`, `record`), returning
-`{models, optimizers, emas, counters, metrics}`. The strategy contract: `deterministic`, `total(space)` and
-`point(space, index)`, or `ask(space, mode)` and `tell(trial, value)` for a fed back strategy.
+written. A lego that builds one object of one class is that class, decorated directly (`@kalfa.lego(...)` above
+`class Rmse(Metric)`); cirak reads the constructor's signature. A lego that returns a plain value, chooses between
+classes or defers a build is a function. The facts a lego declares: `alias` (short names), `partial` (built with
+its params at compile time, called later), `state` (stateful, goes into the record), `returns` (the outputs of a
+flow step), `bus` (bus keys bound to defaulted parameters), `mutates` (inputs changed in place and returned under
+the same name), `aliases` (the output holds the inputs), `refs` (which params are references and of what type:
+`model`, `loss`, `criterion`, `schedule`, `preprocessor`, `generate`, `field`, `column`), `uses` (`predicts` when
+the lego needs the prediction model), `needs_grad` (an objective that needs gradients in the evaluation pass),
+`extras` (the training keys a turn accepts), `grouped` (a preprocessor fitted once over every column that names
+it), `requires` (a library that is not a dependency of kalfa, a name or a list; `check` warns when it is not
+installed and the lego loads it with `kalfa.std.common.optional.load(name)`, which returns `None` with a warning
+when it is absent). The last six are kalfa's own vocabulary, declared to cirak at import (`kalfa.kinds.FACTS`
+through `cirak.declare_facts`); cirak stores them and reads none of them, and a fact kalfa never declared stays a
+`RegistryError`, so a misspelled one is still caught. A `/data/` lego is a run time component: `{uri: name}` as a
+param value, built once the data exists with the parameters its signature names (`loader`, `prep`, `target`).
+The turn contract is the signature of `/turn/kalfa/alternating` (`models, optimizers, emas, counters,
+composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps` plus the
+bus keys `device`, `prep`, `record`), returning `{models, optimizers, emas, counters, metrics}`; a custom turn
+builds a `Pass` (`kalfa.std.common.runtime`) and calls `update` from `kalfa.std.turn.base` for one optimizer
+update over a list of batches, so it writes only its own loop. The strategy contract is the `Strategy` base class
+of `kalfa.std.strategy.base`: `deterministic`, `total(space)` and `point(space, index)`, or `ask(space, mode)` and
+`tell(trial, value)` for a fed back strategy.
 
 ```python
 import kalfa
@@ -370,13 +378,29 @@ def after_minutes(metrics, turn_index, state, minutes=30.0):
 ```
 
 A trigger takes the turn's `metrics`, the `turn_index` and its own `state` mapping and returns `(fired, state)`; a
-criterion takes `(predictions, targets, **params)`; an objective `(models, batch, **params)`; a metric is an
-object with `update(...)` and `compute()`; a preprocessor an object with `apply` and optionally `fit`, `inverse`,
-`partial_fit`, `rescales = True` (the metrics undo it to report in the original scale) and `dtype`; with
-`grouped = True` it is fitted once over the matrix of every column that names it (`fit(matrix)`,
-`apply(matrix, columns=None)`, `inverse(matrix, columns=None)`, `columns` naming the positions a slice holds), the
-sklearn way, and it keeps its statistics per column; a device lego (`/device/acme/tpu`) takes no inputs, returns a `torch.device` and raises when the device is
-not available (`device: {uri: /device/acme/tpu}` then selects it).
+criterion takes `(predictions, targets, **params)`; an objective `(models, batch, **params)` and, when its
+signature names them, `step`, `epoch`, `rng`, `scaler` and `losses` (the other losses of the table on the same
+batch, by name). Every other contract is a base class a plugin subclasses; `check` and `describe` read its class
+attributes without building the object:
+
+| contract | base class | what a subclass writes |
+|---|---|---|
+| preprocessor | `kalfa.std.pre.base.Preprocessor`, with `Scaler` (invertible, `rescales`), `Encoder` (fitted, `fits`) and `Tokenizer` (`encode`, `decode`, `size`) below it | `apply(values)`; `fit(values)` when `fits`; `partial_fit(values)` when `incremental`; `inverse(values)`; `columns(name)` for a widening preprocessor; `decode(scores)` when `decodes`; `dtype` for a Dataset source field; `grouped = True` for one object over every column that names it (`fit(matrix)`, `apply(matrix, columns=None)`, `inverse(matrix, columns=None)`), the sklearn way |
+| metric | `kalfa.std.metric.base.Metric` | `reset()`, `update(...)` naming what it wants among `predictions`, `targets`, `models`, `batch`, `rng`, `predicts`, `record`, `turn`, `prep`, `set`, and `compute()` (`None` reports nothing) |
+| model | `kalfa.std.builder.base.Model` (an `nn.Module`) | `inputs`, `outputs`, `initialized`, `trainable`; the std builder's `Module` and the EMA copy are the two implementations |
+| dataset | `kalfa.std.feed.base.Dataset` and `IterableDataset` (a stream) | `inputs`, `targets`, `frame`, `rows()`, `labels(name)`, `size()` (`None` for a stream), `count()` |
+| checkpoint policy | `kalfa.std.checkpoint.base.Policy` | `monitor`, `tags(metrics)`, `state()`, `restore(state)` |
+| optimizer | `kalfa.std.optimizer.base.Optimizer` | `torch_class`; the base creates the torch optimizer on first use, applies the schedule and answers `lr()` |
+| strategy | `kalfa.std.strategy.base.Strategy` | `deterministic`, `total(space)`, `point(space, index)`, or `ask` and `tell` |
+| losses and metrics entries | `kalfa.std.common.runtime.Loss` | the three std adapters (`/adapter/kalfa/criterion`, `metric`, `objective`) wrap every entry, so the tables are uniform: `loss(context, keys)`, `tracker(name, keys, rescale)`, `with_param(name, value)`, `resolve(**available)` |
+
+A lego that receives `device` gets a `kalfa.std.common.device.Device`: `torch` (the `torch.device`), `move(batch)`,
+`place(modules)`, `generator()`, `autocast(enabled)`, `scaler(enabled)`. A device lego (`/device/acme/tpu`) takes
+no inputs, returns a `torch.device` and raises when the device is not available (`device: {uri: /device/acme/tpu}`
+then selects it); kalfa wraps it. A source lego returns a DataFrame, a `Stream` (`kalfa.std.common.stream`) or
+`Samples(source)` (`kalfa.std.common.samples`) over an object with `fields`, `dtypes`, `column(name)` for the
+light fields and one mapping per item. A plot that reads the history wraps it in
+`kalfa.std.common.history.History` (`series`, `last`, `best`).
 
 **Writing a plot.** A plot lego takes `predictions, history, models, record` and, by naming them in its
 signature, anything else the run holds: `prep`, `train_loader`, `valid_loader`, `test_loader`, `loaders` (the

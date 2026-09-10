@@ -8,20 +8,20 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import frame, tiny_model
-from kalfa.std.adapter.kalfa.criterion import criterion as criterion_adapter
-from kalfa.std.adapter.kalfa.metric import metric as metric_adapter
+from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
+from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
 from kalfa.std.criterion.kalfa.mse import mse
 from kalfa.std.lego.kalfa.evaluate import evaluate
 from kalfa.std.lego.kalfa.generate import generate
 from kalfa.std.lego.kalfa.predict import predict
 from kalfa.std.common.prediction import prediction_table
 from kalfa.std.feed.kalfa.table import table
-from kalfa.std.loader.kalfa.torch import torch as torch_loader
-from kalfa.std.metric.kalfa.rmse import rmse
+from kalfa.std.loader.kalfa.torch import torch_loader
+from kalfa.std.metric.kalfa.rmse import Rmse
 from kalfa.std.pre.base import Prep
 from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 from kalfa.synthetic import housing_frame
 
 
@@ -29,14 +29,14 @@ def test_evaluate_empty_set_gives_an_empty_mapping():
     model = tiny_model()
     loader = torch_loader(table(frame(rows=0)), "valid", {"size": 4})
     assert evaluate({"model": model}, {}, {}, {"turn": 1}, {}, loader, "valid", {"l": criterion_adapter(mse)},
-                    {"r": metric_adapter(rmse())}, {}, {}, "model") == {}
+                    {"r": metric_adapter(Rmse())}, {}, {}, "model") == {}
 
 
 def test_evaluate_reports_losses_and_metrics_and_honours_every_and_sets():
     model = tiny_model()
     loader = torch_loader(table(frame(rows=12)), "valid", {"size": 5})
     losses = {"l": criterion_adapter(mse), "silent": criterion_adapter(mse)}
-    metrics = {"r": metric_adapter(rmse()), "slow": metric_adapter(rmse())}
+    metrics = {"r": metric_adapter(Rmse()), "slow": metric_adapter(Rmse())}
     losses_keys = {"silent": {"sets": ["test"]}}
     metrics_keys = {"slow": {"every": 2}, "r": {"target": "price"}}
     out = evaluate({"model": model}, {}, {}, {"turn": 1}, {}, loader, "valid", losses, metrics, losses_keys,
@@ -51,7 +51,7 @@ def test_evaluate_reports_losses_and_metrics_and_honours_every_and_sets():
 def test_prediction_table_inverts_the_target(tmp_path):
     data = housing_frame(rows=40)
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},
-               {"s": standard_scaler(), "t": standard_scaler()}, [])
+               {"s": StandardScaler(), "t": StandardScaler()}, [])
     test_frame = apply(data.iloc[30:], prep, "test")
     loader = torch_loader(table(test_frame), "test", {"size": 4})
     model = tiny_model(in_features=8)

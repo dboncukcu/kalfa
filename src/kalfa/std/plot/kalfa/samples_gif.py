@@ -1,14 +1,13 @@
 from kalfa.registration import lego
 from kalfa.std.common import figure
 from kalfa.std.plot.base import turn_files
+import warnings
 
 
 @lego("/plot/kalfa/samples_gif", partial=True, alias="samples_gif",
       description="The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning "
                   "when there are none")
 def samples_gif(predictions, history, models, record, name=None, duration=400):
-    import warnings
-
     from PIL import Image
 
     frames = turn_files(record, ".png")

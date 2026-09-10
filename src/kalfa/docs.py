@@ -1,5 +1,3 @@
-"""kalfa docs: the lego reference generated from the registry (the std legos and the alias packs)."""
-
 import inspect
 from pathlib import Path
 
@@ -7,6 +5,9 @@ from cirak.registry import registry
 
 from .config import pack_tables
 from .kinds import KINDS, kalfa_kind
+from ruamel.yaml import YAML
+from . import TEMPLATE
+from .std import STD_URIS
 
 HEADER = """# kalfa lego reference
 
@@ -17,16 +18,17 @@ config section it may be written in follows from the kind (`CONFIG.md` section 5
 valid in a config; the alias packs at the end give the short names. The skeleton steps come after the catalog.
 """
 
-PLUGIN_NOTE = """Legos outside kalfa's std set: what the plugin modules of this listing registered (`kalfa docs --plugin module`
-or `kalfa docs --config config.yaml`). They are written in a config exactly like the std legos, the kind is the
+PLUGIN_NOTE = """Legos outside kalfa's std set: what the plugin modules of this listing registered (`kalfa docs --plugin
+module` or `kalfa docs --config config.yaml`). They are written in a config exactly like the std legos, the kind is the
 first segment of the URI and decides which section takes them.
 """
 
-SKELETON_NOTE = """These are the skeleton steps `src/kalfa/templates/kalfa.yaml` calls; they are not written in a config, the
-template places them and the driver fills their params from the config sections. The list is derived from the URIs
-the template mentions, so it cannot drift. Two more legos are inserted by the driver rather than by the template
-and stay in the catalog above: the adapters (`/adapter/kalfa/criterion` and `/adapter/kalfa/metric`, which wrap the
-criteria and metrics of a config) and the progress component (`/lego/kalfa/progress`).
+SKELETON_NOTE = """These are the skeleton steps `src/kalfa/templates/kalfa.yaml` calls; they are not written in a config,
+the template places them and the driver fills their params from the config sections. The list is derived from the
+URIs the template mentions, so it cannot drift. Four more legos are inserted by the driver rather than by the
+template and stay in the catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and
+`/adapter/kalfa/objective`, which wrap the losses and metrics entries of a config by kind) and the progress
+component (`/lego/kalfa/progress`).
 """
 
 
@@ -56,11 +58,6 @@ def cell(text):
 
 
 def template_uris():
-    """Every registered URI the flow template mentions: the skeleton steps of a run."""
-    from ruamel.yaml import YAML
-
-    from . import TEMPLATE
-
     found = set()
 
     def walk(value):
@@ -78,8 +75,6 @@ def template_uris():
 
 
 def plugin_uris():
-    from .std import STD_URIS
-
     found = []
     for uri in sorted(registry.uris()):
         entry = registry.lookup(uri)
@@ -102,10 +97,6 @@ def table(lines, uris):
 
 
 def render(uris=None, plugins=None):
-    """The reference as Markdown: the catalog by kind, the plugin legos when a listing loaded any, the skeleton
-    steps the template calls, the alias packs."""
-    from .std import STD_URIS
-
     everything = sorted(uris if uris is not None else STD_URIS)
     skeleton = sorted(uri for uri in everything if uri in template_uris())
     chosen = [uri for uri in everything if uri not in set(skeleton)]

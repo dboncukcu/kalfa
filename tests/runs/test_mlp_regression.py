@@ -8,7 +8,8 @@ import torch
 
 from kalfa.api import predict, resume, run
 from kalfa.config import parse_sets
-from kalfa.record import read_history, read_resolved, resume_chain
+from kalfa.record import read_resolved, resume_chain
+from kalfa.std.common.history import History
 
 pytestmark = pytest.mark.slow
 
@@ -37,7 +38,7 @@ def test_record_directory_contents(trained):
     assert "uri: /source/kalfa/parquet" in resolved and "include" not in resolved
     config = read_resolved(record)
     assert config["training"]["turn"] == "/turn/kalfa/alternating"
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3]
     keys = set(history[0])
     assert {"train/loss_mse", "train/loss_huber", "train/loss_mae", "train/loss_logcosh", "train/rmse", "train/mae",
@@ -62,7 +63,7 @@ def test_record_directory_contents(trained):
 def test_forced_rule_chain_fires_and_switches_the_loss(dataset):
     dataset("01_mlp_regression")
     result = run(["config.yaml"], parse_sets([FORCED_RULES], ["epochs=4"]), when="forced")
-    history = read_history(result.record)
+    history = History.read(result.record)
     assert [line["rules"] for line in history] == [["to_huber"], ["to_mae"], [], []]
     payload = torch.load(Path(result.record) / "checkpoints" / "last.pt", weights_only=False)
     assert payload["rules"]["sticky"] == ["to_huber", "to_mae"] and payload["rules"]["effects"] == {"loss": "loss_mae"}
@@ -74,7 +75,7 @@ def test_resume_continues_from_last_pt_into_a_new_directory(trained):
     continued = resume(result.record, parse_sets(["training.epochs=5"]), when="resumed")
     record = Path(continued.record)
     assert record != Path(result.record) and record.name == "housing_resumed"
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [4, 5] and history[0]["global_step"] == 44
     assert resume_chain(record) == [result.record]
     assert (record / "checkpoints" / "best.pt").exists() and (record / "final" / "state.pt").exists()
@@ -100,7 +101,7 @@ def test_same_seed_same_history_and_no_seed_warns(dataset):
     dataset("01_mlp_regression")
     first = run(["config.yaml"], parse_sets(params=["epochs=2"]), when="seed_a")
     second = run(["config.yaml"], parse_sets(params=["epochs=2"]), when="seed_b")
-    assert read_history(first.record) == read_history(second.record)
+    assert History.read(first.record) == History.read(second.record)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         run(["config.yaml"], parse_sets(["seed=null"], ["epochs=1"]), when="unseeded")

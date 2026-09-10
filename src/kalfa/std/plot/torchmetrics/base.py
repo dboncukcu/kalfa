@@ -2,6 +2,7 @@ import numpy
 
 from kalfa.std.common import figure
 from kalfa.std.plot.base import scores_and_labels
+import torch
 
 
 def area_of(x, y):
@@ -9,7 +10,6 @@ def area_of(x, y):
 
 
 def binary_curve(predictions, record, kind, xlabel, ylabel, name=None):
-    import torch
     from torchmetrics.functional.classification import binary_precision_recall_curve, binary_roc
 
     scores, labels = scores_and_labels(predictions)

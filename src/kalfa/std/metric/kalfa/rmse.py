@@ -4,6 +4,7 @@ from kalfa.registration import lego
 from kalfa.std.metric.base import Metric
 
 
+@lego("/metric/kalfa/rmse", state=True, alias="rmse", description="Root mean squared error")
 class Rmse(Metric):
     def __init__(self):
         self.reset()
@@ -22,8 +23,3 @@ class Rmse(Metric):
         if not self.count:
             return math.nan
         return math.sqrt(self.total / self.count)
-
-
-@lego("/metric/kalfa/rmse", state=True, alias="rmse", description="Root mean squared error")
-def rmse():
-    return Rmse()

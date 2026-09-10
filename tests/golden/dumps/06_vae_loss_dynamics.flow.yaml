@@ -6,8 +6,8 @@
 # the comments are tezgah's resolution: implicit bindings, pattern matches, derived reads and exports).
 components:
   losses:
-    vae_loss: {uri: /objective/kalfa/vae, params: {encoder: encoder, decoder: decoder, recon: {uri: /criterion/kalfa/mse}, w_rec: 1.0, kl_schedule: {uri: 
-            /schedule/kalfa/linear_warmup, params: {start: 0.0, end: 1.0, steps: 20000}}}}
+    vae_loss: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/vae, params: {encoder: encoder, decoder: decoder, recon: {uri: 
+                /criterion/kalfa/mse}, w_rec: 1.0, kl_schedule: {uri: /schedule/kalfa/linear_warmup, params: {start: 0.0, end: 1.0, steps: 20000}}}}}}
   metrics:
     recon_rmse: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/kalfa/rmse}}}
   triggers:

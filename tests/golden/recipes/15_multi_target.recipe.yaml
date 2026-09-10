@@ -7,7 +7,8 @@ losses:
   l_z: {uri: /adapter/kalfa/criterion, params: {criterion: {uri: /criterion/kalfa/mse}}}
   l_tail: {uri: /adapter/kalfa/criterion, params: {criterion: {uri: /criterion/kalfa/bce_logits, params: {pos_weight: 
             5.0}}}}
-  total: {uri: /objective/kalfa/weighted_sum, params: {terms: {l_y: 1.0, l_z: 1.0, l_tail: 0.5}}}
+  total: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/weighted_sum, params: {terms: {l_y: 
+              1.0, l_z: 1.0, l_tail: 0.5}}}}}
 metrics:
   rmse_y: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/kalfa/rmse}}}
   rmse_z: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/kalfa/rmse}}}

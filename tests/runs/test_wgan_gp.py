@@ -5,7 +5,7 @@ import torch
 
 from kalfa.api import check, generate
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 from runs.conftest import SMALL
 
 pytestmark = pytest.mark.slow
@@ -37,7 +37,7 @@ def test_check_reads_the_gan_config(dataset):
 def test_critic_steps_ema_fid_and_samples(trained):
     result = trained("07_wgan_gp")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3, 4, 5]
     assert {"train/wgan_d", "train/wgan_g", "val/wgan_g", "lr/d", "lr/g"} <= set(history[0])
     assert "val/fid" not in history[0] and "val/fid" in history[4]

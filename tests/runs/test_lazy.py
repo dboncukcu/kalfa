@@ -6,7 +6,7 @@ import pytest
 from helpers import minimal, write_config
 from kalfa.api import check, predict, run
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 from kalfa.synthetic import write_housing
 
 pytestmark = pytest.mark.slow
@@ -47,7 +47,7 @@ def test_run_on_the_stream(workdir):
     path = write_config(workdir / "cfg.yaml", lazy_config())
     result = run([str(path)], parse_sets([]), when="fixed")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2]
     assert {"train/loss_mse", "val/rmse", "test/rmse", "lr/net"} <= set(history[0])
     table = pandas.read_parquet(record / "predictions.parquet")

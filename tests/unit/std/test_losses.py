@@ -7,17 +7,17 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import batch, tiny_model
-from kalfa.std.adapter.kalfa.criterion import criterion as criterion_adapter
-from kalfa.std.adapter.kalfa.metric import metric as metric_adapter
+from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
+from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
 from kalfa.std.criterion.kalfa.bce_logits import bce_logits
 from kalfa.std.criterion.kalfa.cross_entropy import cross_entropy
 from kalfa.std.criterion.kalfa.huber import huber
 from kalfa.std.criterion.kalfa.log_cosh import log_cosh
 from kalfa.std.criterion.kalfa.mae import mae
 from kalfa.std.criterion.kalfa.mse import mse
-from kalfa.std.metric.kalfa.recon_error import recon_error
-from kalfa.std.metric.kalfa.rmse import rmse
-from kalfa.std.common.runtime import Context
+from kalfa.std.metric.kalfa.recon_error import ReconError
+from kalfa.std.metric.kalfa.rmse import Rmse
+from kalfa.std.common.runtime import Context, Pass
 
 
 def test_criterion_values():
@@ -35,7 +35,7 @@ def test_criterion_values():
 
 
 def test_rmse_metric_accumulates():
-    metric = rmse()
+    metric = Rmse()
     metric.update(torch.tensor([[1.0], [3.0]]), torch.tensor([0.0, 1.0]))
     metric.update(torch.tensor([[2.0]]), torch.tensor([2.0]))
     assert metric.compute() == pytest.approx(math.sqrt(5 / 3))
@@ -44,14 +44,14 @@ def test_rmse_metric_accumulates():
 
 
 def test_metrics_accumulate_above_the_range_of_a_half_precision_batch():
-    metric = rmse()
+    metric = Rmse()
     metric.update(torch.full((4, 2), 300.0, dtype=torch.float16), torch.zeros(4, 2, dtype=torch.float16))
     assert metric.compute() == pytest.approx(300.0)
 
 
 @pytest.mark.skipif(not torch.backends.mps.is_available(), reason="the machine has no mps device")
 def test_metrics_update_on_mps_which_has_no_float64():
-    for metric in (rmse(), recon_error()):
+    for metric in (Rmse(), ReconError()):
         metric.update(torch.zeros(4, 2, device="mps"), torch.ones(4, 2, device="mps"))
         assert metric.compute() == pytest.approx(1.0)
 
@@ -59,7 +59,7 @@ def test_metrics_update_on_mps_which_has_no_float64():
 def test_criterion_adapter_reads_output_and_target_from_the_definition_keys():
     model = tiny_model(seed=1)
     data = batch()
-    context = Context(data, {"model": model}, predicts="model", targets=["price"])
+    context = Context(data, Pass({"model": model}, predicts="model", targets=["price"]))
     adapter = criterion_adapter(mae)
     expected = float(mae(model(data["x"]), data["price"]).detach())
     assert float(adapter.loss(context, {"output": "y", "target": "price"}).detach()) == pytest.approx(expected)
@@ -69,7 +69,7 @@ def test_criterion_adapter_reads_output_and_target_from_the_definition_keys():
         float(mse(model(data["x"]), data["x"]).detach()))
     with pytest.raises(KeyError):
         adapter.loss(context, {"output": "ghost"})
-    context.targets = ["a", "b"]
+    context.scope.targets = ["a", "b"]
     with pytest.raises(ValueError, match="target"):
         adapter.loss(context)
 
@@ -86,14 +86,14 @@ def test_activity_and_trackers():
     tracker = criterion_adapter(mae).tracker("mae")
     for seed in (0, 1):
         data = batch(seed=seed)
-        tracker.observe(Context(data, {"model": model}, predicts="model", targets=["price"]))
+        tracker.observe(Context(data, Pass({"model": model}, predicts="model", targets=["price"])))
     values = [float(mae(model(batch(seed=seed)["x"]), batch(seed=seed)["price"]).detach()) for seed in (0, 1)]
     assert tracker.result() == {"mae": pytest.approx(sum(values) / 2)}
-    metric = metric_adapter(rmse())
+    metric = metric_adapter(Rmse())
     tracker = metric.tracker("rmse", {"output": "y"})
     assert math.isnan(tracker.result()["rmse"])
     data = batch()
-    tracker.observe(Context(data, {"model": model}, predicts="model", targets=["price"]))
+    tracker.observe(Context(data, Pass({"model": model}, predicts="model", targets=["price"])))
     assert tracker.result()["rmse"] == pytest.approx(math.sqrt(float(mse(model(data["x"]),
                                                                           data["price"]).detach())))
     assert not hasattr(metric.metric, "seen") and metric.tracker("r").live is not metric.metric
@@ -111,13 +111,13 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
     import numpy
     from kalfa.std.lego.kalfa.apply import apply
     from kalfa.std.lego.kalfa.fit import fit
-    from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+    from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
     from kalfa.synthetic import scores_frame
 
     data = scores_frame(rows=40)
     prep = fit(data, {"y_*": {"target": True, "preprocessors": ["t"]}, "z": {"target": True, "preprocessors": ["t"]},
                       "x*": {"preprocessors": ["s"]}},
-               {"s": standard_scaler(), "t": standard_scaler()}, [])
+               {"s": StandardScaler(), "t": StandardScaler()}, [])
     frame = apply(data, prep, "valid")
     batch = {"x": torch.from_numpy(numpy.array(frame.data[prep.features].to_numpy(dtype="float32"), copy=True))}
     for name in ("y_a", "y_b", "y_c", "z"):
@@ -130,8 +130,8 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
         def forward(self, value):
             return torch.zeros(len(value), 3), torch.zeros(len(value), 1)
 
-    context = Context(batch, {"m": Zero()}, predicts="m", targets=["y_a", "y_b", "y_c", "z"], prep=prep,
-                      set_name="valid", target_map={"y_hat": "y_*", "z_hat": "z"})
+    context = Context(batch, Pass({"m": Zero()}, predicts="m", targets=["y_a", "y_b", "y_c", "z"], prep=prep,
+                                  set_name="valid", target_map={"y_hat": "y_*", "z_hat": "z"}))
     stacked = context.target(None, "y_hat")
     assert stacked.shape == (40, 3)
     assert torch.allclose(stacked[:, 1], batch["y_b"])
@@ -144,7 +144,7 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
         assert numpy.allclose(targets[:, position].numpy(), original, atol=1e-4)
         assert numpy.allclose(predictions[:, position].numpy(), prep.inverse(name, numpy.zeros(40)), atol=1e-4)
     grouped = prep.fitted["t"]
-    means = [float(grouped.obj.scaler.mean_[grouped.columns.index(name)]) for name in ("y_a", "y_b", "y_c")]
+    means = [float(grouped.preprocessor.scaler.mean_[grouped.columns.index(name)]) for name in ("y_a", "y_b", "y_c")]
     assert len(set(round(value, 6) for value in means)) == 3 and grouped.columns == ["y_a", "y_b", "y_c", "z"]
 
 
@@ -152,12 +152,12 @@ def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     import numpy
     from kalfa.std.lego.kalfa.apply import apply
     from kalfa.std.lego.kalfa.fit import fit
-    from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
+    from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
     from kalfa.synthetic import housing_frame
 
     data = housing_frame(rows=40)
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},
-               {"s": standard_scaler(), "t": standard_scaler()}, [])
+               {"s": StandardScaler(), "t": StandardScaler()}, [])
     frame = apply(data, prep, "valid")
     x = torch.from_numpy(numpy.array(frame.data[prep.features].to_numpy(dtype="float32"), copy=True))
     price = torch.from_numpy(numpy.array(frame.data["price"].to_numpy(dtype="float32"), copy=True))
@@ -169,8 +169,8 @@ def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
         def forward(self, value):
             return torch.zeros(len(value), 1)
 
-    context = Context({"x": x, "price": price}, {"m": Zero()}, predicts="m", targets=["price"], prep=prep,
-                      set_name="valid")
+    context = Context({"x": x, "price": price}, Pass({"m": Zero()}, predicts="m", targets=["price"], prep=prep,
+                                                     set_name="valid"))
     model_scale = float(mae(torch.zeros(40, 1), price))
     assert float(criterion_adapter(mae).loss(context)) == pytest.approx(model_scale)
     as_metric = criterion_adapter(mae).tracker("mae", None, rescale=True)
@@ -180,11 +180,11 @@ def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     as_loss = criterion_adapter(mae).tracker("mae", None)
     as_loss.observe(context)
     assert as_loss.result()["mae"] == pytest.approx(model_scale)
-    tracker = metric_adapter(rmse()).tracker("rmse", None, rescale=True)
+    tracker = metric_adapter(Rmse()).tracker("rmse", None, rescale=True)
     tracker.observe(context)
     original = float(numpy.sqrt(((data["price"].to_numpy() - prep.inverse("price", numpy.zeros(40))) ** 2).mean()))
     assert tracker.result()["rmse"] == pytest.approx(original, rel=1e-3) and original > 10.0
-    plain = metric_adapter(rmse()).tracker("rmse", None)
+    plain = metric_adapter(Rmse()).tracker("rmse", None)
     plain.observe(context)
     assert plain.result()["rmse"] < 5.0
     predictions, targets = context.rescaled(None, "input")
@@ -200,8 +200,8 @@ def test_vae_objective_and_schedules():
     from kalfa.std.schedule.kalfa.linear_warmup import linear_warmup
     from kalfa.std.schedule.kalfa.step_decay import step_decay
     from kalfa.std.schedule.kalfa.warmup_cosine import warmup_cosine
-    from kalfa.std.layer.kalfa.reparam import reparam
-    from kalfa.std.turn.base import with_param
+    from kalfa.std.layer.kalfa.reparam import Reparam
+    from kalfa.std.adapter.kalfa.objective import ObjectiveAdapter
 
     class Encoder(nn.Module):
         inputs = ["image"]
@@ -236,11 +236,11 @@ def test_vae_objective_and_schedules():
                                                        + 0.5 * float(out["kl"].detach()))
     assert out["loss"].requires_grad
     objective = functools.partial(vae, encoder="encoder", decoder="decoder", recon=mse, kl_schedule=schedule)
-    changed = with_param(objective, "w_rec", 0.5)
+    changed = ObjectiveAdapter(objective).with_param("w_rec", 0.5).objective
     assert changed.keywords["w_rec"] == 0.5 and changed.keywords["recon"] is mse and changed.func is vae
     assert linear_warmup(20, 0.0, 1.0, 10) == 1.0 and step_decay(25, 10, 0.5) == pytest.approx(0.25)
     assert warmup_cosine(5, 10, 100) == pytest.approx(0.5) and warmup_cosine(100, 10, 100) == pytest.approx(0.0)
-    layer = reparam()
+    layer = Reparam()
     mu, logvar = torch.zeros(3, 2), torch.zeros(3, 2)
     layer.eval()
     assert torch.equal(layer(mu, logvar), mu)

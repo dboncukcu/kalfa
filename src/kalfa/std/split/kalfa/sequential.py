@@ -2,20 +2,13 @@ from kalfa.registration import lego
 from kalfa.std.common.samples import is_samples
 from kalfa.std.common.stream import is_stream
 from kalfa.std.split.base import cuts_of, report_sets
-
-
-def numpy_arange(count):
-    import numpy
-
-    return numpy.arange(count)
+import pandas
 
 
 @lego("/split/kalfa/sequential", returns=["train", "valid", "test"], refs={"group": "column"},
       alias="sequential",
       description="Cut the rows in their order by ratios; with a group column every group is cut on its own")
 def sequential(df, ratios, group=None):
-    import pandas
-
     if is_stream(df):
         if group is not None:
             raise ValueError("a stream source has no group column; drop group for a sequential split")
@@ -26,7 +19,7 @@ def sequential(df, ratios, group=None):
         if group is not None:
             raise ValueError("a Dataset source has no group column; drop group for a sequential split")
         first, second = cuts_of(len(df), ratios)
-        positions = numpy_arange(len(df))
+        positions = numpy.arange(len(df))
         return report_sets("sequential", {"train": df.subset(positions[:first]),
                                     "valid": df.subset(positions[first:second]),
                                     "test": df.subset(positions[second:])})

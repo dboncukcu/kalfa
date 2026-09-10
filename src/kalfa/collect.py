@@ -1,21 +1,13 @@
-"""kalfa collect: the k fold summary of fold runs, or the sweep table of a parameter scan."""
-
 import json
 import math
 from pathlib import Path
 
-from .record import read_history, read_resolved
+from .record import read_resolved
+from .std.common.history import History
+import pandas
 
 
-def _last_values(history, prefixes=("test/",)):
-    if not history:
-        return {}
-    last = history[-1]
-    return {key: value for key, value in last.items()
-            if isinstance(value, (int, float)) and not isinstance(value, bool) and key.startswith(prefixes)}
-
-
-def _mean_std(values):
+def mean_std(values):
     clean = [float(value) for value in values if not (isinstance(value, float) and math.isnan(value))]
     if not clean:
         return math.nan, math.nan
@@ -32,7 +24,7 @@ def load_runs(run_dirs):
         directory = Path(directory)
         if not (directory / "resolved.yaml").exists():
             continue
-        runs.append({"dir": str(directory), "config": read_resolved(directory), "history": read_history(directory)})
+        runs.append({"dir": str(directory), "config": read_resolved(directory), "history": History.read(directory)})
     return runs
 
 
@@ -41,12 +33,12 @@ def fold_summary(runs):
     for entry in runs:
         params = entry["config"].get("params") or {}
         folds.append({"dir": entry["dir"], "fold": params.get("fold"), "turns": len(entry["history"]),
-                      "last": _last_values(entry["history"])})
+                      "last": History(entry["history"]).last()})
     folds.sort(key=lambda item: (item["fold"] is None, item["fold"]))
     keys = sorted({key for fold in folds for key in fold["last"]})
     summary = {}
     for key in keys:
-        mean, std = _mean_std([fold["last"].get(key, math.nan) for fold in folds])
+        mean, std = mean_std([fold["last"].get(key, math.nan) for fold in folds])
         summary[key] = {"mean": mean, "std": std}
     return {"folds": folds, "summary": summary}
 
@@ -73,7 +65,7 @@ def sweep_table(runs):
         row = {"dir": entry["dir"], "turns": len(entry["history"])}
         for key in varying:
             row[key] = table.get(key)
-        row.update(_last_values(entry["history"], ("val/", "test/")))
+        row.update(History(entry["history"]).last(("val/", "test/")))
         rows.append(row)
     return {"varying": varying, "rows": rows}
 
@@ -97,8 +89,6 @@ def is_run_dir(path):
 
 
 def collect_root(root, out=None):
-    """The points under a sweep root: the finished ones (sweep.json) in a table with the best, the unfinished or
-    failed ones listed and skipped; works on a half done sweep."""
     root = Path(root)
     finished = []
     skipped = []
@@ -106,9 +96,9 @@ def collect_root(root, out=None):
         info = child / "sweep.json"
         if info.exists():
             point = json.loads(info.read_text())
-            history = read_history(child)
+            history = History.read(child)
             finished.append({**point, "dir": str(child), "turns": len(history),
-                             "last": _last_values(history, ("val/", "test/"))})
+                             "last": history.last(("val/", "test/"))})
         elif is_run_dir(child) or (child / "run.json").exists():
             status = "unfinished"
             summary = child / "run.json"
@@ -135,7 +125,6 @@ def collect_root(root, out=None):
     target = Path(out) if out is not None else root
     target.mkdir(parents=True, exist_ok=True)
     (target / "sweep.json").write_text(json.dumps(result, indent=2, default=float))
-    import pandas
 
     pandas.DataFrame(rows).to_csv(target / "sweep.csv", index=False)
     text = root_markdown(result)
@@ -165,9 +154,6 @@ def root_markdown(result):
 
 
 def collect(run_dirs, out=None):
-    """Summarize runs: a sweep root (one directory of points) gives sweep.csv, sweep.json, sweep.md and the best
-    point; run directories give cv.json and cv.md when every run has a fold param, sweep.json and sweep.md
-    otherwise."""
     if len(run_dirs) == 1 and Path(run_dirs[0]).is_dir() and not is_run_dir(run_dirs[0]):
         return collect_root(run_dirs[0], out)
     runs = load_runs(run_dirs)

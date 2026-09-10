@@ -8,7 +8,8 @@ import pytest
 import kalfa  # noqa: F401
 from kalfa.std.common import figure
 from kalfa.std.plot.kalfa.loss_curve import loss_curve
-from kalfa.std.plot.base import panel_title, series_of
+from kalfa.std.common.history import History
+from kalfa.std.plot.base import panel_title
 from kalfa.std.plot.kalfa.pred_vs_true import pred_vs_true
 from kalfa.std.lego.kalfa.run_all import run_all
 
@@ -19,8 +20,8 @@ def history():
 
 
 def test_series_of_skips_bookkeeping_and_selects():
-    assert series_of(history()) == {"train/l": [1.0, 0.5], "val/l": [1.1, 0.6]}
-    assert series_of(history(), ["val/l"]) == {"val/l": [1.1, 0.6]}
+    assert History(history()).series() == {"train/l": [1.0, 0.5], "val/l": [1.1, 0.6]}
+    assert History(history()).series(["val/l"]) == {"val/l": [1.1, 0.6]}
 
 
 def test_plots_write_files(tmp_path):
@@ -70,14 +71,14 @@ def test_sample_writer_and_the_sample_plots(tmp_path):
     import torch
     from torch import nn
 
-    from kalfa.std.metric.kalfa.sample_writer import sample_writer
+    from kalfa.std.metric.kalfa.sample_writer import SampleWriter
     from kalfa.std.plot.kalfa.samples_gif import samples_gif
     from kalfa.std.plot.kalfa.samples_matrix import samples_matrix
 
     def sampler(models, prep, rng, n=4):
         return torch.rand(n, 1, 8, 8, generator=rng)
 
-    writer = sample_writer(n=3, sampler=sampler)
+    writer = SampleWriter(n=3, sampler=sampler)
     rng = torch.Generator().manual_seed(1)
     writer.update(models={}, predicts=None, rng=rng, record=str(tmp_path), turn=5)
     writer.update(models={}, predicts=None, rng=rng, record=str(tmp_path), turn=5)
@@ -95,12 +96,12 @@ def test_sample_writer_and_the_sample_plots(tmp_path):
         def forward(self, value):
             return value
 
-    from_model = sample_writer(n=2)
+    from_model = SampleWriter(n=2)
     from_model.update(models={"net": Same()}, predicts="net", rng=rng, record=str(tmp_path), turn=15,
                       batch={"image": torch.rand(5, 1, 8, 8)})
     assert torch.load(tmp_path / "samples" / "turn_0015.pt", weights_only=False).shape == (2, 1, 8, 8)
     with pytest.raises(ValueError, match="sampler"):
-        sample_writer(n=2).update(models={}, predicts=None, rng=rng, record=str(tmp_path), turn=1)
+        SampleWriter(n=2).update(models={}, predicts=None, rng=rng, record=str(tmp_path), turn=1)
     plots = {"gif": functools.partial(samples_gif, duration=100), "matrix": functools.partial(samples_matrix, n=2)}
     run_all(None, [], {}, plots, keys={}, predicts=None, bus={"composites": {}}, record=str(tmp_path))
     assert (tmp_path / "plots" / "gif.gif").exists() and (tmp_path / "plots" / "matrix.png").exists()

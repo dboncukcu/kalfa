@@ -1,15 +1,15 @@
 from pathlib import Path
 
 import torch
+from kalfa.std.common import figure
+from kalfa.std.common.figure import image_tile
 
 
 def write_samples(samples, target):
-    """Samples under samples/: tensors as samples.pt (images also as grid.png), text as samples.txt."""
     write_sample_files(samples, target, "samples", "grid")
 
 
 def write_turn_samples(samples, target, turn):
-    """The samples of one turn under samples/: turn_<n>.pt and turn_<n>.png, or turn_<n>.txt for text."""
     stem = f"turn_{int(turn):04d}"
     write_sample_files(samples, target, stem, stem)
 
@@ -26,10 +26,6 @@ def write_sample_files(samples, target, stem, image_stem):
 
 
 def write_grid(images, path):
-    """An image grid of at most eight columns, saved as png."""
-    from kalfa.std.common import figure
-    from kalfa.std.common.figure import image_tile
-
     count = len(images)
     columns = min(8, count)
     rows = (count + columns - 1) // columns

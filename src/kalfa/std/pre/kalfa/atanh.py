@@ -4,9 +4,10 @@ from kalfa.registration import lego
 from kalfa.std.pre.base import Scaler
 
 
+@lego("/pre/kalfa/atanh", alias="atanh",
+      description="artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside "
+                  "(-scale, scale) is an error that names how many and how large")
 class Atanh(Scaler):
-    rescales = True
-
     def __init__(self, scale=1.0):
         if scale <= 0.0:
             raise ValueError(f"atanh: scale must be positive, got {scale!r}")
@@ -23,10 +24,3 @@ class Atanh(Scaler):
 
     def inverse(self, values):
         return numpy.tanh(numpy.asarray(values, dtype="float64")) * self.scale
-
-
-@lego("/pre/kalfa/atanh", alias="atanh",
-      description="artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside "
-                  "(-scale, scale) is an error that names how many and how large")
-def atanh(scale=1.0):
-    return Atanh(scale)

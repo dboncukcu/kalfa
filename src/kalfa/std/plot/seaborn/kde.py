@@ -1,15 +1,17 @@
 from kalfa.registration import lego
 from kalfa.std.common import figure
 from kalfa.std.plot.base import first_set, set_frame
-from kalfa.std.plot.seaborn.base import sampled, seaborn_module
+from kalfa.std.common.optional import load
+from kalfa.std.plot.seaborn.base import sampled
 
 
-@lego("/plot/seaborn/kde", partial=True, alias="kde", refs={"x": "column", "y": "column", "hue": "column"},
+@lego("/plot/seaborn/kde", partial=True, alias="kde", requires="seaborn",
+      refs={"x": "column", "y": "column", "hue": "column"},
       description="seaborn's kernel density of one column of a set, or of two as contours; skipped with a "
                   "warning when seaborn is not installed")
 def kde(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None,
         sample=20000, fill=True, name=None):
-    seaborn = seaborn_module("kde")
+    seaborn = load("seaborn", "kde")
     set_name = first_set(sets, "train")
     table = set_frame(loaders, prep, set_name)
     if seaborn is None or table is None or x is None or x not in table.columns:

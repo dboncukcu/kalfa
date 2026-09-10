@@ -8,21 +8,21 @@ import kalfa  # noqa: F401
 from kalfa.std.lego.kalfa.filter_set import filter_set
 from kalfa.std.feed.kalfa.table import SampleDataset, table
 from kalfa.std.layer.kalfa.unflatten import unflatten
-from kalfa.std.loader.kalfa.torch import balanced_sampler, torch as torch_loader
+from kalfa.std.loader.kalfa.torch import balanced_sampler, torch_loader
 from kalfa.std.plot.kalfa.image_pairs import image_pairs
 from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.kalfa.normalize import normalize
-from kalfa.std.pre.kalfa.random_crop_flip import random_crop_flip
-from kalfa.std.pre.kalfa.resize import resize
-from kalfa.std.pre.sklearn.standard_scaler import standard_scaler
-from kalfa.std.pre.kalfa.to_tensor import to_tensor
-from kalfa.std.pre.kalfa.to_tensor_signed import to_tensor_signed
+from kalfa.std.pre.kalfa.normalize import Normalize
+from kalfa.std.pre.kalfa.random_crop_flip import RandomCropFlip
+from kalfa.std.pre.kalfa.resize import Resize
+from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
+from kalfa.std.pre.kalfa.to_tensor import ToTensor
+from kalfa.std.pre.kalfa.to_tensor_signed import ToTensorSigned
 from kalfa.std.common.samples import Samples
 from kalfa.std.source.base import header
 from kalfa.std.source.kalfa.image_folder import image_folder
 from kalfa.std.split.kalfa.kfold import kfold
-from kalfa.std.split.kalfa.random import random as random_split
+from kalfa.std.split.kalfa.random import random_split
 from kalfa.synthetic import write_image_folder
 
 
@@ -64,7 +64,7 @@ def test_samples_query_subset_and_splits(folder):
 def test_fit_apply_and_sample_dataset_in_dataset_mode(folder, tmp_path):
     samples = image_folder(str(folder))
     prep = fit(samples, {"image": {"preprocessors": ["a", "t"]}, "label": {"target": True}},
-               {"t": to_tensor(), "a": random_crop_flip(16)}, [], keys={"a": {"sets": ["train"]}},
+               {"t": ToTensor(), "a": RandomCropFlip(16)}, [], keys={"a": {"sets": ["train"]}},
                record=str(tmp_path / "rec"))
     assert prep.dtypes == {"image": "float32", "label": "int64"} and prep.targets == {"label": ["label"]}
     frame = apply(samples, prep, "train", {"a": {"sets": ["train"]}})
@@ -81,9 +81,9 @@ def test_fit_apply_and_sample_dataset_in_dataset_mode(folder, tmp_path):
     batch = next(iter(loader))
     assert batch["image"].shape == (5, 1, 16, 16) and batch["label"].shape == (5,)
     with pytest.raises(ValueError, match="need a table"):
-        fit(samples, {"im*": {"preprocessors": ["t"]}}, {"t": to_tensor()}, [])
+        fit(samples, {"im*": {"preprocessors": ["t"]}}, {"t": ToTensor()}, [])
     with pytest.raises(ValueError, match="cannot be read as one"):
-        fit(samples, {"image": {"preprocessors": ["s"]}}, {"s": standard_scaler()}, [])
+        fit(samples, {"image": {"preprocessors": ["s"]}}, {"s": StandardScaler()}, [])
     with pytest.raises(TypeError, match="to_tensor"):
         fit(samples, {"image": {}}, {}, [])
 
@@ -91,23 +91,23 @@ def test_fit_apply_and_sample_dataset_in_dataset_mode(folder, tmp_path):
 def test_image_preprocessors(folder):
     samples = image_folder(str(folder))
     image = samples[0]["image"]
-    signed = to_tensor_signed().apply(image)
+    signed = ToTensorSigned().apply(image)
     assert float(signed.min()) >= -1.0 and float(signed.max()) <= 1.0 and signed.shape == (1, 16, 16)
-    assert resize(8).apply(image).size == (8, 8) and resize([8, 12]).apply(image).size == (12, 8)
-    cropped = random_crop_flip(16).apply(image)
+    assert Resize(8).apply(image).size == (8, 8) and Resize([8, 12]).apply(image).size == (12, 8)
+    cropped = RandomCropFlip(16).apply(image)
     assert cropped.size == (16, 16)
-    tensor = to_tensor().apply(image)
-    scaled = normalize(0.5, 0.5).apply(tensor)
+    tensor = ToTensor().apply(image)
+    scaled = Normalize(0.5, 0.5).apply(tensor)
     assert torch.allclose(scaled, (tensor - 0.5) / 0.5)
     rgb = torch.rand(3, 4, 4)
-    imagenet = normalize("imagenet", "imagenet").apply(rgb)
+    imagenet = Normalize("imagenet", "imagenet").apply(rgb)
     assert imagenet.shape == (3, 4, 4) and float(imagenet[0, 0, 0]) == pytest.approx((float(rgb[0, 0, 0]) - 0.485) / 0.229)
 
 
 def test_balanced_sampler_and_unflatten(folder):
     samples = image_folder(str(folder)).query("label != 2")
     skewed = samples.subset([0, 1, 2, 3, 4, 5, 8])
-    prep = fit(skewed, {"image": {"preprocessors": ["t"]}, "label": {"target": True}}, {"t": to_tensor()}, [])
+    prep = fit(skewed, {"image": {"preprocessors": ["t"]}, "label": {"target": True}}, {"t": ToTensor()}, [])
     dataset = table(apply(skewed, prep, "train"))
     torch.manual_seed(0)
     sampler = balanced_sampler(dataset)
@@ -122,7 +122,7 @@ def test_image_pairs_draws_from_the_valid_set_when_test_is_empty(folder, tmp_pat
     from torch import nn
 
     samples = image_folder(str(folder))
-    prep = fit(samples, {"image": {"preprocessors": ["t"]}}, {"t": to_tensor()}, [])
+    prep = fit(samples, {"image": {"preprocessors": ["t"]}}, {"t": ToTensor()}, [])
     loader = torch_loader(table(apply(samples, prep, "valid")), "valid", {"size": 4})
     empty = torch_loader(table(apply(samples.subset([]), prep, "test")), "test", {"size": 4})
 
@@ -140,15 +140,15 @@ def test_image_pairs_draws_from_the_valid_set_when_test_is_empty(folder, tmp_pat
 
 def test_two_views_and_simclr_aug(folder):
     from kalfa.std.objective.kalfa.ntxent import ntxent
-    from kalfa.std.pre.kalfa.simclr_aug import simclr_aug
-    from kalfa.std.pre.kalfa.two_views import two_views
+    from kalfa.std.pre.kalfa.simclr_aug import SimclrAug
+    from kalfa.std.pre.kalfa.two_views import TwoViews
     from torch import nn
 
     samples = image_folder(str(folder))
     image = samples[0]["image"]
-    pair = two_views(simclr_aug(16)).apply(image)
+    pair = TwoViews(SimclrAug(16)).apply(image)
     assert len(pair) == 2 and pair[0].size == (16, 16)
-    stacked = to_tensor().apply(pair)
+    stacked = ToTensor().apply(pair)
     assert stacked.shape == (2, 1, 16, 16)
 
     class Net(nn.Module):
@@ -171,8 +171,8 @@ def test_two_views_and_simclr_aug(folder):
 
 def test_text_source_tokenizer_and_next_token(tmp_path):
     from kalfa.std.feed.kalfa.next_token import next_token
-    from kalfa.std.metric.kalfa.perplexity import perplexity
-    from kalfa.std.pre.kalfa.char_tokenizer import char_tokenizer
+    from kalfa.std.metric.kalfa.perplexity import Perplexity
+    from kalfa.std.pre.kalfa.char_tokenizer import CharTokenizer
     from kalfa.std.source.base import header
     from kalfa.std.source.kalfa.text_lines import text_lines
     from kalfa.synthetic import write_text
@@ -180,7 +180,7 @@ def test_text_source_tokenizer_and_next_token(tmp_path):
     path = write_text(tmp_path / "corpus.txt", lines=12)
     samples = text_lines(str(path))
     assert len(samples) == 12 and samples.fields == ["text"] and header("/source/kalfa/text_lines", {"path": str(path)})["rows"] == 12
-    prep = fit(samples, {"text": {"preprocessors": ["tok"]}}, {"tok": char_tokenizer()}, [], record=str(tmp_path / "rec"))
+    prep = fit(samples, {"text": {"preprocessors": ["tok"]}}, {"tok": CharTokenizer()}, [], record=str(tmp_path / "rec"))
     tokenizer = prep.tokenizer()
     assert tokenizer is not None and "\n" in tokenizer.chars and prep.dtypes == {"text": "int64"}
     ids = tokenizer.encode("ROMEO")
@@ -189,7 +189,7 @@ def test_text_source_tokenizer_and_next_token(tmp_path):
     dataset = next_token(frame, None, seq_len=8)
     assert len(dataset) > 0 and dataset[0]["input_ids"].shape == (8,) and dataset[0]["targets"].shape == (8,)
     assert torch.equal(dataset[0]["targets"][:-1], dataset[0]["input_ids"][1:])
-    metric = perplexity()
+    metric = Perplexity()
     metric.update(torch.zeros(2, 3, 5), torch.zeros(2, 3, dtype=torch.long))
     assert metric.compute() == pytest.approx(5.0)
     assert (tmp_path / "rec" / "preprocessors" / "tok.pkl").exists()

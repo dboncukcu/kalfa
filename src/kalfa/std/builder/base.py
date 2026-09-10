@@ -1,22 +1,18 @@
+from pathlib import Path
+
 from torch import nn
 
 
 class Model(nn.Module):
-    inputs = ()
-    outputs = ()
+    inputs: list = ()
+    outputs: list = ()
     initialized = True
-    kalfa_trainable = True
-
-
-WEIGHT_FILES = {"best": ("checkpoints", "best.pt"), "last": ("checkpoints", "last.pt"),
-                "final": ("final", "state.pt")}
+    trainable = True
 
 
 def weights_path(spec):
-    """The checkpoint file a weights spec {run, model, which} names."""
-    from pathlib import Path
-
     which = spec.get("which")
-    if which not in WEIGHT_FILES:
+    files = {"best": ("checkpoints", "best.pt"), "last": ("checkpoints", "last.pt"), "final": ("final", "state.pt")}
+    if which not in files:
         raise ValueError(f"weights.which must be best, last or final, got {which!r}")
-    return Path(spec["run"]).joinpath(*WEIGHT_FILES[which])
+    return Path(spec["run"]).joinpath(*files[which])

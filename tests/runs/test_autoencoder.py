@@ -4,7 +4,7 @@ import pytest
 
 from kalfa.api import check, predict
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 
 pytestmark = pytest.mark.slow
 
@@ -21,7 +21,7 @@ def test_check_reads_the_image_folder(dataset):
 def test_composite_predicts_and_the_encoder_codes(trained):
     result = trained("05_autoencoder")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2]
     assert {"train/rec", "train/recon_rmse", "val/rec", "val/recon_rmse", "lr/main"} <= set(history[0])
     assert not any(key.startswith("test/") for key in history[0])

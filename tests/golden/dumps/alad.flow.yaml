@@ -6,8 +6,10 @@
 # the comments are tezgah's resolution: implicit bindings, pattern matches, derived reads and exports).
 components:
   losses:
-    adv_d: {uri: /objective/myexample/alad_discriminator, params: {criterion: {uri: /criterion/kalfa/bce_logits}, latent_dim: 4}}
-    adv_g: {uri: /objective/myexample/alad_generator, params: {criterion: {uri: /criterion/kalfa/bce_logits}, latent_dim: 4, feature_matching: 0.0}}
+    adv_d: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/myexample/alad_discriminator, params: {criterion: {uri: 
+                /criterion/kalfa/bce_logits}, latent_dim: 4}}}}
+    adv_g: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/myexample/alad_generator, params: {criterion: {uri: /criterion/kalfa/bce_logits},
+            latent_dim: 4, feature_matching: 0.0}}}}
   metrics:
     auroc: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/torchmetrics/binary_auroc}}}
     average_precision: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/torchmetrics/binary_average_precision}}}

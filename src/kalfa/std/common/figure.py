@@ -1,4 +1,5 @@
 import numpy
+from pathlib import Path
 
 
 CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
@@ -55,7 +56,6 @@ maps = {}
 
 
 def configure(values):
-    """The figures section of the config; every call starts from the defaults, so None resets."""
     global applied
 
     settings_table.clear()
@@ -75,9 +75,9 @@ def pyplot():
     global applied
 
     import matplotlib
+    from matplotlib import pyplot
 
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plot
 
     if not applied:
         if settings_table.get("style", "kalfa") == "kalfa":
@@ -86,7 +86,7 @@ def pyplot():
             if settings_table.get("dpi"):
                 matplotlib.rcParams["savefig.dpi"] = float(settings_table["dpi"])
         applied = True
-    return plot
+    return pyplot
 
 
 def map_of(name, steps):
@@ -169,7 +169,6 @@ def density(figure, axis, x, y, gridsize=60, text="points (log)"):
 
 
 def profile(x, y, bins=60, statistic="median"):
-    """A profile over equal count bins of x: the bin centers and the statistic of y inside each one."""
     edges = numpy.unique(numpy.quantile(x, numpy.linspace(0.0, 1.0, int(bins) + 1)))
     if len(edges) < 4:
         return numpy.zeros(0), numpy.zeros(0)
@@ -185,7 +184,6 @@ def profile(x, y, bins=60, statistic="median"):
 
 
 def binned(x, y, values, bins=55, min_count=15, trim=0.5):
-    """The mean of ``values`` over a 2d grid of x and y; bins under ``min_count`` come back as NaN."""
     x_edges = numpy.linspace(numpy.nanpercentile(x, trim), numpy.nanpercentile(x, 100.0 - trim), int(bins) + 1)
     y_edges = numpy.linspace(numpy.nanpercentile(y, trim), numpy.nanpercentile(y, 100.0 - trim), int(bins) + 1)
     count, _, _ = numpy.histogram2d(x, y, bins=[x_edges, y_edges])
@@ -208,8 +206,6 @@ def finite(*arrays):
 
 
 def target(record, name):
-    from pathlib import Path
-
     directory = Path(record) / "plots"
     directory.mkdir(parents=True, exist_ok=True)
     return directory / name

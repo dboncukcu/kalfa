@@ -1,12 +1,12 @@
 from kalfa.registration import lego
 from kalfa.std.common import figure
-from kalfa.std.plot.base import series_of
+from kalfa.std.common.history import History
 
 
 @lego("/plot/kalfa/loss_curve", partial=True, alias="loss_curve",
       description="Every history series over the turns, or the named ones")
 def loss_curve(predictions, history, models, record, series=None, log=False, name=None):
-    found = series_of(history, series)
+    found = History(history).series(series)
     if not found:
         return None
     drawing, axis = figure.single(width=8.0, height=5.0)

@@ -8,7 +8,8 @@ from kalfa.api import check, run
 from kalfa.cli import main
 from kalfa.collect import collect
 from kalfa.config import parse_sets
-from kalfa.record import read_history, read_resolved
+from kalfa.record import read_resolved
+from kalfa.std.common.history import History
 
 pytestmark = pytest.mark.slow
 
@@ -40,7 +41,7 @@ def test_five_folds_and_collect(dataset):
     for fold in range(5):
         result = run(["config.yaml"], parse_sets(params=["epochs=1", f"fold={fold}"]))
         assert result.record == f"runs/cv_housing_{fold}"
-        history = read_history(result.record)
+        history = History.read(result.record)
         assert len(history) == 1 and "test/rmse" in history[0]
         config = read_resolved(result.record)
         assert config["params"]["fold"] == fold and config["data"]["split"]["params"]["fold"] == fold

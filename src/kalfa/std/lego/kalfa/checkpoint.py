@@ -13,7 +13,7 @@ def checkpoint_line(policy, tags, metrics):
     if extra:
         logger_checkpoint.info("wrote " + ", ".join(f"{tag}.pt" for tag in tags))
         return
-    monitor = getattr(policy, "monitor", None)
+    monitor = policy.monitor
     if monitor is None:
         logger_checkpoint.debug("wrote last.pt")
         return
@@ -35,7 +35,7 @@ def checkpoint(state, policy, metrics=None, record=None):
         return None
     parts = strip_suffix(state)
     stored = (parts.get("rules") or {}).get("checkpoint")
-    if stored is not None and not getattr(policy, "restored", False):
+    if stored is not None and not policy.restored:
         policy.restore(stored)
     policy.restored = True
     tags = policy.tags(metrics)

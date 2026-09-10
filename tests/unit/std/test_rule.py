@@ -4,7 +4,7 @@ import functools
 
 import kalfa  # noqa: F401
 from kalfa.std.rule.kalfa.effects import effects
-from kalfa.std.rule.kalfa.open import open
+from kalfa.std.rule.kalfa.open import open_rules
 from kalfa.std.rule.kalfa.rule import rule
 from kalfa.std.rule.kalfa.stop import stop
 from kalfa.std.trigger.kalfa.after_turn import after_turn
@@ -59,7 +59,7 @@ def trig(hit):
 
 
 def chain(rules, specs, metrics=None, turn_index=0):
-    current = open(rules)
+    current = open_rules(rules)
     for spec in specs:
         current = rule(current, spec["name"], spec["when"], spec["set"], spec.get("after"), metrics, turn_index)
     return stop(current, [], metrics)
@@ -97,10 +97,10 @@ def test_list_order_wins_over_firing_order():
 
 
 def test_stop_is_an_or_and_keeps_trigger_states():
-    rules = open({})
+    rules = open_rules({})
     out = stop(rules, [functools.partial(metric_below, monitor="v", value=1.0), trig(False)], {"v": 0.5})
     assert out["stop"] is True and out["rules"]["stop_fired"] == [0] and len(out["rules"]["stop"]) == 2
     out = stop(out["rules"], [functools.partial(metric_below, monitor="v", value=1.0), trig(False)], {"v": 5.0})
     assert out["stop"] is False and out["rules"]["stop"][1] == {"seen": 2}
-    assert stop(open({}), [], {})["stop"] is False
+    assert stop(open_rules({}), [], {})["stop"] is False
     assert effects({}) == {}

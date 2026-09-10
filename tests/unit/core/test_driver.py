@@ -98,15 +98,18 @@ def test_templates_and_models_become_blocks_with_spec_or_graph():
     assert blocks["score"]["graph"]["s"] == {"model": "net", "inputs": ["x"]}
 
 
-def test_criteria_and_metrics_are_wrapped_by_kind_and_objectives_stay_direct():
+def test_criteria_metrics_and_objectives_are_wrapped_by_kind():
     criterion = component_of({"uri": "/criterion/kalfa/huber", "params": {"delta": 2.0}, "target": "input"},
                              registry)
     assert criterion == {"uri": "/adapter/kalfa/criterion",
                          "params": {"criterion": {"uri": "/criterion/kalfa/huber", "params": {"delta": 2.0}}}}
     metric = component_of({"uri": "/metric/kalfa/rmse", "every": 2, "sets": ["valid"]}, registry)
     assert metric == {"uri": "/adapter/kalfa/metric", "params": {"metric": {"uri": "/metric/kalfa/rmse"}}}
-    unknown = component_of({"uri": "/objective/proj/custom", "params": {"w": 1}, "sets": ["train"]}, registry)
-    assert unknown == {"uri": "/objective/proj/custom", "params": {"w": 1}}
+    objective = component_of({"uri": "/objective/proj/custom", "params": {"w": 1}, "sets": ["train"]}, registry)
+    assert objective == {"uri": "/adapter/kalfa/objective",
+                         "params": {"objective": {"uri": "/objective/proj/custom", "params": {"w": 1}}}}
+    other = component_of({"uri": "/lego/proj/custom", "params": {"w": 1}}, registry)
+    assert other == {"uri": "/lego/proj/custom", "params": {"w": 1}}
 
 
 def test_definition_keys_go_to_the_parallel_table():

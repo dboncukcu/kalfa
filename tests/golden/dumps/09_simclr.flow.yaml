@@ -6,7 +6,7 @@
 # the comments are tezgah's resolution: implicit bindings, pattern matches, derived reads and exports).
 components:
   losses:
-    ntx: {uri: /objective/kalfa/ntxent, params: {model: simclr, temperature: 0.5}}
+    ntx: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/ntxent, params: {model: simclr, temperature: 0.5}}}}
   metrics: {}
   triggers: {}
   plots:

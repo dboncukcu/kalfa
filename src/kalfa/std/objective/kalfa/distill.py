@@ -7,7 +7,7 @@ from kalfa.std.objective.base import input_of
 def target_of(batch, model, target=None):
     if target is not None:
         return batch[target]
-    wires = set(getattr(model, "inputs", []))
+    wires = set(model.inputs)
     rest = [name for name in batch if name not in wires]
     if len(rest) != 1:
         raise ValueError(f"the objective cannot tell the target field among {rest}; write target")

@@ -1,13 +1,13 @@
 from torch import nn
 
 from kalfa.registration import lego
+from kalfa.std.layer.base import LazyLayer
 
 
-class LazyGRU(nn.Module):
-    """A GRU whose input width is taken from the first batch; returns the output sequence (batch, steps, hidden)."""
-
-    kalfa_lazy = True
-
+@lego("/layer/torch/gru", alias="gru",
+      description="GRU over (batch, steps, features) returning every step; the input width comes from the "
+                  "first batch")
+class Gru(LazyLayer):
     def __init__(self, hidden, layers=1):
         super().__init__()
         self.hidden = int(hidden)
@@ -20,10 +20,3 @@ class LazyGRU(nn.Module):
                 device=value.device, dtype=value.dtype)
         out, _ = self.core(value)
         return out
-
-
-@lego("/layer/torch/gru", alias="gru",
-      description="GRU over (batch, steps, features) returning every step; the input width comes from the "
-                  "first batch")
-def gru(hidden, layers=1):
-    return LazyGRU(hidden, layers)

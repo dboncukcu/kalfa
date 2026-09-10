@@ -1,4 +1,4 @@
-"""The legos tidy needs beyond 01: torchmetrics metrics, l1_distance, the score plots and the myexample plugin."""
+"""The legos tidy needs beyond 01: torchmetrics metrics, L1Distance, the score plots and the myexample plugin."""
 
 import math
 import shutil
@@ -11,15 +11,15 @@ from cirak.registry import registry
 from torch import nn
 
 import kalfa  # noqa: F401
-from kalfa.std.adapter.kalfa.metric import metric as metric_adapter
-from kalfa.std.layer.kalfa.l1_distance import l1_distance
+from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
+from kalfa.std.layer.kalfa.l1_distance import L1Distance
 from kalfa.std.metric.torchmetrics.binary_auroc import binary_auroc
 from kalfa.std.metric.torchmetrics.binary_average_precision import binary_average_precision
 from kalfa.std.plot.kalfa.architecture import architecture
 from kalfa.std.plot.torchmetrics.binary_precision_recall_curve import binary_precision_recall_curve
 from kalfa.std.plot.torchmetrics.binary_roc import binary_roc
 from kalfa.std.plot.kalfa.class_histogram import class_histogram
-from kalfa.std.common.runtime import Context
+from kalfa.std.common.runtime import Context, Pass
 from helpers import batch as make_batch
 from helpers import tiny_model
 
@@ -52,7 +52,7 @@ def test_torchmetrics_wrappers_and_nan_on_one_class():
 
 
 def test_l1_distance_per_sample():
-    layer = l1_distance()
+    layer = L1Distance()
     out = layer(torch.tensor([[1.0, 2.0], [0.0, 0.0]]), torch.tensor([[0.0, 0.0], [2.0, 2.0]]))
     assert out.tolist() == [1.5, 2.0]
 
@@ -98,11 +98,11 @@ def test_myexample_objectives_register_with_facts_and_run():
     models = {"encoder": nn.Linear(6, 4), "generator": nn.Linear(4, 6), "dxz": Two(10, ["logit"]),
               "dxx": Two(12, ["logit", "feature"]), "dzz": Two(8, ["logit"])}
     batch = {"x": torch.randn(5, 6)}
-    context = Context(batch, models, targets=[], rng=torch.Generator().manual_seed(1))
+    context = Context(batch, Pass(models, targets=[], rng=torch.Generator().manual_seed(1)))
     disc = registry.resolve("/objective/myexample/alad_discriminator")(models, batch, criterion=bce_logits, latent_dim=4,
-                                                                    rng=context.rng)
+                                                                    rng=context.scope.rng)
     gen = registry.resolve("/objective/myexample/alad_generator")(models, batch, criterion=bce_logits, latent_dim=4,
-                                                               feature_matching=0.5, rng=context.rng)
+                                                               feature_matching=0.5, rng=context.scope.rng)
     assert disc.shape == () and gen.shape == () and disc.requires_grad and gen.requires_grad
     disc.backward()
     assert models["encoder"].weight.grad is None and models["dxz"].layer.weight.grad is not None

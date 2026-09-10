@@ -5,7 +5,7 @@ import torch
 
 from kalfa.api import check, predict, run
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 
 pytestmark = pytest.mark.slow
 
@@ -19,9 +19,10 @@ def test_check_resolves_the_objective_refs(dataset):
     prepared = check(["config.yaml"])
     assert prepared.problems == []
     losses = prepared.document["losses"]
-    assert losses["vae_loss"]["params"]["recon"] == {"uri": "/criterion/kalfa/mse"}
-    assert losses["vae_loss"]["params"]["kl_schedule"]["uri"] == "/schedule/kalfa/linear_warmup"
-    assert losses["vae_loss"]["params"]["encoder"] == "encoder"
+    vae_loss = losses["vae_loss"]["params"]["objective"]
+    assert vae_loss["params"]["recon"] == {"uri": "/criterion/kalfa/mse"}
+    assert vae_loss["params"]["kl_schedule"]["uri"] == "/schedule/kalfa/linear_warmup"
+    assert vae_loss["params"]["encoder"] == "encoder"
     rules = prepared.document["flow"]["training"]["params"]["rules"]
     assert rules[1]["set"] == {"vae_loss.recon": {"uri": "/criterion/kalfa/huber"}}
     prepared = check(["config.yaml"], parse_sets(["training.rules=[{name: bad, when: {uri: after_epoch, params: {at: 1}}, "
@@ -35,7 +36,7 @@ def test_terms_rules_and_determinism(dataset):
     params = ["epochs=3", "kl_warmup_steps=6"]
     result = run(["config.yaml"], parse_sets(sets, params), when="forced")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3]
     keys = set(history[0])
     assert {"train/vae_loss", "train/vae_loss/recon", "train/vae_loss/kl", "train/vae_loss/w_kl", "val/vae_loss/kl",
@@ -48,7 +49,7 @@ def test_terms_rules_and_determinism(dataset):
     recon = effects["vae_loss.recon"]
     assert getattr(recon, "func", recon).__name__ == "huber"
     again = run(["config.yaml"], parse_sets(sets, params), when="again")
-    assert [line["val/recon_rmse"] for line in read_history(again.record)] == [line["val/recon_rmse"] for line in history]
+    assert [line["val/recon_rmse"] for line in History.read(again.record)] == [line["val/recon_rmse"] for line in history]
     assert (record / "plots" / "reconstructions.png").exists() and (record / "plots" / "loss_curve.png").exists()
 
 

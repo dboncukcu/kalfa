@@ -6,7 +6,18 @@ import numpy
 import torch
 
 
-STATE_KEYS = ("models", "optimizers", "emas", "counters", "rules")
+class Policy:
+    monitor: str | None = None
+    restored: bool = False
+
+    def tags(self, metrics: dict) -> list:
+        raise NotImplementedError
+
+    def state(self) -> dict | None:
+        return None
+
+    def restore(self, state: dict | None) -> None:
+        pass
 
 
 def rng_states():
@@ -66,17 +77,3 @@ def load_into(models, optimizers, emas, counters, rules, data):
     if data.get("checkpoint") is not None:
         rules["checkpoint"] = data["checkpoint"]
     restore_rng(data.get("rng"))
-
-
-class Policy:
-    monitor = None
-    restored = False
-
-    def tags(self, metrics):
-        raise NotImplementedError
-
-    def state(self):
-        return None
-
-    def restore(self, state):
-        pass

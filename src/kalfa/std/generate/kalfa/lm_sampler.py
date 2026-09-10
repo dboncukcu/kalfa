@@ -5,7 +5,6 @@ from kalfa.std.generate.base import pick_model
 
 
 def context_of(net, context):
-    """The window of tokens the model sees: ``context`` when given, else the seq_len a module of the model declares."""
     if context is not None:
         return int(context)
     for module in net.modules():

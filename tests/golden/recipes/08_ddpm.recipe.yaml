@@ -3,8 +3,8 @@
 #   uv run python tools/regenerate.py recipes
 include: [../../../src/kalfa/templates/kalfa.yaml]
 losses:
-  ddpm: {uri: /objective/kalfa/ddpm, params: {model: unet, schedule: {uri: /schedule/kalfa/linear_betas, params: {steps: 
-            1000}}}}
+  ddpm: {uri: /adapter/kalfa/objective, params: {objective: {uri: /objective/kalfa/ddpm, params: {model: unet, schedule: {
+            uri: /schedule/kalfa/linear_betas, params: {steps: 1000}}}}}}
 metrics:
   samples: {uri: /adapter/kalfa/metric, params: {metric: {uri: /metric/kalfa/sample_writer, params: {sampler: {uri: 
               /generate/kalfa/ddpm_sampler, params: {model: unet.ema, schedule: {uri: /schedule/kalfa/linear_betas, 

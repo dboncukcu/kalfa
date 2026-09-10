@@ -1,11 +1,10 @@
 from pathlib import Path
 
 import numpy
+import pandas
 
 
 class ParquetChunks:
-    """Row groups of a parquet file in chunks of ``chunk`` rows; the row count comes from the metadata."""
-
     def __init__(self, path, chunk=65536):
         import pyarrow.parquet
 
@@ -30,11 +29,7 @@ class ParquetChunks:
 
 
 class CsvChunks:
-    """A CSV file in chunks of ``chunk`` rows; the row count is one line count."""
-
     def __init__(self, path, chunk=65536):
-        import pandas
-
         self.path = str(path)
         self.chunk = int(chunk)
         if not Path(self.path).is_file():
@@ -44,8 +39,6 @@ class CsvChunks:
             self.rows = max(sum(1 for _ in stream) - 1, 0)
 
     def chunks(self):
-        import pandas
-
         offset = 0
         for frame in pandas.read_csv(self.path, chunksize=self.chunk):
             frame.index = range(offset, offset + len(frame))
@@ -54,8 +47,6 @@ class CsvChunks:
 
 
 class Stream:
-    """A chunked table as the data legos see it: a reader, a row window and the queries applied per chunk."""
-
     def __init__(self, reader, start=0, stop=None, queries=()):
         self.reader = reader
         self.start = int(start)
@@ -68,7 +59,6 @@ class Stream:
 
     @property
     def rows(self):
-        """The rows of the window before the filters."""
         return max(self.stop - self.start, 0)
 
     def window(self, start, stop):
@@ -95,7 +85,6 @@ class Stream:
                 yield frame
 
     def head(self):
-        """The first chunk after the window and the filters, or None."""
         return next(iter(self.chunks()), None)
 
     def count(self):
@@ -107,9 +96,9 @@ def is_stream(value):
 
 
 def like(stream, path):
-    """A stream over another file read the way this one is (same reader class and chunk size)."""
     return Stream(type(stream.reader)(path, stream.reader.chunk))
 
 
 def positions(stream):
-    return numpy.concatenate([numpy.asarray(frame.index) for frame in stream.chunks()] or [numpy.zeros(0, dtype="int64")])
+    found = [numpy.asarray(frame.index) for frame in stream.chunks()]
+    return numpy.concatenate(found or [numpy.zeros(0, dtype="int64")])

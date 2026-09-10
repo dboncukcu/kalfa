@@ -66,7 +66,8 @@ def test_the_alad_recipe_details():
 
     surface = load_surface([example("alad")])
     document = recipe(surface.data, registry, surface.aliases)
-    assert document["losses"]["adv_d"]["params"]["criterion"] == {"uri": "/criterion/kalfa/bce_logits"}
+    adv_d = document["losses"]["adv_d"]["params"]["objective"]
+    assert adv_d["params"]["criterion"] == {"uri": "/criterion/kalfa/bce_logits"}
     assert document["metrics"]["auroc"]["uri"] == "/adapter/kalfa/metric"
     assert document["triggers"] == {}
     params = document["flow"]["models"]["params"]

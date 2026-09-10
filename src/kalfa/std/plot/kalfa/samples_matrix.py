@@ -2,16 +2,14 @@ from kalfa.registration import lego
 from kalfa.std.common import figure
 from kalfa.std.common.figure import image_tile
 from kalfa.std.plot.base import turn_files
+import warnings
+import torch
 
 
 @lego("/plot/kalfa/samples_matrix", partial=True, alias="samples_matrix",
       description="A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; "
                   "skipped with a warning when there are none")
 def samples_matrix(predictions, history, models, record, name=None, n=8):
-    import warnings
-
-    import torch
-
     files = turn_files(record, ".pt")
     if not files:
         warnings.warn("samples_matrix: no samples/turn_*.pt in the record; add a sample_writer metric")

@@ -1,5 +1,3 @@
-"""Terminal colors: the palette the command line and the console log share."""
-
 import os
 
 

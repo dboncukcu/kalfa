@@ -1,30 +1,29 @@
 import numpy
+import pandas
 import torch
 
-from kalfa.std.common.runtime import call_model, expand_targets, named_outputs, to_device
+from kalfa.std.common.device import Device
+from kalfa.std.common.runtime import call_model, expand_targets, named_outputs
 
 
-def prediction_table(model, loader, prep, dataset, device=None, target_map=None):
-    """The predictions DataFrame: row id, targets inverted, pred_<wire> inverted or decoded, raw_<wire>.
-
-    With a target map (``training.targets``) every wire is cut into the fields it predicts and each block is
-    inverted with that field's own chain; without one a single wire as wide as all the targets together is cut the
-    same way, and nothing else can be paired.
-    """
-    import pandas
-
-    model.eval()
+def observed_columns(model, loader, dataset, device):
     raw = {}
     observed = {name: [] for name in dataset.targets}
     with torch.no_grad():
         for batch in loader:
-            batch = to_device(batch, device)
+            batch = device.move(batch)
             outputs = named_outputs(model, call_model(model, batch))
             for wire, value in outputs.items():
                 raw.setdefault(wire, []).append(value.detach().cpu().numpy().reshape(len(value), -1))
             for name in dataset.targets:
                 value = batch[name]
                 observed[name].append(value.detach().cpu().numpy().reshape(len(value), -1))
+    return raw, observed
+
+
+def prediction_table(model, loader, prep, dataset, device=None, target_map=None):
+    model.eval()
+    raw, observed = observed_columns(model, loader, dataset, device or Device.cpu())
     set_name = dataset.frame.set
     columns = {"row": numpy.asarray(dataset.rows())}
     widths = {}
@@ -48,8 +47,7 @@ def prediction_table(model, loader, prep, dataset, device=None, target_map=None)
                 columns[f"raw_{wire}_{position}"] = matrix[:, position]
         if target_map:
             names = expand_targets(target_map.get(wire), dataset.targets)
-            write_blocks(columns, prep, matrix, names, widths, set_name,
-                          [f"pred_{wire}_{name}" for name in names])
+            write_blocks(columns, prep, matrix, names, widths, set_name, [f"pred_{wire}_{name}" for name in names])
             continue
         decoder = prep.decoder(single) if single is not None else None
         if decoder is not None:
@@ -57,13 +55,11 @@ def prediction_table(model, loader, prep, dataset, device=None, target_map=None)
         elif width == total and total:
             names = list(dataset.targets)
             write_blocks(columns, prep, matrix, names, widths, set_name,
-                          [f"pred_{wire}" if single is not None else f"pred_{wire}_{name}" for name in names])
+                         [f"pred_{wire}" if single is not None else f"pred_{wire}_{name}" for name in names])
     return pandas.DataFrame(columns)
 
 
 def write_blocks(columns, prep, matrix, names, widths, set_name, labels):
-    """Cut a wire into the blocks of the fields it predicts and invert every block with that field's chain; the
-    caller names the column of every block."""
     offset = 0
     for name, label in zip(names, labels):
         span = widths.get(name, 1)

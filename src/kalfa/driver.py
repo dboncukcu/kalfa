@@ -1,17 +1,11 @@
-"""The driver: the resolved config becomes the cirak document the templates open (CONFIG.md section 8).
-
-Direct transfer for data.*, metrics, losses, plots, generate, training.*, seed, device, record; thirteen
-reshapings, each reading only the shape of a section (a key's presence, a list's length, a string against a
-mapping).
-"""
-
-from cirak.registry import registry as default_registry
+from cirak.registry import registry
 
 from .config import resolve_alias
 from .kinds import kalfa_kind, DEFINITION_KEYS, TRAINING_FIXED
 
 ADAPTER_CRITERION = "/adapter/kalfa/criterion"
 ADAPTER_METRIC = "/adapter/kalfa/metric"
+ADAPTER_OBJECTIVE = "/adapter/kalfa/objective"
 RANDOM_SPLIT = "/split/kalfa/random"
 BUILDER = "/builder/kalfa/module"
 PROGRESS = "/lego/kalfa/progress"
@@ -24,7 +18,6 @@ LEGO_TYPES = ("model", "criterion", "objective", "metric", "schedule", "init", "
 
 
 def call(value):
-    """A lego call as an inline component: a string is a call without params, a mapping keeps only uri and params."""
     if isinstance(value, str):
         return {"uri": value}
     out = {"uri": value["uri"]}
@@ -35,7 +28,6 @@ def call(value):
 
 
 def call_with_params(value):
-    """A lego call for a block variable read with ``$var.params$``: params is always present."""
     if isinstance(value, str):
         return {"uri": value, "params": {}}
     return {"uri": value["uri"], "params": dict(value.get("params") or {})}
@@ -46,21 +38,18 @@ def is_shortcut(section):
 
 
 def models_of(section):
-    """(1) the single model shortcut becomes models.model; returns (templates, models)."""
     if is_shortcut(section):
         return {}, {"model": section}
     return dict(section.get("templates") or {}), dict(section.get("models") or {})
 
 
 def is_composite(definition):
-    """(3) a model whose graph uses a {model: name} node is a composite."""
     nodes = definition.get("nodes")
     items = nodes if isinstance(nodes, list) else list((nodes or {}).values())
     return any(isinstance(item, dict) and "model" in item for item in items)
 
 
 def node_of(item):
-    """A model node as a cirak block node: template → block, everything else kept in place."""
     out = {}
     for key in NODE_KEYS:
         if key == "block":
@@ -72,7 +61,6 @@ def node_of(item):
 
 
 def block_of(definition, template=False):
-    """(10) a model or template definition as a cirak block: a list of nodes is a spec, a mapping a graph."""
     block = {}
     if template and definition.get("variables"):
         block["variables"] = definition["variables"]
@@ -93,8 +81,6 @@ def block_of(definition, template=False):
 
 
 def chain_graph(nodes, inputs, outputs):
-    """A chain whose boundary is not one wire in and one wire out, as a graph: the first node takes every input,
-    each node feeds the next, the last one writes the outputs."""
     graph = {}
     previous = list(inputs)
     for position, item in enumerate(nodes):
@@ -121,7 +107,6 @@ def blocks_of(templates, models):
 
 
 def trained_and_composites(models):
-    """(3)(4) trained models with their index in definition order, and the composites."""
     trained = []
     composites = []
     index = 0
@@ -136,7 +121,6 @@ def trained_and_composites(models):
 
 
 def ema_items(models):
-    """(6) the models that write ema, with their decay."""
     found = []
     for name, definition in models.items():
         ema = definition.get("ema")
@@ -146,7 +130,6 @@ def ema_items(models):
 
 
 def optimizers_of(config, models):
-    """(2)(5) the optimizer table with an inline optimizer under its model's name, and the models each one trains."""
     training = config.get("training") or {}
     table = {}
     for name, definition in (config.get("optimizers") or {}).items():
@@ -174,7 +157,6 @@ def optimizers_of(config, models):
 
 
 def predicts_of(training, trained, composites):
-    """predicts as written, else the only trained model, else None."""
     if training.get("predicts") is not None:
         return training["predicts"]
     if len(trained) == 1:
@@ -183,21 +165,13 @@ def predicts_of(training, trained, composites):
 
 
 def lego_reference(value, aliases):
-    """A string that names a lego, as the inline component cirak builds; a mapping is already one."""
     if isinstance(value, str):
         return {"uri": resolve_alias(value, aliases) or value}
     return value
 
 
-def resolve_refs(uri, params, aliases, registry, preprocessors=None, generate=None):
-    """The params of a lego call with its lego typed references (refs fact) turned into inline components.
-
-    A ``preprocessor`` reference names a definition of data.preprocessors and becomes that definition's call; a
-    ``generate`` reference written as the name ``generate`` becomes the generate section's call. References of type
-    model, loss, field, column, wire, history and data stay names; the lego reads them at run time or the framework
-    resolves them.
-    """
-    refs = registry.facts(uri).refs if isinstance(uri, str) else {}
+def resolve_refs(uri, params, aliases, catalog, preprocessors=None, generate=None):
+    refs = catalog.facts(uri).refs if isinstance(uri, str) else {}
     if not params or not refs:
         return params
     out = dict(params)
@@ -207,34 +181,32 @@ def resolve_refs(uri, params, aliases, registry, preprocessors=None, generate=No
         if ref_type in ("pre", "preprocessor") and isinstance(out[param], str):
             definition = (preprocessors or {}).get(out[param])
             if definition is not None:
-                out[param] = call_resolved(definition, aliases, registry, preprocessors)
+                out[param] = call_resolved(definition, aliases, catalog, preprocessors)
                 continue
         if ref_type == "generate" and out[param] == "generate":
             if generate is None:
                 raise ValueError(f"{uri}: {param} names the generate section, which the config does not write")
-            out[param] = call_resolved(generate, aliases, registry, preprocessors)
+            out[param] = call_resolved(generate, aliases, catalog, preprocessors)
             continue
         if ref_type in LEGO_TYPES and ref_type != "model":
             out[param] = lego_reference(out[param], aliases)
     return out
 
 
-def call_resolved(value, aliases, registry, preprocessors=None, generate=None):
-    """A lego call with its lego typed references resolved."""
+def call_resolved(value, aliases, catalog, preprocessors=None, generate=None):
     inner = call(value)
     if "params" in inner:
-        inner["params"] = resolve_refs(inner["uri"], inner["params"], aliases, registry, preprocessors, generate)
+        inner["params"] = resolve_refs(inner["uri"], inner["params"], aliases, catalog, preprocessors, generate)
     return inner
 
 
-def set_values(targets, losses, aliases, registry):
-    """Rule set values: a string for a param the lego declares as a lego reference becomes an inline component."""
+def set_values(targets, losses, aliases, catalog):
     out = {}
     for key, value in (targets or {}).items():
         owner, _, param = key.partition(".")
         entry = losses.get(owner) if isinstance(losses, dict) else None
         if param and param != "loss" and isinstance(entry, dict) and isinstance(value, str):
-            ref_type = registry.facts(entry.get("uri", "")).refs.get(param)
+            ref_type = catalog.facts(entry.get("uri", "")).refs.get(param)
             if ref_type in LEGO_TYPES and ref_type != "model":
                 out[key] = lego_reference(value, aliases)
                 continue
@@ -242,38 +214,34 @@ def set_values(targets, losses, aliases, registry):
     return out
 
 
-def triggers_of(training, aliases=None, registry=None):
-    registry = registry if registry is not None else default_registry
+def triggers_of(training, aliases=None, catalog=None):
+    catalog = catalog if catalog is not None else registry
     aliases = aliases or {}
     found = {}
     for rule in training.get("rules") or []:
-        found[rule["name"]] = call_resolved(rule["when"], aliases, registry)
+        found[rule["name"]] = call_resolved(rule["when"], aliases, catalog)
     for position, trigger in enumerate(training.get("stop") or []):
-        found[f"stop_{position}"] = call_resolved(trigger, aliases, registry)
+        found[f"stop_{position}"] = call_resolved(trigger, aliases, catalog)
     return found
 
 
-def component_of(entry, registry, aliases=None, generate=None):
-    """(11) a losses or metrics entry: criteria and metrics are wrapped in their adapter, objectives stay direct."""
-    inner = call_resolved(entry, aliases or {}, registry, generate=generate)
+def component_of(entry, catalog, aliases=None, generate=None):
+    inner = call_resolved(entry, aliases or {}, catalog, generate=generate)
     kind = kalfa_kind(inner["uri"])
     if kind == "criterion":
         return {"uri": ADAPTER_CRITERION, "params": {"criterion": inner}}
     if kind == "metric":
         return {"uri": ADAPTER_METRIC, "params": {"metric": inner}}
+    if kind == "objective":
+        return {"uri": ADAPTER_OBJECTIVE, "params": {"objective": inner}}
     return inner
 
 
-def components_of(section, registry, aliases=None, generate=None):
-    return {name: component_of(entry, registry, aliases, generate) for name, entry in (section or {}).items()}
+def components_of(section, catalog, aliases=None, generate=None):
+    return {name: component_of(entry, catalog, aliases, generate) for name, entry in (section or {}).items()}
 
 
 def keys_of(section, targets=None):
-    """(12) the definition level keys of a component table, one entry per name (empty when nothing is written).
-
-    (13) a definition that names an output wire and no target inherits the target of that wire from
-    ``training.targets``; with a single entry in that table a definition that names neither inherits it too.
-    """
     targets = dict(targets or {})
     table = {}
     for name, entry in (section or {}).items():
@@ -287,9 +255,8 @@ def keys_of(section, targets=None):
     return table
 
 
-def data_params(data, aliases=None, registry=None):
-    """(7)(8)(9) the data block variables: split and batch short forms, string and mapping filters."""
-    registry = registry if registry is not None else default_registry
+def data_params(data, aliases=None, catalog=None):
+    catalog = catalog if catalog is not None else registry
     aliases = aliases or {}
     filters = data.get("filter") or []
     split = data["split"]
@@ -300,7 +267,7 @@ def data_params(data, aliases=None, registry=None):
     batch = data["batch"]
     batch = {"size": batch} if not isinstance(batch, dict) else dict(batch)
     table = data.get("preprocessors") or {}
-    preprocessors = {name: call_resolved(entry, aliases, registry, table) for name, entry in table.items()}
+    preprocessors = {name: call_resolved(entry, aliases, catalog, table) for name, entry in table.items()}
     return {"source": call_with_params(data["source"]),
             "filter_pre": [item for item in filters if isinstance(item, str)],
             "filter_set": [item for item in filters if isinstance(item, dict)],
@@ -313,9 +280,8 @@ def data_params(data, aliases=None, registry=None):
             "feed": call_with_params(data["feed"])}
 
 
-def recipe(config, registry=None, aliases=None):
-    """The cirak document for a resolved config: component tables, model blocks and the five block usages."""
-    registry = registry if registry is not None else default_registry
+def recipe(config, catalog=None, aliases=None):
+    catalog = catalog if catalog is not None else registry
     aliases = aliases or {}
     training = config.get("training") or {}
     templates, models = models_of(config["model"])
@@ -325,21 +291,21 @@ def recipe(config, registry=None, aliases=None):
     predicts = predicts_of(training, trained, composites)
     losses = config.get("losses") or {}
     rules = [{"name": rule["name"], "when": f"@triggers.{rule['name']}",
-              "set": set_values(rule.get("set"), losses, aliases, registry), "after": rule.get("after")}
+              "set": set_values(rule.get("set"), losses, aliases, catalog), "after": rule.get("after")}
              for rule in training.get("rules") or []]
     checkpoint = training.get("checkpoint")
     targets = training.get("targets") or {}
     generate = config.get("generate")
     document = {
-        "losses": components_of(losses, registry, aliases, generate),
-        "metrics": components_of(config.get("metrics"), registry, aliases, generate),
-        "triggers": triggers_of(training, aliases, registry),
-        "plots": {name: call_resolved(entry, aliases, registry) for name, entry in (config.get("plots") or {}).items()},
+        "losses": components_of(losses, catalog, aliases, generate),
+        "metrics": components_of(config.get("metrics"), catalog, aliases, generate),
+        "triggers": triggers_of(training, aliases, catalog),
+        "plots": {name: call_resolved(entry, aliases, catalog) for name, entry in (config.get("plots") or {}).items()},
         "progress": {"uri": PROGRESS},
         "blocks": blocks_of(templates, models),
         "flow": {
             "outputs": list(FLOW_OUTPUTS),
-            "data": {"block": "data", "params": data_params(config["data"], aliases, registry)},
+            "data": {"block": "data", "params": data_params(config["data"], aliases, catalog)},
             "models": {"block": "models", "params": {
                 "trained_items": trained,
                 "composite_items": composites,
@@ -367,7 +333,7 @@ def recipe(config, registry=None, aliases=None):
                 "figures": config.get("figures"),
                 "predicts": predicts,
                 "targets": targets,
-                "generate": None if generate is None else call_resolved(generate, aliases, registry),
+                "generate": None if generate is None else call_resolved(generate, aliases, catalog),
                 "plots_keys": keys_of(config.get("plots"))}},
         },
     }

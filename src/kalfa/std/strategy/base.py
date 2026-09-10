@@ -1,25 +1,40 @@
 import math
+from dataclasses import dataclass
+
+
+@dataclass
+class Choices:
+    values: list
+
+
+@dataclass
+class Range:
+    low: float
+    high: float
+    log: bool = False
+    integer: bool = False
+    steps: int | None = None
 
 
 RANGE_KEYS = ("low", "high", "log", "int", "steps")
 
 
-class Choices:
-    def __init__(self, values):
-        self.values = list(values)
-
-
-class Range:
-    def __init__(self, low, high, log=False, integer=False, steps=None):
-        self.low = float(low)
-        self.high = float(high)
-        self.log = bool(log)
-        self.integer = bool(integer)
-        self.steps = None if steps is None else int(steps)
+def parse_range(name, entry):
+    unknown = [key for key in entry if key not in RANGE_KEYS]
+    if unknown or "low" not in entry or "high" not in entry:
+        raise ValueError(f"sweep.space.{name}: a range is {{low, high, log, int, steps}}, got {sorted(entry)}")
+    low, high = entry["low"], entry["high"]
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in (low, high)) \
+            or not low < high:
+        raise ValueError(f"sweep.space.{name}: low must be a number below high")
+    if entry.get("log") and low <= 0:
+        raise ValueError(f"sweep.space.{name}: a log range needs low > 0")
+    steps = entry.get("steps")
+    return Range(float(low), float(high), bool(entry.get("log", False)), bool(entry.get("int", False)),
+                 None if steps is None else int(steps))
 
 
 def parse_space(mapping):
-    """The space of a sweep section: name -> Choices or Range, validated."""
     if not isinstance(mapping, dict) or not mapping:
         raise ValueError("sweep.space maps param names to a list of choices or a range {low, high, log, int, steps}")
     space = {}
@@ -27,34 +42,20 @@ def parse_space(mapping):
         if isinstance(entry, list):
             if not entry:
                 raise ValueError(f"sweep.space.{name}: the list of choices is empty")
-            space[name] = Choices(entry)
+            space[name] = Choices(list(entry))
         elif isinstance(entry, dict):
-            unknown = [key for key in entry if key not in RANGE_KEYS]
-            if unknown or "low" not in entry or "high" not in entry:
-                raise ValueError(f"sweep.space.{name}: a range is {{low, high, log, int, steps}}, got {sorted(entry)}")
-            low, high = entry["low"], entry["high"]
-            if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in (low, high)) \
-                    or not low < high:
-                raise ValueError(f"sweep.space.{name}: low must be a number below high")
-            if entry.get("log") and low <= 0:
-                raise ValueError(f"sweep.space.{name}: a log range needs low > 0")
-            space[name] = Range(low, high, entry.get("log", False), entry.get("int", False), entry.get("steps"))
+            space[name] = parse_range(name, entry)
         else:
             raise ValueError(f"sweep.space.{name}: a list of choices or a range mapping")
     return space
 
 
 def grid_values(name, entry):
-    """The values a grid enumerates for one entry: the choices, or steps points of a range."""
     if isinstance(entry, Choices):
         return list(entry.values)
     if entry.steps is None or entry.steps < 2:
         raise ValueError(f"sweep.space.{name}: grid needs a list of choices or a range with steps >= 2")
-    values = []
-    for position in range(entry.steps):
-        fraction = position / (entry.steps - 1)
-        values.append(value_at(entry, fraction))
-    return values
+    return [value_at(entry, position / (entry.steps - 1)) for position in range(entry.steps)]
 
 
 def value_at(entry, fraction):
@@ -66,7 +67,6 @@ def value_at(entry, fraction):
 
 
 def sample(entry, fraction):
-    """The value at a fraction of [0, 1): a choice by position, or a point of the range."""
     if isinstance(entry, Choices):
         return entry.values[min(int(fraction * len(entry.values)), len(entry.values) - 1)]
     return value_at(entry, fraction)
@@ -79,8 +79,8 @@ def point_from_fractions(space, fractions):
 class Strategy:
     deterministic = False
 
-    def total(self, space):
+    def total(self, space: dict) -> int:
         raise NotImplementedError
 
-    def point(self, space, index):
+    def point(self, space: dict, index: int) -> dict:
         raise NotImplementedError

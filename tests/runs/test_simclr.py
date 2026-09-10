@@ -4,7 +4,7 @@ import pytest
 
 from kalfa.api import check, predict
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 from runs.conftest import SMALL
 
 pytestmark = pytest.mark.slow
@@ -29,7 +29,7 @@ def test_check_resolves_the_view_preprocessor(dataset):
 def test_contrastive_training_and_the_backbone_codes(trained):
     result = trained("09_simclr")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2]
     assert set(history[0]) == {"turn", "global_step", "train/ntx", "lr/main", "rules"}
     assert [line["global_step"] for line in history] == [32, 64]

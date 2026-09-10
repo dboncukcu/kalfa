@@ -1,28 +1,34 @@
-from torch.utils import data
+import numpy
+import torch
+
+from kalfa.std.pre.base import Frame
 
 
-class Dataset(data.Dataset):
-    inputs = ()
-    targets = ()
+class Dataset(torch.utils.data.Dataset):
+    inputs: list = ()
+    targets: list = ()
+    frame: Frame | None = None
 
-    def rows(self):
+    def rows(self) -> numpy.ndarray:
         raise NotImplementedError
 
-    def labels(self, name):
-        raise NotImplementedError
+    def labels(self, name: str) -> torch.Tensor:
+        raise ValueError(f"{type(self).__name__} cannot count its labels; balanced and class_weights need a table "
+                         f"dataset")
+
+    def size(self) -> int | None:
+        return len(self)
+
+    def count(self) -> int:
+        return len(self)
 
 
-def dataset_size(dataset):
-    """The number of items of a dataset, counted by a pass when it has no length."""
-    try:
-        return len(dataset)
-    except TypeError:
-        return sum(1 for _ in dataset)
+class IterableDataset(torch.utils.data.IterableDataset, Dataset):
+    shuffle = False
+    buffer = 4096
 
-
-def sized(dataset):
-    """The length of a dataset, None for a stream that has to be read to be counted."""
-    try:
-        return len(dataset)
-    except TypeError:
+    def size(self) -> int | None:
         return None
+
+    def count(self) -> int:
+        return sum(1 for _ in self)

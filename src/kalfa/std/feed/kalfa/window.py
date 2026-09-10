@@ -9,7 +9,6 @@ SET_ORDER = ("train", "valid", "test")
 
 
 def previous_frames(frame, frames):
-    """The sets before this one in train, valid, test order; their tail is the window context at the boundary."""
     if not frames or frame.set not in SET_ORDER:
         return []
     position = SET_ORDER.index(frame.set)
@@ -17,34 +16,26 @@ def previous_frames(frame, frames):
 
 
 class WindowDataset(Dataset):
-    """Sliding windows of ``size`` steps of the features and the next ``horizon`` steps of every target field.
-
-    With a group column every group is its own series and no window crosses groups; with ``context`` (the earlier
-    sets in train, valid, test order) the last ``size`` rows of the same group before this set precede the first
-    windows, so the set boundary loses no targets. ``rows`` gives the source row id of the first target step of
-    every window.
-    """
-
     def __init__(self, frame, size, horizon, context=None, group=None):
         self.frame = frame
-        self.size = int(size)
+        self.window = int(size)
         self.horizon = int(horizon)
         self.inputs = ["x"]
         self.targets = list(frame.targets)
         windows = []
         labels = {name: [] for name in self.targets}
         row_ids = []
-        for key, part, tail in self._series(frame, context, group):
+        for key, part, tail in self.series_of(frame, context, group):
             x = numpy.concatenate([tail["x"], part["x"]]) if tail is not None else part["x"]
             offset = len(tail["x"]) if tail is not None else 0
-            for end in range(max(self.size, offset), len(x) - self.horizon + 1):
-                windows.append(x[end - self.size:end])
+            for end in range(max(self.window, offset), len(x) - self.horizon + 1):
+                windows.append(x[end - self.window:end])
                 for name in self.targets:
                     values = part["targets"][name]
                     labels[name].append(values[end - offset:end - offset + self.horizon])
                 row_ids.append(part["rows"][end - offset])
         self.x = torch.from_numpy(numpy.stack(windows).astype("float32")) if windows else \
-            torch.zeros((0, self.size, len(frame.features)), dtype=torch.float32)
+            torch.zeros((0, self.window, len(frame.features)), dtype=torch.float32)
         self.fields = {}
         for name in self.targets:
             if labels[name]:
@@ -57,7 +48,7 @@ class WindowDataset(Dataset):
         self.row_ids = numpy.asarray(row_ids)
 
     @staticmethod
-    def _parts(frame, group):
+    def parts_of(frame, group):
         data = frame.data
         if group is None or frame.extra is None or group not in frame.extra.columns:
             keys = [None]
@@ -72,14 +63,14 @@ class WindowDataset(Dataset):
                         "targets": {name: part[columns].to_numpy() for name, columns in frame.targets.items()},
                         "rows": numpy.asarray(part.index)}
 
-    def _series(self, frame, context, group):
+    def series_of(self, frame, context, group):
         tails = {}
         for previous in context or []:
-            for key, part in self._parts(previous, group):
+            for key, part in self.parts_of(previous, group):
                 earlier = tails.get(key)
                 joined = numpy.concatenate([earlier["x"], part["x"]]) if earlier is not None else part["x"]
-                tails[key] = {"x": joined[-self.size:]}
-        for key, part in self._parts(frame, group):
+                tails[key] = {"x": joined[-self.window:]}
+        for key, part in self.parts_of(frame, group):
             yield key, part, tails.get(key)
 
     def __len__(self):

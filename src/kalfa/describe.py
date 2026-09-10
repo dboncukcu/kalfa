@@ -4,6 +4,10 @@ from pathlib import Path
 
 from .kinds import SETS
 from .std.pre.base import assign_fields
+from cirak.registry import registry
+from . import __version__
+from .check import Checker
+from .std.common.runtime import expand_targets
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -34,7 +38,6 @@ DOT = "·"
 
 
 def width_of():
-    """The width the terminal reports: COLUMNS overrides it, a pipe has none and falls back to 96 columns."""
     return max(40, shutil.get_terminal_size((96, 24)).columns)
 
 
@@ -210,8 +213,6 @@ def owners_of(prepared):
 
 
 def target_fields(prepared, probe=None):
-    """The target fields in the order the plan builds them: from the fitted plan when the data was loaded, else
-    from the file header and the field patterns, pattern by pattern, column by column."""
     if probe is not None and probe.prep is not None:
         return [item.name for item in probe.prep.fields if item.target]
     params = data_params(prepared) or {}
@@ -225,9 +226,6 @@ def target_fields(prepared, probe=None):
 
 
 def target_slots(prepared, probe=None):
-    """The place every target field takes in the output wire that predicts it, from training.targets."""
-    from .std.common.runtime import expand_targets
-
     mapping = block_params(prepared, "after").get("targets") or {}
     fields = target_fields(prepared, probe)
     slots = {}
@@ -240,9 +238,6 @@ def target_slots(prepared, probe=None):
 def summary_section(prepared, style, width, probe=None):
     surface = prepared.surface
     lines = []
-    from cirak.registry import registry
-
-    from . import __version__
 
     fragments = {str(path): uri for uri, path in registry.fragments().items()}
     files = [Path(path).name for path in surface.paths]
@@ -386,7 +381,8 @@ def spec_text(entry, style=PLAIN):
     name = style.cyan(short(entry.get("uri")))
     if "in_features" in params and "out_features" in params:
         rest = params_text(params, skip=("in_features", "out_features"), style=style)
-        return f"{name} {number(params['in_features'], style)}→{number(params['out_features'], style)} {rest}".rstrip()
+        width = f"{number(params['in_features'], style)}→{number(params['out_features'], style)}"
+        return f"{name} {width} {rest}".rstrip()
     if "out_features" in params:
         rest = params_text(params, skip=("out_features",), style=style)
         return f"{name} {number(params['out_features'], style)} {rest}".rstrip()
@@ -493,8 +489,9 @@ def trigger_text(call, style=PLAIN):
 
 
 def unwrap(call):
-    if isinstance(call, dict) and short(call.get("uri")) in ("criterion", "metric"):
-        inner = (call.get("params") or {}).get("criterion") or (call.get("params") or {}).get("metric")
+    if isinstance(call, dict) and short(call.get("uri")) in ("criterion", "metric", "objective"):
+        params = call.get("params") or {}
+        inner = params.get("criterion") or params.get("metric") or params.get("objective")
         if isinstance(inner, dict):
             return inner
     return call
@@ -519,7 +516,6 @@ def sets_of(keys, style=PLAIN):
 
 
 def compares_of(keys, style=PLAIN):
-    """The wire and the target fields a definition compares, when it names either."""
     keys = keys or {}
     output, target = keys.get("output"), keys.get("target")
     if output is None and target is None:
@@ -562,7 +558,6 @@ def training_section(prepared, style, width, probe=None):
                                     f"{style.dim('predicts')} {params.get('predicts') or '—'}", style))
     if extra:
         lines.append(field_line("", extra, style))
-    from .std.common.runtime import expand_targets
 
     mapping = block_params(prepared, "after").get("targets") or {}
     if mapping:
@@ -636,10 +631,6 @@ def after_section(prepared, style, width, probe=None):
 
 
 def column_refs(prepared):
-    from cirak.registry import registry
-
-    from .check import Checker
-
     found = {}
     try:
         for column, path in Checker(prepared.surface, registry).column_refs():
@@ -702,7 +693,6 @@ def columns_section(prepared, style, width, probe=None):
 
 
 def plan_columns(prepared, style, width, probe):
-    """The column table of a run whose header could not be read: every field of the fitted plan, in plan order."""
     prep = probe.prep
     features = list(prep.features)
     wires = target_slots(prepared, probe)
@@ -741,9 +731,6 @@ SECTION_TABLE = {
 
 
 def report(prepared, style, sections=None, probe=None, span=100_000):
-    """The analysis with nothing clipped: rendered at a width nothing reaches, then again at the longest line the
-    content produced. A line exactly ``span`` long was drawn to the width (a section rule, the version line), so it
-    says nothing about how wide the text is. For a file or a pipe, where there is no terminal to fit."""
     text = render(prepared, style, sections, probe, width=span)
     content = [wide(line) for line in text.splitlines() if wide(line) != span]
     return render(prepared, style, sections, probe, width=max(40, max(content, default=80)))

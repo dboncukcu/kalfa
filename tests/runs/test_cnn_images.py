@@ -5,7 +5,7 @@ import torch
 
 from kalfa.api import check, prepare, run
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 from runs.conftest import SMALL
 
 pytestmark = pytest.mark.slow
@@ -37,12 +37,12 @@ def backbone_norm(record, tag="last"):
 def test_frozen_backbone_then_unfreeze(dataset, trained):
     dataset("04_cnn_images")
     frozen = run(["config.yaml"], parse_sets(SETS, ["epochs=1", "unfreeze_at=5"]), when="frozen")
-    history = read_history(frozen.record)
+    history = History.read(frozen.record)
     assert {"train/ce", "train/accuracy", "val/accuracy", "lr/main"} <= set(history[0])
     assert history[0]["lr/main"] == pytest.approx(1e-3) and history[0]["rules"] == []
     assert torch.equal(backbone_norm(frozen.record), torch.zeros(8))
     thawed = trained("04_cnn_images")
-    history = read_history(thawed.record)
+    history = History.read(thawed.record)
     assert [line["rules"] for line in history] == [["unfreeze"], []]
     assert not torch.equal(backbone_norm(thawed.record), torch.zeros(8))
     payload = torch.load(Path(thawed.record) / "checkpoints" / "last.pt", weights_only=False)

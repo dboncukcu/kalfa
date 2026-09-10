@@ -1,11 +1,3 @@
-"""kalfa sweep: the points of a search space run as ordinary records under one root.
-
-Every point is a plain run whose record is ``<root>/<id>``, written together with ``sweep.json`` (the id, the
-point, the strategy, the total and the objective). Strategies deterministic by id run anywhere with ``--id``; a fed
-back strategy proposes points in the local loop, where every point runs in a subprocess and its objective is read
-back from history.jsonl.
-"""
-
 import json
 import subprocess
 import sys
@@ -16,11 +8,11 @@ from cirak.registry import registry
 
 from .config import load_surface, parse_sets, resolve_alias
 from .kinds import kalfa_kind
-from .record import read_history
-from .std.strategy.base import parse_space
+from .std.common.history import History
+from .std.strategy.base import Strategy, parse_space
+from .api import gate, run
+from .check import OBJECTIVE_KEYS
 
-SWEEP_KEYS = ("strategy", "space", "objective", "record")
-OBJECTIVE_KEYS = ("monitor", "mode", "at")
 
 
 class SweepError(ValueError):
@@ -29,7 +21,7 @@ class SweepError(ValueError):
 
 @dataclass
 class Plan:
-    strategy: object
+    strategy: Strategy
     uri: str
     space: dict
     objective: dict
@@ -38,7 +30,7 @@ class Plan:
 
     @property
     def deterministic(self):
-        return bool(getattr(self.strategy, "deterministic", False))
+        return bool(self.strategy.deterministic)
 
 
 def strategy_of(section, aliases):
@@ -58,9 +50,6 @@ def strategy_of(section, aliases):
 
 
 def plan(paths, sets=None, record=None) -> Plan:
-    """The sweep of a config: the strategy built, the space parsed, the objective and the root."""
-    from .api import gate
-
     surface = load_surface(paths, sets)
     gate(surface.problems)
     section = surface.data.get("sweep")
@@ -78,7 +67,6 @@ def point_dir(root, index):
 
 
 def yaml_value(value):
-    """A point value as a -p value: YAML that reads back as the same scalar."""
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -104,19 +92,11 @@ def point_of(plan, index):
 
 
 def objective_of(record, objective):
-    """(value, turn) of the objective in a record's history: the best turn by mode, or the last turn."""
     monitor = objective.get("monitor")
-    mode = objective.get("mode", "min")
-    at = objective.get("at", "best")
-    lines = [line for line in read_history(record)
-             if isinstance(line.get(monitor), (int, float)) and line[monitor] == line[monitor]]
-    if not lines:
-        raise SweepError(f"{record}: history has no value for objective monitor {monitor!r}")
-    if at == "last":
-        line = lines[-1]
-    else:
-        line = (min if mode == "min" else max)(lines, key=lambda entry: entry[monitor])
-    return float(line[monitor]), int(line.get("turn", len(lines)))
+    try:
+        return History.read(record).best(monitor, objective.get("mode", "min"), objective.get("at", "best"))
+    except ValueError:
+        raise SweepError(f"{record}: history has no value for objective monitor {monitor!r}") from None
 
 
 def write_point(record, plan, index, point, value, turn):
@@ -133,9 +113,6 @@ def read_point(record):
 
 
 def run_point(paths, sets, params, plan, index, point=None, when=None):
-    """Run one point in this process: the record is <root>/<id>, sweep.json is written after the run."""
-    from .api import run
-
     if point is None:
         point = point_of(plan, index)
     record = point_dir(plan.root, index)
@@ -157,8 +134,6 @@ def child_command(paths, sets, params, root, index, point=None):
 
 
 def local_loop(paths, sets, params, plan, log=print):
-    """Every point in a subprocess; finished points (sweep.json) are kept, other existing directories are skipped;
-    a fed back strategy learns every objective before proposing the next point."""
     entries = []
     for index in range(plan.total):
         record = point_dir(plan.root, index)

@@ -4,7 +4,8 @@ import pytest
 
 from kalfa.api import check, resume, run
 from kalfa.config import parse_sets
-from kalfa.record import read_history, resume_chain
+from kalfa.record import resume_chain
+from kalfa.std.common.history import History
 
 pytestmark = pytest.mark.slow
 
@@ -28,7 +29,7 @@ def test_run_then_resume(dataset):
     assert "epochs: 2  # --set overrides" in resolved
     continued = resume(result.record, parse_sets(["training.epochs=4"]), when="second")
     assert continued.record == "runs/housing_resume_second"
-    history = read_history(continued.record)
+    history = History.read(continued.record)
     assert [line["turn"] for line in history] == [3, 4]
     assert resume_chain(continued.record) == [result.record]
     assert (Path(continued.record) / "checkpoints" / "best.pt").exists()

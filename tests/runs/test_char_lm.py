@@ -6,7 +6,7 @@ import torch
 
 from kalfa.api import check, generate, resume
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 from runs.conftest import SMALL
 
 pytestmark = pytest.mark.slow
@@ -32,7 +32,7 @@ def test_check_reads_the_text_config(dataset):
 def test_steps_mode_the_tokenizer_resume_and_sampling(trained):
     result = trained("10_char_lm")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3, 4]
     assert [line["global_step"] for line in history] == [2, 4, 6, 8]
     assert {"train/lm", "train/perplexity", "val/lm", "val/perplexity", "lr/main"} <= set(history[0])
@@ -49,7 +49,7 @@ def test_steps_mode_the_tokenizer_resume_and_sampling(trained):
     assert payload["models"]["gpt"]["nodes.s0.weight"].shape == (tokenizer.size, 16)
     assert (record / "plugins" / "gpt_legos.py").read_text() == Path("gpt_legos.py").read_text()
     continued = resume(result.record, parse_sets(["training.steps.total=12"]), when="more")
-    more = read_history(continued.record)
+    more = History.read(continued.record)
     assert [line["turn"] for line in more] == [5, 6] and more[-1]["global_step"] == 12
     again = generate(result.record)
     assert again.samples.startswith("ROMEO:") and again.path.endswith("samples.txt")

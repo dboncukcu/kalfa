@@ -6,9 +6,10 @@ from io import StringIO
 
 import kalfa  # noqa: F401
 from kalfa.std.common.log import Progress, console, logger_for, node_path, sink
-from kalfa.std.lego.kalfa.history import history, history_line, turn_line
+from kalfa.std.common.history import History
+from kalfa.std.lego.kalfa.history import history, turn_line
 from kalfa.std.lego.kalfa.progress import progress
-from kalfa.std.optimizer.torch.sgd import sgd
+from kalfa.std.optimizer.torch.sgd import Sgd
 from kalfa.std.lego.kalfa.const import const
 from kalfa.std.lego.kalfa.identity import identity
 from kalfa.std.lego.kalfa.merge import merge
@@ -32,8 +33,8 @@ def test_merge_prefixes_and_orders_the_sets():
 
 
 def test_history_line_and_file(tmp_path):
-    optimizer = sgd({"m": tiny_model()}, {"lr": 0.3}, None, "l")
-    line = history_line({"train/l": 0.5}, {"turn": 2, "global_step": 8}, {"m": optimizer}, {"fired": ["a"]})
+    optimizer = Sgd({"m": tiny_model()}, {"lr": 0.3}, None, "l")
+    line = History.line({"train/l": 0.5}, {"turn": 2, "global_step": 8}, {"m": optimizer}, {"fired": ["a"]})
     assert line == {"turn": 2, "global_step": 8, "train/l": 0.5, "lr/m": 0.3, "rules": ["a"]}
     bar = progress()
     assert Progress.current is bar

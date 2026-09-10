@@ -5,7 +5,7 @@ import pytest
 
 from kalfa.api import check
 from kalfa.config import parse_sets
-from kalfa.record import read_history
+from kalfa.std.common.history import History
 
 pytestmark = pytest.mark.slow
 
@@ -24,7 +24,7 @@ def test_check_column_refs(dataset):
 def test_windows_with_context_and_the_forecast(trained):
     result = trained("03_timeseries_window")
     record = Path(result.record)
-    history = read_history(record)
+    history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2]
     assert {"train/loss_mse", "train/rmse", "val/rmse", "val/mae", "test/rmse", "lr/model"} <= set(history[0])
     assert history[-1]["val/rmse"] > 2.0 and history[-1]["train/loss_mse"] < 2.0
