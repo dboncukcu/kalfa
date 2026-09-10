@@ -910,6 +910,20 @@
       "kind": "lego",
       "signature": "(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)"
     },
+    "/lego/kalfa/prepared_header": {
+      "alias": [],
+      "description": "The header a prepared directory recorded in its manifest: the columns, the dtypes and the rows",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(path)"
+    },
+    "/lego/kalfa/prepared_sizes": {
+      "alias": [],
+      "description": "The set sizes a prepared directory recorded in its manifest",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(rows, path)"
+    },
     "/lego/kalfa/ratio_sizes": {
       "alias": [],
       "description": "The set sizes a split by ratios produces from rows rows; without rows, which sets it produces",
@@ -2051,6 +2065,16 @@
       "kind": "source",
       "signature": "(path, chunk=65536)"
     },
+    "/source/kalfa/prepared": {
+      "alias": [],
+      "description": "The data kalfa prepare wrote: the sets of a table read back into one frame marked by set, or the items of a Dataset source read from where they are with the split kept as positions",
+      "facts": {
+        "header": "/lego/kalfa/prepared_header",
+        "returns": "df"
+      },
+      "kind": "source",
+      "signature": "(path)"
+    },
     "/source/kalfa/text_lines": {
       "alias": [
         "text_lines"
@@ -2096,6 +2120,20 @@
       },
       "kind": "split",
       "signature": "(df, k, fold, val=None, seed=None)"
+    },
+    "/split/kalfa/prepared": {
+      "alias": [],
+      "description": "The split kalfa prepare recorded: the sets a prepared frame is marked with, or the positions of a Dataset source's items per set",
+      "facts": {
+        "returns": [
+          "train",
+          "valid",
+          "test"
+        ],
+        "sizes": "/lego/kalfa/prepared_sizes"
+      },
+      "kind": "split",
+      "signature": "(df, path)"
     },
     "/split/kalfa/random": {
       "alias": [

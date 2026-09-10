@@ -14,9 +14,9 @@ The legos a config writes, by kind.
 
 | Kind | Where it is written | Count |
 |---|---|---|
-| `source` | data.source | 6 |
+| `source` | data.source | 7 |
 | `transform` | data.transform | 5 |
-| `split` | data.split | 4 |
+| `split` | data.split | 5 |
 | `frame` | data.frame | 2 |
 | `pre` | data.preprocessors | 28 |
 | `feed` | data.feed | 3 |
@@ -50,6 +50,7 @@ The legos a config writes, by kind.
 | `/source/kalfa/image_folder` | `image_folder` | `(path)` | returns: df; header: /lego/kalfa/image_folder_header; samples: True | Images under root/<class>/ as a Dataset with fields image and label |
 | `/source/kalfa/parquet` | `parquet` | `(path)` | returns: df; header: /lego/kalfa/parquet_header | Read a parquet file into a DataFrame |
 | `/source/kalfa/parquet_stream` |  | `(path, chunk=65536)` | returns: df; header: /lego/kalfa/parquet_header; stream: True | Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table |
+| `/source/kalfa/prepared` |  | `(path)` | returns: df; header: /lego/kalfa/prepared_header | The data kalfa prepare wrote: the sets of a table read back into one frame marked by set, or the items of a Dataset source read from where they are with the split kept as positions |
 | `/source/kalfa/text_lines` | `text_lines` | `(path)` | returns: df; header: /lego/kalfa/text_lines_header; samples: True | The lines of a text file as a Dataset with the field text |
 
 ### transform
@@ -68,6 +69,7 @@ The legos a config writes, by kind.
 |---|---|---|---|---|
 | `/split/kalfa/given` | `given` | `(df, valid=None, test=None)` | returns: train, valid, test; sizes: /lego/kalfa/given_sizes | The source is the train set; valid and test come from the given paths, read like the source (a missing path means no set) |
 | `/split/kalfa/kfold` | `kfold` | `(df, k, fold, val=None, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/kfold_sizes; needs_table: True | k folds of a seeded permutation: the held out fold is the test set, val carves the valid set from the rest; without val there is no valid set |
+| `/split/kalfa/prepared` |  | `(df, path)` | returns: train, valid, test; sizes: /lego/kalfa/prepared_sizes | The split kalfa prepare recorded: the sets a prepared frame is marked with, or the positions of a Dataset source's items per set |
 | `/split/kalfa/random` | `random_split` | `(df, ratios, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/ratio_sizes; needs_table: True | Shuffle the rows with a seed and cut them by ratios into train, valid and test; the short form of a split without a uri |
 | `/split/kalfa/sequential` | `sequential` | `(df, ratios, group=None)` | returns: train, valid, test; refs: group=column; sizes: /lego/kalfa/ratio_sizes | Cut the rows in their order by ratios; with a group column every group is cut on its own |
 
@@ -371,6 +373,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/pack` |  | `(items)` | aliases: items | A mapping of the given items |
 | `/lego/kalfa/parquet_header` |  | `(path, chunk=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata |
 | `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict a set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet for the test set and predictions_<set>.parquet for another |
+| `/lego/kalfa/prepared_header` |  | `(path)` |  | The header a prepared directory recorded in its manifest: the columns, the dtypes and the rows |
+| `/lego/kalfa/prepared_sizes` |  | `(rows, path)` |  | The set sizes a prepared directory recorded in its manifest |
 | `/lego/kalfa/ratio_sizes` |  | `(rows, ratios, seed=None, group=None)` |  | The set sizes a split by ratios produces from rows rows; without rows, which sets it produces |
 | `/lego/kalfa/read_frames` |  | `(record)` | returns: frames | The fitted frame transforms of a record, read from fitted/frames |
 | `/lego/kalfa/read_prep` |  | `(record)` | returns: prep | The fitted preprocessing plan of a record, read from its preprocessors directory |

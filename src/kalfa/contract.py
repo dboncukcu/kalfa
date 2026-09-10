@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 
 from cirak.registry import registry
@@ -6,6 +7,7 @@ from ruamel.yaml import YAML
 
 from .errors import KalfaError
 from .kinds import names_of
+from .std.common.files import write_text
 
 
 @dataclass
@@ -69,4 +71,7 @@ class Contract:
         return self.path.read_text()
 
     def write(self, target):
-        Path(target).write_text(self.text())
+        write_text(target, self.text())
+
+    def digest(self):
+        return hashlib.sha256(self.text().encode("utf-8")).hexdigest()

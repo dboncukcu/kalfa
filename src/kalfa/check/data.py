@@ -170,6 +170,8 @@ class DataRules:
     def source_header(self):
         data = self.data.get("data") or {}
         source = data.get("source")
+        if self.given_header is not None:
+            return dict(self.given_header)
         if not isinstance(source, dict):
             return None
         params = source.get("params") or {}

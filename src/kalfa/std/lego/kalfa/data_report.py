@@ -1,7 +1,7 @@
-import json
 from pathlib import Path
 
 from kalfa.registration import lego
+from kalfa.std.common.files import write_json
 from kalfa.std.common.log import logger_for
 from kalfa.std.pre.base import Grouped, columns_of_source
 
@@ -61,7 +61,7 @@ def data_report(stages, split, after, fitted, prep, frames, loaders, record=None
                     for name, loader in by_set(loaders, "_loader").items()},
     }
     if record is not None:
-        (Path(record) / "data.json").write_text(json.dumps(report, indent=2))
+        write_json(Path(record) / "data.json", report)
     logger.info(f"{report['fit']['features']} features, {len(report['fit']['targets'])} targets; "
                 f"{', '.join(f'{name} {entry['rows']}' for name, entry in report['sets'].items())} rows")
     return report

@@ -307,7 +307,17 @@ def prep_of(data, preprocessors, keys, contract, record=None):
     return {"uri": contract.wiring["fit"], "params": params, "inputs": {"df": "train_df"}}
 
 
-def data_params(data, aliases=None, catalog=None, contract=None, record=None):
+def prepared_params(directory, contract, sets):
+    path = str(directory)
+    return {"source": {"uri": contract.wiring["prepared_source"], "params": {"path": path}},
+            "transform_pre": [],
+            "set_transforms": {name: {"set": name, "transforms": []} for name in sets},
+            "split": {"uri": contract.wiring["prepared_split"], "params": {"path": path}},
+            "frames": {"uri": "/lego/kalfa/const", "params": {"value": []}, "inputs": {}},
+            "prep": {"uri": contract.wiring["read_prep"], "params": {"record": path}, "inputs": {}}}
+
+
+def data_params(data, aliases=None, catalog=None, contract=None, record=None, prepared=None):
     catalog = catalog if catalog is not None else registry
     contract = contract or Contract.load()
     aliases = aliases or {}
@@ -321,7 +331,7 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
     table = data.get("preprocessors") or {}
     preprocessors = {name: call_resolved(entry, aliases, catalog, table) for name, entry in table.items()}
     keys = keys_of(data.get("preprocessors"))
-    return {"source": call_with_params(data["source"]),
+    params = {"source": call_with_params(data["source"]),
             "sets": sets,
             "transform_pre": transform_pre,
             "set_transforms": set_transforms,
@@ -334,9 +344,12 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
             "prep": prep_of(data, preprocessors, keys, contract, record),
             "preprocessors_keys": keys,
             "feed": call_with_params(data["feed"])}
+    if prepared is not None:
+        params.update(prepared_params(prepared, contract, sets))
+    return params
 
 
-def recipe(config, catalog=None, aliases=None, contract=None, record=None):
+def recipe(config, catalog=None, aliases=None, contract=None, record=None, prepared=None):
     catalog = catalog if catalog is not None else registry
     contract = contract or Contract.load()
     aliases = aliases or {}
@@ -366,7 +379,8 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
         "blocks": blocks_of(templates, models),
         "flow": {
             "outputs": ["history", "predictions"],
-            "data": {"block": "data", "params": data_params(config["data"], aliases, catalog, contract, record)},
+            "data": {"block": "data",
+                     "params": data_params(config["data"], aliases, catalog, contract, record, prepared)},
             "models": {"block": "models", "params": {
                 "trained_items": trained,
                 "composite_items": composites,

@@ -1,4 +1,6 @@
 import json
+import os
+import socket
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
@@ -6,9 +8,64 @@ from pathlib import Path
 from cirak.api import annotated
 from ruamel.yaml import YAML
 
+from . import __version__
 from .config import written_config
+from .std.common.files import append_line, read_json, write_json, write_text
 
 DATETIME_TOKEN = "$datetime$"
+
+
+class Record:
+    def __init__(self, directory):
+        self.directory = Path(directory)
+
+    def path(self, name):
+        return self.directory / name
+
+    def write_text(self, name, text):
+        return write_text(self.path(name), text)
+
+    def write_json(self, name, mapping):
+        return write_json(self.path(name), mapping)
+
+    def read_json(self, name):
+        return read_json(self.path(name))
+
+    def append(self, name, mapping):
+        append_line(self.path(name), mapping)
+
+    def manifest(self, kind, **fields):
+        existing = self.read_json("manifest.json")
+        if existing is not None:
+            return existing
+        note = {"kind": kind, "started": datetime.now().isoformat(timespec="seconds"), "version": __version__,
+                **fields}
+        self.write_json("manifest.json", note)
+        return note
+
+    def host(self):
+        note = {"hostname": socket.gethostname(), "pid": os.getpid(), "cwd": str(Path.cwd())}
+        self.write_json("host.json", note)
+        return note
+
+    @property
+    def is_record(self):
+        return self.path("manifest.json").exists() or self.path("resolved.yaml").exists()
+
+    def last_seen(self):
+        stamps = [path.stat().st_mtime for path in self.directory.iterdir() if path.is_file()]
+        return datetime.fromtimestamp(max(stamps)).isoformat(timespec="seconds") if stamps else None
+
+    def status(self):
+        if not self.is_record:
+            return None
+        ended = self.read_json("run.json")
+        if ended is not None:
+            state = ended.get("status") or "finished"
+            return {"state": "failed" if state in ("failed", "error") else "finished", "last_seen": self.last_seen()}
+        if self.path("history.jsonl").exists() or self.path("steps.jsonl").exists():
+            return {"state": "running", "last_seen": self.last_seen()}
+        return {"state": "pending", "last_seen": self.last_seen()}
 
 
 def stamp():
@@ -31,15 +88,11 @@ def resolved_text(surface) -> str:
 
 
 def write_resolved(directory, surface):
-    target = Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-    (target / "resolved.yaml").write_text(resolved_text(surface))
+    Record(directory).write_text("resolved.yaml", resolved_text(surface))
 
 
 def write_flow(directory, text):
-    target = Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-    (target / "flow.yaml").write_text(text)
+    Record(directory).write_text("flow.yaml", text)
 
 
 def read_resolved(directory):
@@ -57,8 +110,7 @@ def resume_source(directory):
 
 
 def write_resume_note(directory, source_run, checkpoint):
-    note = {"resume_from": str(source_run), "checkpoint": str(checkpoint)}
-    (Path(directory) / "resume.json").write_text(json.dumps(note, indent=2))
+    Record(directory).write_json("resume.json", {"resume_from": str(source_run), "checkpoint": str(checkpoint)})
 
 
 def resume_chain(directory):

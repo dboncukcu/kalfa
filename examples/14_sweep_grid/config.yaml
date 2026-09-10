@@ -9,6 +9,15 @@
 #   kalfa collect runs/sweep_housing                           sweep.csv, sweep.json, sweep.md and the best point
 #   kalfa sweep 14_sweep_grid.yaml --set 'sweep.strategy={uri: optuna, params: {trials: 8, seed: 1}}' \
 #       --set 'sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}'
+#
+# On HTCondor: plan the root once on the submit host, then submit; every job runs one point by its id and looks at
+# no other point, the shared filesystem holds the root, and kalfa collect reads it whenever you like.
+#   kalfa sweep config.yaml --plan --prepare-data --record /shared/sweeps/housing
+#       writes manifest.json, sweep.plan (N, CONFIG, ROOT), sweep.sub, sweep.sh and data/ (the data block run once);
+#       sweep.sub and sweep.sh are yours after that: the environment line of sweep.sh, request_gpus and the runtime
+#       of sweep.sub, +JobFlavour = "tomorrow" on lxplus
+#   condor_submit /shared/sweeps/housing/sweep.sub
+#   kalfa collect /shared/sweeps/housing
 
 include:
   - ../01_mlp_regression/config.yaml

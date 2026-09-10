@@ -2,6 +2,8 @@ from pathlib import Path
 
 import numpy
 
+from kalfa.std.common.files import atomic
+
 
 class Figure:
     categorical = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
@@ -192,7 +194,8 @@ class Figure:
     def save(self, drawing, record, name, suffix=None):
         drawing.tight_layout()
         path = self.target(record, f"{name}.{suffix or self.format}")
-        drawing.savefig(path, bbox_inches="tight")
+        with atomic(path) as temporary:
+            drawing.savefig(temporary, format=suffix or self.format, bbox_inches="tight")
         self.pyplot().close(drawing)
         return path
 

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import subprocess
@@ -18,10 +19,10 @@ from .aliasing import aliasing_problems
 from .check import Checker
 from .config import Surface, load_surface
 from .contract import Contract
-from .driver import recipe
+from .driver import call_with_params, recipe
 from .errors import KalfaError
 from .kinds import kalfa_kind
-from .record import read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note
+from .record import Record, read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note
 from .recipe import analyze, compile, dump, implicit_bindings
 from .std.calibrate.base import read_calibrations
 from .std.checkpoint.base import load, load_into
@@ -30,16 +31,17 @@ from .std.common.generation import write_samples
 from .std.common.history import History
 from .std.common.log import Monitor, clock, logger_for, since
 from .std.common.prediction import prediction_table
+from .std.common.files import atomic
 from .std.common.rng import seed_all
 from .std.export.base import traced_inputs
 from .std.common.runtime import call_model, named_outputs, resolve_model
-from .std.frame.base import read_frames
+from .std.frame.base import read_frames, write_frames
 from .std.lego.kalfa.apply import apply
 from .std.lego.kalfa.apply_frames import apply_frames
 from .std.lego.kalfa.clone import Ema
 from .std.lego.kalfa.run_all import run_all
 from .std.lego.kalfa.select import select
-from .std.pre.base import Prep, read_prep
+from .std.pre.base import Prep, read_prep, write_prep
 
 
 logger = logger_for("run")
@@ -97,45 +99,61 @@ def record_paths(paths, contract=None):
     return found, contract
 
 
-def prepare(paths, sets=None, inputs=None, dry=True, contract=None) -> Prepared:
+def data_hash(config):
+    return hashlib.sha256(json.dumps(config.get("data"), sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def prepared_manifest(directory):
+    manifest = Record(directory).read_json("manifest.json")
+    if manifest is None or manifest.get("kind") != "data":
+        raise KalfaError(f"{directory} is no prepared directory; kalfa prepare cfg.yaml --out {directory} writes one")
+    return manifest
+
+
+def prepare(paths, sets=None, inputs=None, dry=True, contract=None, prepared=None) -> Prepared:
     started = clock()
     paths, contract = record_paths(paths, contract)
     contract = contract or Contract.load()
     inputs = contract.run_inputs if inputs is None else list(inputs)
     surface = load_surface(paths, sets, contract)
-    checker = Checker(surface, registry, contract)
+    manifest = prepared_manifest(prepared) if prepared is not None else None
+    checker = Checker(surface, registry, contract, manifest["header"] if manifest is not None else None)
     problems = list(surface.problems)
     blocking = has_errors(problems)
     if not blocking:
         checker.run()
         problems.extend(checker.problems)
         logger.debug(f"checked in {since(started)}: {len(problems)} problems")
-    prepared = Prepared(surface, problems, contract)
-    prepared.sets = list(checker.sets)
-    prepared.header = checker.header
-    prepared.sizes = checker.sizes() if checker.header is not None else None
+    found = Prepared(surface, problems, contract)
+    found.sets = list(checker.sets)
+    found.header = checker.header
+    found.sizes = checker.sizes() if checker.header is not None else None
     if blocking or has_errors(checker.problems) and not checker.header_only_errors():
-        return prepared
+        return found
+    if manifest is not None and manifest.get("hash") != data_hash(surface.data):
+        problems.append(error("prepared_mismatch", f"{prepared} was prepared from another data section; prepare "
+                                                   f"it again from this config"))
+        return found
     try:
-        prepared.document = recipe(surface.data, registry, surface.aliases, contract)
+        found.document = recipe(surface.data, registry, surface.aliases, contract, prepared=prepared)
     except (KeyError, TypeError, ValueError, AttributeError) as exception:
         problems.append(error("driver_failed", f"the driver cannot shape this config: {exception!r}"))
-        return prepared
-    analysis = analyze(prepared.document, contract)
-    prepared.analysis = analysis
+        return found
+    analysis = analyze(found.document, contract)
+    found.analysis = analysis
     problems.extend(analysis.problems)
     if has_errors(analysis.problems):
-        return prepared
+        return found
     built = clock()
     pipeline, tezgah_problems = compile(analysis, inputs, dry)
     problems.extend(tezgah_problems)
     logger.debug(f"compiled the flow in {since(built)}")
-    prepared.pipeline = pipeline
+    found.pipeline = pipeline
     if pipeline is not None and pipeline.resolved is not None:
-        prepared.implicit = list(implicit_bindings(pipeline.resolved))
-        prepared.aliasing = aliasing_problems(pipeline, registry)
-        problems.extend(prepared.aliasing)
-    return prepared
+        found.implicit = list(implicit_bindings(pipeline.resolved))
+        found.aliasing = aliasing_problems(pipeline, registry)
+        problems.extend(found.aliasing)
+    return found
 
 
 def gate(problems):
@@ -147,11 +165,52 @@ def gate(problems):
         raise ConfigError(failures)
 
 
-def check(paths, sets=None, load=False, contract=None) -> Prepared:
-    prepared = prepare(paths, sets, dry=True, contract=contract)
-    if load and prepared.document is not None and not prepared.errors:
-        prepared.loaded = loaded_sizes(prepared.document, prepared.contract)
-    return prepared
+def check(paths, sets=None, load=False, contract=None, prepared=None) -> Prepared:
+    found = prepare(paths, sets, dry=True, contract=contract, prepared=prepared)
+    if load and found.document is not None and not found.errors:
+        found.loaded = (dict(prepared_manifest(prepared)["sizes"]) if prepared is not None
+                        else loaded_sizes(found.document, found.contract))
+    return found
+
+
+@dataclass
+class PreparedData:
+    directory: str
+    sizes: dict
+    manifest: dict
+
+
+def prepare_data(paths, sets=None, out=None, contract=None) -> PreparedData:
+    found = prepare(paths, sets, dry=True, contract=contract)
+    gate(found.problems)
+    config = found.surface.data
+    source = config["data"]["source"]
+    if registry.facts(source["uri"]).get("stream"):
+        raise KalfaError("a stream source is lazy already; there is nothing to prepare")
+    names = document_sets(found.document)
+    wanted = ["prep", "frames", "data_report", *[f"{name}_df" for name in names]]
+    outputs = flow_outputs(found.document, ("data",), wanted, found.contract)
+    target = Record(out)
+    target.directory.mkdir(parents=True, exist_ok=True)
+    samples = bool(registry.facts(source["uri"]).get("samples"))
+    sizes = {}
+    for name in names:
+        part = outputs[f"{name}_df"]
+        sizes[name] = int(len(part))
+        if samples:
+            target.write_text(f"{name}.json", json.dumps([int(position) for position in part.positions]))
+        else:
+            with atomic(target.path(f"{name}.parquet")) as temporary:
+                part.rename_axis("row").reset_index().to_parquet(temporary, index=False)
+    write_prep(outputs["prep"], target.directory)
+    write_frames(outputs["frames"], target.directory)
+    target.write_json("data.json", outputs["data_report"])
+    manifest = target.manifest("data", hash=data_hash(config), sets=names, sizes=sizes,
+                               layout="samples" if samples else "table", header=found.header,
+                               source=call_with_params(source), config=[str(path) for path in paths
+                                                                         if not isinstance(path, dict)])
+    logger.info(f"prepared {out}: " + ", ".join(f"{name} {size}" for name, size in sizes.items()))
+    return PreparedData(str(out), sizes, manifest)
 
 
 def document_sets(document):
@@ -263,17 +322,17 @@ def write_git_note(record, paths):
 
 
 def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None,
-        contract=None, monitor=None) -> RunResult:
+        contract=None, monitor=None, prepared=None, identity=None) -> RunResult:
     started = clock()
     paths, contract = record_paths(paths, contract)
     contract = contract or Contract.load()
     monitor = monitor or Monitor()
     inputs = contract.run_inputs + (["resume"] if resume is not None else [])
-    prepared = prepare(paths, sets, inputs=inputs, dry=False, contract=contract)
-    gate(prepared.problems)
-    if executor != "serial" and prepared.aliasing:
-        gate([error(problem.kind, problem.message, hint=problem.hint) for problem in prepared.aliasing])
-    config = prepared.surface.data
+    found = prepare(paths, sets, inputs=inputs, dry=False, contract=contract, prepared=prepared)
+    gate(found.problems)
+    if executor != "serial" and found.aliasing:
+        gate([error(problem.kind, problem.message, hint=problem.hint) for problem in found.aliasing])
+    config = found.surface.data
     record = record_dir(config, when)
     target = Path(record)
     if target.exists() and any(target.iterdir()):
@@ -283,10 +342,18 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
         logger.debug(f"seed {config['seed']}")
     logger.info(f"record {record}")
     target.mkdir(parents=True, exist_ok=True)
-    write_resolved(record, prepared.surface)
+    note = Record(record)
+    note.manifest(**{"kind": "run", "name": target.name, "config": [str(path) for path in paths
+                                                                    if not isinstance(path, dict)],
+                     "params": dict(config.get("params") or {}), "contract": contract.digest(),
+                     "prepared": str(prepared) if prepared is not None else None, **(identity or {})})
+    note.host()
+    write_resolved(record, found.surface)
     contract.write(target / "contract.yaml")
     copy_plugins(config.get("plugins"), target)
-    write_flow(record, prepared.dump())
+    write_flow(record, found.dump())
+    if prepared is not None:
+        shutil.copytree(Path(prepared) / "fitted", target / "fitted", dirs_exist_ok=True)
     if resume_from is not None:
         old = Path(resume_from) / "checkpoints"
         if old.is_dir():
@@ -301,9 +368,9 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
     values = {"device": device, "record": record, "monitor": monitor}
     if resume is not None:
         values["resume"] = str(resume)
-    tezgah.subscribe(prepared.pipeline, monitor.sink)
+    tezgah.subscribe(found.pipeline, monitor.sink)
     try:
-        report = tezgah.run(prepared.pipeline, inputs=values, executor=executor, workers=workers, record_dir=record)
+        report = tezgah.run(found.pipeline, inputs=values, executor=executor, workers=workers, record_dir=record)
         history = report.outputs.get("history") or []
         monitor.summary(config.get("params"), history[-1] if history else None)
     finally:
@@ -637,6 +704,6 @@ def flow_outputs(document, blocks, names, contract=None):
     return report.outputs
 
 
-__all__ = ["Exported", "Generated", "KalfaError", "Opened", "Plots", "Prepared", "Prediction", "Probe", "RunResult",
-           "check", "export", "generate", "open_record", "plots", "predict", "prepare", "probe", "read_resolved",
-           "resume", "run", "seed_all"]
+__all__ = ["Exported", "Generated", "KalfaError", "Opened", "Plots", "Prepared", "PreparedData", "Prediction",
+           "Probe", "RunResult", "check", "export", "generate", "open_record", "plots", "predict", "prepare",
+           "prepare_data", "probe", "read_resolved", "resume", "run", "seed_all"]

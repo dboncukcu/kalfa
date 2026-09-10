@@ -39,6 +39,7 @@ def build_parser():
     run_cmd.add_argument("config", nargs="+")
     set_option(run_cmd)
     contract_option(run_cmd)
+    run_cmd.add_argument("--prepared", metavar="DIR", help="start from the data kalfa prepare wrote into DIR")
     run_cmd.add_argument("--executor", default="serial")
     run_cmd.add_argument("--workers", type=int)
     log_option(run_cmd)
@@ -54,6 +55,7 @@ def build_parser():
     check_cmd.add_argument("--recipe", action="store_true", help="print the driver document the templates open")
     check_cmd.add_argument("--load", action="store_true",
                            help="run the data block and report the real set sizes (after filters)")
+    check_cmd.add_argument("--prepared", metavar="DIR", help="check against the data kalfa prepare wrote into DIR")
     check_cmd.set_defaults(handler=cmd_check)
 
     describe_cmd = commands.add_parser("describe", help="the config as an analysis: data, model, training, after "
@@ -64,6 +66,8 @@ def build_parser():
     describe_cmd.add_argument("--load", action="store_true",
                               help="run the data and model blocks: the real set sizes, the fitted column widths and "
                                    "the parameter counts")
+    describe_cmd.add_argument("--prepared", metavar="DIR",
+                              help="describe against the data kalfa prepare wrote into DIR")
     describe_cmd.add_argument("--section", action="append", default=[], choices=list(describe.ALL_SECTIONS),
                               help="print this section only (repeatable)")
     describe_cmd.add_argument("--wiring", action="store_true",
@@ -95,6 +99,16 @@ def build_parser():
     contract_option(generate_cmd)
     log_option(generate_cmd)
     generate_cmd.set_defaults(handler=cmd_generate)
+
+    prepare_cmd = commands.add_parser("prepare", help="run the data block once and write the applied sets, the "
+                                                      "fitted state and the data report into a directory a run "
+                                                      "starts from with --prepared")
+    prepare_cmd.add_argument("config", nargs="+")
+    prepare_cmd.add_argument("--out", required=True, metavar="DIR", help="the directory to write")
+    set_option(prepare_cmd)
+    contract_option(prepare_cmd)
+    log_option(prepare_cmd)
+    prepare_cmd.set_defaults(handler=cmd_prepare)
 
     export_cmd = commands.add_parser("export", help="write a model of a recorded run in another format: onnx, "
                                                     "torchscript or state_dict, or an export lego of your own")
@@ -141,6 +155,11 @@ def build_parser():
                                                                  "by id)")
     sweep_cmd.add_argument("--id", type=int, metavar="N", dest="point_id",
                            help="run point N only, for a queue job; the record is <root>/<N>")
+    sweep_cmd.add_argument("--plan", action="store_true",
+                           help="write the root once: manifest.json, sweep.plan and the site files sweep.sub and "
+                                "sweep.sh (never overwritten), then stop")
+    sweep_cmd.add_argument("--prepare-data", action="store_true", dest="prepare_data",
+                           help="with --plan, run the data block once into <root>/data; the points start from it")
     sweep_cmd.add_argument("--point", help=argparse.SUPPRESS)
     sweep_cmd.set_defaults(handler=cmd_sweep)
 
@@ -275,7 +294,8 @@ def print_problems(problems, stream):
 def cmd_check(args) -> int:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        prepared = api.check(args.config, layer_of(args), load=args.load, contract=contract_of(args))
+        prepared = api.check(args.config, layer_of(args), load=args.load, contract=contract_of(args),
+                             prepared=args.prepared)
     style = style_for(sys.stdout)
     if args.layers:
         print(prepared.surface.layers_text())
@@ -307,7 +327,7 @@ def cmd_run(args) -> int:
         warnings.simplefilter("always")
         monitor.echo_warnings(caught)
         result = api.run(args.config, layer_of(args), executor=args.executor, workers=args.workers,
-                         contract=contract_of(args), monitor=monitor)
+                         contract=contract_of(args), monitor=monitor, prepared=args.prepared)
     print_warnings(caught)
     print(f"run {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
           f"record {style.cyan(result.record)}")
@@ -330,7 +350,7 @@ def cmd_resume(args) -> int:
 def cmd_describe(args) -> int:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        prepared = api.check(args.config, layer_of(args), contract=contract_of(args))
+        prepared = api.check(args.config, layer_of(args), contract=contract_of(args), prepared=args.prepared)
     style = style_for(sys.stdout)
     if prepared.problems:
         print_problems(prepared.problems, sys.stdout)
@@ -367,6 +387,17 @@ def cmd_predict(args) -> int:
     print(f"predicted {len(result.table)} rows with {style.bold(result.model)}: {style.cyan(result.path)}")
     if result.plots:
         print(f"plots {', '.join(result.plots)}: {style.cyan(str(Path(args.run) / 'plots'))}")
+    return 0
+
+
+def cmd_prepare(args) -> int:
+    with Monitor(level_of(args.log)), warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = api.prepare_data(args.config, layer_of(args), out=args.out, contract=contract_of(args))
+    print_warnings(caught)
+    style = style_for(sys.stdout)
+    sizes = ", ".join(f"{name} {size}" for name, size in result.sizes.items())
+    print(f"prepared {sizes}: {style.cyan(result.directory)}")
     return 0
 
 
@@ -419,6 +450,14 @@ def cmd_sweep(args) -> int:
         return 0
     if args.show is not None:
         print(json.dumps(sweep.point_of(plan, args.show)))
+        return 0
+    if args.plan or args.prepare_data:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            sweep.write_plan(plan, args.set, args.param, prepare=args.prepare_data, log=print)
+        print_warnings(caught)
+        print(f"submit with: condor_submit {plan.root / 'sweep.sub'}; or run the points here: kalfa sweep "
+              f"{' '.join(args.config)} --record {plan.root}")
         return 0
     if args.point_id is not None:
         point = json.loads(args.point) if args.point else None

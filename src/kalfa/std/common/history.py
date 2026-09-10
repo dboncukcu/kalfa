@@ -1,6 +1,7 @@
-import json
 import math
 from pathlib import Path
+
+from kalfa.std.common.files import append_line, read_lines
 
 
 def is_number(value):
@@ -17,10 +18,7 @@ class History:
 
     @classmethod
     def read(cls, record):
-        path = Path(record) / "history.jsonl"
-        if not path.exists():
-            return cls()
-        return cls(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+        return cls(read_lines(Path(record) / "history.jsonl"))
 
     @staticmethod
     def line(metrics, counters, optimizers, rules, seconds=None):
@@ -36,10 +34,7 @@ class History:
 
     @classmethod
     def read_steps(cls, record):
-        path = Path(record) / "steps.jsonl"
-        if not path.exists():
-            return cls()
-        return cls(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+        return cls(read_lines(Path(record) / "steps.jsonl"))
 
     @staticmethod
     def append(record, line):
@@ -47,11 +42,8 @@ class History:
 
     @staticmethod
     def append_steps(record, lines, name="steps.jsonl"):
-        target = Path(record)
-        target.mkdir(parents=True, exist_ok=True)
-        with (target / name).open("a", encoding="utf-8") as stream:
-            for line in lines:
-                stream.write(json.dumps(line, default=float) + "\n")
+        for line in lines:
+            append_line(Path(record) / name, line)
 
     def __len__(self):
         return len(self.lines)

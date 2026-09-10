@@ -12,8 +12,9 @@ from .sections import SectionRules
 
 
 class Checker(SectionRules, DataRules, RefRules):
-    def __init__(self, surface, registry, contract=None):
+    def __init__(self, surface, registry, contract=None, header=None):
         self.surface = surface
+        self.given_header = header
         self.data = surface.data
         self.raw = surface.raw
         self.registry = registry

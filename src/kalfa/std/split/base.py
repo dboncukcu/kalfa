@@ -16,8 +16,7 @@ def count_of(part):
 
 def report_sets(name, parts):
     if logger.isEnabledFor(logging.INFO):
-        logger.info(f"{name}: train {count_of(parts['train'])}, valid {count_of(parts['valid'])}, "
-                    f"test {count_of(parts['test'])}")
+        logger.info(f"{name}: " + ", ".join(f"{set_name} {count_of(part)}" for set_name, part in parts.items()))
     return parts
 
 

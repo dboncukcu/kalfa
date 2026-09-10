@@ -82,6 +82,8 @@ kalfa generate runs/x [--which best|last] [--device cuda]         # writes sampl
 kalfa plots runs/x [--only a,b] [--set figures.format=pdf]        # redraw the plots section from the record; nothing trains
 kalfa resume runs/x [--set training.epochs=N]                     # continues from last.pt or final/ into a new directory
 kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep section: the local loop or one point
+kalfa sweep cfg.yaml --plan [--prepare-data] [--record root]      # write the root once: the manifest, sweep.plan, sweep.sub, sweep.sh
+kalfa prepare cfg.yaml --out DIR                                  # the data block once; kalfa run cfg.yaml --prepared DIR starts from it
 kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
 kalfa ls [/alias/kalfa/tabular | /criterion | ... | word]         # packs and legos with their kinds and facts; a word searches
 kalfa docs [--write DOCS.md]                                      # the lego reference generated from the registry
@@ -137,7 +139,12 @@ record directory gets no new file. The lines do land in `stderr.txt` of the reco
 while the run is live, and the node timings are in `events.jsonl` either way.
 
 Sweeps: the config gets `sweep: {strategy, space, objective, record}` (`grid`, `random`, `sobol` are deterministic
-by id; `optuna` is fed back), `kalfa sweep` runs every point as an ordinary run under `<root>/<id>/` in a
+by id; `optuna` is fed back). `kalfa sweep cfg.yaml --plan --record root` writes the root once before any point
+starts: `manifest.json` (the strategy, the space, the objective, the total), `sweep.plan` (`N`, the config, the
+root, regenerated on every plan) and the two site files it never overwrites, `sweep.sub` for HTCondor (`include :
+sweep.plan`, `queue $(N)`) and `sweep.sh` (the environment of the site, then `kalfa sweep cfg.yaml --id $1`);
+`--prepare-data` runs the data block once into `<root>/data/` and every point starts from it. Then `kalfa sweep`
+runs every point as an ordinary run under `<root>/<id>/` in a
 subprocess, `kalfa collect <root>` writes the table and the best point; on a queue system one job per point with
 `kalfa sweep cfg.yaml --id N --record <shared root>` (`examples/14_sweep_grid`).
 
@@ -199,7 +206,8 @@ samples = generate(result.record, which="best")
 | `plots(run_dir, only=None, device=None, contract=None)` | `Plots` | `record`, `names`; the plots section redrawn from the record |
 | `open_record(run_dir, which=None, sets=None, contract=None)` | `Opened` | what every command over a record starts from: `contract`, `surface`, `document`, `analysis`, `store`, `prep`, and `rebuild()` for the models with the `which` weights |
 | `collect_root(root, out=None)` in `kalfa.collect` | mapping | the sweep or fold table and the best point; `load_runs`, `fold_summary`, `sweep_table` are the pieces |
-| `plan(paths, sets=None, record=None)` in `kalfa.sweep` | `Plan` | the points of a sweep without running any of them |
+| `plan(paths, sets=None, record=None)` in `kalfa.sweep` | `Plan` | the points of a sweep without running any of them; `write_plan(plan, prepare=False)` writes the root |
+| `prepare_data(paths, sets=None, out=None, contract=None)` | `PreparedData` | the data block run once into `out`: the sets as parquet, `fitted/`, `data.json` and a manifest; `run(..., prepared=out)` starts from it |
 
 `check` never raises, it returns what it found; `run` raises `ConfigError` on an error and warns (`CirakWarning`)
 for the rest. `print(render_problems(prepared.problems))` from `cirak.errors` prints them the way the command line
@@ -261,6 +269,8 @@ never written into (an error).
 
 | File | Contents |
 |---|---|
+| `manifest.json` | the identity, written once at the start: `kind` (`run`, `point`, `sweep`, `data`), the name, the config paths, the params, the kalfa version, a hash of the contract, for a point its values and its root, for a prepared run the directory it started from |
+| `host.json` | the hostname, the pid and the working directory of the process that wrote the record |
 | `resolved.yaml` | the config with its aliases and `$param$`s resolved; the source of every overridden value in a comment; runs again on its own |
 | `contract.yaml` | the contract the run was compiled by (the wiring and the flow blocks); `predict`, `generate` and `resume` read it back |
 | `flow.yaml` | the tezgah graph that ran: the component tables, the model blocks, the expanded flow and tezgah's resolution comments |

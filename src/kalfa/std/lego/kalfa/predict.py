@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas
 
 from kalfa.registration import lego
+from kalfa.std.common.files import atomic
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.prediction import prediction_table
 from kalfa.std.common.runtime import resolve_model
@@ -29,6 +30,7 @@ def predict(models, composites, loader, prep, predicts, set, target_map=None, ca
         target = Path(record)
         target.mkdir(parents=True, exist_ok=True)
         name = "predictions.parquet" if set == "test" else f"predictions_{set}.parquet"
-        table.to_parquet(target / name, index=False)
+        with atomic(target / name) as temporary:
+            table.to_parquet(temporary, index=False)
         logger_after.info(f"{name}: {len(table)} rows")
     return table

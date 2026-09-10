@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 
 from kalfa.std.common.figure import Figure
+from kalfa.std.common.files import atomic
 
 
 def write_samples(samples, target):
@@ -37,5 +38,6 @@ def write_grid(images, path, figures=None):
             figures.image_tile(axis, images[position])
         else:
             axis.axis("off")
-    drawing.savefig(path, bbox_inches="tight")
+    with atomic(path) as temporary:
+        drawing.savefig(temporary, format=Path(path).suffix.lstrip(".") or "png", bbox_inches="tight")
     figures.pyplot().close(drawing)

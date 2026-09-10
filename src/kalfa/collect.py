@@ -2,7 +2,7 @@ import json
 import math
 from pathlib import Path
 
-from .record import read_resolved
+from .record import Record, read_resolved
 from .std.common.history import History
 import pandas
 
@@ -85,7 +85,11 @@ def sweep_markdown(result):
 
 
 def is_run_dir(path):
-    return (Path(path) / "resolved.yaml").exists()
+    record = Record(path)
+    manifest = record.read_json("manifest.json")
+    if manifest is not None:
+        return manifest.get("kind") in ("run", "point")
+    return record.path("resolved.yaml").exists()
 
 
 def collect_root(root, out=None):
@@ -110,7 +114,8 @@ def collect_root(root, out=None):
             skipped.append({"dir": child.name, "status": status})
     if not finished:
         raise ValueError(f"{root}: no finished point (a directory with sweep.json) under the sweep root")
-    objective = finished[0]["objective"]
+    manifest = Record(root).read_json("manifest.json") or {}
+    objective = {**finished[0]["objective"], **(manifest.get("objective") or {})}
     pick = min if objective.get("mode", "min") == "min" else max
     best = pick(finished, key=lambda entry: entry["objective"]["value"])
     rows = []

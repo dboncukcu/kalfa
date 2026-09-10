@@ -28,6 +28,8 @@ wiring:
   default_rng: /rng/kalfa/derived                # the model seed rule when the config writes none
   fit: /lego/kalfa/fit                           # the prep step of a run
   read_prep: /lego/kalfa/read_prep               # the prep step of a command over a record
+  prepared_source: /source/kalfa/prepared        # the source of a run over kalfa prepare's directory
+  prepared_split: /split/kalfa/prepared          # its split, the sets the directory holds
   fit_frames: /lego/kalfa/fit_frames             # the frame transforms fitted on the train set in a run
   read_frames: /lego/kalfa/read_frames           # the fitted frame transforms of a record
   run_inputs: [device, record, monitor]          # the values a command hands to the run

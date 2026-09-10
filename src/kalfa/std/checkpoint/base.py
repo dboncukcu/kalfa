@@ -3,6 +3,7 @@ from pathlib import Path
 
 import torch
 
+from kalfa.std.common.files import atomic
 from kalfa.std.common.rng import restore_rng, rng_states
 
 
@@ -30,9 +31,8 @@ def payload(models, optimizers, emas, counters, rules, checkpoint=None):
 
 
 def save(path, data):
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(data, target)
+    with atomic(path) as temporary:
+        torch.save(data, temporary)
 
 
 def load(path):
