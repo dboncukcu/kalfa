@@ -100,3 +100,16 @@ def test_predict_takes_the_log_option(workdir, capsys):
     assert main(["predict", "runs/one", "--log", "info"]) == 0
     err = capsys.readouterr().err
     assert "predicting with net (best weights)" in err and "300 rows ->" in err
+
+
+def test_plots_command_and_predict_plots(workdir, capsys):
+    config = minimal()
+    config["record"] = "runs/drawn"
+    path = write_config(workdir / "cfg.yaml", config)
+    assert main(["run", path]) == 0
+    (workdir / "runs" / "drawn" / "plots" / "loss_curve.png").unlink()
+    assert main(["plots", "runs/drawn", "--only", "loss_curve"]) == 0
+    assert "plots loss_curve" in capsys.readouterr().out
+    assert (workdir / "runs" / "drawn" / "plots" / "loss_curve.png").exists()
+    assert main(["predict", "runs/drawn", "--plots", "pred_vs_true"]) == 0
+    assert "plots pred_vs_true" in capsys.readouterr().out

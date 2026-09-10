@@ -9,7 +9,7 @@ import pandas
 import tezgah
 import torch
 from cirak.api import Analysis
-from cirak.build import build_components
+from cirak.build import ComponentStore, build_components
 from cirak.errors import CirakWarning, ConfigError, error, render_problems
 from cirak.registry import registry
 
@@ -22,15 +22,18 @@ from .errors import KalfaError
 from .kinds import kalfa_kind
 from .record import read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note
 from .recipe import analyze, compile, dump, implicit_bindings
-from .std.checkpoint.base import load
+from .std.checkpoint.base import load, load_into
 from .std.common.device import Device
 from .std.common.generation import write_samples
+from .std.common.history import History
 from .std.common.log import Monitor, clock, logger_for, since
 from .std.common.prediction import prediction_table
 from .std.common.rng import seed_all
 from .std.common.runtime import call_model, named_outputs, resolve_model
 from .std.lego.kalfa.apply import apply
 from .std.lego.kalfa.clone import Ema
+from .std.lego.kalfa.run_all import run_all
+from .std.lego.kalfa.select import select
 from .std.pre.base import Prep, read_prep
 
 
@@ -70,8 +73,27 @@ def has_errors(problems):
     return any(problem.severity == "error" for problem in problems)
 
 
+def resolved_of(run_dir):
+    resolved = Path(run_dir) / "resolved.yaml"
+    if not resolved.exists():
+        raise KalfaError(f"{run_dir} has no resolved.yaml")
+    return resolved
+
+
+def record_paths(paths, contract=None):
+    found = []
+    for path in paths:
+        if not isinstance(path, dict) and Path(path).is_dir():
+            found.append(str(resolved_of(path)))
+            contract = recorded_contract(path, contract)
+        else:
+            found.append(path)
+    return found, contract
+
+
 def prepare(paths, sets=None, inputs=None, dry=True, contract=None) -> Prepared:
     started = clock()
+    paths, contract = record_paths(paths, contract)
     contract = contract or Contract.load()
     inputs = contract.run_inputs if inputs is None else list(inputs)
     surface = load_surface(paths, sets, contract)
@@ -216,6 +238,7 @@ def write_device_note(record, device):
 def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None,
         contract=None, monitor=None) -> RunResult:
     started = clock()
+    paths, contract = record_paths(paths, contract)
     contract = contract or Contract.load()
     monitor = monitor or Monitor()
     inputs = contract.run_inputs + (["resume"] if resume is not None else [])
@@ -285,9 +308,7 @@ def resume(run_dir, sets=None, executor="serial", workers=None, when=None, contr
     source = resume_source(run_dir)
     if source is None:
         raise KalfaError(f"{run_dir} has neither checkpoints/last.pt nor final/state.pt; nothing to resume")
-    resolved = Path(run_dir) / "resolved.yaml"
-    if not resolved.exists():
-        raise KalfaError(f"{run_dir} has no resolved.yaml")
+    resolved = resolved_of(run_dir)
     return run([str(resolved)], sets, executor, workers, resume=source, resume_from=str(run_dir), when=when,
                contract=recorded_contract(run_dir, contract), monitor=monitor)
 
@@ -325,57 +346,157 @@ def weights_of(run_dir, which):
 
 
 @dataclass
-class Prediction:
-    path: str | None
-    table: pandas.DataFrame
-    model: str
+class Opened:
+    run_dir: str
+    contract: Contract
+    surface: Surface
+    which: str
+    document: dict
+    analysis: Analysis
+    store: ComponentStore
+    prep: Prep
+    models: dict | None = None
+    composites: dict | None = None
+    payload: dict | None = None
+
+    @property
+    def config(self):
+        return self.surface.data
+
+    @property
+    def after(self):
+        return self.document["flow"]["after"]["params"] or {}
+
+    def rebuild(self):
+        if self.models is None:
+            self.models, self.composites = rebuild_models(self.analysis, self.store, self.prep)
+            self.payload = load(weights_of(self.run_dir, self.which))
+            for name, module in self.models.items():
+                if name in self.payload.get("models", {}):
+                    module.load_state_dict(self.payload["models"][name])
+        return self.models, self.composites
 
 
-def predict(run_dir, model=None, which=None, data=None, sets=None, device=None, contract=None) -> Prediction:
-    resolved = Path(run_dir) / "resolved.yaml"
-    if not resolved.exists():
-        raise KalfaError(f"{run_dir} has no resolved.yaml")
+def open_record(run_dir, which=None, sets=None, contract=None) -> Opened:
+    resolved = resolved_of(run_dir)
     contract = recorded_contract(run_dir, contract)
     surface = load_surface([str(resolved)], sets, contract)
     gate(surface.problems)
     config = surface.data
-    which = which or config["training"].get("report", "last")
     document = recipe(config, registry, surface.aliases, contract, record=run_dir)
     analysis = analyze(document, contract)
     gate(analysis.problems)
     store = build_components(analysis.data, analysis.expansions, registry)
-    prep = read_prep(run_dir)
-    models, composites = rebuild_models(analysis, store, prep)
-    payload = load(weights_of(run_dir, which))
-    for name, module in models.items():
-        if name in payload.get("models", {}):
-            module.load_state_dict(payload["models"][name])
-    name = model or document["flow"]["after"]["params"].get("predicts")
+    return Opened(str(run_dir), contract, surface, which or config["training"].get("report", "last"), document,
+                  analysis, store, read_prep(run_dir))
+
+
+def record_loaders(document, contract=None):
+    contract = contract or Contract.load()
+    outputs = data_outputs(document, [f"{name}_loader" for name in contract.sets], contract)
+    return {name: outputs[f"{name}_loader"] for name in contract.sets}
+
+
+def new_loader(opened, data):
+    if isinstance(data, pandas.DataFrame):
+        df = data
+    else:
+        source = opened.config["data"]["source"]
+        df = registry.resolve(source["uri"])(**{**(source.get("params") or {}), "path": data})
+    params = opened.document["flow"]["data"]["params"]
+    frame = apply(df, opened.prep, "test")
+    feed = params["feed"]
+    dataset = registry.resolve(feed["uri"])(frame, None, **(feed.get("params") or {}))
+    spec = params["loaders"]["test"]
+    return registry.resolve(spec["uri"])(dataset, **spec["params"])
+
+
+def chosen_plots(table, chosen):
+    if chosen == "all":
+        return dict(table)
+    names = [name for name in chosen.split(",") if name] if isinstance(chosen, str) else list(chosen)
+    unknown = [name for name in names if name not in table]
+    if unknown:
+        raise KalfaError(f"plots {unknown} are not in the plots section, which has {sorted(table)}")
+    return {name: table[name] for name in names}
+
+
+def draw_plots(opened, chosen, predictions, history, models, bus, suffix=""):
+    after = opened.after
+    table = opened.store.get("plots") if opened.document.get("plots") else {}
+    plots = chosen_plots(table, chosen)
+    figures = opened.store.resolve_params(after["figures"])
+    run_all(predictions, history, models, plots, keys=after.get("plots_keys"), predicts=after.get("predicts"),
+            bus={key: bus.get(key) for key in opened.contract.plot_bus}, record=opened.run_dir, figures=figures,
+            suffix=suffix)
+    return list(plots)
+
+
+@dataclass
+class Prediction:
+    path: str | None
+    table: pandas.DataFrame
+    model: str
+    plots: list = field(default_factory=list)
+
+
+def predict(run_dir, model=None, which=None, data=None, sets=None, device=None, contract=None,
+            plots=None) -> Prediction:
+    opened = open_record(run_dir, which, sets, contract)
+    models, composites = opened.rebuild()
+    name = model or opened.after.get("predicts")
     target = resolve_model(name, models, composites)
-    logger.info(f"predicting with {name} ({which} weights)")
+    logger.info(f"predicting with {name} ({opened.which} weights)")
     device = build_device(device) if device is not None else Device.cpu()
     device.place(models)
     device.place(composites)
     if data is not None:
-        source = config["data"]["source"]
-        df = registry.resolve(source["uri"])(**{**(source.get("params") or {}), "path": data})
-        frame = apply(df, prep, "test")
-        feed = document["flow"]["data"]["params"]["feed"]
-        dataset = registry.resolve(feed["uri"])(frame, None, **(feed.get("params") or {}))
-        spec = document["flow"]["data"]["params"]["loaders"]["test"]
-        loader = registry.resolve(spec["uri"])(dataset, **spec["params"])
-        tag = f"_{Path(data).stem}"
+        loaders = {"test": new_loader(opened, data)}
+        tag = "_frame" if isinstance(data, pandas.DataFrame) else f"_{Path(data).stem}"
     else:
-        loader = test_loader(document, contract)
+        loaders = record_loaders(opened.document, opened.contract)
         tag = ""
     if model is not None:
         tag += f"_{model}"
-    target_map = (document["flow"]["after"]["params"] or {}).get("targets")
-    table = prediction_table(target, loader, prep, loader.dataset, device, target_map)
+    loader = loaders["test"]
+    table = prediction_table(target, loader, opened.prep, loader.dataset, device, opened.after.get("targets"))
     path = Path(run_dir) / f"predictions{tag}.parquet"
     table.to_parquet(path, index=False)
     logger.info(f"{len(table)} rows -> {path}")
-    return Prediction(str(path), table, name)
+    drawn = []
+    if plots is not None:
+        bus = {"prep": opened.prep, "composites": composites, "device": device,
+               **{f"{set_name}_loader": item for set_name, item in loaders.items()}}
+        drawn = draw_plots(opened, plots, table, History.read(run_dir), {**composites, **models}, bus, tag)
+    return Prediction(str(path), table, name, drawn)
+
+
+@dataclass
+class Plots:
+    record: str
+    names: list
+
+
+def plots(run_dir, only=None, sets=None, device=None, contract=None) -> Plots:
+    opened = open_record(run_dir, None, sets, contract)
+    contract = opened.contract
+    wanted = ["prep", "models", "emas", "composites", "optimizers", *[f"{name}_loader" for name in contract.sets]]
+    outputs = flow_outputs(opened.document, ("data", "models", "optimizers"), wanted, contract)
+    counters = {}
+    rules = {}
+    final = Path(run_dir) / "final" / "state.pt"
+    if final.exists():
+        load_into(outputs["models"], outputs["optimizers"], outputs["emas"], counters, rules, load(final))
+    selected = select(outputs["models"], outputs["emas"], opened.which, str(run_dir))
+    device = build_device(device) if device is not None else Device.cpu()
+    device.place(selected)
+    device.place(outputs["composites"])
+    table = Path(run_dir) / "predictions.parquet"
+    predictions = pandas.read_parquet(table) if table.exists() else None
+    logger.info(f"redrawing the plots of {run_dir} with the {opened.which} models")
+    bus = {**outputs, "device": device, "counters": counters, "rules": rules}
+    drawn = draw_plots(opened, only or "all", predictions, History.read(run_dir), selected, bus)
+    return Plots(str(run_dir), drawn)
 
 
 @dataclass
@@ -385,38 +506,22 @@ class Generated:
 
 
 def generate(run_dir, which=None, sets=None, device=None, contract=None) -> Generated:
-    resolved = Path(run_dir) / "resolved.yaml"
-    if not resolved.exists():
-        raise KalfaError(f"{run_dir} has no resolved.yaml")
-    contract = recorded_contract(run_dir, contract)
-    surface = load_surface([str(resolved)], sets, contract)
-    gate(surface.problems)
-    config = surface.data
-    if config.get("generate") is None:
+    opened = open_record(run_dir, which, sets, contract)
+    if opened.config.get("generate") is None:
         raise KalfaError(f"{run_dir}: the config has no generate section")
-    which = which or config["training"].get("report", "last")
-    document = recipe(config, registry, surface.aliases, contract, record=run_dir)
-    analysis = analyze(document, contract)
-    gate(analysis.problems)
-    store = build_components(analysis.data, analysis.expansions, registry)
-    prep = read_prep(run_dir)
-    models, composites = rebuild_models(analysis, store, prep)
-    payload = load(weights_of(run_dir, which))
-    for name, module in models.items():
-        if name in payload.get("models", {}):
-            module.load_state_dict(payload["models"][name])
+    models, composites = opened.rebuild()
     everything = {**composites, **models}
-    for name, state in payload.get("emas", {}).items():
+    for name, state in opened.payload.get("emas", {}).items():
         if name in models:
             ema = Ema(models[name], 1.0)
             ema.load_state_dict(state)
             everything[f"{name}.ema"] = ema
-    sampler = store.resolve_params(document["flow"]["after"]["params"]["generate"])
-    logger.info(f"generating with the {which} models")
+    sampler = opened.store.resolve_params(opened.after["generate"])
+    logger.info(f"generating with the {opened.which} models")
     device = build_device(device) if device is not None else Device.cpu()
     device.place(everything)
-    seed_all(config.get("seed"))
-    samples = sampler(models=everything, prep=prep, rng=device.generator())
+    seed_all(opened.config.get("seed"))
+    samples = sampler(models=everything, prep=opened.prep, rng=device.generator())
     target = Path(run_dir) / "samples"
     write_samples(samples, target)
     path = target / ("samples.txt" if isinstance(samples, str) else "samples.pt")
@@ -441,9 +546,6 @@ def flow_outputs(document, blocks, names, contract=None):
     return report.outputs
 
 
-def test_loader(document, contract=None):
-    return data_outputs(document, ["test_loader"], contract)["test_loader"]
-
-
-__all__ = ["Generated", "KalfaError", "Prepared", "Prediction", "Probe", "RunResult", "check", "generate",
-           "predict", "prepare", "probe", "read_resolved", "resume", "run", "seed_all"]
+__all__ = ["Generated", "KalfaError", "Opened", "Plots", "Prepared", "Prediction", "Probe", "RunResult", "check",
+           "generate", "open_record", "plots", "predict", "prepare", "probe", "read_resolved", "resume", "run",
+           "seed_all"]

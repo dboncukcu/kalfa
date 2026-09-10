@@ -1,10 +1,11 @@
+import copy
 import sys
 from dataclasses import dataclass, field
 from importlib import import_module
 from pathlib import Path
 
 from cirak.errors import Problem, error
-from cirak.loader import Layer, load, parse_value, set_layer
+from cirak.loader import Layer, LoadedFile, load, parse_value, set_layer
 from cirak.merge import describe_layers, merge_layers
 from cirak.registry import registry
 from cirak.resolve import TOKEN
@@ -123,10 +124,15 @@ def pack_tables():
 
 
 def load_surface(paths, sets=None, contract=None) -> Surface:
-    paths = [str(path) for path in paths]
+    files = [str(path) for path in paths if not isinstance(path, dict)]
+    mappings = [path for path in paths if isinstance(path, dict)]
+    paths = [*files, *["<mapping>"] * len(mappings)]
     contract = contract or Contract.load()
     logger.info(f"config {', '.join(paths)}")
-    layer, problems = load(paths, registry.fragments())
+    layer, problems = load(files, registry.fragments())
+    for mapping in mappings:
+        given = Layer(files=[LoadedFile("<mapping>", copy.deepcopy(mapping), {})], label="mapping")
+        layer = Layer(files=[], below=[layer, given], label="")
     if sets:
         layer = Layer(files=[], below=[layer, set_layer(sets)], label="")
     raw, provenance, overrides, merge_problems = merge_layers(layer)

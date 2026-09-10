@@ -50,7 +50,7 @@ class Contract:
 
     @property
     def plot_bus(self):
-        return list(self.wiring["plot_bus"])
+        return dict(self.wiring["plot_bus"])
 
     def roles(self):
         return list(names_of(registry.facts(self.wiring["builder"]).get("roles")))

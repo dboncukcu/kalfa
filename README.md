@@ -74,8 +74,9 @@ kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--load
                                                                   # only the problems; --load runs the data block
 kalfa describe cfg.yaml [--load] [--section data|model|...] [--wiring] [--save report.txt]
                                                                   # the config as an analysis, after the same checks
-kalfa predict runs/x [--model name] [--which best|last] [--data new.parquet] [--device cuda]
+kalfa predict runs/x [--model name] [--which best|last] [--data new.parquet] [--device cuda] [--plots [a,b]]
 kalfa generate runs/x [--which best|last] [--device cuda]         # writes samples/ with the sampler of the generate section
+kalfa plots runs/x [--only a,b] [--set figures.format=pdf]        # redraw the plots section from the record; nothing trains
 kalfa resume runs/x [--set training.epochs=N]                     # continues from last.pt or final/ into a new directory
 kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep section: the local loop or one point
 kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
@@ -168,9 +169,10 @@ filters; `--load` runs the data block and prints the real sizes.
 ## Python API
 
 Every command is a function and the command line is a thin shell over them: `kalfa.api` holds `check`, `run`,
-`resume`, `predict` and `generate`, `kalfa.collect` the collectors, `kalfa.sweep` the sweep plan. `paths` is a list
-of config files (the same layering as on the command line), `sets` is `--set` written as `(dotted path, value)`
-pairs, and `-p lr=1e-4` is `("params.lr", 1e-4)`.
+`resume`, `predict`, `generate` and `plots`, `kalfa.collect` the collectors, `kalfa.sweep` the sweep plan. `paths`
+is a list of config files (the same layering as on the command line); an entry may also be a config mapping (one
+layer without line provenance) or a record directory (its `resolved.yaml` under its own `contract.yaml`). `sets`
+is `--set` written as `(dotted path, value)` pairs, and `-p lr=1e-4` is `("params.lr", 1e-4)`.
 
 ```python
 from kalfa.api import check, generate, predict, resume, run
@@ -188,8 +190,10 @@ samples = generate(result.record, which="best")
 | `probe(document)` | `Probe` | the data and model blocks run on their own: `sizes`, `prep` (the fitted plan), `features` (the width of the feature tensor), `parameters` per model, `shapes` of one batch, `notes`; `kalfa.describe.render(prepared, style, sections, probe)` turns the two into the text `kalfa describe` prints |
 | `run(paths, sets=None, executor="serial", workers=None, contract=None, monitor=None)` | `RunResult` | `record` (the directory it opened), `report` (tezgah's, `report.outputs["history"]` is the per turn table), `device`; `monitor` is a `kalfa.std.common.log.Monitor` (`Monitor(logging.INFO, progress=False)` prints the turn lines instead of the bar), the default one draws the bar |
 | `resume(run_dir, sets=None, executor="serial", workers=None, contract=None, monitor=None)` | `RunResult` | the same, in a new record directory |
-| `predict(run_dir, model=None, which=None, data=None, device=None, contract=None)` | `Prediction` | `path`, `table` (a DataFrame), `model` |
+| `predict(run_dir, model=None, which=None, data=None, device=None, contract=None, plots=None)` | `Prediction` | `path`, `table` (a DataFrame), `model`, `plots` (the definitions drawn); `data` is a file or a DataFrame (`predictions_frame.parquet`); `plots="all"` or a list of definitions draws them on the table |
 | `generate(run_dir, which=None, device=None, contract=None)` | `Generated` | `path`, `samples` |
+| `plots(run_dir, only=None, device=None, contract=None)` | `Plots` | `record`, `names`; the plots section redrawn from the record |
+| `open_record(run_dir, which=None, sets=None, contract=None)` | `Opened` | what every command over a record starts from: `contract`, `surface`, `document`, `analysis`, `store`, `prep`, and `rebuild()` for the models with the `which` weights |
 | `collect_root(root, out=None)` in `kalfa.collect` | mapping | the sweep or fold table and the best point; `load_runs`, `fold_summary`, `sweep_table` are the pieces |
 | `plan(paths, sets=None, record=None)` in `kalfa.sweep` | `Plan` | the points of a sweep without running any of them |
 
@@ -262,7 +266,7 @@ never written into (an error).
 | `final/state.pt` | always, once the run ends, with the same scope |
 | `preprocessors/` | the fitted preprocessors (one file per name) and `plan.json`; `kalfa predict` reads from here |
 | `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>`; with `training.targets` one column per predicted field, `pred_<output>_<field>` |
-| `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`, or the format `figures` asks for; `architecture` writes text) |
+| `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`, or the format `figures` asks for; `architecture` writes text); `kalfa plots` redraws them from the record and `predict --plots` writes them with the suffix of its predictions file (`roc_new.png`) |
 | `samples/` | the output of `generate`: `samples.pt` (for images `grid.png` too), `samples.txt` for text; `turn_<n>.*` from `sample_writer` |
 | `plugins/` | copies of the plugin modules the run imported, so predict, generate and resume work from the record |
 | `device.json` | the chosen device and the device lego that picked it |
@@ -422,7 +426,9 @@ light fields and one mapping per item. A plot that reads the history wraps it in
 **Writing a plot.** A plot lego takes `predictions, history, models, record` and, by naming them in its
 signature, anything else the run holds: `prep`, `train_loader`, `valid_loader`, `test_loader`, `loaders` (the
 three in one mapping), `predicts`, `sets`, `name`, `device`, `counters`, `optimizers`, `emas`, `rules`, and
-`figures`. Draw through `figures`, a `kalfa.std.common.figure.Figure` (`single`, `grid`, `label`, `density`,
+`figures`; the bus keys are the `plot_bus` mapping of the contract's wiring. A key the plot cannot work without
+goes into its `needs` fact (`needs=["train_loader"]`), and `kalfa plots` or `predict --plots` skip the plot with a
+log line when the key is not there instead of calling it. Draw through `figures`, a `kalfa.std.common.figure.Figure` (`single`, `grid`, `label`, `density`,
 `profile`, `binned`, `colorbar`, `save` and the palette) carrying the format, the panel size and the style of the
 run's `figures` section, already sized for the definition's `width` and `height`, and the figure comes out in the
 run's own look. `kalfa.std.plot.base.set_frame(loaders, prep, set)` gives

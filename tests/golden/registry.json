@@ -15,7 +15,8 @@
     "writes",
     "enumerates",
     "describe",
-    "roles"
+    "roles",
+    "needs"
   ],
   "kinds": [
     "builder",
@@ -758,7 +759,7 @@
     },
     "/lego/kalfa/run_all": {
       "alias": [],
-      "description": "Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height); bus carries everything else the run has (prep, the loaders, the device, the final state) and a plot receives whatever its signature names, plus loaders, predicts, sets, name and figures, the look of the run's plots sized for the definition",
+      "description": "Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height) and the lego of the plot, whose refs type the inputs and whose needs name the bus keys it cannot work without (skipped with a log line when one is missing); bus carries everything else the run has and a plot receives whatever its signature names, plus loaders, predicts, sets, name (with the suffix of the predictions it draws) and figures, the look of the run's plots sized for the definition",
       "facts": {
         "bus": {
           "figures": "figures",
@@ -767,7 +768,7 @@
         "returns": null
       },
       "kind": "lego",
-      "signature": "(predictions, history, models, plots, keys=None, predicts=None, bus=None, record=None, figures=None)"
+      "signature": "(predictions, history, models, plots, keys=None, predicts=None, bus=None, record=None, figures=None, suffix='')"
     },
     "/lego/kalfa/save_final": {
       "alias": [],
@@ -1118,6 +1119,9 @@
       ],
       "description": "The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one)",
       "facts": {
+        "needs": [
+          "train_loader"
+        ],
         "partial": true
       },
       "kind": "plot",
@@ -1145,6 +1149,9 @@
       ],
       "description": "A histogram per feature column of a set, in the original units; log names the columns to draw on a log10 axis",
       "facts": {
+        "needs": [
+          "train_loader"
+        ],
         "partial": true
       },
       "kind": "plot",
@@ -1258,6 +1265,9 @@
       ],
       "description": "The rank correlation of every column with the target, the strongest first; groups maps a column to a group name and colours the bars by it",
       "facts": {
+        "needs": [
+          "train_loader"
+        ],
         "partial": true,
         "refs": {
           "target": "field"
@@ -1272,6 +1282,9 @@
       ],
       "description": "One panel per feature: the target against it as a hexbin density with the median profile over equal count bins; it reads the set the definition names (train without one) and draws in the original units",
       "facts": {
+        "needs": [
+          "train_loader"
+        ],
         "partial": true,
         "refs": {
           "target": "field"
@@ -1286,6 +1299,9 @@
       ],
       "description": "seaborn's kernel density of one column of a set, or of two as contours; skipped with a warning when seaborn is not installed",
       "facts": {
+        "needs": [
+          "train_loader"
+        ],
         "partial": true,
         "refs": {
           "hue": "column",
@@ -1303,6 +1319,9 @@
       ],
       "description": "seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; skipped with a warning when seaborn is not installed",
       "facts": {
+        "needs": [
+          "train_loader"
+        ],
         "partial": true,
         "requires": "seaborn"
       },
@@ -1315,6 +1334,9 @@
       ],
       "description": "seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed",
       "facts": {
+        "needs": [
+          "train_loader"
+        ],
         "partial": true,
         "refs": {
           "group": "column",

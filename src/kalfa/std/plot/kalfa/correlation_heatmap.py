@@ -3,7 +3,7 @@ from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import columns_of, first_set, set_frame
 
 
-@lego("/plot/kalfa/correlation_heatmap", partial=True, alias="correlation_heatmap",
+@lego("/plot/kalfa/correlation_heatmap", partial=True, needs=["train_loader"], alias="correlation_heatmap",
       description="The rank correlation of every column of a set against every other, features and targets "
                   "together; it reads the set the definition names (train without one)")
 def correlation_heatmap(predictions, history, models, record, loaders=None, prep=None, sets=None,

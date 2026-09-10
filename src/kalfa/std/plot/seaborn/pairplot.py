@@ -5,7 +5,7 @@ from kalfa.std.common.optional import load
 from kalfa.std.plot.seaborn.base import sampled
 
 
-@lego("/plot/seaborn/pairplot", partial=True, alias="pairplot", requires="seaborn",
+@lego("/plot/seaborn/pairplot", partial=True, needs=["train_loader"], alias="pairplot", requires="seaborn",
       description="seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; "
                   "skipped with a warning when seaborn is not installed")
 def pairplot(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None,

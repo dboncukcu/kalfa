@@ -5,7 +5,7 @@ from kalfa.std.common.optional import load
 from kalfa.std.plot.seaborn.base import sampled
 
 
-@lego("/plot/seaborn/kde", partial=True, alias="kde", requires="seaborn",
+@lego("/plot/seaborn/kde", partial=True, needs=["train_loader"], alias="kde", requires="seaborn",
       refs={"x": "column", "y": "column", "hue": "column"},
       description="seaborn's kernel density of one column of a set, or of two as contours; skipped with a "
                   "warning when seaborn is not installed")

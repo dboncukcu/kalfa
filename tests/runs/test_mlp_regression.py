@@ -6,7 +6,7 @@ import pandas
 import pytest
 import torch
 
-from kalfa.api import predict, resume, run
+from kalfa.api import check, plots, predict, resume, run
 from kalfa.config import parse_sets
 from kalfa.record import read_resolved, resume_chain
 from kalfa.std.common.history import History
@@ -95,6 +95,23 @@ def test_predict_on_new_data_inverts_the_target(trained):
     assert abs(float((table["pred_y"].to_numpy() - truth).mean())) < 20.0
     assert Path(prediction.path).name == "predictions_new.parquet" and prediction.model == "model"
     assert len(own.table) == 300 and Path(own.path).name == "predictions.parquet"
+
+
+def test_plots_are_redrawn_from_the_record_and_after_a_prediction(trained):
+    result = trained("01_mlp_regression")
+    record = Path(result.record)
+    (record / "plots" / "loss_curve.png").unlink()
+    drawn = plots(record, only=["loss_curve"])
+    assert drawn.names == ["loss_curve"] and (record / "plots" / "loss_curve.png").exists()
+    prediction = predict(record, data="new.parquet", plots="all")
+    assert prediction.plots == ["loss_curve", "pred_vs_true"]
+    assert (record / "plots" / "pred_vs_true_new.png").exists() and (record / "plots" / "loss_curve_new.png").exists()
+    frame = predict(record, data=pandas.read_parquet("new.parquet"))
+    assert Path(frame.path).name == "predictions_frame.parquet" and len(frame.table) == 100
+    opened = check([str(record)])
+    assert opened.errors == [] and opened.surface.paths == [str(record / "resolved.yaml")]
+    mapping = check([read_resolved(record)])
+    assert mapping.errors == [] and mapping.surface.paths == ["<mapping>"]
 
 
 def test_same_seed_same_history_and_no_seed_warns(dataset):

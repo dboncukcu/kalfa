@@ -6,6 +6,7 @@ from kalfa.std.plot.base import bars, columns_of, first_set, set_frame
 
 
 @lego("/plot/kalfa/target_correlation", partial=True, alias="target_correlation", refs={"target": "field"},
+      needs=["train_loader"],
       description="The rank correlation of every column with the target, the strongest first; groups maps a "
                   "column to a group name and colours the bars by it")
 def target_correlation(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None,

@@ -8,7 +8,7 @@ declare_kinds("source", "split", "pre", "feed", "loader", "layer", "init", "crit
               "adapter", "optimizer", "schedule", "turn", "trigger", "checkpoint", "rule", "generate", "plot",
               "strategy", "device", "rng", "lego")
 declare_facts("uses", "needs_grad", "needs_models", "extras", "grouped", "requires", "sizes", "header", "stream",
-              "samples", "needs_table", "counts", "writes", "enumerates", "describe", "roles")
+              "samples", "needs_table", "counts", "writes", "enumerates", "describe", "roles", "needs")
 
 
 def discover():

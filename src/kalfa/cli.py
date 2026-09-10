@@ -78,6 +78,9 @@ def build_parser():
     predict_cmd.add_argument("--model", help="any model of the run, composites and .ema copies included")
     predict_cmd.add_argument("--which", choices=["best", "last"])
     predict_cmd.add_argument("--data", help="predict on this file instead of the run's test set")
+    predict_cmd.add_argument("--plots", nargs="?", const="all", metavar="NAMES",
+                             help="draw the plots section on the predictions just made: every plot, or a comma "
+                                  "separated list of definitions; the files take the suffix of the predictions file")
     device_option(predict_cmd)
     set_option(predict_cmd)
     contract_option(predict_cmd)
@@ -92,6 +95,16 @@ def build_parser():
     contract_option(generate_cmd)
     log_option(generate_cmd)
     generate_cmd.set_defaults(handler=cmd_generate)
+
+    plots_cmd = commands.add_parser("plots", help="redraw the plots section of a recorded run from its files and its "
+                                                  "data; nothing is fitted or trained again")
+    plots_cmd.add_argument("run")
+    plots_cmd.add_argument("--only", metavar="NAMES", help="a comma separated list of the plot definitions to draw")
+    device_option(plots_cmd)
+    set_option(plots_cmd)
+    contract_option(plots_cmd)
+    log_option(plots_cmd)
+    plots_cmd.set_defaults(handler=cmd_plots)
 
     resume_cmd = commands.add_parser("resume", help="continue a run from last.pt or final/ into a new directory")
     resume_cmd.add_argument("run")
@@ -324,9 +337,21 @@ def cmd_predict(args) -> int:
     with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = api.predict(args.run, model=args.model, which=args.which, data=args.data, sets=layer_of(args),
-                             device=device_value(args), contract=contract_of(args))
+                             device=device_value(args), contract=contract_of(args), plots=args.plots)
     style = style_for(sys.stdout)
     print(f"predicted {len(result.table)} rows with {style.bold(result.model)}: {style.cyan(result.path)}")
+    if result.plots:
+        print(f"plots {', '.join(result.plots)}: {style.cyan(str(Path(args.run) / 'plots'))}")
+    return 0
+
+
+def cmd_plots(args) -> int:
+    with Monitor(level_of(args.log)), warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = api.plots(args.run, only=args.only, sets=layer_of(args), device=device_value(args),
+                           contract=contract_of(args))
+    style = style_for(sys.stdout)
+    print(f"plots {', '.join(result.names) or 'none'}: {style.cyan(str(Path(result.record) / 'plots'))}")
     return 0
 
 

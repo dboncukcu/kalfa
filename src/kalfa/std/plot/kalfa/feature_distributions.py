@@ -3,7 +3,7 @@ from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import columns_of, first_set, logged, set_frame
 
 
-@lego("/plot/kalfa/feature_distributions", partial=True, alias="feature_distributions",
+@lego("/plot/kalfa/feature_distributions", partial=True, needs=["train_loader"], alias="feature_distributions",
       description="A histogram per feature column of a set, in the original units; log names the columns to "
                   "draw on a log10 axis")
 def feature_distributions(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None,

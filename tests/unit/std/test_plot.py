@@ -60,8 +60,26 @@ def test_run_all_calls_every_plot_and_resolves_inputs_by_refs(tmp_path):
     kalfa.lego("/plot/test/typed", typed, partial=True,
                refs={"series": "history", "column": "field", "net": "model"})
     run_all(pandas.DataFrame({"price": [1.0, 2.0]}), history(), {"m": "model"}, {"t": typed},
-            keys={"t": {"inputs": {"series": "val/l", "column": "price", "net": "m"}}}, record=str(tmp_path))
+            keys={"t": {"lego": "/plot/test/typed", "inputs": {"series": "val/l", "column": "price", "net": "m"}}},
+            record=str(tmp_path))
     assert got == {"series": [1.1, 0.6], "column": [1.0, 2.0], "net": "model"}
+
+
+def test_run_all_skips_a_plot_whose_needs_are_not_on_the_bus(tmp_path, caplog):
+    import logging
+
+    seen = []
+
+    def needy(predictions, history, models, record, train_loader=None, name=None):
+        seen.append(name)
+
+    kalfa.lego("/plot/test/needy", needy, partial=True, needs=["train_loader"])
+    keys = {"needy": {"lego": "/plot/test/needy"}}
+    with caplog.at_level(logging.INFO, logger="kalfa.after.plots"):
+        run_all(None, [], {}, {"needy": needy}, keys=keys, bus={"train_loader": None}, record=str(tmp_path))
+        run_all(None, [], {}, {"needy": needy}, keys=keys, bus={"train_loader": 1}, record=str(tmp_path),
+                suffix="_new")
+    assert seen == ["needy_new"] and "needy skipped: the bus has no train_loader" in caplog.text
 
 
 def test_sample_writer_and_the_sample_plots(tmp_path):

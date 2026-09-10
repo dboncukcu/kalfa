@@ -52,4 +52,7 @@ flow:
           rec: {target: input}}, metrics_keys: {recon_rmse: {target: input}}, predicts: ae, epochs: 20, steps: null, 
         rules: [], stop: ['@triggers.stop_0'], history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: best, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: ae, targets: {},
-      generate: null, plots_keys: {loss_curve: {}, reconstructions: {}}}}
+      generate: null, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, reconstructions: {lego: 
+            /plot/kalfa/image_pairs}}, plot_bus: {prep: prep, train_loader: train_loader, valid_loader: valid_loader, 
+          test_loader: test_loader, composites: composites, device: device, counters: counters_final, optimizers: 
+          optimizers_final, emas: emas_final, rules: rules_final}}}

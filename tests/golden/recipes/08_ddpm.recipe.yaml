@@ -39,4 +39,7 @@ flow:
         epochs: 200, steps: null, rules: [], stop: [], history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: last, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: unet, targets: {},
       generate: {uri: /generate/kalfa/ddpm_sampler, params: {model: unet.ema, schedule: {uri: 
-              /schedule/kalfa/linear_betas, params: {steps: 1000}}, shape: [3, 32, 32], n: 64}}, plots_keys: {loss_curve: {}}}}
+              /schedule/kalfa/linear_betas, params: {steps: 1000}}, shape: [3, 32, 32], n: 64}}, plots_keys: {loss_curve: {
+          lego: /plot/kalfa/loss_curve}}, plot_bus: {prep: prep, train_loader: train_loader, valid_loader: valid_loader, 
+          test_loader: test_loader, composites: composites, device: device, counters: counters_final, optimizers: 
+          optimizers_final, emas: emas_final, rules: rules_final}}}

@@ -4,6 +4,7 @@ from kalfa.std.plot.base import columns_of, first_set, logged, set_frame
 
 
 @lego("/plot/kalfa/target_vs_features", partial=True, alias="target_vs_features", refs={"target": "field"},
+      needs=["train_loader"],
       description="One panel per feature: the target against it as a hexbin density with the median profile "
                   "over equal count bins; it reads the set the definition names (train without one) and "
                   "draws in the original units")

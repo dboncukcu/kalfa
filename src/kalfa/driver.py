@@ -240,6 +240,13 @@ def keys_of(section, targets=None):
     return table
 
 
+def plots_keys_of(plots):
+    table = keys_of(plots)
+    for name, entry in (plots or {}).items():
+        table[name]["lego"] = call(entry)["uri"]
+    return table
+
+
 def rng_of(config, contract):
     if config.get("rng") is not None:
         return call_with_params(config["rng"])
@@ -340,7 +347,8 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
                 "predicts": predicts,
                 "targets": targets,
                 "generate": None if generate is None else call_resolved(generate, aliases, catalog),
-                "plots_keys": keys_of(config.get("plots"))}},
+                "plots_keys": plots_keys_of(config.get("plots")),
+                "plot_bus": contract.plot_bus}},
         },
     }
     return document

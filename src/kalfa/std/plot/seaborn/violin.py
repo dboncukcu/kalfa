@@ -5,7 +5,7 @@ from kalfa.std.common.optional import load
 from kalfa.std.plot.seaborn.base import sampled
 
 
-@lego("/plot/seaborn/violin", partial=True, alias="violin", requires="seaborn",
+@lego("/plot/seaborn/violin", partial=True, needs=["train_loader"], alias="violin", requires="seaborn",
       refs={"value": "column", "group": "column"},
       description="seaborn's violin of one column of a set, split by a grouping column when one is named; "
                   "skipped with a warning when seaborn is not installed")
