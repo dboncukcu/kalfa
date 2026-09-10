@@ -31,8 +31,8 @@ def test_record_directory_contents(trained):
     for name in ("resolved.yaml", "flow.yaml", "history.jsonl", "events.jsonl", "run.json", "stdout.txt",
                  "checkpoints/best.pt", "checkpoints/last.pt", "final/state.pt", "fitted/preprocessors/plan.json",
                  "fitted/preprocessors/std_scaler.pkl", "fitted/preprocessors/target_std.pkl",
-                 "fitted/frames/frames.pkl", "predictions.parquet",
-                 "plots/loss_curve.png", "plots/pred_vs_true.png"):
+                 "fitted/frames/frames.pkl", "predictions.parquet", "data.json",
+                 "plots/loss_curve.png", "plots/pred_vs_true.png", "plots/data_pipeline.png"):
         assert (record / name).exists(), name
     resolved = (record / "resolved.yaml").read_text()
     assert "epochs: 3  # --set overrides" in resolved and "record: runs/housing_$datetime$" in resolved
@@ -105,7 +105,8 @@ def test_plots_are_redrawn_from_the_record_and_after_a_prediction(trained):
     drawn = plots(record, only=["loss_curve"])
     assert drawn.names == ["loss_curve"] and (record / "plots" / "loss_curve.png").exists()
     prediction = predict(record, data="new.parquet", plots="all")
-    assert prediction.plots == ["loss_curve", "pred_vs_true"]
+    assert prediction.plots == ["loss_curve", "pred_vs_true", "data_pipeline"]
+    assert not (record / "plots" / "data_pipeline_new.png").exists()
     assert (record / "plots" / "pred_vs_true_new.png").exists() and (record / "plots" / "loss_curve_new.png").exists()
     frame = predict(record, data=pandas.read_parquet("new.parquet"))
     assert Path(frame.path).name == "predictions_frame.parquet" and len(frame.table) == 100

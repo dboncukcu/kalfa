@@ -141,8 +141,9 @@ def test_definition_keys_go_to_the_parallel_table():
     training = document["flow"]["training"]["params"]
     assert training["losses_keys"] == {"loss_mse": {}, "loss_huber": {}, "loss_mae": {}, "loss_logcosh": {}}
     assert training["metrics_keys"] == {"rmse": {}, "mae": {}}
-    assert document["flow"]["after"]["params"]["plots_keys"] == {"loss_curve": {"lego": "/plot/kalfa/loss_curve"},
-                                                                 "pred_vs_true": {"lego": "/plot/kalfa/pred_vs_true"}}
+    assert document["flow"]["after"]["params"]["plots_keys"] == {
+        "loss_curve": {"lego": "/plot/kalfa/loss_curve"}, "pred_vs_true": {"lego": "/plot/kalfa/pred_vs_true"},
+        "data_pipeline": {"lego": "/plot/kalfa/data_pipeline"}}
     assert document["flow"]["data"]["params"]["preprocessors_keys"] == {"std_scaler": {}, "target_std": {}}
 
 

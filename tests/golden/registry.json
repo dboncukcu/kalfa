@@ -607,6 +607,18 @@
       "kind": "lego",
       "signature": "(path, chunk=None)"
     },
+    "/lego/kalfa/data_report": {
+      "alias": [],
+      "description": "The shape of the data at every stage of the data block, read from the bus keys the stages wrote: the rows and columns of the source and after every transform, the sets after the split and after their transforms, the fitted frame transforms and preprocessors, the features and targets, the loaders; written to the record as data.json",
+      "facts": {
+        "bus": {
+          "record": "record"
+        },
+        "returns": "data_report"
+      },
+      "kind": "lego",
+      "signature": "(stages, split, after, fitted, prep, frames, loaders, record=None)"
+    },
     "/lego/kalfa/evaluate": {
       "alias": [],
       "description": "Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files",
@@ -1189,6 +1201,20 @@
       },
       "kind": "plot",
       "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None, figures=None)"
+    },
+    "/plot/kalfa/data_pipeline": {
+      "alias": [
+        "data_pipeline"
+      ],
+      "description": "The data block as one picture: every stage with its rows and columns, the split, the fitted frame transforms and preprocessors, the features and targets, the loaders; under the fit, before and after histograms of the columns with the longest chains (columns names others) when the source is a table",
+      "facts": {
+        "needs": [
+          "data_report"
+        ],
+        "partial": true
+      },
+      "kind": "plot",
+      "signature": "(predictions, history, models, record, data_report=None, train_df=None, train_frame=None, prep=None, columns=None, name=None, figures=None)"
     },
     "/plot/kalfa/error_map": {
       "alias": [
@@ -2193,6 +2219,7 @@
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "cuda": "/device/kalfa/cuda",
+      "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
@@ -2278,6 +2305,7 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv_stream",
       "cuda": "/device/kalfa/cuda",
+      "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
@@ -2368,6 +2396,7 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
       "cuda": "/device/kalfa/cuda",
+      "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
@@ -2479,6 +2508,7 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
       "cuda": "/device/kalfa/cuda",
+      "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
@@ -2587,6 +2617,7 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
       "cuda": "/device/kalfa/cuda",
+      "data_pipeline": "/plot/kalfa/data_pipeline",
       "ddpm": "/objective/kalfa/ddpm",
       "ddpm_sampler": "/generate/kalfa/ddpm_sampler",
       "derive": "/transform/kalfa/derive",
@@ -2692,6 +2723,7 @@
   "plot_bus": [
     "composites",
     "counters",
+    "data_report",
     "device",
     "emas",
     "losses",
@@ -2700,6 +2732,8 @@
     "prep",
     "rules",
     "test_loader",
+    "train_df",
+    "train_frame",
     "train_loader",
     "valid_loader"
   ]

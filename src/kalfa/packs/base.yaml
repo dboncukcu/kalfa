@@ -83,6 +83,7 @@ alias:
   confusion_matrix: /plot/kalfa/confusion_matrix
   forecast_samples: /plot/kalfa/forecast_samples
   architecture: /plot/kalfa/architecture
+  data_pipeline: /plot/kalfa/data_pipeline
   architecture_text: /plot/kalfa/architecture_text
   torchview: /plot/torchview/architecture
   # objective

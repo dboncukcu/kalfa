@@ -32,7 +32,7 @@ The legos a config writes, by kind.
 | `trigger` | training.stop, rules when | 5 |
 | `checkpoint` | training.checkpoint | 3 |
 | `generate` | generate | 3 |
-| `plot` | plots | 24 |
+| `plot` | plots | 25 |
 | `strategy` | sweep.strategy | 4 |
 | `device` | device, predict --device, generate --device | 4 |
 | `rng` | rng | 3 |
@@ -251,6 +251,7 @@ The legos a config writes, by kind.
 | `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None, figures=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
 | `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
 | `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None, figures=None)` | partial: True; needs: train_loader | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
+| `/plot/kalfa/data_pipeline` | `data_pipeline` | `(predictions, history, models, record, data_report=None, train_df=None, train_frame=None, prep=None, columns=None, name=None, figures=None)` | partial: True; needs: data_report | The data block as one picture: every stage with its rows and columns, the split, the fitted frame transforms and preprocessors, the features and targets, the loaders; under the fit, before and after histograms of the columns with the longest chains (columns names others) when the source is a table |
 | `/plot/kalfa/error_map` | `error_map` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, output=None, target=None, statistic='residual', bins=55, min_count=15, name=None, figures=None)` | partial: True; refs: x=column, y=column, target=field | The error of one prediction over a 2d grid of two columns: with statistic residual blue is a prediction below the truth and red above it, with abs the mean absolute error; bins holding fewer than min_count points stay empty |
 | `/plot/kalfa/feature_distributions` | `feature_distributions` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, log=None, bins=80, limit=24, per_row=4, name=None, figures=None)` | partial: True; needs: train_loader | A histogram per feature column of a set, in the original units; log names the columns to draw on a log10 axis |
 | `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None, figures=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |
@@ -329,6 +330,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/clone` |  | `(model, decay)` | state: True | An exponential moving average copy of a model with the given decay |
 | `/lego/kalfa/const` |  | `(value)` |  | A fresh copy of a constant value |
 | `/lego/kalfa/csv_header` |  | `(path, chunk=None)` |  | The columns, the dtypes of the first rows and the line count of a CSV file |
+| `/lego/kalfa/data_report` |  | `(stages, split, after, fitted, prep, frames, loaders, record=None)` | returns: data_report; bus: record=record | The shape of the data at every stage of the data block, read from the bus keys the stages wrote: the rows and columns of the source and after every transform, the sets after the split and after their transforms, the fitted frame transforms and preprocessors, the features and targets, the loaders; written to the record as data.json |
 | `/lego/kalfa/evaluate` |  | `(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)` | returns: metrics; bus: device=device, prep=prep, record=record | Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files |
 | `/lego/kalfa/figures` |  | `(format='png', width=None, height=None, dpi=150, style='kalfa')` |  | The look of every plot of a run: the file format, the size of one panel in inches, the dpi and the style (kalfa, or none for matplotlib's own); the figures section is its params and the built object reaches every plot that names figures |
 | `/lego/kalfa/fit` |  | `(df, fields, preprocessors, drop, keys=None, record=None)` | returns: prep; bus: record=record; state: True | Resolve the field globs and fit every preprocessor chain on the train set; keys carry the sets a preprocessor is limited to |
@@ -432,6 +434,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
@@ -519,6 +522,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
@@ -608,6 +612,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
@@ -723,6 +728,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
@@ -834,6 +840,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |

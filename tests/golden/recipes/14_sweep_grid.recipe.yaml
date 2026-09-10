@@ -18,6 +18,7 @@ triggers:
 plots:
   loss_curve: {uri: /plot/kalfa/loss_curve}
   pred_vs_true: {uri: /plot/kalfa/pred_vs_true}
+  data_pipeline: {uri: /plot/kalfa/data_pipeline}
 checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/rmse}}
 blocks: {model: {inputs: [x], outputs: [y], spec: [{uri: /layer/kalfa/linear_relu, params: {out_features: 128}}, {uri: 
           /layer/kalfa/linear_relu, params: {out_features: 128}}, {uri: /layer/kalfa/linear, params: {out_features: 1}}]}}
@@ -46,7 +47,8 @@ flow:
       history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: best, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: model, targets: {},
       generate: null, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, pred_vs_true: {lego: 
-            /plot/kalfa/pred_vs_true}}, plot_bus: {prep: prep, train_loader: train_loader, valid_loader: valid_loader, 
-          test_loader: test_loader, composites: composites, device: device, counters: counters_final, optimizers: 
-          optimizers_final, emas: emas_final, rules: rules_final, losses: losses, losses_keys: losses_keys}, losses_keys: {
-        loss_mse: {}, loss_huber: {}, loss_mae: {}, loss_logcosh: {}}}}
+            /plot/kalfa/pred_vs_true}, data_pipeline: {lego: /plot/kalfa/data_pipeline}}, plot_bus: {prep: prep, 
+          train_loader: train_loader, valid_loader: valid_loader, test_loader: test_loader, composites: composites, 
+          device: device, counters: counters_final, optimizers: optimizers_final, emas: emas_final, rules: rules_final, 
+          losses: losses, losses_keys: losses_keys, data_report: data_report, train_df: train_df, train_frame: 
+          train_frame}, losses_keys: {loss_mse: {}, loss_huber: {}, loss_mae: {}, loss_logcosh: {}}}}

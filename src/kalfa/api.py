@@ -495,7 +495,8 @@ class Plots:
 def plots(run_dir, only=None, sets=None, device=None, contract=None) -> Plots:
     opened = open_record(run_dir, None, sets, contract)
     contract = opened.contract
-    wanted = ["prep", "models", "emas", "composites", "optimizers", *[f"{name}_loader" for name in contract.sets]]
+    wanted = ["prep", "models", "emas", "composites", "optimizers", "data_report", "train_df", "train_frame",
+              *[f"{name}_loader" for name in contract.sets]]
     outputs = flow_outputs(opened.document, ("data", "models", "optimizers"), wanted, contract)
     counters = {}
     rules = {}

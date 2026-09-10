@@ -67,7 +67,8 @@ training:
   report: best
 
 plots:
-  loss_curve:   {uri: loss_curve}
-  pred_vs_true: {uri: pred_vs_true}
+  loss_curve:    {uri: loss_curve}
+  pred_vs_true:  {uri: pred_vs_true}
+  data_pipeline: {uri: data_pipeline}
 
 record: runs/housing_$datetime$

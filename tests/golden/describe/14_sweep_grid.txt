@@ -58,7 +58,7 @@ config.yaml                                                                     
 
 ── AFTER ───────────────────────────────────────────────────────────────────────────────────────
   report      best        predict model ─→ predictions.parquet
-  plots       loss_curve, pred_vs_true  ─→ plots/
+  plots       loss_curve, pred_vs_true, data_pipeline  ─→ plots/
   record      runs/housing_$datetime$
 
 ── COLUMNS ─────────────────────────────────────────────────────────────────────────────────────
