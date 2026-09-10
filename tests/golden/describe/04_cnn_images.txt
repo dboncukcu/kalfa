@@ -5,6 +5,7 @@ config.yaml                                                                     
     lr           0.001    unfreeze_at  5
   seed        7
   device      cuda
+  rng         derived (no rng key)
   record      runs/pets_$datetime$
 
 ── DATA ───────────────────────────────────────────────────────────────────────────────────────────────────────

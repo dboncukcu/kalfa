@@ -33,6 +33,7 @@ The legos a config writes, by kind.
 | `plot` | plots | 22 |
 | `strategy` | sweep.strategy | 4 |
 | `device` | device, predict --device, generate --device | 4 |
+| `rng` | rng | 3 |
 | `lego` | a param value, or the contract | 1 |
 | `data` | a param value ({uri: name}) | 2 |
 
@@ -265,6 +266,14 @@ The legos a config writes, by kind.
 | `/device/kalfa/cuda` | `cuda` | `(index=0)` |  | The cuda device with the given index; an error when cuda or that index is not available |
 | `/device/kalfa/mps` | `mps` | `()` |  | The Apple mps device; an error when it is not available |
 
+### rng
+
+| URI | Alias | Signature | Facts | Description |
+|---|---|---|---|---|
+| `/rng/kalfa/derived` | `derived` | `(seed, name, index)` | partial: True | A substream per model by name: the build runs under sha256(seed:name), so inserting or renaming another model changes no weights; None without a seed |
+| `/rng/kalfa/global` | `global` | `(seed, name, index)` | partial: True | One global stream: no model touches the RNG, every build draws from the stream the seed started in build order, the way a plain script does |
+| `/rng/kalfa/indexed` | `indexed` | `(seed, name, index)` | partial: True | A substream per model by position: the build runs under sha256(seed:index), the rule of the runs made before the rng key, which reproduce with it; None without a seed |
+
 ### lego
 
 | URI | Alias | Signature | Facts | Description |
@@ -280,17 +289,17 @@ The legos a config writes, by kind.
 
 ## Skeleton steps
 
-These are the skeleton steps `src/kalfa/contract.yaml` calls: the nodes of its blocks, the loader,
-fit, read_prep and figures legos of its wiring, and the helpers the `sizes` and `header` facts name. They are
-not written in a config; the contract places them and the driver fills their params from the config sections.
-The list is derived from the URIs the contract mentions, so it cannot drift. The rest of the wiring stays in the
-catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and `/adapter/kalfa/objective`,
-which wrap the losses and metrics entries of a config by kind) and the defaults that stand in for a config value
-(`/split/kalfa/random`, `/device/kalfa/cpu`).
+These are the skeleton steps `src/kalfa/contract.yaml` calls: the nodes of its blocks, the builder,
+the loader, fit, read_prep and figures of its wiring, and the helpers the `sizes` and `header` facts name. They
+are not written in a config; the contract places them and the driver fills their params from the config
+sections. The list is derived from the URIs the contract mentions, so it cannot drift. The rest of the wiring
+stays in the catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and
+`/adapter/kalfa/objective`, which wrap the losses and metrics entries of a config by kind) and the defaults that
+stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/kalfa/derived`).
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/builder/kalfa/module` |  | `(graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)` | bus: prep=prep, train_loader=train_loader; roles: weights, bias, scale | Build a model graph into an nn.Module under hash(seed, index), apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader |
+| `/builder/kalfa/module` |  | `(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)` | bus: prep=prep, train_loader=train_loader; roles: weights, bias, scale | Build a model graph into an nn.Module in the stream the rng lego derives from the seed, the name and the index, apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader |
 | `/lego/kalfa/apply` |  | `(df, prep, set, keys=None)` |  | Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to |
 | `/lego/kalfa/checkpoint` |  | `(state, policy, metrics=None, record=None)` | returns: None; bus: metrics=metrics, record=record | Write the checkpoint files the policy asks for; nothing without a policy |
 | `/lego/kalfa/clone` |  | `(model, decay)` | state: True | An exponential moving average copy of a model with the given decay |
@@ -318,7 +327,7 @@ which wrap the losses and metrics entries of a config by kind) and the defaults 
 | `/lego/kalfa/save_final` |  | `(models, optimizers, emas, counters, rules, record=None)` | returns: None; bus: record=record | Write final/state.pt with the full state once training ends |
 | `/lego/kalfa/select` |  | `(models, emas, which, record=None)` | returns: selected; bus: record=record | The report models: copies loaded from best.pt, or the final state for last |
 | `/lego/kalfa/text_lines_header` |  | `(path)` |  | The text field and the line count of a text file |
-| `/loader/kalfa/torch` |  | `(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)` |  | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; a stream dataset shuffles through buffer rows and takes no sampler or workers |
+| `/loader/kalfa/torch` |  | `(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)` |  | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers |
 | `/rule/kalfa/effects` |  | `(rules)` | returns: effects | The effects the fired rules left for this turn |
 | `/rule/kalfa/open` |  | `(rules)` |  | Open the rule chain of a turn |
 | `/rule/kalfa/rule` |  | `(rules, name, when, set, after=None, metrics=None, turn_index=None)` | returns: rules; bus: metrics=metrics, turn_index=turn_index | Evaluate one rule: skipped until its after rule fired in an earlier turn, sticky once fired, later rules win the same key |
@@ -398,6 +407,9 @@ which wrap the losses and metrics entries of a config by kind) and the defaults 
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `derived` | `/rng/kalfa/derived` | rng |
+| `indexed` | `/rng/kalfa/indexed` | rng |
+| `global` | `/rng/kalfa/global` | rng |
 
 ### /alias/kalfa/lazy
 
@@ -471,6 +483,9 @@ which wrap the losses and metrics entries of a config by kind) and the defaults 
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `derived` | `/rng/kalfa/derived` | rng |
+| `indexed` | `/rng/kalfa/indexed` | rng |
+| `global` | `/rng/kalfa/global` | rng |
 | `parquet` | `/source/kalfa/parquet_stream` | source |
 | `csv` | `/source/kalfa/csv_stream` | source |
 
@@ -546,6 +561,9 @@ which wrap the losses and metrics entries of a config by kind) and the defaults 
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `derived` | `/rng/kalfa/derived` | rng |
+| `indexed` | `/rng/kalfa/indexed` | rng |
+| `global` | `/rng/kalfa/global` | rng |
 | `parquet` | `/source/kalfa/parquet` | source |
 | `csv` | `/source/kalfa/csv` | source |
 | `random_split` | `/split/kalfa/random` | split |
@@ -647,6 +665,9 @@ which wrap the losses and metrics entries of a config by kind) and the defaults 
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `derived` | `/rng/kalfa/derived` | rng |
+| `indexed` | `/rng/kalfa/indexed` | rng |
+| `global` | `/rng/kalfa/global` | rng |
 | `parquet` | `/source/kalfa/parquet` | source |
 | `csv` | `/source/kalfa/csv` | source |
 | `text_lines` | `/source/kalfa/text_lines` | source |
@@ -744,6 +765,9 @@ which wrap the losses and metrics entries of a config by kind) and the defaults 
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `derived` | `/rng/kalfa/derived` | rng |
+| `indexed` | `/rng/kalfa/indexed` | rng |
+| `global` | `/rng/kalfa/global` | rng |
 | `parquet` | `/source/kalfa/parquet` | source |
 | `csv` | `/source/kalfa/csv` | source |
 | `image_folder` | `/source/kalfa/image_folder` | source |

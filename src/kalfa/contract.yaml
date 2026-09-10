@@ -24,6 +24,7 @@ wiring:
   builder: /builder/kalfa/module                 # builds every model block; its roles fact names the init roles
   default_split: /split/kalfa/random             # the split of the short form {ratios, seed}
   default_device: /device/kalfa/cpu              # the device when the config writes none
+  default_rng: /rng/kalfa/derived                # the model seed rule when the config writes none
   fit: /lego/kalfa/fit                           # the prep step of a run
   read_prep: /lego/kalfa/read_prep               # the prep step of a command over a record
   run_inputs: [device, record, monitor]          # the values a command hands to the run
@@ -75,9 +76,9 @@ blocks:
   # ---------------------------------------------------------------- models
   # The driver turns model.templates and every model into blocks (template to block, a nodes list to spec, a mapping to graph;
   # it looks at the shape). The constructor step: {block, builder, params, inputs}; at run time builder(graph, **params, **inputs).
-  # /builder/kalfa/module builds the nn.Module, reinitializes the parameters under hash(seed, index), applies the init roles and
-  # patterns, loads weights, applies trainable (requires_grad and the mode); in a composite it takes the {model: name} nodes
-  # from the models mapping.
+  # wiring.builder builds the nn.Module, reinitializes the parameters in the stream the rng lego derives from the seed, the
+  # name and the index, applies the init roles and patterns, loads weights, applies trainable (requires_grad and the mode);
+  # in a composite it takes the {model: name} nodes from the models mapping.
   models:
     variables:
       trained_items: {required: true}   # [{name, index, init, trainable, weights}]; the block definition is blocks.<name>
@@ -87,11 +88,14 @@ blocks:
       composite_refs: {default: {}}
       ema_refs: {default: {}}           # {name: name_ema}
       seed: {required: true}            # may be null (unseeded)
+      rng: {required: true}             # {uri, params}: the rng of the config, or wiring.default_rng
+      builder: {required: true}         # wiring.builder
     flow:
       build:
         foreach: {over: $trained_items$, item: m, key: $m.name$,
-                  node: {block: $m.name$, builder: /builder/kalfa/module,
-                         params: {seed: $seed$, index: $m.index$, init: $m.init$, trainable: $m.trainable$, weights: $m.weights$},
+                  node: {block: $m.name$, builder: $builder$,
+                         params: {rng: $rng$, seed: $seed$, name: $m.name$, index: $m.index$, init: $m.init$,
+                                  trainable: $m.trainable$, weights: $m.weights$},
                          outputs: [$m.name$]}}
       ema:
         foreach: {over: $ema_items$, item: e, key: $e.name$,
@@ -100,7 +104,7 @@ blocks:
       emas:       {uri: /lego/kalfa/pack, inputs: {items: $ema_refs$}, outputs: [emas]}
       compose:
         foreach: {over: $composite_items$, item: c, key: $c.name$,
-                  node: {block: $c.name$, builder: /builder/kalfa/module, inputs: {models: models}, outputs: [$c.name$]}}
+                  node: {block: $c.name$, builder: $builder$, inputs: {models: models}, outputs: [$c.name$]}}
       composites: {uri: /lego/kalfa/pack, inputs: {items: $composite_refs$}, outputs: [composites]}
 
   # ---------------------------------------------------------------- optimizers

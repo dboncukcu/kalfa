@@ -1,9 +1,9 @@
 import copy
-import random
 from pathlib import Path
 
-import numpy
 import torch
+
+from kalfa.std.common.rng import restore_rng, rng_states
 
 
 class Policy:
@@ -17,26 +17,6 @@ class Policy:
 
     def restore(self, state: dict | None) -> None:
         pass
-
-
-def rng_states():
-    states = {"python": random.getstate(), "numpy": numpy.random.get_state(), "torch": torch.get_rng_state()}
-    if torch.cuda.is_available():
-        states["cuda"] = torch.cuda.get_rng_state_all()
-    return states
-
-
-def restore_rng(states):
-    if not states:
-        return
-    if "python" in states:
-        random.setstate(states["python"])
-    if "numpy" in states:
-        numpy.random.set_state(states["numpy"])
-    if "torch" in states:
-        torch.set_rng_state(states["torch"])
-    if states.get("cuda") is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(states["cuda"])
 
 
 def state_dicts(items):

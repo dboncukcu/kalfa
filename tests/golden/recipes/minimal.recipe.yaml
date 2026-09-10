@@ -39,7 +39,8 @@ flow:
               std_scaler: {}, target_std: {}}}, inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, target_std: {}},
       feed: {uri: /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: net, index: 0, init: null, trainable: true, weights: null}], 
-        composite_items: [], ema_items: [], trained_refs: {net: net}, composite_refs: {}, ema_refs: {}, seed: 7}}
+        composite_items: [], ema_items: [], trained_refs: {net: net}, composite_refs: {}, ema_refs: {}, seed: 7, rng: {
+          uri: /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}
   optimizers: {block: optimizers, params: {optimizer_items: [{name: net, uri: /optimizer/torch/adam, params: {lr: 0.001},
           loss: loss_mse, schedule: null, models: {net: net}}], optimizer_refs: {net: opt_net}}}
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {

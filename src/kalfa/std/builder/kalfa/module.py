@@ -1,5 +1,4 @@
 import fnmatch
-import hashlib
 
 import torch
 from torch import nn
@@ -9,6 +8,7 @@ from kalfa.std.builder.base import Model, weights_path
 from kalfa.std.checkpoint.base import load
 from kalfa.std.common.deferred import DeferredLayer
 from kalfa.std.common.log import clock, logger_for, since
+from kalfa.std.common.rng import derived_seed, forked
 from kalfa.std.layer.base import LazyLayer
 
 
@@ -19,9 +19,10 @@ def is_lazy(module):
     return isinstance(module, (nn.modules.lazy.LazyModuleMixin, LazyLayer))
 
 
-def model_seed(seed, index):
-    digest = hashlib.sha256(f"{seed}:{index}".encode()).digest()
-    return int.from_bytes(digest[:8], "big") % (2 ** 63)
+def model_seed(rng, seed, name, index):
+    if rng is not None:
+        return rng(seed, name, index)
+    return None if seed is None else derived_seed(seed, name)
 
 
 def role_of(name, parameter):
@@ -52,23 +53,9 @@ def apply_roles(root, roles, patterns=()):
                     initializer(parameter)
 
 
-class Seeded:
-    def __init__(self, context, seed):
-        self.context = context
-        self.seed = seed
-
-    def __enter__(self):
-        self.context.__enter__()
-        torch.manual_seed(self.seed)
-        return self
-
-    def __exit__(self, *error):
-        return self.context.__exit__(*error)
-
-
 class Module(Model):
-    def __init__(self, graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None,
-                 train_loader=None):
+    def __init__(self, graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None,
+                 models=None, prep=None, train_loader=None):
         super().__init__()
         self.graph = graph
         self.inputs = list(graph.inputs)
@@ -84,7 +71,8 @@ class Module(Model):
                 if models is None or node.ref not in models:
                     raise KeyError(f"node {node.name!r} references model {node.ref!r}, which is not built")
                 self.refs[node.name] = models[node.ref]
-        self.seed = None if seed is None else model_seed(seed, index)
+        self.name = name
+        self.seed = model_seed(rng, seed, name, index)
         self.init = dict(init or {})
         self.node_init = {node.name: node.extra["init"] for node in graph.nodes if "init" in node.extra}
         self.trainable = bool(trainable)
@@ -96,9 +84,7 @@ class Module(Model):
             self.build()
 
     def seeded(self):
-        if self.seed is None:
-            return torch.random.fork_rng(devices=[], enabled=False)
-        return Seeded(torch.random.fork_rng(devices=[]), self.seed)
+        return forked(self.seed)
 
     def reset_parameters(self):
         for module in self.nodes.modules():
@@ -195,13 +181,13 @@ def load_weights(spec):
 
 
 @lego("/builder/kalfa/module", bus=["prep", "train_loader"], roles=["weights", "bias", "scale"],
-      description="Build a model graph into an nn.Module under hash(seed, index), apply init roles, "
-                  "trainable and weights; reference nodes take the models dict; layer params that are kind "
-                  "data components are built from prep and the train loader")
-def module(graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None,
-           train_loader=None):
+      description="Build a model graph into an nn.Module in the stream the rng lego derives from the seed, the "
+                  "name and the index, apply init roles, trainable and weights; reference nodes take the models "
+                  "dict; layer params that are kind data components are built from prep and the train loader")
+def module(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None,
+           prep=None, train_loader=None):
     started = clock()
-    built = Module(graph, seed, index, init, trainable, weights, models, prep, train_loader)
+    built = Module(graph, rng, seed, name, index, init, trainable, weights, models, prep, train_loader)
     if weights is not None:
         state = load_weights(weights)
         logger.info(f"weights from {weights_path(weights)}")
@@ -210,5 +196,5 @@ def module(graph, seed=None, index=0, init=None, trainable=True, weights=None, m
             built.settle()
         else:
             built.pending_state = dict(state)
-    logger.debug(f"built a module under seed {seed} index {index} ({since(started)})")
+    logger.debug(f"built {name or 'a module'} under seed {built.seed} ({since(started)})")
     return built

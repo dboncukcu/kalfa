@@ -2,6 +2,7 @@ import torch
 
 from kalfa.registration import lego
 from kalfa.std.common.log import logger_for
+from kalfa.std.common.rng import seed_worker
 from kalfa.std.feed.base import IterableDataset
 
 
@@ -40,7 +41,8 @@ def stream_loader(data, train, size, shuffle, drop_last, workers, collate, balan
 @lego("/loader/kalfa/torch",
       description="torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches "
                   "in order for the other sets; balanced puts a class balancing sampler over the single target "
-                  "field; a stream dataset shuffles through buffer rows and takes no sampler or workers")
+                  "field; every worker is seeded from the torch seed on its own; a stream dataset shuffles "
+                  "through buffer rows and takes no sampler or workers")
 def torch_loader(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None,
                  balanced=False, buffer=4096):
     train = set == "train"
@@ -56,5 +58,6 @@ def torch_loader(data, set, size, eval_size=None, shuffle=True, drop_last=False,
         sampler = balanced_sampler(data)
         shuffle = False
     loader = torch.utils.data.DataLoader(data, batch_size=size, shuffle=shuffle, drop_last=drop_last, sampler=sampler,
-                                         num_workers=workers, collate_fn=collate)
+                                         num_workers=workers, collate_fn=collate,
+                                         worker_init_fn=seed_worker if workers else None)
     return report_built(loader, set, size)

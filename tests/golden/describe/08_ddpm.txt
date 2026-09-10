@@ -7,6 +7,7 @@ config.yaml                                                                     
     seed             7
   seed        7
   device      cuda
+  rng         derived (no rng key)
   record      runs/ddpm_$datetime$
 
 ── DATA ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

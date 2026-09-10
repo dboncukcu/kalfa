@@ -10,8 +10,9 @@ include: []                       # [empty] alias packs (/alias/kalfa/tabular, v
 plugins: []                       # [empty] modules next to the config or pip packages; @lego registrations
 params: {}                        # [empty] $name$ placeholders; -p name=value (--param); no reserved names, not on the bus
 
-seed: null                        # [library] the global seed; the model seed hash(seed, index), the loader, the generator, init; without it torch runs unseeded, check warns
+seed: null                        # [library] the global seed: python, numpy and torch before the run, the model seeds through the rng lego, the loader, the generators, init; without it torch runs unseeded, check warns
 device: null                      # [library] a device lego: auto | cpu | cuda | mps | {uri: cuda, params: {index: 1}} | your own; cpu when absent; --set device=cuda
+rng: null                         # [wiring] the model seed rule, an rng lego: derived (a substream per model by name) | indexed (by position, the runs before the key) | global (one stream in build order) | {uri, params}; wiring.default_rng (derived) when absent
 
 data:
   source: null                    # [required] {uri: parquet | csv | image_folder | text_lines | your own lego, params: {path: ...}}

@@ -250,6 +250,14 @@ def test_set_parsing():
     assert parse_sets(params=["a.b=1"]) == [("params.a.b", 1)]
 
 
+def test_rng_is_a_lego_slot_of_its_kind(workdir):
+    config = minimal()
+    config["rng"] = "indexed"
+    assert kinds_of(workdir, config)[1] == []
+    config["rng"] = "adam"
+    assert kinds_of(workdir, config, "bad.yaml")[1] == ["kind_mismatch"]
+
+
 def test_turn_without_an_extras_declaration_takes_no_extra_keys(workdir):
     def turn(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics,
              losses_keys, metrics_keys, predicts, steps, stream=None):

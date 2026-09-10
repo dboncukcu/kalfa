@@ -143,15 +143,16 @@ flow:
     loader_valid: {uri: /loader/kalfa/torch, params: {set: valid, size: 50}, inputs: {data: valid_data}, outputs: [valid_loader]}
     loader_test: {uri: /loader/kalfa/torch, params: {set: test, size: 50}, inputs: {data: test_data}, outputs: [test_loader]}
   models: # reads: prep, train_loader; exports: encoder, generator, dxz, dxx, dzz, models, emas, composites
-    build_encoder: {block: encoder, builder: /builder/kalfa/module, params: {seed: 42, index: 0, init: null, trainable: true, weights: null}, outputs: [encoder]}  # implicit: prep, train_loader
-    build_generator: {block: generator, builder: /builder/kalfa/module, params: {seed: 42, index: 1, init: {weights: {uri: /init/torch/normal, params: {std: 
-                0.02}}}, trainable: true, weights: null}, outputs: [generator]} # implicit: prep, train_loader
-    build_dxz: {block: dxz, builder: /builder/kalfa/module, params: {seed: 42, index: 2, init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}, 
-          trainable: true, weights: null}, outputs: [dxz]} # implicit: prep, train_loader
-    build_dxx: {block: dxx, builder: /builder/kalfa/module, params: {seed: 42, index: 3, init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}, 
-          trainable: true, weights: null}, outputs: [dxx]} # implicit: prep, train_loader
-    build_dzz: {block: dzz, builder: /builder/kalfa/module, params: {seed: 42, index: 4, init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}, 
-          trainable: true, weights: null}, outputs: [dzz]} # implicit: prep, train_loader
+    build_encoder: {block: encoder, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 42, name: encoder, index: 0, init: 
+          null, trainable: true, weights: null}, outputs: [encoder]}  # implicit: prep, train_loader
+    build_generator: {block: generator, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 42, name: generator, index: 1,
+        init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}, trainable: true, weights: null}, outputs: [generator]} # implicit: prep, train_loader
+    build_dxz: {block: dxz, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 42, name: dxz, index: 2, init: {weights: {
+            uri: /init/torch/normal, params: {std: 0.02}}}, trainable: true, weights: null}, outputs: [dxz]} # implicit: prep, train_loader
+    build_dxx: {block: dxx, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 42, name: dxx, index: 3, init: {weights: {
+            uri: /init/torch/normal, params: {std: 0.02}}}, trainable: true, weights: null}, outputs: [dxx]} # implicit: prep, train_loader
+    build_dzz: {block: dzz, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 42, name: dzz, index: 4, init: {weights: {
+            uri: /init/torch/normal, params: {std: 0.02}}}, trainable: true, weights: null}, outputs: [dzz]} # implicit: prep, train_loader
     models: {uri: /lego/kalfa/pack, inputs: {items: {encoder: encoder, generator: generator, dxz: dxz, dxx: dxx, dzz: dzz}}, outputs: [models]}
     emas: {uri: /lego/kalfa/pack, inputs: {items: {}}, outputs: [emas]}
     compose_anomaly_score: {block: anomaly_score, builder: /builder/kalfa/module, inputs: {models: models}, outputs: [anomaly_score]} # implicit: prep, train_loader

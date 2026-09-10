@@ -1,12 +1,10 @@
 import json
-import random
 import shutil
 import sys
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy
 import pandas
 import tezgah
 import torch
@@ -29,6 +27,7 @@ from .std.common.device import Device
 from .std.common.generation import write_samples
 from .std.common.log import Monitor, clock, logger_for, since
 from .std.common.prediction import prediction_table
+from .std.common.rng import seed_all
 from .std.common.runtime import call_model, named_outputs, resolve_model
 from .std.lego.kalfa.apply import apply
 from .std.lego.kalfa.clone import Ema
@@ -165,16 +164,6 @@ def probe(document, contract=None) -> Probe:
             found.parameters[name] = (sum(item.numel() for item in module.parameters()),
                                       sum(item.numel() for item in module.parameters() if item.requires_grad))
     return found
-
-
-def seed_all(seed):
-    if seed is None:
-        return
-    random.seed(seed)
-    numpy.random.seed(int(seed) % (2 ** 32))
-    torch.manual_seed(int(seed))
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(int(seed))
 
 
 @dataclass

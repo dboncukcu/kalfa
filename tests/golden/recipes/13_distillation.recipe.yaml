@@ -41,7 +41,8 @@ flow:
   models: {block: models, params: {trained_items: [{name: teacher, index: 0, init: null, trainable: false, weights: {run: 
               runs/cifar_resnet50_x, model: net, which: best}}, {name: student, index: 1, init: null, trainable: true, 
             weights: null}], composite_items: [], ema_items: [], trained_refs: {teacher: teacher, student: student}, 
-        composite_refs: {}, ema_refs: {}, seed: 7}}
+        composite_refs: {}, ema_refs: {}, seed: 7, rng: {uri: /rng/kalfa/derived, params: {}}, builder: 
+        /builder/kalfa/module}}
   optimizers: {block: optimizers, params: {optimizer_items: [{name: main, uri: /optimizer/torch/adamw, params: {lr: 
               0.001}, loss: kd, schedule: null, models: {student: student}}], optimizer_refs: {main: opt_main}}}
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {

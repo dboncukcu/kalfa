@@ -6,6 +6,7 @@ config.yaml                                                                     
     seed    7
   seed        7
   device      cpu (no device key)
+  rng         derived (no rng key)
   record      runs/housing_$datetime$
 
 ── DATA ────────────────────────────────────────────────────────────────────────────────────────

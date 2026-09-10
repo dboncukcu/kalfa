@@ -21,13 +21,13 @@ module` or `kalfa docs --config config.yaml`). They are written in a config exac
 first segment of the URI and decides which section takes them.
 """
 
-SKELETON_NOTE = """These are the skeleton steps `src/kalfa/contract.yaml` calls: the nodes of its blocks, the loader,
-fit, read_prep and figures legos of its wiring, and the helpers the `sizes` and `header` facts name. They are
-not written in a config; the contract places them and the driver fills their params from the config sections.
-The list is derived from the URIs the contract mentions, so it cannot drift. The rest of the wiring stays in the
-catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and `/adapter/kalfa/objective`,
-which wrap the losses and metrics entries of a config by kind) and the defaults that stand in for a config value
-(`/split/kalfa/random`, `/device/kalfa/cpu`).
+SKELETON_NOTE = """These are the skeleton steps `src/kalfa/contract.yaml` calls: the nodes of its blocks, the builder,
+the loader, fit, read_prep and figures of its wiring, and the helpers the `sizes` and `header` facts name. They
+are not written in a config; the contract places them and the driver fills their params from the config
+sections. The list is derived from the URIs the contract mentions, so it cannot drift. The rest of the wiring
+stays in the catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and
+`/adapter/kalfa/objective`, which wrap the losses and metrics entries of a config by kind) and the defaults that
+stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/kalfa/derived`).
 """
 
 
@@ -72,7 +72,8 @@ def template_uris():
     contract = Contract.load()
     walk(contract.blocks)
     for value in contract.wiring.values():
-        if isinstance(value, str) and kalfa_kind(value) in ("lego", "loader") and registry.lookup(value) is not None:
+        if isinstance(value, str) and kalfa_kind(value) in ("lego", "loader", "builder") \
+                and registry.lookup(value) is not None:
             found.add(value)
     for uri in STD_URIS:
         facts = registry.facts(uri)
@@ -122,6 +123,7 @@ def render(uris=None, plugins=None):
         "schedule": "optimizer schedule", "turn": "training.turn", "trigger": "training.stop, rules when",
         "checkpoint": "training.checkpoint", "rule": "the contract", "generate": "generate",
         "plot": "plots", "strategy": "sweep.strategy", "device": "device, predict --device, generate --device",
+        "rng": "rng",
         "lego": "a param value, or the contract", "builder": "the contract",
         "data": "a param value ({uri: name})",
     }

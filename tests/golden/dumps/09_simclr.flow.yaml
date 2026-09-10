@@ -55,9 +55,10 @@ flow:
     loader_valid: {uri: /loader/kalfa/torch, params: {set: valid, size: 256, drop_last: true}, inputs: {data: valid_data}, outputs: [valid_loader]}
     loader_test: {uri: /loader/kalfa/torch, params: {set: test, size: 256, drop_last: true}, inputs: {data: test_data}, outputs: [test_loader]}
   models: # reads: prep, train_loader; exports: backbone, head, models, emas, composites
-    build_backbone: {block: backbone, builder: /builder/kalfa/module, params: {seed: 7, index: 0, init: null, trainable: true, weights: null}, outputs: [
-          backbone]}  # implicit: prep, train_loader
-    build_head: {block: head, builder: /builder/kalfa/module, params: {seed: 7, index: 1, init: null, trainable: true, weights: null}, outputs: [head]} # implicit: prep, train_loader
+    build_backbone: {block: backbone, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 7, name: backbone, index: 0, 
+          init: null, trainable: true, weights: null}, outputs: [backbone]}  # implicit: prep, train_loader
+    build_head: {block: head, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 7, name: head, index: 1, init: null, 
+          trainable: true, weights: null}, outputs: [head]} # implicit: prep, train_loader
     models: {uri: /lego/kalfa/pack, inputs: {items: {backbone: backbone, head: head}}, outputs: [models]}
     emas: {uri: /lego/kalfa/pack, inputs: {items: {}}, outputs: [emas]}
     compose_simclr: {block: simclr, builder: /builder/kalfa/module, inputs: {models: models}, outputs: [simclr]} # implicit: prep, train_loader

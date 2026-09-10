@@ -5,6 +5,7 @@ config.yaml                                                                     
     lr         0.0001    n_classes  10
   seed        7
   device      cuda
+  rng         derived (no rng key)
   record      runs/wgan_$datetime$
 
 ── DATA ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

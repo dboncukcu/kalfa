@@ -17,6 +17,8 @@ class SectionRules:
             self.warning("no_seed", "seed is not written; torch runs unseeded and two runs differ", ("seed",))
         if self.data.get("device") is not None:
             self.call_of(self.data["device"], ("device",), ("device",), "device")
+        if self.data.get("rng") is not None:
+            self.call_of(self.data["rng"], ("rng",), ("rng",), "rng")
         record = self.data.get("record")
         if "record" in self.data and not isinstance(record, str):
             self.error("invalid_value", "record must be a path", ("record",))

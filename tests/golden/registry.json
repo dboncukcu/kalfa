@@ -42,6 +42,7 @@
     "plot",
     "strategy",
     "device",
+    "rng",
     "lego"
   ],
   "legos": {
@@ -76,7 +77,7 @@
     },
     "/builder/kalfa/module": {
       "alias": [],
-      "description": "Build a model graph into an nn.Module under hash(seed, index), apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader",
+      "description": "Build a model graph into an nn.Module in the stream the rng lego derives from the seed, the name and the index, apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader",
       "facts": {
         "bus": {
           "prep": "prep",
@@ -89,7 +90,7 @@
         ]
       },
       "kind": "builder",
-      "signature": "(graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)"
+      "signature": "(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)"
     },
     "/checkpoint/kalfa/best": {
       "alias": [
@@ -801,7 +802,7 @@
     },
     "/loader/kalfa/torch": {
       "alias": [],
-      "description": "torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; a stream dataset shuffles through buffer rows and takes no sampler or workers",
+      "description": "torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers",
       "facts": {},
       "kind": "loader",
       "signature": "(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)"
@@ -1597,6 +1598,39 @@
       "kind": "pre",
       "signature": "()"
     },
+    "/rng/kalfa/derived": {
+      "alias": [
+        "derived"
+      ],
+      "description": "A substream per model by name: the build runs under sha256(seed:name), so inserting or renaming another model changes no weights; None without a seed",
+      "facts": {
+        "partial": true
+      },
+      "kind": "rng",
+      "signature": "(seed, name, index)"
+    },
+    "/rng/kalfa/global": {
+      "alias": [
+        "global"
+      ],
+      "description": "One global stream: no model touches the RNG, every build draws from the stream the seed started in build order, the way a plain script does",
+      "facts": {
+        "partial": true
+      },
+      "kind": "rng",
+      "signature": "(seed, name, index)"
+    },
+    "/rng/kalfa/indexed": {
+      "alias": [
+        "indexed"
+      ],
+      "description": "A substream per model by position: the build runs under sha256(seed:index), the rule of the runs made before the rng key, which reproduce with it; None without a seed",
+      "facts": {
+        "partial": true
+      },
+      "kind": "rng",
+      "signature": "(seed, name, index)"
+    },
     "/rule/kalfa/effects": {
       "alias": [],
       "description": "The effects the fired rules left for this turn",
@@ -1983,14 +2017,17 @@
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "cuda": "/device/kalfa/cuda",
+      "derived": "/rng/kalfa/derived",
       "dropout": "/layer/torch/dropout",
       "f1": "/metric/torchmetrics/f1",
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
+      "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
+      "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
       "l1_distance": "/layer/kalfa/l1_distance",
       "label_encoder": "/pre/kalfa/label_encoder",
@@ -2054,14 +2091,17 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv_stream",
       "cuda": "/device/kalfa/cuda",
+      "derived": "/rng/kalfa/derived",
       "dropout": "/layer/torch/dropout",
       "f1": "/metric/torchmetrics/f1",
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
+      "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
+      "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
       "l1_distance": "/layer/kalfa/l1_distance",
       "label_encoder": "/pre/kalfa/label_encoder",
@@ -2130,6 +2170,7 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
       "cuda": "/device/kalfa/cuda",
+      "derived": "/rng/kalfa/derived",
       "dropout": "/layer/torch/dropout",
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
@@ -2137,9 +2178,11 @@
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
+      "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
+      "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
       "kbins_discretizer": "/pre/sklearn/kbins_discretizer",
       "kde": "/plot/seaborn/kde",
@@ -2227,6 +2270,7 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
       "cuda": "/device/kalfa/cuda",
+      "derived": "/rng/kalfa/derived",
       "dropout": "/layer/torch/dropout",
       "embedding": "/layer/torch/embedding",
       "error_map": "/plot/kalfa/error_map",
@@ -2235,9 +2279,11 @@
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
+      "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
+      "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
       "kde": "/plot/seaborn/kde",
       "kfold": "/split/kalfa/kfold",
@@ -2323,6 +2369,7 @@
       "cuda": "/device/kalfa/cuda",
       "ddpm": "/objective/kalfa/ddpm",
       "ddpm_sampler": "/generate/kalfa/ddpm_sampler",
+      "derived": "/rng/kalfa/derived",
       "distill": "/objective/kalfa/distill",
       "dropout": "/layer/torch/dropout",
       "embedding": "/layer/torch/embedding",
@@ -2334,12 +2381,14 @@
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "gan_sampler": "/generate/kalfa/gan_sampler",
       "given": "/split/kalfa/given",
+      "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "image_folder": "/source/kalfa/image_folder",
       "image_grid": "/plot/kalfa/image_grid",
       "image_pairs": "/plot/kalfa/image_pairs",
+      "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
       "kde": "/plot/seaborn/kde",
       "kfold": "/split/kalfa/kfold",

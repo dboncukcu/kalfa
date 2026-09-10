@@ -10,13 +10,13 @@ class Ref:
 
 
 class Schema:
-    sections = ("include", "plugins", "params", "alias", "seed", "device", "data", "model", "metrics", "losses",
+    sections = ("include", "plugins", "params", "alias", "seed", "device", "rng", "data", "model", "metrics", "losses",
                 "optimizers", "training", "generate", "plots", "figures", "sweep", "record")
     required = ("data", "model", "losses", "training", "record")
     unresolved = ("include", "plugins", "params", "alias")
     builtin_variables = ("datetime",)
     short_calls = (("training", "turn"), ("training", "checkpoint"), ("data", "feed"), ("sweep", "strategy"),
-                   ("device",))
+                   ("device",), ("rng",))
     data = ("source", "filter", "split", "batch", "preprocessors", "drop", "fields", "feed")
     data_required = ("source", "split", "batch", "fields", "feed")
     filter = ("query", "sets")

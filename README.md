@@ -139,7 +139,11 @@ subprocess, `kalfa collect <root>` writes the table and the best point; on a que
 Devices: `device` is a lego slot, not a plain string. The short form is an alias (`auto` takes the first available
 of cuda, mps and cpu; `cpu`; `cuda`; `mps`), the long form is `{uri: cuda, params: {index: 1}}`; without the key the
 run is on the cpu. Every device lego checks its own availability and fails with a clear message instead of falling
-back silently, so `device: cuda` on a machine without cuda is an error, not a slow cpu run. The chosen device is
+back silently, so `device: cuda` on a machine without cuda is an error, not a slow cpu run. `rng` is the same
+kind of slot for the model seeds: `derived` (the default) initializes every model in a substream of its own named
+after it, so adding or renaming another model changes no weights; `indexed` seeds by the definition position, the
+rule of the runs made before the key; `global` forks nothing and every model draws from the one stream in build
+order; a lego of your own answers `(seed, name, index)`. The chosen device is
 written to `device.json` in the record and printed by `kalfa run`. `kalfa predict` and `kalfa generate` take the
 same choice as `--device` (a short name, or a lego call in quotes), so a record can be replayed on a GPU box; they
 stay on the cpu without it. Your own device lego (`/device/acme/tpu`) plugs into the same slot.

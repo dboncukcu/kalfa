@@ -5,6 +5,7 @@ config.yaml                                                                     
     lr           0.001    alpha        0.7
   seed        7
   device      cuda
+  rng         derived (no rng key)
   record      runs/distill_$datetime$
 
 ── DATA ─────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ config.yaml                                                                     
     log_norm    1200      epochs      60        seed        42
   seed        42
   device      cpu (no device key)
+  rng         derived (no rng key)
   record      runs/alad_$datetime$
 
 ── DATA ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

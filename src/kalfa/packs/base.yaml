@@ -84,3 +84,7 @@ alias:
   cpu: /device/kalfa/cpu
   cuda: /device/kalfa/cuda
   mps: /device/kalfa/mps
+  # rng
+  derived: /rng/kalfa/derived
+  indexed: /rng/kalfa/indexed
+  global: /rng/kalfa/global

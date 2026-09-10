@@ -58,7 +58,8 @@ def linear_graph(in_features=3, out_features=1, lazy=False):
 
 
 def tiny_model(in_features=3, out_features=1, seed=1, index=0, lazy=False, **kwargs):
-    return Module(linear_graph(in_features, out_features, lazy), seed=seed, index=index, **kwargs)
+    return Module(linear_graph(in_features, out_features, lazy), seed=seed, name=f"model{index}", index=index,
+                  **kwargs)
 
 
 def frame(rows=16, features=3, seed=0, set_name="train", target="price"):

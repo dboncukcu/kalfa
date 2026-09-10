@@ -6,8 +6,9 @@ from cirak.build import Graph, GraphNode
 from torch import nn
 
 import kalfa  # noqa: F401
-from helpers import linear_graph, tiny_model
+from helpers import tiny_model
 from kalfa.std.builder.kalfa.module import Module, apply_roles, model_seed, module
+from kalfa.std.common.rng import derived_seed
 from kalfa.std.init.torch.normal import normal
 from kalfa.std.init.torch.xavier import xavier
 from kalfa.std.init.torch.zeros import zeros
@@ -49,7 +50,9 @@ def test_builder_is_seeded_by_index_and_deterministic():
     third = tiny_model(seed=7, index=1)
     assert torch.equal(first.nodes["layer"].weight, second.nodes["layer"].weight)
     assert not torch.equal(first.nodes["layer"].weight, third.nodes["layer"].weight)
-    assert model_seed(7, 0) != model_seed(7, 1) and model_seed(7, 0) == model_seed(7, 0)
+    assert derived_seed(7, "a") != derived_seed(7, "b") and derived_seed(7, "a") == derived_seed(7, "a")
+    assert model_seed(None, 7, "a", 0) == derived_seed(7, "a") and model_seed(None, None, "a", 0) is None
+    assert model_seed(lambda seed, name, index: 42, None, "a", 0) == 42
     assert first.inputs == ["x"] and first.outputs == ["y"]
     assert first(torch.ones(2, 3)).shape == (2, 1)
 

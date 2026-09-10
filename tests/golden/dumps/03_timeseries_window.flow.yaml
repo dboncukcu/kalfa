@@ -51,7 +51,8 @@ flow:
     loader_valid: {uri: /loader/kalfa/torch, params: {set: valid, size: 64}, inputs: {data: valid_data}, outputs: [valid_loader]}
     loader_test: {uri: /loader/kalfa/torch, params: {set: test, size: 64}, inputs: {data: test_data}, outputs: [test_loader]}
   models: # reads: prep, train_loader; exports: model, models, emas, composites
-    build_model: {block: model, builder: /builder/kalfa/module, params: {seed: 7, index: 0, init: null, trainable: true, weights: null}, outputs: [model]}  # implicit: prep, train_loader
+    build_model: {block: model, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 7, name: model, index: 0, init: null, 
+          trainable: true, weights: null}, outputs: [model]}  # implicit: prep, train_loader
     models: {uri: /lego/kalfa/pack, inputs: {items: {model: model}}, outputs: [models]}
     emas: {uri: /lego/kalfa/pack, inputs: {items: {}}, outputs: [emas]}
     composites: {uri: /lego/kalfa/pack, inputs: {items: {}}, outputs: [composites]}

@@ -131,7 +131,8 @@ flow:
                   std: 0.02}}}, trainable: true, weights: null}, {name: dzz, index: 4, init: {weights: {uri: 
                 /init/torch/normal, params: {std: 0.02}}}, trainable: true, weights: null}], composite_items: [name: 
             anomaly_score], ema_items: [], trained_refs: {encoder: encoder, generator: generator, dxz: dxz, dxx: dxx, 
-          dzz: dzz}, composite_refs: {anomaly_score: anomaly_score}, ema_refs: {}, seed: 42}}
+          dzz: dzz}, composite_refs: {anomaly_score: anomaly_score}, ema_refs: {}, seed: 42, rng: {uri: 
+          /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}
   optimizers: {block: optimizers, params: {optimizer_items: [{name: g, uri: /optimizer/torch/adam, params: {lr: 0.0002, 
               betas: [0.5, 0.999]}, loss: adv_g, schedule: null, models: {encoder: encoder, generator: generator}}, {
             name: d, uri: /optimizer/torch/adam, params: {lr: 0.0002, betas: [0.5, 0.999]}, loss: adv_d, schedule: null, 

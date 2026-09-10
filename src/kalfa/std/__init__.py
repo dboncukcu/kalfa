@@ -6,7 +6,7 @@ from cirak.registry import registry
 
 declare_kinds("source", "split", "pre", "feed", "loader", "layer", "init", "criterion", "objective", "metric",
               "adapter", "optimizer", "schedule", "turn", "trigger", "checkpoint", "rule", "generate", "plot",
-              "strategy", "device", "lego")
+              "strategy", "device", "rng", "lego")
 declare_facts("uses", "needs_grad", "needs_models", "extras", "grouped", "requires", "sizes", "header", "stream",
               "samples", "needs_table", "counts", "writes", "enumerates", "describe", "roles")
 

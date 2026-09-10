@@ -53,7 +53,8 @@ flow:
                 params: {std: 0.02}}}, trainable: true, weights: null}, {name: critic, index: 1, init: {weights: {uri: 
                 /init/torch/normal, params: {std: 0.02}}}, trainable: true, weights: null}], composite_items: [], 
         ema_items: [{name: generator, decay: 0.999}], trained_refs: {generator: generator, critic: critic}, 
-        composite_refs: {}, ema_refs: {generator: generator_ema}, seed: 7}}
+        composite_refs: {}, ema_refs: {generator: generator_ema}, seed: 7, rng: {uri: /rng/kalfa/derived, params: {}}, 
+        builder: /builder/kalfa/module}}
   optimizers: {block: optimizers, params: {optimizer_items: [{name: d, uri: /optimizer/torch/adam, params: {lr: 0.0001, 
               betas: [0.0, 0.9]}, loss: wgan_d, schedule: null, models: {critic: critic}}, {name: g, uri: 
             /optimizer/torch/adam, params: {lr: 0.0001, betas: [0.0, 0.9]}, loss: wgan_g, schedule: null, models: {

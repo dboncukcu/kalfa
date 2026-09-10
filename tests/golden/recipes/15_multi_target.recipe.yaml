@@ -60,7 +60,8 @@ flow:
   models: {block: models, params: {trained_items: [{name: head, index: 0, init: null, trainable: true, weights: null}, {
             name: combine, index: 1, init: null, trainable: true, weights: null}, {name: tail, index: 2, init: null, 
             trainable: true, weights: null}], composite_items: [name: full], ema_items: [], trained_refs: {head: head, 
-          combine: combine, tail: tail}, composite_refs: {full: full}, ema_refs: {}, seed: 7}}
+          combine: combine, tail: tail}, composite_refs: {full: full}, ema_refs: {}, seed: 7, rng: {uri: 
+          /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}
   optimizers: {block: optimizers, params: {optimizer_items: [{name: main, uri: /optimizer/torch/adam, params: {lr: 0.001},
           loss: total, schedule: null, models: {head: head, combine: combine, tail: tail}}], optimizer_refs: {main: 
           opt_main}}}

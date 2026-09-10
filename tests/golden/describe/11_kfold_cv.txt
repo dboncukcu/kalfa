@@ -7,6 +7,7 @@ config.yaml                                                                     
     fold    0
   seed        7
   device      cpu (no device key)
+  rng         derived (no rng key)
   record      runs/cv_housing_0
 
 ── DATA ────────────────────────────────────────────────────────────────────────────────────────

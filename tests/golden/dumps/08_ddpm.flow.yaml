@@ -42,7 +42,8 @@ flow:
     loader_valid: {uri: /loader/kalfa/torch, params: {set: valid, size: 128}, inputs: {data: valid_data}, outputs: [valid_loader]}
     loader_test: {uri: /loader/kalfa/torch, params: {set: test, size: 128}, inputs: {data: test_data}, outputs: [test_loader]}
   models: # reads: prep, train_loader; exports: unet, models, emas, composites
-    build_unet: {block: unet, builder: /builder/kalfa/module, params: {seed: 7, index: 0, init: null, trainable: true, weights: null}, outputs: [unet]}  # implicit: prep, train_loader
+    build_unet: {block: unet, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 7, name: unet, index: 0, init: null, 
+          trainable: true, weights: null}, outputs: [unet]}  # implicit: prep, train_loader
     ema_unet: {uri: /lego/kalfa/clone, params: {decay: 0.9999}, inputs: {model: unet}, outputs: [unet_ema]}
     models: {uri: /lego/kalfa/pack, inputs: {items: {unet: unet}}, outputs: [models]}
     emas: {uri: /lego/kalfa/pack, inputs: {items: {unet: unet_ema}}, outputs: [emas]}

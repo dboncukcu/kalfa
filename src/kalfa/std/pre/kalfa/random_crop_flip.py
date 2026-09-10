@@ -1,6 +1,5 @@
-import numpy
-
 from kalfa.registration import lego
+from kalfa.std.common.rng import Draws
 from kalfa.std.pre.base import Preprocessor, pil_image
 
 
@@ -11,15 +10,17 @@ class RandomCropFlip(Preprocessor):
 
     def __init__(self, size):
         self.size = int(size)
+        self.draws = Draws("random_crop_flip")
 
     def apply(self, value):
         from PIL import Image, ImageOps
 
         image = ImageOps.expand(pil_image(value), border=self.padding, fill=0)
         width, height = image.size
-        left = int(numpy.random.randint(0, max(width - self.size, 0) + 1))
-        top = int(numpy.random.randint(0, max(height - self.size, 0) + 1))
+        draws = self.draws.numpy()
+        left = int(draws.integers(0, max(width - self.size, 0) + 1))
+        top = int(draws.integers(0, max(height - self.size, 0) + 1))
         image = image.crop((left, top, left + self.size, top + self.size))
-        if numpy.random.random() < 0.5:
+        if draws.random() < 0.5:
             image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         return image

@@ -240,6 +240,12 @@ def keys_of(section, targets=None):
     return table
 
 
+def rng_of(config, contract):
+    if config.get("rng") is not None:
+        return call_with_params(config["rng"])
+    return {"uri": contract.wiring["default_rng"], "params": {}}
+
+
 def loaders_of(batch, contract):
     batch = {"size": batch} if not isinstance(batch, dict) else dict(batch)
     return {name: {"uri": contract.wiring["loader"], "set": name, "params": {"set": name, **batch}}
@@ -311,7 +317,9 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
                 "trained_refs": {item["name"]: item["name"] for item in trained},
                 "composite_refs": {item["name"]: item["name"] for item in composites},
                 "ema_refs": {item["name"]: f"{item['name']}_ema" for item in emas},
-                "seed": config.get("seed")}},
+                "seed": config.get("seed"),
+                "rng": rng_of(config, contract),
+                "builder": contract.wiring["builder"]}},
             "optimizers": {"block": "optimizers", "params": {
                 "optimizer_items": optimizers,
                 "optimizer_refs": {item["name"]: f"opt_{item['name']}" for item in optimizers}}},

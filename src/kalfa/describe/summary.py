@@ -3,7 +3,7 @@ from pathlib import Path
 from cirak.registry import registry
 
 from .. import __version__
-from .text import call_text, field_line, number, pairs_block
+from .text import call_text, field_line, number, pairs_block, short
 
 
 def summary_section(prepared, style, width, probe=None):
@@ -28,6 +28,10 @@ def summary_section(prepared, style, width, probe=None):
     lines.append(field_line("seed", "unseeded" if seed is None else number(seed, style), style))
     lines.append(field_line("device", call_text(device, style=style) if device is not None
                                       else style.dim("cpu (no device key)"), style))
+    rng = config.get("rng")
+    lines.append(field_line("rng", call_text(rng, style=style) if rng is not None
+                                   else style.dim(f"{short(prepared.contract.wiring['default_rng'])} (no rng key)"),
+                            style))
     record = config.get("record")
     if record is not None:
         lines.append(field_line("record", str(record), style))
