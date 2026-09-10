@@ -5,7 +5,17 @@
     "needs_models",
     "extras",
     "grouped",
-    "requires"
+    "requires",
+    "sizes",
+    "header",
+    "stream",
+    "samples",
+    "needs_table",
+    "counts",
+    "writes",
+    "enumerates",
+    "describe",
+    "roles"
   ],
   "kinds": [
     "builder",
@@ -71,7 +81,12 @@
         "bus": {
           "prep": "prep",
           "train_loader": "train_loader"
-        }
+        },
+        "roles": [
+          "weights",
+          "bias",
+          "scale"
+        ]
       },
       "kind": "builder",
       "signature": "(graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)"
@@ -81,7 +96,12 @@
         "best"
       ],
       "description": "Write best.pt when the monitored value improves and last.pt every turn",
-      "facts": {},
+      "facts": {
+        "writes": [
+          "best",
+          "last"
+        ]
+      },
       "kind": "checkpoint",
       "signature": "(monitor, mode='min')"
     },
@@ -90,7 +110,11 @@
         "last"
       ],
       "description": "Write last.pt every turn",
-      "facts": {},
+      "facts": {
+        "writes": [
+          "last"
+        ]
+      },
       "kind": "checkpoint",
       "signature": "()"
     },
@@ -99,7 +123,12 @@
         "snapshot"
       ],
       "description": "Write snapshot_<n>.pt every n turns and last.pt every turn",
-      "facts": {},
+      "facts": {
+        "writes": [
+          "last",
+          "snapshot"
+        ]
+      },
       "kind": "checkpoint",
       "signature": "(every)"
     },
@@ -174,7 +203,9 @@
         "class_weights"
       ],
       "description": "Inverse frequency class weights of the train set's target field, mean one; built once the train loader exists",
-      "facts": {},
+      "facts": {
+        "counts": true
+      },
       "kind": "data",
       "signature": "(loader, target=None)"
     },
@@ -247,6 +278,7 @@
       ],
       "description": "Windows of size steps and the next horizon steps of the targets; context takes the tail of the previous set at the split boundary, group keeps series apart",
       "facts": {
+        "needs_table": true,
         "refs": {
           "group": "column"
         }
@@ -529,6 +561,13 @@
       "kind": "lego",
       "signature": "(value)"
     },
+    "/lego/kalfa/csv_header": {
+      "alias": [],
+      "description": "The columns, the dtypes of the first rows and the line count of a CSV file",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(path, chunk=None)"
+    },
     "/lego/kalfa/evaluate": {
       "alias": [],
       "description": "Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files",
@@ -542,6 +581,13 @@
       },
       "kind": "lego",
       "signature": "(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)"
+    },
+    "/lego/kalfa/figures": {
+      "alias": [],
+      "description": "The look of every plot of a run: the file format, the size of one panel in inches, the dpi and the style (kalfa, or none for matplotlib's own); the figures section is its params and the built object reaches every plot that names figures",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(format='png', width=None, height=None, dpi=150, style='kalfa')"
     },
     "/lego/kalfa/filter": {
       "alias": [],
@@ -582,13 +628,21 @@
       "kind": "lego",
       "signature": "(models, composites, prep, generate, record=None)"
     },
+    "/lego/kalfa/given_sizes": {
+      "alias": [],
+      "description": "The set sizes of a given split: the source rows for train, the header of every given file for the other sets (header reads a path like the source)",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(rows, valid=None, test=None, header=None)"
+    },
     "/lego/kalfa/history": {
       "alias": [],
-      "description": "Append the turn's line to history.jsonl and advance the progress display",
+      "description": "Append the turn's line to history.jsonl and hand it to the monitor",
       "facts": {
         "bus": {
           "counters_next": "counters_next",
           "metrics": "metrics",
+          "monitor": "monitor",
           "optimizers_next": "optimizers_next",
           "record": "record",
           "rules_next": "rules_next",
@@ -597,7 +651,7 @@
         "returns": null
       },
       "kind": "lego",
-      "signature": "(progress, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)"
+      "signature": "(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)"
     },
     "/lego/kalfa/identity": {
       "alias": [],
@@ -610,9 +664,16 @@
       "kind": "lego",
       "signature": "(value)"
     },
+    "/lego/kalfa/image_folder_header": {
+      "alias": [],
+      "description": "The fields, the dtypes, the image count and the classes of an image folder",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(path)"
+    },
     "/lego/kalfa/init_state": {
       "alias": [],
-      "description": "Move the state to the device, load a checkpoint when resuming, count the turns left",
+      "description": "Move the state to the device, load a checkpoint when resuming and restore the checkpoint policy from it, count the turns left",
       "facts": {
         "bus": {
           "device": "device",
@@ -624,14 +685,21 @@
         "returns": "epochs_left"
       },
       "kind": "lego",
-      "signature": "(state, epochs, steps, resume=None, device=None)"
+      "signature": "(state, epochs, steps, policy=None, resume=None, device=None)"
+    },
+    "/lego/kalfa/kfold_sizes": {
+      "alias": [],
+      "description": "The set sizes a k fold split produces from rows rows; without rows, which sets it produces",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(rows, k, fold, val=None, seed=None)"
     },
     "/lego/kalfa/merge": {
       "alias": [],
-      "description": "Merge the per set metrics under train/, val/ and test/",
+      "description": "Merge the per set metrics under the prefixes of the sets (train/, val/, test/)",
       "facts": {},
       "kind": "lego",
-      "signature": "(parts)"
+      "signature": "(parts, prefixes)"
     },
     "/lego/kalfa/pack": {
       "alias": [],
@@ -643,6 +711,13 @@
       },
       "kind": "lego",
       "signature": "(items)"
+    },
+    "/lego/kalfa/parquet_header": {
+      "alias": [],
+      "description": "The columns, their arrow types and the row count of a parquet file, from its metadata",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(path, chunk=None)"
     },
     "/lego/kalfa/pixel_features": {
       "alias": [],
@@ -664,24 +739,34 @@
       "kind": "lego",
       "signature": "(models, composites, loader, prep, predicts, set, target_map=None, record=None, device=None)"
     },
-    "/lego/kalfa/progress": {
+    "/lego/kalfa/ratio_sizes": {
       "alias": [],
-      "description": "The progress display of a run",
+      "description": "The set sizes a split by ratios produces from rows rows; without rows, which sets it produces",
       "facts": {},
       "kind": "lego",
-      "signature": "()"
+      "signature": "(rows, ratios, seed=None, group=None)"
+    },
+    "/lego/kalfa/read_prep": {
+      "alias": [],
+      "description": "The fitted preprocessing plan of a record, read from its preprocessors directory",
+      "facts": {
+        "returns": "prep"
+      },
+      "kind": "lego",
+      "signature": "(record)"
     },
     "/lego/kalfa/run_all": {
       "alias": [],
-      "description": "Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height); bus carries everything else the run has (prep, the loaders, the device, the final state) and a plot receives whatever its signature names, plus loaders, predicts, sets and name; figures carries the figure settings of the config",
+      "description": "Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height); bus carries everything else the run has (prep, the loaders, the device, the final state) and a plot receives whatever its signature names, plus loaders, predicts, sets, name and figures, the look of the run's plots sized for the definition",
       "facts": {
         "bus": {
+          "figures": "figures",
           "record": "record"
         },
         "returns": null
       },
       "kind": "lego",
-      "signature": "(predictions, history, models, plots, keys=None, predicts=None, figures=None, bus=None, record=None)"
+      "signature": "(predictions, history, models, plots, keys=None, predicts=None, bus=None, record=None, figures=None)"
     },
     "/lego/kalfa/save_final": {
       "alias": [],
@@ -707,12 +792,19 @@
       "kind": "lego",
       "signature": "(models, emas, which, record=None)"
     },
+    "/lego/kalfa/text_lines_header": {
+      "alias": [],
+      "description": "The text field and the line count of a text file",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(path)"
+    },
     "/loader/kalfa/torch": {
       "alias": [],
-      "description": "torch DataLoader; shuffles the train set only, eval_size for the other sets; a stream dataset shuffles through its buffer and takes no sampler or workers",
+      "description": "torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; a stream dataset shuffles through buffer rows and takes no sampler or workers",
       "facts": {},
       "kind": "loader",
-      "signature": "(data, set, batch)"
+      "signature": "(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)"
     },
     "/metric/kalfa/fid": {
       "alias": [
@@ -995,7 +1087,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, device=None, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)"
     },
     "/plot/kalfa/class_histogram": {
       "alias": [
@@ -1006,7 +1098,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, bins=40, name=None)"
+      "signature": "(predictions, history, models, record, bins=40, name=None, figures=None)"
     },
     "/plot/kalfa/confusion_matrix": {
       "alias": [
@@ -1017,7 +1109,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, name=None)"
+      "signature": "(predictions, history, models, record, name=None, figures=None)"
     },
     "/plot/kalfa/correlation_heatmap": {
       "alias": [
@@ -1028,7 +1120,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None, figures=None)"
     },
     "/plot/kalfa/error_map": {
       "alias": [
@@ -1044,7 +1136,7 @@
         }
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, output=None, target=None, statistic='residual', bins=55, min_count=15, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, output=None, target=None, statistic='residual', bins=55, min_count=15, name=None, figures=None)"
     },
     "/plot/kalfa/feature_distributions": {
       "alias": [
@@ -1055,7 +1147,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, log=None, bins=80, limit=24, per_row=4, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, log=None, bins=80, limit=24, per_row=4, name=None, figures=None)"
     },
     "/plot/kalfa/forecast_samples": {
       "alias": [
@@ -1066,7 +1158,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, n=6, name=None)"
+      "signature": "(predictions, history, models, record, n=6, name=None, figures=None)"
     },
     "/plot/kalfa/image_grid": {
       "alias": [
@@ -1077,7 +1169,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None, figures=None)"
     },
     "/plot/kalfa/image_pairs": {
       "alias": [
@@ -1088,7 +1180,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None, figures=None)"
     },
     "/plot/kalfa/loss_curve": {
       "alias": [
@@ -1099,7 +1191,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, series=None, log=False, name=None)"
+      "signature": "(predictions, history, models, record, series=None, log=False, name=None, figures=None)"
     },
     "/plot/kalfa/permutation_importance": {
       "alias": [
@@ -1110,7 +1202,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None, figures=None)"
     },
     "/plot/kalfa/pred_vs_true": {
       "alias": [
@@ -1121,7 +1213,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70)"
+      "signature": "(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70, figures=None)"
     },
     "/plot/kalfa/residuals": {
       "alias": [
@@ -1135,7 +1227,7 @@
         }
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None)"
+      "signature": "(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None, figures=None)"
     },
     "/plot/kalfa/samples_gif": {
       "alias": [
@@ -1146,7 +1238,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, name=None, duration=400)"
+      "signature": "(predictions, history, models, record, name=None, duration=400, figures=None)"
     },
     "/plot/kalfa/samples_matrix": {
       "alias": [
@@ -1157,7 +1249,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, name=None, n=8)"
+      "signature": "(predictions, history, models, record, name=None, n=8, figures=None)"
     },
     "/plot/kalfa/target_correlation": {
       "alias": [
@@ -1171,7 +1263,7 @@
         }
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, method='spearman', columns=None, top=25, groups=None, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, method='spearman', columns=None, top=25, groups=None, name=None, figures=None)"
     },
     "/plot/kalfa/target_vs_features": {
       "alias": [
@@ -1185,7 +1277,7 @@
         }
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None, figures=None)"
     },
     "/plot/seaborn/kde": {
       "alias": [
@@ -1202,7 +1294,7 @@
         "requires": "seaborn"
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None, figures=None)"
     },
     "/plot/seaborn/pairplot": {
       "alias": [
@@ -1214,7 +1306,7 @@
         "requires": "seaborn"
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None, figures=None)"
     },
     "/plot/seaborn/violin": {
       "alias": [
@@ -1230,7 +1322,7 @@
         "requires": "seaborn"
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None)"
+      "signature": "(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None, figures=None)"
     },
     "/plot/torchmetrics/binary_precision_recall_curve": {
       "alias": [],
@@ -1239,7 +1331,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, name=None)"
+      "signature": "(predictions, history, models, record, name=None, figures=None)"
     },
     "/plot/torchmetrics/binary_roc": {
       "alias": [],
@@ -1248,7 +1340,7 @@
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, name=None)"
+      "signature": "(predictions, history, models, record, name=None, figures=None)"
     },
     "/pre/kalfa/abs": {
       "alias": [
@@ -1599,6 +1691,7 @@
       ],
       "description": "Read a CSV file into a DataFrame",
       "facts": {
+        "header": "/lego/kalfa/csv_header",
         "returns": "df"
       },
       "kind": "source",
@@ -1608,7 +1701,9 @@
       "alias": [],
       "description": "Read a CSV file in chunks (the lazy set)",
       "facts": {
-        "returns": "df"
+        "header": "/lego/kalfa/csv_header",
+        "returns": "df",
+        "stream": true
       },
       "kind": "source",
       "signature": "(path, chunk=65536)"
@@ -1619,7 +1714,9 @@
       ],
       "description": "Images under root/<class>/ as a Dataset with fields image and label",
       "facts": {
-        "returns": "df"
+        "header": "/lego/kalfa/image_folder_header",
+        "returns": "df",
+        "samples": true
       },
       "kind": "source",
       "signature": "(path)"
@@ -1630,6 +1727,7 @@
       ],
       "description": "Read a parquet file into a DataFrame",
       "facts": {
+        "header": "/lego/kalfa/parquet_header",
         "returns": "df"
       },
       "kind": "source",
@@ -1639,7 +1737,9 @@
       "alias": [],
       "description": "Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table",
       "facts": {
-        "returns": "df"
+        "header": "/lego/kalfa/parquet_header",
+        "returns": "df",
+        "stream": true
       },
       "kind": "source",
       "signature": "(path, chunk=65536)"
@@ -1650,7 +1750,9 @@
       ],
       "description": "The lines of a text file as a Dataset with the field text",
       "facts": {
-        "returns": "df"
+        "header": "/lego/kalfa/text_lines_header",
+        "returns": "df",
+        "samples": true
       },
       "kind": "source",
       "signature": "(path)"
@@ -1665,7 +1767,8 @@
           "train",
           "valid",
           "test"
-        ]
+        ],
+        "sizes": "/lego/kalfa/given_sizes"
       },
       "kind": "split",
       "signature": "(df, valid=None, test=None)"
@@ -1676,11 +1779,13 @@
       ],
       "description": "k folds of a seeded permutation: the held out fold is the test set, val carves the valid set from the rest; without val there is no valid set",
       "facts": {
+        "needs_table": true,
         "returns": [
           "train",
           "valid",
           "test"
-        ]
+        ],
+        "sizes": "/lego/kalfa/kfold_sizes"
       },
       "kind": "split",
       "signature": "(df, k, fold, val=None, seed=None)"
@@ -1691,11 +1796,13 @@
       ],
       "description": "Shuffle the rows with a seed and cut them by ratios into train, valid and test; the short form of a split without a uri",
       "facts": {
+        "needs_table": true,
         "returns": [
           "train",
           "valid",
           "test"
-        ]
+        ],
+        "sizes": "/lego/kalfa/ratio_sizes"
       },
       "kind": "split",
       "signature": "(df, ratios, seed=None)"
@@ -1713,7 +1820,8 @@
           "train",
           "valid",
           "test"
-        ]
+        ],
+        "sizes": "/lego/kalfa/ratio_sizes"
       },
       "kind": "split",
       "signature": "(df, ratios, group=None)"
@@ -1723,7 +1831,9 @@
         "grid"
       ],
       "description": "Every combination of the space's choices (a range needs steps); deterministic by id",
-      "facts": {},
+      "facts": {
+        "enumerates": true
+      },
       "kind": "strategy",
       "signature": "()"
     },
@@ -1761,6 +1871,7 @@
       ],
       "description": "Fires once the given number of turns has ended, counted across resumes",
       "facts": {
+        "describe": "turn \u2265 {at}",
         "partial": true
       },
       "kind": "predicate",
@@ -1772,6 +1883,7 @@
       ],
       "description": "Fires when the monitored value rises above value; a missing value is not seen",
       "facts": {
+        "describe": "{monitor} > {value}",
         "partial": true
       },
       "kind": "predicate",
@@ -1783,6 +1895,7 @@
       ],
       "description": "Fires when the monitored value drops below value; a missing value is not seen",
       "facts": {
+        "describe": "{monitor} < {value}",
         "partial": true
       },
       "kind": "predicate",
@@ -1794,6 +1907,7 @@
       ],
       "description": "Fires after patience turns without improvement of the monitored value; turns without the value are not counted",
       "facts": {
+        "describe": "{monitor} plateau {patience}",
         "partial": true
       },
       "kind": "predicate",
@@ -1805,6 +1919,7 @@
       ],
       "description": "Fires once the given number of minutes has passed since the first turn it saw",
       "facts": {
+        "describe": "after {minutes} minutes",
         "partial": true
       },
       "kind": "predicate",
@@ -1838,11 +1953,12 @@
           "optimizers",
           "emas",
           "counters",
+          "stream",
           "metrics"
         ]
       },
       "kind": "turn",
-      "signature": "(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, device=None, prep=None, record=None)"
+      "signature": "(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None)"
     }
   },
   "packs": {

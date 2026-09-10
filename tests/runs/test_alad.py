@@ -17,17 +17,17 @@ def test_check_the_plugin_config(dataset):
     assert [problem.kind for problem in prepared.problems] == ["unused_output"] * 4
     assert all(problem.severity == "warning" for problem in prepared.problems)
     assert prepared.sizes == {"train": 1400, "valid": 200, "test": 400}
-    from kalfa.std.split.base import sizes as split_sizes
+    from kalfa.std.lego.kalfa.ratio_sizes import ratio_sizes
 
     kept = int((anomaly_frame()["is_anomaly"] != 5).sum())
-    expected = split_sizes(kept, [0.7, 0.1, 0.2])
+    expected = ratio_sizes(kept, [0.7, 0.1, 0.2])
     loaded = check(["config.yaml"], parse_sets([]), load=True).loaded
     assert loaded["valid"] == expected["valid"] and loaded["test"] == expected["test"]
     assert 0 < loaded["train"] < expected["train"]
     document = prepared.document
     assert document["flow"]["data"]["params"]["filter_pre"] == ["(is_anomaly > -4) & (is_anomaly < 4)"]
     assert document["flow"]["data"]["params"]["filter_set"] == [{"query": "is_anomaly == 0", "sets": ["train"]}]
-    assert document["flow"]["training"]["params"]["checkpoint"] is None
+    assert document["checkpoint"] == {}
     adv_d = document["losses"]["adv_d"]["params"]["objective"]
     assert adv_d["params"]["criterion"] == {"uri": "/criterion/kalfa/bce_logits"}
 

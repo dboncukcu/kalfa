@@ -1,30 +1,29 @@
-from cirak.api import Analysis, compile_checked, dump_document, dump_text
+from io import StringIO
+
+from cirak.api import Analysis, _plain_tree, compile_checked, dump_document, dump_text
 from cirak.expand import expand, expand_flow
-from cirak.loader import Layer, LoadedFile, load
+from cirak.loader import Layer, LoadedFile
 from cirak.merge import merge_layers
 from cirak.registry import registry
 from cirak.resolve import resolve
 from cirak.validate import validate
-
-from . import TEMPLATE
-from io import StringIO
-from cirak.api import _plain_tree
 from ruamel.yaml import YAML
 
-RUN_INPUTS = ("device", "record")
+from .contract import Contract
+
 DRIVER_LABEL = "kalfa driver"
 
 
-def analyze(document) -> Analysis:
-    template, problems = load([str(TEMPLATE)], registry.fragments())
+def analyze(document, contract=None) -> Analysis:
+    contract = contract or Contract.load()
+    template = Layer(files=[LoadedFile(str(contract.path), contract.template(), {})], label=str(contract.path))
     layer = Layer(files=[LoadedFile(DRIVER_LABEL, document, {})], below=[template], label=DRIVER_LABEL)
     data, provenance, overrides, merge_problems = merge_layers(layer)
-    problems = [*problems, *merge_problems]
     data, resolve_problems = resolve(data, provenance)
     flow, flow_provenance, flow_problems = expand_flow(data, provenance)
     analysis = Analysis(data, provenance, {}, [], layer, overrides, flow, flow_provenance)
     expansions, expand_problems = expand(data, provenance, flow, analysis.view_provenance)
-    collected = [*problems, *resolve_problems, *flow_problems, *expand_problems]
+    collected = [*merge_problems, *resolve_problems, *flow_problems, *expand_problems]
     collected += validate(analysis.view, analysis.view_provenance, expansions, registry)
     return Analysis(data, provenance, expansions, collected, layer, overrides, flow, flow_provenance)
 

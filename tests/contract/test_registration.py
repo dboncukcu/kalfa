@@ -4,7 +4,7 @@ import pytest
 from cirak.registry import registry
 
 import kalfa
-from kalfa.kinds import KINDS, cirak_kind, kalfa_kind, kind_of
+from kalfa.kinds import cirak_kind, kalfa_kind, kind_of, kinds
 
 
 def test_kind_is_the_first_uri_segment():
@@ -15,7 +15,7 @@ def test_kind_is_the_first_uri_segment():
             kind_of(bad)
     assert kalfa_kind("/loss/kalfa/mae") is None and kalfa_kind("/plot/kalfa/loss_curve") == "plot"
     assert cirak_kind("trigger") == "predicate" and cirak_kind("layer") == "layer" and cirak_kind("data") == "data"
-    assert "predicate" not in KINDS
+    assert "predicate" not in kinds() and kinds()[-2:] == ["builder", "data"]
 
 
 def test_kalfa_lego_registers_with_the_derived_kind():
@@ -66,7 +66,7 @@ def test_the_uri_is_the_path():
 
     root = Path(kalfa.std.__file__).parent
     files = sorted(path for path in root.glob("*/*/*.py") if path.name not in ("__init__.py", "base.py"))
-    assert len(files) == len(STD_URIS) == 162
+    assert len(files) == len(STD_URIS) == 170
     modules = {}
     for path in files:
         kind, pack, name = path.relative_to(root).with_suffix("").parts

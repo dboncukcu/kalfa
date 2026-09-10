@@ -11,10 +11,12 @@ from tezgah import TezgahError
 
 from . import api, collect, describe, docs, sweep
 from .config import import_plugins, pack_tables, parse_sets
+from .contract import Contract
 from .kinds import kalfa_kind
 from .recipe import recipe_text
-from .std.common.log import console, echo_warnings, level_of
+from .std.common.log import Monitor, level_of
 from .style import Style, style_for
+
 
 def main(argv=None) -> int:
     parser = build_parser()
@@ -36,6 +38,7 @@ def build_parser():
     run_cmd = commands.add_parser("run", help="check, compile and train; the record directory holds everything")
     run_cmd.add_argument("config", nargs="+")
     set_option(run_cmd)
+    contract_option(run_cmd)
     run_cmd.add_argument("--executor", default="serial")
     run_cmd.add_argument("--workers", type=int)
     log_option(run_cmd)
@@ -45,6 +48,7 @@ def build_parser():
     check_cmd = commands.add_parser("check", help="report every problem without running")
     check_cmd.add_argument("config", nargs="+")
     set_option(check_cmd)
+    contract_option(check_cmd)
     check_cmd.add_argument("--layers", action="store_true", help="print the layer tree and the overridden leaves")
     check_cmd.add_argument("--dump", action="store_true", help="print the expanded flow the way flow.yaml records it")
     check_cmd.add_argument("--recipe", action="store_true", help="print the driver document the templates open")
@@ -56,6 +60,7 @@ def build_parser():
                                                        "and the columns, after the same checks")
     describe_cmd.add_argument("config", nargs="+")
     set_option(describe_cmd)
+    contract_option(describe_cmd)
     describe_cmd.add_argument("--load", action="store_true",
                               help="run the data and model blocks: the real set sizes, the fitted column widths and "
                                    "the parameter counts")
@@ -75,6 +80,7 @@ def build_parser():
     predict_cmd.add_argument("--data", help="predict on this file instead of the run's test set")
     device_option(predict_cmd)
     set_option(predict_cmd)
+    contract_option(predict_cmd)
     log_option(predict_cmd)
     predict_cmd.set_defaults(handler=cmd_predict)
 
@@ -83,12 +89,14 @@ def build_parser():
     generate_cmd.add_argument("--which", choices=["best", "last"])
     device_option(generate_cmd)
     set_option(generate_cmd)
+    contract_option(generate_cmd)
     log_option(generate_cmd)
     generate_cmd.set_defaults(handler=cmd_generate)
 
     resume_cmd = commands.add_parser("resume", help="continue a run from last.pt or final/ into a new directory")
     resume_cmd.add_argument("run")
     set_option(resume_cmd)
+    contract_option(resume_cmd)
     resume_cmd.add_argument("--executor", default="serial")
     resume_cmd.add_argument("--workers", type=int)
     log_option(resume_cmd)
@@ -127,7 +135,23 @@ def build_parser():
     ls_cmd.add_argument("--kind")
     plugin_option(ls_cmd)
     ls_cmd.set_defaults(handler=cmd_ls)
+
+    contract_cmd = commands.add_parser("contract", help="print the contract kalfa runs configs by (the wiring and "
+                                                        "the flow blocks), or write it with --write for editing")
+    contract_cmd.add_argument("--write", metavar="PATH", help="write the contract to this file instead of printing it")
+    contract_cmd.set_defaults(handler=cmd_contract)
     return parser
+
+
+def contract_option(command):
+    command.add_argument("--contract", metavar="PATH",
+                         help="run against this contract instead of the built in one (kalfa contract --write "
+                              "exports it); a command over a record takes the record's copy without it")
+
+
+def contract_of(args):
+    path = getattr(args, "contract", None)
+    return Contract.load(path) if path is not None else None
 
 
 def plugin_option(command):
@@ -211,7 +235,7 @@ def print_problems(problems, stream):
 def cmd_check(args) -> int:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        prepared = api.check(args.config, layer_of(args), load=args.load)
+        prepared = api.check(args.config, layer_of(args), load=args.load, contract=contract_of(args))
     style = style_for(sys.stdout)
     if args.layers:
         print(prepared.surface.layers_text())
@@ -239,11 +263,12 @@ def cmd_check(args) -> int:
 
 def cmd_run(args) -> int:
     style = style_for(sys.stdout)
-    with console(level_of(args.log), progress=not args.no_progress), \
+    with Monitor(level_of(args.log), progress=not args.no_progress) as monitor, \
             warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        echo_warnings(caught)
-        result = api.run(args.config, layer_of(args), executor=args.executor, workers=args.workers)
+        monitor.echo_warnings(caught)
+        result = api.run(args.config, layer_of(args), executor=args.executor, workers=args.workers,
+                         contract=contract_of(args), monitor=monitor)
     print_warnings(caught)
     print(f"run {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
           f"record {style.cyan(result.record)}")
@@ -252,11 +277,12 @@ def cmd_run(args) -> int:
 
 def cmd_resume(args) -> int:
     style = style_for(sys.stdout)
-    with console(level_of(args.log), progress=not args.no_progress), \
+    with Monitor(level_of(args.log), progress=not args.no_progress) as monitor, \
             warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        echo_warnings(caught)
-        result = api.resume(args.run, layer_of(args), executor=args.executor, workers=args.workers)
+        monitor.echo_warnings(caught)
+        result = api.resume(args.run, layer_of(args), executor=args.executor, workers=args.workers,
+                            contract=contract_of(args), monitor=monitor)
     print_warnings(caught)
     print(f"resumed {style.bold(result.report.run)}: {style.green('ok')}; device {result.device}; "
           f"record {style.cyan(result.record)}")
@@ -266,7 +292,7 @@ def cmd_resume(args) -> int:
 def cmd_describe(args) -> int:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        prepared = api.check(args.config, layer_of(args))
+        prepared = api.check(args.config, layer_of(args), contract=contract_of(args))
     style = style_for(sys.stdout)
     if prepared.problems:
         print_problems(prepared.problems, sys.stdout)
@@ -280,7 +306,7 @@ def cmd_describe(args) -> int:
         else:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                found = api.probe(prepared.document)
+                found = api.probe(prepared.document, prepared.contract)
     sections = list(args.section) if args.section else None
     if args.wiring and "wiring" not in (sections or ()):
         sections = list(sections or describe.DEFAULT_SECTIONS) + ["wiring"]
@@ -295,19 +321,20 @@ def cmd_describe(args) -> int:
 
 
 def cmd_predict(args) -> int:
-    with console(level_of(args.log)), warnings.catch_warnings():
+    with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = api.predict(args.run, model=args.model, which=args.which, data=args.data, sets=layer_of(args),
-                             device=device_value(args))
+                             device=device_value(args), contract=contract_of(args))
     style = style_for(sys.stdout)
     print(f"predicted {len(result.table)} rows with {style.bold(result.model)}: {style.cyan(result.path)}")
     return 0
 
 
 def cmd_generate(args) -> int:
-    with console(level_of(args.log)), warnings.catch_warnings():
+    with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        result = api.generate(args.run, which=args.which, sets=layer_of(args), device=device_value(args))
+        result = api.generate(args.run, which=args.which, sets=layer_of(args), device=device_value(args),
+                              contract=contract_of(args))
     style = style_for(sys.stdout)
     print(f"generated: {style.cyan(result.path)}")
     return 0
@@ -358,6 +385,16 @@ def cmd_docs(args) -> int:
     else:
         sys.stdout.write(text)
     return 1 if failed else 0
+
+
+def cmd_contract(args) -> int:
+    contract = Contract.load()
+    if args.write:
+        contract.write(args.write)
+        print(f"wrote {args.write}")
+    else:
+        sys.stdout.write(contract.text())
+    return 0
 
 
 def cmd_ls(args) -> int:

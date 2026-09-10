@@ -16,7 +16,8 @@ from kalfa.std.lego.kalfa.fit import fit
 from kalfa.std.pre.kalfa.one_hot import OneHot
 from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 from kalfa.std.source.kalfa.csv_stream import csv_stream
-from kalfa.std.source.base import header
+from kalfa.std.lego.kalfa.csv_header import csv_header
+from kalfa.std.lego.kalfa.parquet_header import parquet_header
 from kalfa.std.source.kalfa.parquet_stream import parquet_stream
 from kalfa.std.split.kalfa.given import given
 from kalfa.std.split.kalfa.kfold import kfold
@@ -42,10 +43,10 @@ def test_chunked_sources_yield_the_table_with_global_row_ids(housing):
     assert [len(chunk) for chunk in chunks] == [30, 30, 30, 10] and stream.rows == 100
     joined = pandas.concat(chunks)
     assert joined.index.tolist() == list(range(100)) and list(joined.columns) == list(frame.columns)
-    assert header("/source/kalfa/parquet_stream", {"path": str(directory / "housing.parquet")})["rows"] == 100
+    assert parquet_header(str(directory / "housing.parquet"))["rows"] == 100
     csv = csv_stream(str(directory / "housing.csv"), chunk=40)
     assert positions(csv).tolist() == list(range(100)) and csv.columns == list(frame.columns)
-    assert header("/source/kalfa/csv_stream", {"path": str(directory / "housing.csv")})["rows"] == 100
+    assert csv_header(str(directory / "housing.csv"))["rows"] == 100
 
 
 def test_filters_and_windows_apply_on_the_stream(housing):
@@ -104,7 +105,7 @@ def test_stream_dataset_and_loader(housing):
     parts = sequential(stream, [0.7, 0.2, 0.1])
     train = table(apply(parts["train"], prep, "train"))
     assert isinstance(train, StreamDataset) and train.size() is None and train.count() == 70
-    loader = torch_loader(train, "train", {"size": 16, "buffer": 8})
+    loader = torch_loader(train, "train", 16, buffer=8)
     torch.manual_seed(3)
     first = [batch["x"] for batch in loader]
     order_first = train.rows().tolist()
@@ -112,18 +113,18 @@ def test_stream_dataset_and_loader(housing):
     list(loader)
     assert train.rows().tolist() == order_first and sorted(order_first) == list(range(70))
     assert order_first != list(range(70)) and first[0].shape == (16, 3)
-    test = torch_loader(table(apply(parts["test"], prep, "test")), "test", {"size": 16})
+    test = torch_loader(table(apply(parts["test"], prep, "test")), "test", 16)
     batches = list(test)
     assert test.dataset.rows().tolist() == list(range(90, 100)) and batches[0]["price"].shape == (10,)
     with pytest.raises(ValueError, match="cannot be counted"):
-        torch_loader(train, "train", {"size": 16, "balanced": True})
+        torch_loader(train, "train", 16, balanced=True)
     with pytest.raises(ValueError, match="workers: 0"):
-        torch_loader(train, "train", {"size": 16, "workers": 2})
+        torch_loader(train, "train", 16, workers=2)
     with pytest.raises(ValueError, match="cannot be counted"):
         train.labels("price")
     with pytest.raises(ValueError, match="table in memory"):
         window(apply(parts["train"], prep, "train"), None, size=2, horizon=1)
     empty = table(apply(filter_rows(parts["train"], "price > 1e9"), prep, "train"))
     with pytest.raises(ValueError, match="yields no rows"):
-        list(torch_loader(empty, "train", {"size": 4}))
-    assert list(torch_loader(table(apply(parts["train"].empty(), prep, "valid")), "valid", {"size": 4})) == []
+        list(torch_loader(empty, "train", 4))
+    assert list(torch_loader(table(apply(parts["train"].empty(), prep, "valid")), "valid", 4)) == []

@@ -71,15 +71,21 @@ def test_split_and_batch_short_forms_and_filter_kinds():
             "preprocessors": {"s": {"uri": "/pre/sklearn/standard_scaler", "sets": ["train"]}}}
     params = data_params(data)
     assert params["split"] == {"uri": "/split/kalfa/random", "params": {"ratios": [0.8, 0.1, 0.1], "seed": 3}}
-    assert params["batch"] == {"size": 32}
+    assert params["loaders"]["train"] == {"uri": "/loader/kalfa/torch", "set": "train",
+                                          "params": {"set": "train", "size": 32}}
+    assert list(params["loaders"]) == ["train", "valid", "test"]
     assert params["filter_pre"] == ["a > 0"] and params["filter_set"] == [{"query": "b == 1", "sets": ["train"]}]
     assert params["source"] == {"uri": "/source/kalfa/parquet", "params": {}}
     assert params["feed"] == {"uri": "/feed/kalfa/table", "params": {}}
-    assert params["preprocessors"] == {"s": {"uri": "/pre/sklearn/standard_scaler"}}
+    assert params["prep"] == {"uri": "/lego/kalfa/fit", "inputs": {"df": "train_df"},
+                              "params": {"fields": {}, "preprocessors": {"s": {"uri": "/pre/sklearn/standard_scaler"}},
+                                         "drop": [], "keys": {"s": {"sets": ["train"]}}}}
     long = data_params({**data, "split": {"uri": "/split/kalfa/kfold", "params": {"k": 5}},
                         "batch": {"size": 8, "eval_size": 16}})
     assert long["split"] == {"uri": "/split/kalfa/kfold", "params": {"k": 5}}
-    assert long["batch"] == {"size": 8, "eval_size": 16}
+    assert long["loaders"]["valid"]["params"] == {"set": "valid", "size": 8, "eval_size": 16}
+    over = data_params(data, record="runs/one")
+    assert over["prep"] == {"uri": "/lego/kalfa/read_prep", "params": {"record": "runs/one"}, "inputs": {}}
 
 
 def test_templates_and_models_become_blocks_with_spec_or_graph():
@@ -119,9 +125,11 @@ def test_definition_keys_go_to_the_parallel_table():
                                 "c": {}}
     data = {"source": "/source/kalfa/parquet", "split": {"ratios": [1, 0, 0]}, "batch": 1, "fields": {},
             "feed": "/feed/kalfa/table",
-            "preprocessors": {"s": {"uri": "/pre/sklearn/standard_scaler", "sets": ["train"]}, "t": {"uri": "/pre/kalfa/abs"}}}
+            "preprocessors": {"s": {"uri": "/pre/sklearn/standard_scaler", "sets": ["train"]},
+                              "t": {"uri": "/pre/kalfa/abs"}}}
     params = data_params(data)
-    assert params["preprocessors"] == {"s": {"uri": "/pre/sklearn/standard_scaler"}, "t": {"uri": "/pre/kalfa/abs"}}
+    assert params["prep"]["params"]["preprocessors"] == {"s": {"uri": "/pre/sklearn/standard_scaler"},
+                                                         "t": {"uri": "/pre/kalfa/abs"}}
     assert params["preprocessors_keys"] == {"s": {"sets": ["train"]}, "t": {}}
     surface = load_surface([example("01_mlp_regression")])
     document = recipe(surface.data, registry, surface.aliases)

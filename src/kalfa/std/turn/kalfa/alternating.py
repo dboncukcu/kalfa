@@ -59,14 +59,14 @@ class Arrangement:
 
 
 @lego("/turn/kalfa/alternating", alias=["alternating", "supervised"],
-      returns=["models", "optimizers", "emas", "counters", "metrics"],
+      returns=["models", "optimizers", "emas", "counters", "stream", "metrics"],
       mutates=["models", "optimizers", "emas", "counters"], bus=["device", "prep", "record"],
       extras=["amp", "grad_clip", "accumulate"],
       description="One turn: every step each optimizer in order minimizes its loss for its steps; a turn is "
                   "an epoch, or K steps with a stream that lives across turns; losses and metrics are the "
                   "running means of the pass")
 def alternating(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics,
-                losses_keys, metrics_keys, predicts, steps, device=None, prep=None, record=None):
+                losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None):
     effects = dict(effects or {})
     settings = Settings.of(extra)
     arrangement = Arrangement(params, optimizers)
@@ -86,7 +86,7 @@ def alternating(models, optimizers, emas, counters, composites, effects, loader,
                        for name, entry, keys in active_entries(metrics, metrics_keys, "train", turn)]
     observers = [tracker for name, tracker in loss_trackers.items() if name not in active.values()] + metric_trackers
     limit = int(steps["turn"]) if steps is not None else None
-    cursor = Cursor.of(loader, endless=steps is not None)
+    cursor = Cursor.of(stream, loader, endless=steps is not None)
     taken = 0
     while limit is None or taken < limit:
         stepped, last = arrangement.step(cursor, scope, active, losses, loss_trackers, counters, settings)
@@ -106,4 +106,5 @@ def alternating(models, optimizers, emas, counters, composites, effects, loader,
                       f"their place in order {arrangement.order} (steps {arrangement.per_steps or 'one each'}); "
                       f"more batches per turn or fewer steps for the optimizers before them")
     return {"models": models, "optimizers": optimizers, "emas": emas, "counters": counters,
+            "stream": cursor if cursor.endless else None,
             "metrics": collect_results([*loss_trackers.values(), *metric_trackers])}

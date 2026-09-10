@@ -252,10 +252,10 @@ def test_set_parsing():
 
 def test_turn_without_an_extras_declaration_takes_no_extra_keys(workdir):
     def turn(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics,
-             losses_keys, metrics_keys, predicts, steps):
+             losses_keys, metrics_keys, predicts, steps, stream=None):
         return {}
 
-    kalfa.lego("/turn/test/plain", turn, returns=["models", "optimizers", "emas", "counters", "metrics"])
+    kalfa.lego("/turn/test/plain", turn, returns=["models", "optimizers", "emas", "counters", "stream", "metrics"])
     config = minimal()
     config["training"]["turn"] = "/turn/test/plain"
     prepared, kinds = kinds_of(workdir, config)
@@ -385,5 +385,5 @@ def test_figures_section_values(workdir):
     assert kinds_of(workdir, config)[1] == []
     config["figures"] = {"format": "eps", "width": 0, "style": "seaborn", "colour": "blue"}
     prepared, kinds = kinds_of(workdir, config, "bad.yaml")
-    assert kinds == ["unknown_key", "invalid_value", "invalid_value", "invalid_value"]
+    assert kinds == ["unknown_key", "invalid_value"]
     assert "figures.format must be one of" in prepared.problems[1].message

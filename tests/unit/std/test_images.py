@@ -19,7 +19,7 @@ from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 from kalfa.std.pre.kalfa.to_tensor import ToTensor
 from kalfa.std.pre.kalfa.to_tensor_signed import ToTensorSigned
 from kalfa.std.common.samples import Samples
-from kalfa.std.source.base import header
+from kalfa.std.lego.kalfa.image_folder_header import image_folder_header
 from kalfa.std.source.kalfa.image_folder import image_folder
 from kalfa.std.split.kalfa.kfold import kfold
 from kalfa.std.split.kalfa.random import random_split
@@ -38,7 +38,7 @@ def test_image_folder_source_and_header(folder):
     item = samples[0]
     assert item["image"].size == (16, 16) and item["label"] == 0
     assert samples.column("label").tolist() == [0] * 8 + [1] * 8 + [2] * 8
-    head = header("/source/kalfa/image_folder", {"path": str(folder)})
+    head = image_folder_header(str(folder))
     assert head == {"columns": ["image", "label"], "dtypes": {"image": "image", "label": "int64"}, "rows": 24,
                     "classes": ["one", "two", "zero"]}
     with pytest.raises(FileNotFoundError):
@@ -77,7 +77,7 @@ def test_fit_apply_and_sample_dataset_in_dataset_mode(folder, tmp_path):
     assert item["image"].shape == (1, 16, 16) and item["image"].dtype == torch.float32
     assert 0.0 <= float(item["image"].min()) and float(item["image"].max()) <= 1.0
     assert item["label"].dtype == torch.int64 and dataset.labels("label").tolist() == samples.column("label").tolist()
-    loader = torch_loader(dataset, "train", {"size": 5})
+    loader = torch_loader(dataset, "train", 5)
     batch = next(iter(loader))
     assert batch["image"].shape == (5, 1, 16, 16) and batch["label"].shape == (5,)
     with pytest.raises(ValueError, match="need a table"):
@@ -101,7 +101,8 @@ def test_image_preprocessors(folder):
     assert torch.allclose(scaled, (tensor - 0.5) / 0.5)
     rgb = torch.rand(3, 4, 4)
     imagenet = Normalize("imagenet", "imagenet").apply(rgb)
-    assert imagenet.shape == (3, 4, 4) and float(imagenet[0, 0, 0]) == pytest.approx((float(rgb[0, 0, 0]) - 0.485) / 0.229)
+    assert imagenet.shape == (3, 4, 4)
+    assert float(imagenet[0, 0, 0]) == pytest.approx((float(rgb[0, 0, 0]) - 0.485) / 0.229)
 
 
 def test_balanced_sampler_and_unflatten(folder):
@@ -113,7 +114,7 @@ def test_balanced_sampler_and_unflatten(folder):
     sampler = balanced_sampler(dataset)
     drawn = dataset.labels("label")[torch.as_tensor(list(sampler))].tolist()
     assert drawn.count(1) > 1
-    loader = torch_loader(dataset, "train", {"size": 7, "balanced": True})
+    loader = torch_loader(dataset, "train", 7, balanced=True)
     assert loader.sampler is not None and len(next(iter(loader))["label"]) == 7
     assert unflatten([1, 4, 4])(torch.zeros(2, 16)).shape == (2, 1, 4, 4)
 
@@ -123,8 +124,8 @@ def test_image_pairs_draws_from_the_valid_set_when_test_is_empty(folder, tmp_pat
 
     samples = image_folder(str(folder))
     prep = fit(samples, {"image": {"preprocessors": ["t"]}}, {"t": ToTensor()}, [])
-    loader = torch_loader(table(apply(samples, prep, "valid")), "valid", {"size": 4})
-    empty = torch_loader(table(apply(samples.subset([]), prep, "test")), "test", {"size": 4})
+    loader = torch_loader(table(apply(samples, prep, "valid")), "valid", 4)
+    empty = torch_loader(table(apply(samples.subset([]), prep, "test")), "test", 4)
 
     class Same(nn.Module):
         inputs = ["image"]
@@ -173,14 +174,15 @@ def test_text_source_tokenizer_and_next_token(tmp_path):
     from kalfa.std.feed.kalfa.next_token import next_token
     from kalfa.std.metric.kalfa.perplexity import Perplexity
     from kalfa.std.pre.kalfa.char_tokenizer import CharTokenizer
-    from kalfa.std.source.base import header
+    from kalfa.std.lego.kalfa.text_lines_header import text_lines_header
     from kalfa.std.source.kalfa.text_lines import text_lines
     from kalfa.synthetic import write_text
 
     path = write_text(tmp_path / "corpus.txt", lines=12)
     samples = text_lines(str(path))
-    assert len(samples) == 12 and samples.fields == ["text"] and header("/source/kalfa/text_lines", {"path": str(path)})["rows"] == 12
-    prep = fit(samples, {"text": {"preprocessors": ["tok"]}}, {"tok": CharTokenizer()}, [], record=str(tmp_path / "rec"))
+    assert len(samples) == 12 and samples.fields == ["text"] and text_lines_header(str(path))["rows"] == 12
+    prep = fit(samples, {"text": {"preprocessors": ["tok"]}}, {"tok": CharTokenizer()}, [],
+               record=str(tmp_path / "rec"))
     tokenizer = prep.tokenizer()
     assert tokenizer is not None and "\n" in tokenizer.chars and prep.dtypes == {"text": "int64"}
     ids = tokenizer.encode("ROMEO")

@@ -9,19 +9,12 @@ from cirak.merge import describe_layers, merge_layers
 from cirak.registry import registry
 from cirak.resolve import TOKEN
 
-from .std.common.log import logger_for
-from cirak.errors import render_problems
+from .contract import Contract
+from .schema import Schema
 from .std import STD_URIS
+from .std.common.log import logger_for
 
 logger = logger_for("config")
-
-BUILTIN_VARIABLES = ("datetime",)
-SKIPPED_SECTIONS = ("params", "alias", "plugins", "include")
-REFERENCE_TYPES = ("criterion", "objective", "metric", "schedule", "init", "generate", "trigger")
-INIT_ROLES = ("weights", "bias", "scale")
-SHORT_CALL_PATHS = (("training", "turn"), ("training", "checkpoint"), ("data", "feed"), ("sweep", "strategy"),
-                    ("device",))
-
 
 @dataclass
 class Surface:
@@ -45,15 +38,11 @@ class Surface:
         return describe_layers(self.layer, self.overrides)
 
 
-TOP_KEYS = ("plugins", "params", "seed", "device", "data", "model", "metrics", "losses", "optimizers", "training",
-            "generate", "plots", "figures", "record")
-
-
 def parse_set(text):
     path, separator, value = text.partition("=")
     if not separator or not path:
         raise ValueError(f"--set expects PATH=VALUE, got {text!r}")
-    if "." not in path and path not in TOP_KEYS:
+    if "." not in path and path not in Schema.sections:
         raise ValueError(f"--set {text!r}: {path!r} is not a top level key; write a dotted path from the root "
                          f"(--set training.epochs=5) or -p {text} for params.{path}")
     return path, parse_value(value)
@@ -133,8 +122,9 @@ def pack_tables():
     return tables
 
 
-def load_surface(paths, sets=None) -> Surface:
+def load_surface(paths, sets=None, contract=None) -> Surface:
     paths = [str(path) for path in paths]
+    contract = contract or Contract.load()
     logger.info(f"config {', '.join(paths)}")
     layer, problems = load(paths, registry.fragments())
     if sets:
@@ -149,7 +139,7 @@ def load_surface(paths, sets=None) -> Surface:
     table = raw.get("alias")
     if isinstance(table, dict):
         aliases.update({name: target for name, target in table.items() if isinstance(target, str)})
-    data = resolve_surface(raw, provenance, aliases, problems)
+    data = resolve_surface(raw, provenance, aliases, problems, contract.roles())
     return Surface(data, raw, provenance, overrides, layer, aliases, problems, paths)
 
 
@@ -164,15 +154,15 @@ def resolve_alias(text, aliases):
     return current
 
 
-def resolve_surface(raw, provenance, aliases, problems):
+def resolve_surface(raw, provenance, aliases, problems, roles=()):
     globals_ = raw.get("params") if isinstance(raw.get("params"), dict) else {}
-    resolver = Resolver(aliases, globals_, provenance, problems)
+    resolver = Resolver(aliases, globals_, provenance, problems, roles)
     out = {}
     for key, value in raw.items():
-        if key in SKIPPED_SECTIONS:
+        if key in Schema.unresolved:
             out[key] = value
         else:
-            if (key,) in SHORT_CALL_PATHS and isinstance(value, str):
+            if (key,) in Schema.short_calls and isinstance(value, str):
                 out[key] = resolver.uri(value, (key,))
             else:
                 out[key] = resolver.walk(value, (key,))
@@ -198,18 +188,20 @@ def resolve_rule_sets(data, aliases):
                 refs = registry.facts(uri).refs
             except Exception:
                 continue
-            if (refs or {}).get(param) in REFERENCE_TYPES:
+            ref = Schema.ref((refs or {}).get(param))
+            if ref.lego and ref.table is None:
                 resolved = resolve_alias(value, aliases)
                 if resolved is not None:
                     rule["set"][key] = resolved
 
 
 class Resolver:
-    def __init__(self, aliases, globals_, provenance, problems):
+    def __init__(self, aliases, globals_, provenance, problems, roles=()):
         self.aliases = aliases
         self.globals = globals_
         self.provenance = provenance
         self.problems = problems
+        self.roles = tuple(roles)
 
     def walk(self, value, path, block_vars=frozenset()):
         if isinstance(value, dict):
@@ -242,7 +234,8 @@ class Resolver:
             return out
         for param, ref_type in (refs or {}).items():
             value = params.get(param)
-            if ref_type in REFERENCE_TYPES and isinstance(value, str) and not value.startswith("/"):
+            ref = Schema.ref(ref_type)
+            if ref.lego and ref.table is None and isinstance(value, str) and not value.startswith("/"):
                 resolved = resolve_alias(value, self.aliases)
                 if resolved is not None:
                     params[param] = resolved
@@ -253,9 +246,9 @@ class Resolver:
         return frozenset(str(name) for name in declared)
 
     def short_call(self, path):
-        if path in SHORT_CALL_PATHS:
+        if path in Schema.short_calls:
             return True
-        return len(path) >= 2 and path[-1] in INIT_ROLES and "init" in path[:-1]
+        return len(path) >= 2 and path[-1] in self.roles and "init" in path[:-1]
 
     def uri(self, text, path, block_vars=frozenset()):
         text = self.substitute(text, path, block_vars)
@@ -275,7 +268,7 @@ class Resolver:
 
         def lookup(name):
             base, _, field_name = name.partition(".")
-            if base in BUILTIN_VARIABLES or base in block_vars:
+            if base in Schema.builtin_variables or base in block_vars:
                 return True, None
             if base not in self.globals:
                 self.problems.append(error("unknown_variable", f"unknown variable ${name}$",
@@ -308,9 +301,5 @@ def written_config(data):
     return {key: value for key, value in data.items() if key != "alias"}
 
 
-def problems_text(problems):
-    return render_problems(list(problems))
-
-
-__all__ = ["Problem", "Surface", "TOP_KEYS", "load_surface", "parse_param", "parse_set", "parse_sets",
-           "resolve_alias", "written_config"]
+__all__ = ["Problem", "Surface", "load_surface", "parse_param", "parse_set", "parse_sets", "resolve_alias",
+           "written_config"]

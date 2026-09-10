@@ -8,7 +8,6 @@ import torch
 
 class Policy:
     monitor: str | None = None
-    restored: bool = False
 
     def tags(self, metrics: dict) -> list:
         raise NotImplementedError

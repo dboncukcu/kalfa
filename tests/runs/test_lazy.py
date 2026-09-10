@@ -51,7 +51,8 @@ def test_run_on_the_stream(workdir):
     assert [line["turn"] for line in history] == [1, 2]
     assert {"train/loss_mse", "val/rmse", "test/rmse", "lr/net"} <= set(history[0])
     table = pandas.read_parquet(record / "predictions.parquet")
-    assert table["row"].tolist() == list(range(1700, 2000)) and list(table.columns) == ["row", "price", "raw_y", "pred_y"]
+    assert table["row"].tolist() == list(range(1700, 2000))
+    assert list(table.columns) == ["row", "price", "raw_y", "pred_y"]
     assert (record / "preprocessors" / "std_scaler.pkl").exists() and (record / "plots" / "loss_curve.png").exists()
     write_housing(workdir / "new.parquet", rows=50, seed=9)
     fresh = predict(result.record, data="new.parquet")

@@ -5,6 +5,7 @@ import numpy
 
 
 @lego("/split/kalfa/random", returns=["train", "valid", "test"], alias="random_split",
+      sizes="/lego/kalfa/ratio_sizes", needs_table=True,
       description="Shuffle the rows with a seed and cut them by ratios into train, valid and test; the short "
                   "form of a split without a uri")
 def random_split(df, ratios, seed=None):

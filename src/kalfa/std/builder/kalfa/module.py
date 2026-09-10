@@ -194,7 +194,7 @@ def load_weights(spec):
     return states[spec["model"]]
 
 
-@lego("/builder/kalfa/module", bus=["prep", "train_loader"],
+@lego("/builder/kalfa/module", bus=["prep", "train_loader"], roles=["weights", "bias", "scale"],
       description="Build a model graph into an nn.Module under hash(seed, index), apply init roles, "
                   "trainable and weights; reference nodes take the models dict; layer params that are kind "
                   "data components are built from prep and the train loader")

@@ -99,7 +99,8 @@ def test_myexample_objectives_register_with_facts_and_run():
               "dxx": Two(12, ["logit", "feature"]), "dzz": Two(8, ["logit"])}
     batch = {"x": torch.randn(5, 6)}
     context = Context(batch, Pass(models, targets=[], rng=torch.Generator().manual_seed(1)))
-    disc = registry.resolve("/objective/myexample/alad_discriminator")(models, batch, criterion=bce_logits, latent_dim=4,
+    alad_discriminator = registry.resolve("/objective/myexample/alad_discriminator")
+    disc = alad_discriminator(models, batch, criterion=bce_logits, latent_dim=4,
                                                                     rng=context.scope.rng)
     gen = registry.resolve("/objective/myexample/alad_generator")(models, batch, criterion=bce_logits, latent_dim=4,
                                                                feature_matching=0.5, rng=context.scope.rng)

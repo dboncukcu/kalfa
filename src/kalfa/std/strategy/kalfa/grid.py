@@ -2,7 +2,7 @@ from kalfa.registration import lego
 from kalfa.std.strategy.base import Strategy, grid_values
 
 
-@lego("/strategy/kalfa/grid", alias="grid",
+@lego("/strategy/kalfa/grid", alias="grid", enumerates=True,
       description="Every combination of the space's choices (a range needs steps); deterministic by id")
 class Grid(Strategy):
     deterministic = True

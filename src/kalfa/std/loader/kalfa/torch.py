@@ -26,33 +26,35 @@ def balanced_sampler(data):
     return torch.utils.data.WeightedRandomSampler(weights, num_samples=len(labels), replacement=True)
 
 
-def stream_loader(data, set, batch, size, drop_last):
-    if batch.get("balanced"):
+def stream_loader(data, train, size, shuffle, drop_last, workers, collate, balanced, buffer):
+    if balanced:
         raise ValueError("balanced needs a table dataset; a lazy set cannot be counted")
-    if int(batch.get("workers", 0) or 0):
+    if workers:
         raise ValueError("a lazy set runs with workers: 0; every worker would replay the whole stream")
-    if set == "train" and isinstance(data, IterableDataset):
-        data.shuffle = bool(batch.get("shuffle", True))
-        data.buffer = int(batch.get("buffer", 4096) or 4096)
-    return torch.utils.data.DataLoader(data, batch_size=size, drop_last=drop_last, num_workers=0,
-                                       collate_fn=batch.get("collate"))
+    if train and isinstance(data, IterableDataset):
+        data.shuffle = shuffle
+        data.buffer = int(buffer)
+    return torch.utils.data.DataLoader(data, batch_size=size, drop_last=drop_last, num_workers=0, collate_fn=collate)
 
 
 @lego("/loader/kalfa/torch",
-      description="torch DataLoader; shuffles the train set only, eval_size for the other sets; a stream "
-                  "dataset shuffles through its buffer and takes no sampler or workers")
-def torch_loader(data, set, batch):
+      description="torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches "
+                  "in order for the other sets; balanced puts a class balancing sampler over the single target "
+                  "field; a stream dataset shuffles through buffer rows and takes no sampler or workers")
+def torch_loader(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None,
+                 balanced=False, buffer=4096):
     train = set == "train"
-    size = int(batch["size"]) if train else int(batch.get("eval_size") or batch["size"])
-    shuffle = bool(batch.get("shuffle", True)) if train else False
-    drop_last = bool(batch.get("drop_last", False)) if train else False
+    size = int(size) if train else int(eval_size or size)
+    shuffle = bool(shuffle) if train else False
+    drop_last = bool(drop_last) if train else False
+    workers = int(workers or 0)
     if isinstance(data, torch.utils.data.IterableDataset):
-        return report_built(stream_loader(data, set, batch, size, drop_last), set, size)
+        return report_built(stream_loader(data, train, size, shuffle, drop_last, workers, collate, balanced, buffer),
+                            set, size)
     sampler = None
-    if batch.get("balanced") and train and len(data):
+    if balanced and train and len(data):
         sampler = balanced_sampler(data)
         shuffle = False
     loader = torch.utils.data.DataLoader(data, batch_size=size, shuffle=shuffle, drop_last=drop_last, sampler=sampler,
-                                         num_workers=int(batch.get("workers", 0) or 0),
-                                         collate_fn=batch.get("collate"))
+                                         num_workers=workers, collate_fn=collate)
     return report_built(loader, set, size)

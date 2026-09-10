@@ -6,7 +6,7 @@ import pandas
 logger = logger_for("data.source")
 
 
-@lego("/source/kalfa/parquet", returns="df", alias="parquet",
+@lego("/source/kalfa/parquet", returns="df", alias="parquet", header="/lego/kalfa/parquet_header",
       description="Read a parquet file into a DataFrame")
 def parquet(path):
     logger.info(f"reading {path}")

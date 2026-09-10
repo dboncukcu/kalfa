@@ -15,7 +15,7 @@ from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.fit import fit
 from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 from kalfa.std.split.kalfa.kfold import kfold
-from kalfa.std.split.base import kfold_sizes
+from kalfa.std.lego.kalfa.kfold_sizes import kfold_sizes
 from kalfa.std.split.kalfa.sequential import sequential
 from kalfa.synthetic import energy_frame
 
@@ -84,7 +84,8 @@ def test_gru_and_last_step_are_lazy_and_seeded():
     from kalfa.std.builder.kalfa.module import Module
 
     def build(seed):
-        graph = Graph(("x",), ("y",), (GraphNode("g", Gru(4), ("x",), ("h",)), GraphNode("l", LastStep(), ("h",), ("s",)),
+        graph = Graph(("x",), ("y",), (GraphNode("g", Gru(4), ("x",), ("h",)),
+                                       GraphNode("l", LastStep(), ("h",), ("s",)),
                                        GraphNode("o", torch.nn.LazyLinear(2), ("s",), ("y",))))
         return Module(graph, seed=seed)
 
@@ -112,6 +113,6 @@ def test_kfold_holds_out_the_fold_and_carves_valid():
     assert not set(parts["test"].index) & set(other["test"].index)
     no_valid = kfold(data, k=5, fold=0, seed=1)
     assert len(no_valid["valid"]) == 0 and len(no_valid["train"]) == 80
-    assert kfold_sizes(100, {"k": 5, "fold": 0, "val": 0.25}) == {"train": 60, "valid": 20, "test": 20}
+    assert kfold_sizes(100, k=5, fold=0, val=0.25) == {"train": 60, "valid": 20, "test": 20}
     with pytest.raises(ValueError):
         kfold(data, k=5, fold=7, seed=1)

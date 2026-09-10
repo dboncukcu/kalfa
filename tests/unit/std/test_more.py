@@ -65,7 +65,8 @@ def test_weighted_sum_combines_other_losses_by_name():
 
 
 def test_conv2d_and_maxpool_shapes():
-    net = nn.Sequential(conv2d(4, 3, padding=1), nn.ReLU(), maxpool(2), conv2d(2, 3, stride=2, padding=1, in_channels=4))
+    net = nn.Sequential(conv2d(4, 3, padding=1), nn.ReLU(), maxpool(2),
+                        conv2d(2, 3, stride=2, padding=1, in_channels=4))
     out = net(torch.rand(2, 3, 16, 16))
     assert out.shape == (2, 2, 4, 4)
     assert isinstance(net[0], nn.LazyConv2d) or net[0].in_channels == 3
@@ -90,7 +91,7 @@ def test_image_grid_and_run_all_name_files_after_the_definition(tmp_path):
     write_image_folder(tmp_path / "imgs", classes=("x",), per_class=4, size=8)
     samples = image_folder(str(tmp_path / "imgs"))
     prep = fit(samples, {"image": {"preprocessors": ["t"]}, "label": {"target": True}}, {"t": ToTensor()}, [])
-    loader = torch_loader(table(apply(samples, prep, "test")), "test", {"size": 4})
+    loader = torch_loader(table(apply(samples, prep, "test")), "test", 4)
 
     class Same(nn.Module):
         inputs = ["image"]
@@ -116,7 +117,7 @@ def test_turn_warns_when_an_optimizer_takes_no_step():
     optimizers = {"a": Sgd({"first": first}, {"lr": 0.01}, None, "mse"),
                   "b": Sgd({"second": second}, {"lr": 0.01}, None, "mse")}
     losses = {"mse": criterion_adapter(mse)}
-    loader = torch_loader(table(frame(rows=8)), "train", {"size": 8})
+    loader = torch_loader(table(frame(rows=8)), "train", 8)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         out = alternating({"first": first, "second": second}, optimizers, {}, {"global_step": 0, "turn": 0}, {}, {},

@@ -4,7 +4,8 @@ from kalfa.std.split.base import fold_bounds, kfold_counts, report_sets, take_ro
 import numpy
 
 
-@lego("/split/kalfa/kfold", returns=["train", "valid", "test"], alias="kfold",
+@lego("/split/kalfa/kfold", returns=["train", "valid", "test"], alias="kfold", sizes="/lego/kalfa/kfold_sizes",
+      needs_table=True,
       description="k folds of a seeded permutation: the held out fold is the test set, val carves the valid "
                   "set from the rest; without val there is no valid set")
 def kfold(df, k, fold, val=None, seed=None):

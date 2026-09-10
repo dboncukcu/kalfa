@@ -31,13 +31,9 @@ def strip_suffix(state, suffix="_next"):
 @lego("/lego/kalfa/checkpoint", returns=None, bus=["metrics", "record"],
       description="Write the checkpoint files the policy asks for; nothing without a policy")
 def checkpoint(state, policy, metrics=None, record=None):
-    if policy is None or record is None:
+    if not policy or record is None:
         return None
     parts = strip_suffix(state)
-    stored = (parts.get("rules") or {}).get("checkpoint")
-    if stored is not None and not policy.restored:
-        policy.restore(stored)
-    policy.restored = True
     tags = policy.tags(metrics)
     data = payload(parts.get("models"), parts.get("optimizers"), parts.get("emas"), parts.get("counters"),
                    parts.get("rules"), policy.state())

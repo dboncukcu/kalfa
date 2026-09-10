@@ -26,11 +26,14 @@ def teacher(dataset, records):
 def test_check_compares_the_teacher_with_its_run(teacher):
     prepared = check(["config.yaml"], parse_sets(SETS))
     assert prepared.problems == []
-    prepared = check(["config.yaml"], parse_sets(SETS + ["model.models.teacher.weights={run: runs/nowhere, model: net, which: best}"]))
+    prepared = check(["config.yaml"], parse_sets(SETS + ["model.models.teacher.weights={run: runs/nowhere, model: net, "
+                                                        "which: best}"]))
     assert "weights_run_missing" in [problem.kind for problem in prepared.problems]
-    prepared = check(["config.yaml"], parse_sets(SETS + ["model.models.teacher.weights={run: runs/cifar_resnet50_x, model: net, which: final}"]))
+    prepared = check(["config.yaml"], parse_sets(SETS + ["model.models.teacher.weights={run: runs/cifar_resnet50_x, "
+                                                        "model: net, which: final}"]))
     assert "weights_missing" not in [problem.kind for problem in prepared.problems]
-    prepared = check(["config.yaml"], parse_sets(SETS + ["model.models.teacher.nodes=[{uri: linear, params: {out_features: 10}}]"]))
+    prepared = check(["config.yaml"], parse_sets(SETS + ["model.models.teacher.nodes=[{uri: linear, "
+                                                        "params: {out_features: 10}}]"]))
     assert "weights_mismatch" in [problem.kind for problem in prepared.problems]
     prepared = check(["config.yaml"], parse_sets(SETS + ["model.models.teacher.init={weights: zeros}"]))
     assert "weights_init" in [problem.kind for problem in prepared.problems]

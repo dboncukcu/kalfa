@@ -49,8 +49,9 @@ def describe_state(state, total, left, steps):
 
 
 @lego("/lego/kalfa/init_state", returns="epochs_left", mutates=["state"], bus=["resume", "device"],
-      description="Move the state to the device, load a checkpoint when resuming, count the turns left")
-def init_state(state, epochs, steps, resume=None, device=None):
+      description="Move the state to the device, load a checkpoint when resuming and restore the checkpoint "
+                  "policy from it, count the turns left")
+def init_state(state, epochs, steps, policy=None, resume=None, device=None):
     device = device or Device.cpu()
     device.place(state["models"])
     device.place(state["emas"])
@@ -58,6 +59,8 @@ def init_state(state, epochs, steps, resume=None, device=None):
         logger_training.info(f"resuming from {resume}")
         load_into(state["models"], state["optimizers"], state["emas"], state["counters"], state["rules"],
                   load(resume))
+        if policy and state["rules"].get("checkpoint") is not None:
+            policy.restore(state["rules"]["checkpoint"])
     if epochs is not None:
         total = int(epochs)
     elif steps is not None:

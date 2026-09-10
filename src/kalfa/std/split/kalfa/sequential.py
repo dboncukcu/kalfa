@@ -6,7 +6,7 @@ import pandas
 
 
 @lego("/split/kalfa/sequential", returns=["train", "valid", "test"], refs={"group": "column"},
-      alias="sequential",
+      alias="sequential", sizes="/lego/kalfa/ratio_sizes",
       description="Cut the rows in their order by ratios; with a group column every group is cut on its own")
 def sequential(df, ratios, group=None):
     if is_stream(df):

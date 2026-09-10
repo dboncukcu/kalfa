@@ -57,9 +57,12 @@ def test_checkpoint_writes_files_and_restores_the_policy(tmp_path):
     assert data["checkpoint"] == {"best": 1.0} and "model" in data["models"]
     assert checkpoint(suffixed(state), None, {}, str(tmp_path)) is None
     fresh = Best("val/rmse")
-    state["rules"] = {"checkpoint": {"best": 0.2}}
     checkpoint(suffixed(state), fresh, {"val/rmse": 0.5}, str(tmp_path))
-    assert fresh.best == 0.2
+    assert fresh.best == 0.5
+    restored = Best("val/rmse")
+    init_state(state_of(), epochs=10, steps=None, policy=restored, resume=str(tmp_path / "checkpoints" / "last.pt"),
+               device=Device.cpu())
+    assert restored.best == 0.5
 
 
 def test_init_state_moves_resumes_and_counts_the_turns_left(tmp_path):
@@ -73,7 +76,8 @@ def test_init_state_moves_resumes_and_counts_the_turns_left(tmp_path):
     checkpoint(suffixed(state), Last(), {}, str(tmp_path))
     marker = torch.rand(1)
     fresh = state_of(seed=5)
-    left = init_state(fresh, epochs=10, steps=None, resume=str(tmp_path / "checkpoints" / "last.pt"), device=Device.cpu())
+    left = init_state(fresh, epochs=10, steps=None, resume=str(tmp_path / "checkpoints" / "last.pt"),
+                      device=Device.cpu())
     assert left == 6
     assert fresh["counters"] == {"global_step": 7, "turn": 4} and fresh["rules"]["sticky"] == ["a"]
     assert torch.equal(fresh["models"]["model"].nodes["layer"].weight, state["models"]["model"].nodes["layer"].weight)

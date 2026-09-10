@@ -1,12 +1,10 @@
 import inspect
-from pathlib import Path
 
 from cirak.registry import registry
 
 from .config import pack_tables
-from .kinds import KINDS, kalfa_kind
-from ruamel.yaml import YAML
-from . import TEMPLATE
+from .contract import Contract
+from .kinds import kalfa_kind, kinds
 from .std import STD_URIS
 
 HEADER = """# kalfa lego reference
@@ -23,12 +21,13 @@ module` or `kalfa docs --config config.yaml`). They are written in a config exac
 first segment of the URI and decides which section takes them.
 """
 
-SKELETON_NOTE = """These are the skeleton steps `src/kalfa/templates/kalfa.yaml` calls; they are not written in a config,
-the template places them and the driver fills their params from the config sections. The list is derived from the
-URIs the template mentions, so it cannot drift. Four more legos are inserted by the driver rather than by the
-template and stay in the catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and
-`/adapter/kalfa/objective`, which wrap the losses and metrics entries of a config by kind) and the progress
-component (`/lego/kalfa/progress`).
+SKELETON_NOTE = """These are the skeleton steps `src/kalfa/contract.yaml` calls: the nodes of its blocks, the loader,
+fit, read_prep and figures legos of its wiring, and the helpers the `sizes` and `header` facts name. They are
+not written in a config; the contract places them and the driver fills their params from the config sections.
+The list is derived from the URIs the contract mentions, so it cannot drift. The rest of the wiring stays in the
+catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and `/adapter/kalfa/objective`,
+which wrap the losses and metrics entries of a config by kind) and the defaults that stand in for a config value
+(`/split/kalfa/random`, `/device/kalfa/cpu`).
 """
 
 
@@ -70,7 +69,16 @@ def template_uris():
         elif isinstance(value, str) and value.startswith("/") and registry.lookup(value) is not None:
             found.add(value)
 
-    walk(YAML(typ="safe").load(Path(TEMPLATE).read_text()))
+    contract = Contract.load()
+    walk(contract.blocks)
+    for value in contract.wiring.values():
+        if isinstance(value, str) and kalfa_kind(value) in ("lego", "loader") and registry.lookup(value) is not None:
+            found.add(value)
+    for uri in STD_URIS:
+        facts = registry.facts(uri)
+        for name in ("sizes", "header"):
+            if isinstance(facts.get(name), str):
+                found.add(facts.get(name))
     return found
 
 
@@ -109,20 +117,20 @@ def render(uris=None, plugins=None):
     lines.append("|---|---|---|")
     places = {
         "source": "data.source", "split": "data.split", "pre": "data.preprocessors", "feed": "data.feed",
-        "loader": "the template", "layer": "model nodes", "init": "model init", "criterion": "losses, metrics",
+        "loader": "the contract", "layer": "model nodes", "init": "model init", "criterion": "losses, metrics",
         "objective": "losses", "metric": "metrics", "adapter": "the driver", "optimizer": "optimizers",
         "schedule": "optimizer schedule", "turn": "training.turn", "trigger": "training.stop, rules when",
-        "checkpoint": "training.checkpoint", "rule": "the template", "generate": "generate",
+        "checkpoint": "training.checkpoint", "rule": "the contract", "generate": "generate",
         "plot": "plots", "strategy": "sweep.strategy", "device": "device, predict --device, generate --device",
-        "lego": "a param value, or the driver", "builder": "the template",
+        "lego": "a param value, or the contract", "builder": "the contract",
         "data": "a param value ({uri: name})",
     }
-    grouped = {kind: [uri for uri in chosen if kalfa_kind(uri) == kind] for kind in KINDS}
-    for kind in KINDS:
+    grouped = {kind: [uri for uri in chosen if kalfa_kind(uri) == kind] for kind in kinds()}
+    for kind in kinds():
         if grouped[kind]:
             lines.append(f"| `{kind}` | {places.get(kind, '')} | {len(grouped[kind])} |")
     lines.append("")
-    for kind in KINDS:
+    for kind in kinds():
         entries = grouped[kind]
         if not entries:
             continue
@@ -131,7 +139,7 @@ def render(uris=None, plugins=None):
     if plugins is not None:
         lines.append("## Plugin legos\n")
         lines.append(PLUGIN_NOTE)
-        by_kind = {kind: [uri for uri in plugins if kalfa_kind(uri) == kind] for kind in KINDS}
+        by_kind = {kind: [uri for uri in plugins if kalfa_kind(uri) == kind] for kind in kinds()}
         by_kind["other"] = [uri for uri in plugins if kalfa_kind(uri) is None]
         if not plugins:
             lines.append("Nothing registered outside kalfa's std set.\n")

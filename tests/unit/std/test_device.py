@@ -51,7 +51,8 @@ def test_check_validates_the_device_call(workdir):
     assert "kind_mismatch" in [problem.kind for problem in problems]
     problems = check([str(write_config(workdir / "c.yaml", {**minimal(), "device": "auto"}))], parse_sets([])).problems
     assert problems == []
-    prepared = check([str(write_config(workdir / "d.yaml", minimal()))], parse_sets(["device={uri: cuda, params: {index: 1}}"]))
+    prepared = check([str(write_config(workdir / "d.yaml", minimal()))],
+                     parse_sets(["device={uri: cuda, params: {index: 1}}"]))
     assert prepared.problems == []
 
 
@@ -60,7 +61,8 @@ def test_a_custom_device_lego_runs_and_the_choice_is_recorded(workdir, monkeypat
     def fake(flavor="plain"):
         return torch.device("cpu")
 
-    path = write_config(workdir / "cfg.yaml", {**minimal(), "device": {"uri": "/device/test/fake", "params": {"flavor": "x"}}})
+    path = write_config(workdir / "cfg.yaml",
+                        {**minimal(), "device": {"uri": "/device/test/fake", "params": {"flavor": "x"}}})
     result = run([str(path)], parse_sets([]), when="fake")
     assert result.device.torch == torch.device("cpu")
     note = json.loads((Path(result.record) / "device.json").read_text())

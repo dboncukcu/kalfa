@@ -1,5 +1,5 @@
 from kalfa.registration import lego
-from kalfa.std.common import figure
+from kalfa.std.common.figure import Figure
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.optional import load
 from kalfa.std.plot.base import report_loader
@@ -10,7 +10,7 @@ import torch
 logger = logger_for("after.plots")
 
 
-def draw_models(models, loaders, record, stem, device=None):
+def draw_models(figures, models, loaders, record, stem, device=None):
     torchview = load("torchview", "architecture")
     if torchview is None:
         return
@@ -27,7 +27,7 @@ def draw_models(models, loaders, record, stem, device=None):
         try:
             drawing = torchview.draw_graph(model, input_data=[batch[wire][:2].to(where) for wire in wires],
                                  device=where, graph_name=label, expand_nested=True)
-            drawing.visual_graph.render(str(figure.target(record, f"{stem}_{label}")), format="png", cleanup=True)
+            drawing.visual_graph.render(str(figures.target(record, f"{stem}_{label}")), format="png", cleanup=True)
             logger.debug(f"architecture: drew {label}")
         except Exception as exception:
             cause = f" <- {type(exception.__cause__).__name__}: {exception.__cause__}" if exception.__cause__ else ""
@@ -39,13 +39,14 @@ def draw_models(models, loaders, record, stem, device=None):
       description="The report models printed as text under plots/architecture.txt, and drawn under "
                   "plots/architecture_<model>.png when torchview and graphviz are installed; the drawing "
                   "runs on the device of the run, so a composite keeps its referenced models with it")
-def architecture(predictions, history, models, record, loaders=None, device=None, name=None):
+def architecture(predictions, history, models, record, loaders=None, device=None, name=None, figures=None):
+    figures = figures or Figure()
     lines = []
     for label, model in (models or {}).items():
         lines.append(f"== {label}")
         lines.append(repr(model))
         lines.append("")
     stem = name or "architecture"
-    figure.target(record, f"{stem}.txt").write_text("\n".join(lines))
-    draw_models(models, loaders, record, stem, device)
+    figures.target(record, f"{stem}.txt").write_text("\n".join(lines))
+    draw_models(figures, models, loaders, record, stem, device)
     return None

@@ -1,14 +1,13 @@
-"""const, pack, merge, identity, the history log, the progress display and the console log."""
+"""const, pack, merge, identity, the history log and the monitor."""
 
 import json
 import logging
 from io import StringIO
 
 import kalfa  # noqa: F401
-from kalfa.std.common.log import Progress, console, logger_for, node_path, sink
+from kalfa.std.common.log import Monitor, logger_for, node_path, turn_line
 from kalfa.std.common.history import History
-from kalfa.std.lego.kalfa.history import history, turn_line
-from kalfa.std.lego.kalfa.progress import progress
+from kalfa.std.lego.kalfa.history import history
 from kalfa.std.optimizer.torch.sgd import Sgd
 from kalfa.std.lego.kalfa.const import const
 from kalfa.std.lego.kalfa.identity import identity
@@ -27,24 +26,26 @@ def test_const_pack_identity():
 
 def test_merge_prefixes_and_orders_the_sets():
     parts = {"test_metrics": {"r": 3.0}, "train_metrics": {"l": 1.0}, "valid_metrics": {"r": 2.0, "l": 1.5}}
-    assert merge(parts) == {"train/l": 1.0, "val/r": 2.0, "val/l": 1.5, "test/r": 3.0}
-    assert list(merge(parts)) == ["train/l", "val/r", "val/l", "test/r"]
-    assert merge({}) == {}
+    prefixes = {"train": "train", "valid": "val", "test": "test"}
+    assert merge(parts, prefixes) == {"train/l": 1.0, "val/r": 2.0, "val/l": 1.5, "test/r": 3.0}
+    assert list(merge(parts, prefixes)) == ["train/l", "val/r", "val/l", "test/r"]
+    assert merge({}, prefixes) == {}
 
 
 def test_history_line_and_file(tmp_path):
     optimizer = Sgd({"m": tiny_model()}, {"lr": 0.3}, None, "l")
     line = History.line({"train/l": 0.5}, {"turn": 2, "global_step": 8}, {"m": optimizer}, {"fired": ["a"]})
     assert line == {"turn": 2, "global_step": 8, "train/l": 0.5, "lr/m": 0.3, "rules": ["a"]}
-    bar = progress()
-    assert Progress.current is bar
-    history(bar, {"train/l": 0.5}, 1, {"turn": 2, "global_step": 8}, {"m": optimizer}, {"fired": []}, str(tmp_path))
-    history(bar, {"train/l": 0.4}, 2, {"turn": 3, "global_step": 12}, {"m": optimizer}, {}, str(tmp_path))
+    monitor = Monitor()
+    history(monitor, {"train/l": 0.5}, 1, {"turn": 2, "global_step": 8}, {"m": optimizer}, {"fired": []},
+            str(tmp_path))
+    history(monitor, {"train/l": 0.4}, 2, {"turn": 3, "global_step": 12}, {"m": optimizer}, {}, str(tmp_path))
     lines = [json.loads(text) for text in (tmp_path / "history.jsonl").read_text().splitlines()]
     assert [line["turn"] for line in lines] == [2, 3] and lines[1]["rules"] == []
-    sink({"kind": "started", "path": "training.epochs", "total": 5})
-    assert bar.total == 5 and bar.bar.total == 5
-    bar.close()
+    monitor.sink({"kind": "started", "path": "training.epochs", "total": 5})
+    assert monitor.total == 5 and monitor.bar.total == 5
+    monitor.close()
+    assert monitor.bar is None
     assert history(None, {}, 0, {}, {}, {}, None) is None
 
 
@@ -57,25 +58,23 @@ def test_turn_line_and_node_path():
     assert node_path("data.source") == "data.source"
 
 
-def test_console_writes_the_kalfa_lines_to_the_stream_until_it_stops():
+def test_monitor_writes_the_kalfa_lines_to_the_stream_until_it_stops():
     stream = StringIO()
-    with console(logging.INFO, stream):
+    with Monitor(logging.INFO, stream=stream) as monitor:
         logger_for("data.source").info("reading x.parquet")
         logger_for("data.source").debug("only at debug")
-        sink({"kind": "started", "path": "data.source", "node": "source"})
-    logger_for("data.source").info("after the console closed")
+        monitor.sink({"kind": "started", "path": "data.source", "node": "source"})
+    logger_for("data.source").info("after the monitor closed")
     text = stream.getvalue()
     assert "INFO   data.source     reading x.parquet" in text
     assert "only at debug" not in text and "started" not in text
-    assert "after the console closed" not in text
+    assert "after the monitor closed" not in text
 
 
 def test_no_progress_keeps_the_bar_out():
-    with console(None, progress=False):
-        bar = progress()
-        history(bar, {"train/l": 0.5}, 1, {"turn": 1, "global_step": 4}, {}, {}, None)
-        assert bar.bar is None
-    assert Progress.enabled
+    with Monitor(None, progress=False) as monitor:
+        history(monitor, {"train/l": 0.5}, 1, {"turn": 1, "global_step": 4}, {}, {}, None)
+        assert monitor.bar is None
 
 
 def test_turn_line_carries_every_value():
@@ -86,12 +85,12 @@ def test_turn_line_carries_every_value():
     assert "val/mae 8" in text and "lr/model 0.001" in text and "rules" not in text
 
 
-def test_console_at_debug_shows_every_node():
+def test_monitor_at_debug_shows_every_node():
     stream = StringIO()
-    with console(logging.DEBUG, stream):
-        sink({"kind": "started", "path": "training.epochs[0].body.turn", "node": "turn"})
-        sink({"kind": "finished", "path": "training.epochs[0].body.turn", "node": "turn", "ms": 1500.0})
-        sink({"kind": "failed", "path": "data.source", "node": "source", "error": "no file"})
+    with Monitor(logging.DEBUG, stream=stream) as monitor:
+        monitor.sink({"kind": "started", "path": "training.epochs[0].body.turn", "node": "turn"})
+        monitor.sink({"kind": "finished", "path": "training.epochs[0].body.turn", "node": "turn", "ms": 1500.0})
+        monitor.sink({"kind": "failed", "path": "data.source", "node": "source", "error": "no file"})
     text = stream.getvalue()
     assert "DEBUG  training.epochs[0].turn  started" in text
     assert "finished (1.50s)" in text and "ERROR" in text and "failed: no file" in text

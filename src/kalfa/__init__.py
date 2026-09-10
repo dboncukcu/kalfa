@@ -7,7 +7,7 @@ from . import std
 from .registration import lego
 
 PACKS = Path(__file__).parent / "packs"
-TEMPLATE = Path(__file__).parent / "templates" / "kalfa.yaml"
+CONTRACT = Path(__file__).parent / "contract.yaml"
 
 
 def register_packs():
@@ -23,4 +23,4 @@ try:
 except PackageNotFoundError:
     __version__ = "0.2.0"
 
-__all__ = ["PACKS", "TEMPLATE", "__version__", "lego", "std"]
+__all__ = ["CONTRACT", "PACKS", "__version__", "lego", "std"]

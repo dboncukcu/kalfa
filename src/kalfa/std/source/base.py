@@ -58,31 +58,3 @@ class TextLines:
         if name == "text":
             return list(self.lines)
         raise ValueError(f"field {name!r} is not readable as a column; only text is")
-
-
-def header(uri, params):
-    path = params.get("path")
-    if uri in ("/source/kalfa/parquet", "/source/kalfa/parquet_stream"):
-        import pyarrow.parquet
-
-        handle = pyarrow.parquet.ParquetFile(path)
-        schema = handle.schema_arrow
-        dtypes = {name: str(schema.field(name).type) for name in schema.names}
-        return {"columns": list(schema.names), "dtypes": dtypes, "rows": handle.metadata.num_rows}
-    if uri == "/source/kalfa/image_folder":
-        folder = ImageFolder(path)
-        return {"columns": list(folder.fields), "dtypes": dict(folder.dtypes), "rows": len(folder),
-                "classes": list(folder.classes)}
-    if uri == "/source/kalfa/text_lines":
-        lines = TextLines(path)
-        return {"columns": ["text"], "dtypes": {"text": "string"}, "rows": len(lines)}
-    if uri in ("/source/kalfa/csv", "/source/kalfa/csv_stream"):
-        head = pandas.read_csv(path, nrows=64)
-        with open(path, "rb") as stream:
-            rows = max(sum(1 for _ in stream) - 1, 0)
-        return {"columns": list(head.columns), "dtypes": {name: str(dtype) for name, dtype in head.dtypes.items()},
-                "rows": rows}
-    return None
-
-
-STREAM_SOURCES = ("/source/kalfa/parquet_stream", "/source/kalfa/csv_stream")

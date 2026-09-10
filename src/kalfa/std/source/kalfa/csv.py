@@ -6,7 +6,7 @@ import pandas
 logger = logger_for("data.source")
 
 
-@lego("/source/kalfa/csv", returns="df", alias="csv",
+@lego("/source/kalfa/csv", returns="df", alias="csv", header="/lego/kalfa/csv_header",
       description="Read a CSV file into a DataFrame")
 def csv(path):
     logger.info(f"reading {path}")

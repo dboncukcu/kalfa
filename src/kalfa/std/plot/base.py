@@ -1,6 +1,5 @@
 import numpy
 
-from kalfa.std.common import figure
 from pathlib import Path
 import fnmatch
 import pandas
@@ -125,19 +124,19 @@ def pick_pair(predictions, output=None, target=None):
     return None, None
 
 
-def bars(axis, names, values, groups=None, spread=None):
+def bars(figures, axis, names, values, groups=None, spread=None):
     table = dict(groups or {})
     labels = [table.get(column, "") for column in names]
     ordered = [label for label in dict.fromkeys(labels) if label]
-    colors = {label: figure.CATEGORICAL[position % len(figure.CATEGORICAL)]
+    colors = {label: figures.categorical[position % len(figures.categorical)]
               for position, label in enumerate(ordered)}
-    painted = [colors.get(label, figure.CATEGORICAL[0]) for label in labels]
+    painted = [colors.get(label, figures.categorical[0]) for label in labels]
     axis.barh(names, values, xerr=spread, height=0.66, color=painted,
-              error_kw={"ecolor": figure.INK_MUTED, "elinewidth": 1} if spread is not None else None)
-    axis.axvline(0.0, color=figure.INK_MUTED, linewidth=1)
+              error_kw={"ecolor": figures.ink_muted, "elinewidth": 1} if spread is not None else None)
+    axis.axvline(0.0, color=figures.ink_muted, linewidth=1)
     axis.grid(axis="y", visible=False)
     if len(ordered) > 1:
-        handles = [figure.pyplot().Line2D([], [], marker="s", linestyle="", markersize=8, color=colors[label],
+        handles = [figures.pyplot().Line2D([], [], marker="s", linestyle="", markersize=8, color=colors[label],
                                           label=label) for label in ordered]
         axis.legend(handles=handles, loc="lower right")
     return ordered

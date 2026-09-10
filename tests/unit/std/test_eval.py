@@ -27,14 +27,14 @@ from kalfa.synthetic import housing_frame
 
 def test_evaluate_empty_set_gives_an_empty_mapping():
     model = tiny_model()
-    loader = torch_loader(table(frame(rows=0)), "valid", {"size": 4})
+    loader = torch_loader(table(frame(rows=0)), "valid", 4)
     assert evaluate({"model": model}, {}, {}, {"turn": 1}, {}, loader, "valid", {"l": criterion_adapter(mse)},
                     {"r": metric_adapter(Rmse())}, {}, {}, "model") == {}
 
 
 def test_evaluate_reports_losses_and_metrics_and_honours_every_and_sets():
     model = tiny_model()
-    loader = torch_loader(table(frame(rows=12)), "valid", {"size": 5})
+    loader = torch_loader(table(frame(rows=12)), "valid", 5)
     losses = {"l": criterion_adapter(mse), "silent": criterion_adapter(mse)}
     metrics = {"r": metric_adapter(Rmse()), "slow": metric_adapter(Rmse())}
     losses_keys = {"silent": {"sets": ["test"]}}
@@ -53,7 +53,7 @@ def test_prediction_table_inverts_the_target(tmp_path):
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},
                {"s": StandardScaler(), "t": StandardScaler()}, [])
     test_frame = apply(data.iloc[30:], prep, "test")
-    loader = torch_loader(table(test_frame), "test", {"size": 4})
+    loader = torch_loader(table(test_frame), "test", 4)
     model = tiny_model(in_features=8)
     out = prediction_table(model, loader, prep, loader.dataset)
     assert list(out.columns) == ["row", "price", "raw_y", "pred_y"]
@@ -63,7 +63,7 @@ def test_prediction_table_inverts_the_target(tmp_path):
     assert out["pred_y"].to_numpy() == pytest.approx(restored)
     written = predict({"model": model}, {}, loader, prep, "model", "test", record=str(tmp_path))
     assert (tmp_path / "predictions.parquet").exists() and len(written) == 10
-    empty = predict({"model": model}, {}, torch_loader(table(frame(rows=0)), "test", {"size": 4}), prep, "model", "test")
+    empty = predict({"model": model}, {}, torch_loader(table(frame(rows=0)), "test", 4), prep, "model", "test")
     assert len(empty) == 0
 
 

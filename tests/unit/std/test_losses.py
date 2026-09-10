@@ -280,7 +280,8 @@ def test_wgan_objectives_and_fid():
     torch.manual_seed(0)
     models = {"generator": Generator(), "critic": Critic()}
     batch = {"image": torch.randn(6, 3, 2, 2)}
-    loss = wgan_gp_d(models, batch, "generator", "critic", latent=4, gp_weight=10.0, rng=torch.Generator().manual_seed(1))
+    loss = wgan_gp_d(models, batch, "generator", "critic", latent=4, gp_weight=10.0,
+                     rng=torch.Generator().manual_seed(1))
     assert loss.requires_grad and loss.shape == ()
     loss.backward()
     assert models["critic"].layer.weight.grad is not None and models["generator"].layer.weight.grad is None

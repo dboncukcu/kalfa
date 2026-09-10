@@ -1,15 +1,17 @@
-from kalfa.registration import lego
-from kalfa.std.common import figure
-from kalfa.std.common.figure import image_tile
-from kalfa.std.plot.base import turn_files
 import warnings
+
 import torch
+
+from kalfa.registration import lego
+from kalfa.std.common.figure import Figure
+from kalfa.std.plot.base import turn_files
 
 
 @lego("/plot/kalfa/samples_matrix", partial=True, alias="samples_matrix",
       description="A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; "
                   "skipped with a warning when there are none")
-def samples_matrix(predictions, history, models, record, name=None, n=8):
+def samples_matrix(predictions, history, models, record, name=None, n=8, figures=None):
+    figures = figures or Figure()
     files = turn_files(record, ".pt")
     if not files:
         warnings.warn("samples_matrix: no samples/turn_*.pt in the record; add a sample_writer metric")
@@ -23,14 +25,14 @@ def samples_matrix(predictions, history, models, record, name=None, n=8):
         warnings.warn("samples_matrix: the turn samples are not images")
         return None
     columns = max(len(samples) for _, samples in rows)
-    drawing, axes = figure.tiles(len(rows), columns)
+    drawing, axes = figures.tiles(len(rows), columns)
     for row, (turn, samples) in enumerate(rows):
         for column in range(columns):
             axis = axes[row][column]
             if column < len(samples):
-                image_tile(axis, samples[column])
+                figures.image_tile(axis, samples[column])
             else:
                 axis.axis("off")
         axes[row][0].set_ylabel(f"turn {turn}")
-    figure.save(drawing, record, name or "samples_matrix")
+    figures.save(drawing, record, name or "samples_matrix")
     return None

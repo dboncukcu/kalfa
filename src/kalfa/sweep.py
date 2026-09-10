@@ -11,7 +11,7 @@ from .kinds import kalfa_kind
 from .std.common.history import History
 from .std.strategy.base import Strategy, parse_space
 from .api import gate, run
-from .check import OBJECTIVE_KEYS
+from .schema import Schema
 
 
 
@@ -101,7 +101,7 @@ def objective_of(record, objective):
 
 def write_point(record, plan, index, point, value, turn):
     entry = {"id": int(index), "point": point, "strategy": plan.uri, "total": plan.total,
-             "objective": {**{key: plan.objective.get(key) for key in OBJECTIVE_KEYS}, "value": value, "turn": turn},
+             "objective": {**{key: plan.objective.get(key) for key in Schema.objective}, "value": value, "turn": turn},
              "record": str(record)}
     (Path(record) / "sweep.json").write_text(json.dumps(entry, indent=2))
     return entry

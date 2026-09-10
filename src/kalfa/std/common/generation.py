@@ -1,8 +1,8 @@
 from pathlib import Path
 
 import torch
-from kalfa.std.common import figure
-from kalfa.std.common.figure import image_tile
+
+from kalfa.std.common.figure import Figure
 
 
 def write_samples(samples, target):
@@ -25,16 +25,17 @@ def write_sample_files(samples, target, stem, image_stem):
         write_grid(samples, target / f"{image_stem}.png")
 
 
-def write_grid(images, path):
+def write_grid(images, path, figures=None):
+    figures = figures or Figure()
     count = len(images)
     columns = min(8, count)
     rows = (count + columns - 1) // columns
-    drawing, axes = figure.tiles(rows, columns)
+    drawing, axes = figures.tiles(rows, columns)
     for position in range(rows * columns):
         axis = axes[position // columns][position % columns]
         if position < count:
-            image_tile(axis, images[position])
+            figures.image_tile(axis, images[position])
         else:
             axis.axis("off")
     drawing.savefig(path, bbox_inches="tight")
-    figure.pyplot().close(drawing)
+    figures.pyplot().close(drawing)

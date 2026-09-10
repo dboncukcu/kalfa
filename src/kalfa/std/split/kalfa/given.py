@@ -21,7 +21,7 @@ def read_like(df, path):
     raise ValueError(f"given: cannot read {path!r}; a table set is a .parquet or .csv file")
 
 
-@lego("/split/kalfa/given", returns=["train", "valid", "test"], alias="given",
+@lego("/split/kalfa/given", returns=["train", "valid", "test"], alias="given", sizes="/lego/kalfa/given_sizes",
       description="The source is the train set; valid and test come from the given paths, read like the "
                   "source (a missing path means no set)")
 def given(df, valid=None, test=None):

@@ -28,7 +28,7 @@ def setup(seed=1, rows=32, lazy=False):
     losses = {"loss_mse": criterion_adapter(mse), "loss_mae": criterion_adapter(mae),
               "loss_huber": criterion_adapter(functools.partial(huber, delta=1.0))}
     metrics = {"rmse": metric_adapter(Rmse())}
-    loader = torch_loader(table(frame(rows=rows)), "train", {"size": 8})
+    loader = torch_loader(table(frame(rows=rows)), "train", 8)
     counters = {"global_step": 0, "turn": 0}
     return model, optimizer, losses, metrics, loader, counters
 
@@ -48,7 +48,8 @@ def test_one_turn_changes_weights_and_reports_running_means():
     assert out["models"]["model"] is model and out["counters"] is counters
     assert counters == {"global_step": 4, "turn": 1}
     assert set(out["metrics"]) == {"loss_mse", "loss_mae", "loss_huber", "rmse"}
-    assert out["metrics"]["loss_mae"] > 0.0 and out["metrics"]["rmse"] == pytest.approx(out["metrics"]["loss_mse"] ** 0.5, rel=0.3)
+    assert out["metrics"]["loss_mae"] > 0.0
+    assert out["metrics"]["rmse"] == pytest.approx(out["metrics"]["loss_mse"] ** 0.5, rel=0.3)
 
 
 def test_lazy_model_trains_from_the_first_batch():
@@ -61,7 +62,8 @@ def test_effects_switch_the_active_loss():
     model, optimizer, losses, metrics, loader, counters = setup()
     assert effective_loss("model", {}, {"model": optimizer}) == "loss_mse"
     assert effective_loss("model", {"loss": "loss_mae"}, {"model": optimizer}) == "loss_mae"
-    assert effective_loss("model", {"model.loss": "loss_huber", "loss": "loss_mae"}, {"model": optimizer}) == "loss_huber"
+    effects = {"model.loss": "loss_huber", "loss": "loss_mae"}
+    assert effective_loss("model", effects, {"model": optimizer}) == "loss_huber"
     seen = []
     original = losses["loss_mae"].loss
 
@@ -100,7 +102,7 @@ def test_two_optimizers_update_only_their_own_models():
     b = tiny_model(seed=1, index=1)
     opt_a = Sgd({"a": a}, {"lr": 0.1}, None, "l")
     opt_b = Sgd({"b": b}, {"lr": 0.0}, None, "l")
-    loader = torch_loader(table(frame(rows=16)), "train", {"size": 8})
+    loader = torch_loader(table(frame(rows=16)), "train", 8)
     losses = {"l": criterion_adapter(mse)}
     before_b = b.nodes["layer"].weight.clone()
     alternating({"a": a, "b": b}, {"a": opt_a, "b": opt_b}, {}, {"global_step": 0, "turn": 0}, {}, {}, loader,
@@ -126,14 +128,15 @@ def test_steps_mode_keeps_the_stream_across_turns():
     out = alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses, metrics,
                       {}, {}, "model", {"total": 8, "turn": 2}, device=Device.cpu())
     assert counters == {"global_step": 2, "turn": 1} and "loss_mse" in out["metrics"]
-    cursor = loader.kalfa_cursor
+    cursor = out["stream"]
     assert cursor is not None and not cursor.exhausted
-    alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses, metrics,
-                {}, {}, "model", {"total": 8, "turn": 2}, device=Device.cpu())
-    assert counters == {"global_step": 4, "turn": 2} and loader.kalfa_cursor is cursor
+    out = alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses, metrics,
+                      {}, {}, "model", {"total": 8, "turn": 2}, stream=cursor, device=Device.cpu())
+    assert counters == {"global_step": 4, "turn": 2} and out["stream"] is cursor
     for _ in range(3):
-        alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses, metrics,
-                    {}, {}, "model", {"total": 8, "turn": 2}, device=Device.cpu())
+        out = alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {}, losses,
+                          metrics, {}, {}, "model", {"total": 8, "turn": 2}, stream=out["stream"],
+                          device=Device.cpu())
     assert counters["global_step"] == 10
 
 
@@ -142,7 +145,7 @@ def test_fresh_batch_and_per_optimizer_steps_consume_batches():
     b = tiny_model(seed=1, index=1)
     opt_a = Sgd({"a": a}, {"lr": 0.01}, None, "l")
     opt_b = Sgd({"b": b}, {"lr": 0.01}, None, "l")
-    loader = torch_loader(table(frame(rows=48)), "train", {"size": 8})
+    loader = torch_loader(table(frame(rows=48)), "train", 8)
     losses = {"l": criterion_adapter(mse), "lb": criterion_adapter(mse)}
     counters = {"global_step": 0, "turn": 0}
     out = alternating({"a": a, "b": b}, {"a": opt_a, "b": opt_b}, {}, counters, {}, {"b.loss": "lb"}, loader,
@@ -155,7 +158,7 @@ def test_fresh_batch_and_per_optimizer_steps_consume_batches():
 def test_untrainable_model_stays_in_eval_mode():
     model = tiny_model(trainable=False)
     optimizer = Sgd({"model": model}, {"lr": 0.1}, None, "l")
-    loader = torch_loader(table(frame(rows=8)), "train", {"size": 8})
+    loader = torch_loader(table(frame(rows=8)), "train", 8)
     with pytest.raises(ValueError, match="no gradient"):
         alternating({"model": model}, {"model": optimizer}, {}, {"global_step": 0, "turn": 0}, {}, {}, loader, {}, {},
                     {"l": criterion_adapter(mse)}, {}, {}, {}, "model", None)

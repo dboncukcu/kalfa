@@ -30,7 +30,8 @@ def test_windows_with_context_and_the_forecast(trained):
     assert history[-1]["val/rmse"] > 2.0 and history[-1]["train/loss_mse"] < 2.0
     predictions = pandas.read_parquet(record / "predictions.parquet")
     assert list(predictions.columns)[:2] == ["row", "load_0"]
-    assert [column for column in predictions.columns if column.startswith("pred_")] == [f"pred_y_{i}" for i in range(24)]
+    predicted = [column for column in predictions.columns if column.startswith("pred_")]
+    assert predicted == [f"pred_y_{i}" for i in range(24)]
     assert len(predictions) == 3 * (90 - 24 + 1)
     source = pandas.read_parquet("energy.parquet")
     first = predictions.iloc[0]

@@ -81,6 +81,7 @@ kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep 
 kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
 kalfa ls [/alias/kalfa/tabular | /criterion | ... | word]         # packs and legos with their kinds and facts; a word searches
 kalfa docs [--write DOCS.md]                                      # the lego reference generated from the registry
+kalfa contract [--write contract.yaml]                            # the wiring and the flow blocks kalfa runs a config by
 kalfa ls|docs [--plugin module ...] [--config cfg.yaml ...]       # the same listings with your own legos imported first
 ```
 
@@ -88,6 +89,14 @@ kalfa ls|docs [--plugin module ...] [--config cfg.yaml ...]       # the same lis
 `--set training.rules=[]`, `--set device=cuda`); a single segment can only be a top level key, any other bare name
 is an error with a hint. `-p name=value` (`--param`) is the shortcut for `params.name` (`-p lr=1e-4`). The value
 is read as YAML; lists are replaced wholesale, a rule list is rewritten with `--set training.rules=[...]`.
+
+`--contract PATH` (on `run`, `check`, `describe`, `predict`, `generate` and `resume`) runs a config against an
+edited copy of the contract: the `wiring` (the adapters that wrap the losses and metrics entries, the builder, the
+default split and device, the prep steps, the run inputs, the history prefixes, the loader the `batch` section
+parametrises, the figures lego the `figures` section parametrises, the plot bus) and the five flow `blocks` the
+driver opens. `kalfa contract --write contract.yaml` exports the built in one; every record keeps the copy it ran
+with as `contract.yaml`, and a command over a record reads that copy without the option. A step of your own is a
+node in a block of the copy (`after: {flow: {notify: {uri: /lego/acme/slack, inputs: {history: history}}}}`).
 
 `--log` prints to stderr what the run is doing at the moment it is doing it, so a long step is not a silent one.
 `--log info` (a bare `--log` means `info`) is the narrative: the config files and the plugins, the device, the
@@ -145,7 +154,8 @@ kalfa: its three plots say so in the log and are skipped when it is not installe
 `figures` sets the look of every plot in one place: `{format: png | pdf | svg, width, height, dpi, style}`, where
 `width` and `height` are the size of one panel in inches. A single plot overrides them with the definition level
 keys `width` and `height`, and `--set figures.format=pdf` switches the whole run from the command line. The plots
-share one palette and one grid, so a record's figures look like one document.
+share one palette and one grid, so a record's figures look like one document. The section is the params of the
+figures lego the contract names (`/lego/kalfa/figures`), so `check` validates it by building the lego.
 
 `check --dump` prints the graph that will run (`flow.yaml`), `--recipe` the document the driver hands to cirak;
 `--layers` shows the layer tree and the overridden leaves. The set table is from the file header, before the
@@ -170,12 +180,12 @@ samples = generate(result.record, which="best")
 
 | Function | Returns | What it carries |
 |---|---|---|
-| `check(paths, sets=None, load=False)` | `Prepared` | `problems`, `errors`, `warnings`, `sizes` (the set table), `loaded` (real sizes), `header` (columns, dtypes, rows), `implicit` (the implicit bindings), `document`, `analysis`, `pipeline`, `dump()` (the `flow.yaml` document) |
+| `check(paths, sets=None, load=False, contract=None)` | `Prepared` | `problems`, `errors`, `warnings`, `sizes` (the set table), `loaded` (real sizes), `header` (columns, dtypes, rows), `implicit` (the implicit bindings), `document`, `analysis`, `pipeline`, `dump()` (the `flow.yaml` document) |
 | `probe(document)` | `Probe` | the data and model blocks run on their own: `sizes`, `prep` (the fitted plan), `features` (the width of the feature tensor), `parameters` per model, `shapes` of one batch, `notes`; `kalfa.describe.render(prepared, style, sections, probe)` turns the two into the text `kalfa describe` prints |
-| `run(paths, sets=None, executor="serial", workers=None)` | `RunResult` | `record` (the directory it opened), `report` (tezgah's, `report.outputs["history"]` is the per turn table), `device` |
-| `resume(run_dir, sets=None, executor="serial", workers=None)` | `RunResult` | the same, in a new record directory |
-| `predict(run_dir, model=None, which=None, data=None, device=None)` | `Prediction` | `path`, `table` (a DataFrame), `model` |
-| `generate(run_dir, which=None, device=None)` | `Generated` | `path`, `samples` |
+| `run(paths, sets=None, executor="serial", workers=None, contract=None, monitor=None)` | `RunResult` | `record` (the directory it opened), `report` (tezgah's, `report.outputs["history"]` is the per turn table), `device`; `monitor` is a `kalfa.std.common.log.Monitor` (`Monitor(logging.INFO, progress=False)` prints the turn lines instead of the bar), the default one draws the bar |
+| `resume(run_dir, sets=None, executor="serial", workers=None, contract=None, monitor=None)` | `RunResult` | the same, in a new record directory |
+| `predict(run_dir, model=None, which=None, data=None, device=None, contract=None)` | `Prediction` | `path`, `table` (a DataFrame), `model` |
+| `generate(run_dir, which=None, device=None, contract=None)` | `Generated` | `path`, `samples` |
 | `collect_root(root, out=None)` in `kalfa.collect` | mapping | the sweep or fold table and the best point; `load_runs`, `fold_summary`, `sweep_table` are the pieces |
 | `plan(paths, sets=None, record=None)` in `kalfa.sweep` | `Plan` | the points of a sweep without running any of them |
 
@@ -240,6 +250,7 @@ never written into (an error).
 | File | Contents |
 |---|---|
 | `resolved.yaml` | the config with its aliases and `$param$`s resolved; the source of every overridden value in a comment; runs again on its own |
+| `contract.yaml` | the contract the run was compiled by (the wiring and the flow blocks); `predict`, `generate` and `resume` read it back |
 | `flow.yaml` | the tezgah graph that ran: the component tables, the model blocks, the expanded flow and tezgah's resolution comments |
 | `history.jsonl` | per turn the `train/`, `val/`, `test/` values, `global_step`, `lr/<optimizer>`, the rules that fired |
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |
@@ -349,8 +360,10 @@ through `cirak.declare_facts`); cirak stores them and reads none of them, and a 
 `RegistryError`, so a misspelled one is still caught. A `/data/` lego is a run time component: `{uri: name}` as a
 param value, built once the data exists with the parameters its signature names (`loader`, `prep`, `target`).
 The turn contract is the signature of `/turn/kalfa/alternating` (`models, optimizers, emas, counters,
-composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps` plus the
-bus keys `device`, `prep`, `record`), returning `{models, optimizers, emas, counters, metrics}`; a custom turn
+composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream`
+plus the bus keys `device`, `prep`, `record`), returning `{models, optimizers, emas, counters, stream, metrics}`;
+`stream` is the batch cursor a `steps` run carries from one turn to the next (`None` at the first turn and in an
+epoch run); a custom turn
 builds a `Pass` (`kalfa.std.common.runtime`) and calls `update` from `kalfa.std.turn.base` for one optimizer
 update over a list of batches, so it writes only its own loop. The strategy contract is the `Strategy` base class
 of `kalfa.std.strategy.base`: `deterministic`, `total(space)` and `point(space, index)`, or `ask(space, mode)` and
@@ -404,10 +417,11 @@ light fields and one mapping per item. A plot that reads the history wraps it in
 
 **Writing a plot.** A plot lego takes `predictions, history, models, record` and, by naming them in its
 signature, anything else the run holds: `prep`, `train_loader`, `valid_loader`, `test_loader`, `loaders` (the
-three in one mapping), `predicts`, `sets`, `name`, `device`, `counters`, `optimizers`, `emas`, `rules`. Draw with
-`kalfa.std.common.figure` (`single`, `grid`, `label`, `density`, `profile`, `binned`, `colorbar`, `save` and the
-palette) and the figure comes out in the run's own style and format. `kalfa.std.plot.base.set_frame(loaders, prep,
-set)` gives
+three in one mapping), `predicts`, `sets`, `name`, `device`, `counters`, `optimizers`, `emas`, `rules`, and
+`figures`. Draw through `figures`, a `kalfa.std.common.figure.Figure` (`single`, `grid`, `label`, `density`,
+`profile`, `binned`, `colorbar`, `save` and the palette) carrying the format, the panel size and the style of the
+run's `figures` section, already sized for the definition's `width` and `height`, and the figure comes out in the
+run's own look. `kalfa.std.plot.base.set_frame(loaders, prep, set)` gives
 the columns of one set as a DataFrame in the original units, features and targets together, which is what
 `target_vs_features` and `correlation_heatmap` draw.
 

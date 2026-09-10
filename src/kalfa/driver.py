@@ -1,20 +1,9 @@
 from cirak.registry import registry
 
 from .config import resolve_alias
-from .kinds import kalfa_kind, DEFINITION_KEYS, TRAINING_FIXED
-
-ADAPTER_CRITERION = "/adapter/kalfa/criterion"
-ADAPTER_METRIC = "/adapter/kalfa/metric"
-ADAPTER_OBJECTIVE = "/adapter/kalfa/objective"
-RANDOM_SPLIT = "/split/kalfa/random"
-BUILDER = "/builder/kalfa/module"
-PROGRESS = "/lego/kalfa/progress"
-FLOW_OUTPUTS = ["history", "predictions"]
-
-MODEL_KEYS = ("inputs", "outputs", "nodes", "optimizer", "init", "ema", "trainable", "weights")
-NODE_KEYS = ("uri", "block", "model", "params", "inputs", "outputs", "init", "repeat", "unpack")
-LEGO_TYPES = ("model", "criterion", "objective", "metric", "schedule", "init", "pre", "preprocessor", "generate",
-              "trigger")
+from .contract import Contract
+from .kinds import kalfa_kind
+from .schema import Schema
 
 
 def call(value):
@@ -34,7 +23,7 @@ def call_with_params(value):
 
 
 def is_shortcut(section):
-    return any(key in section for key in MODEL_KEYS)
+    return any(key in section for key in Schema.definition_of_model)
 
 
 def models_of(section):
@@ -51,12 +40,10 @@ def is_composite(definition):
 
 def node_of(item):
     out = {}
-    for key in NODE_KEYS:
-        if key == "block":
-            if "template" in item:
-                out["block"] = item["template"]
-        elif key in item:
-            out[key] = item[key]
+    for key in Schema.node:
+        if key not in item:
+            continue
+        out["block" if key == "template" else key] = item[key]
     return out
 
 
@@ -188,7 +175,7 @@ def resolve_refs(uri, params, aliases, catalog, preprocessors=None, generate=Non
                 raise ValueError(f"{uri}: {param} names the generate section, which the config does not write")
             out[param] = call_resolved(generate, aliases, catalog, preprocessors)
             continue
-        if ref_type in LEGO_TYPES and ref_type != "model":
+        if Schema.ref(ref_type).lego:
             out[param] = lego_reference(out[param], aliases)
     return out
 
@@ -207,7 +194,7 @@ def set_values(targets, losses, aliases, catalog):
         entry = losses.get(owner) if isinstance(losses, dict) else None
         if param and param != "loss" and isinstance(entry, dict) and isinstance(value, str):
             ref_type = catalog.facts(entry.get("uri", "")).refs.get(param)
-            if ref_type in LEGO_TYPES and ref_type != "model":
+            if Schema.ref(ref_type).lego:
                 out[key] = lego_reference(value, aliases)
                 continue
         out[key] = value
@@ -225,27 +212,25 @@ def triggers_of(training, aliases=None, catalog=None):
     return found
 
 
-def component_of(entry, catalog, aliases=None, generate=None):
+def component_of(entry, catalog, aliases=None, generate=None, contract=None):
+    contract = contract or Contract.load()
     inner = call_resolved(entry, aliases or {}, catalog, generate=generate)
     kind = kalfa_kind(inner["uri"])
-    if kind == "criterion":
-        return {"uri": ADAPTER_CRITERION, "params": {"criterion": inner}}
-    if kind == "metric":
-        return {"uri": ADAPTER_METRIC, "params": {"metric": inner}}
-    if kind == "objective":
-        return {"uri": ADAPTER_OBJECTIVE, "params": {"objective": inner}}
-    return inner
+    adapter = contract.wiring.get(f"{kind}_adapter")
+    if adapter is None:
+        return inner
+    return {"uri": adapter, "params": {kind: inner}}
 
 
-def components_of(section, catalog, aliases=None, generate=None):
-    return {name: component_of(entry, catalog, aliases, generate) for name, entry in (section or {}).items()}
+def components_of(section, catalog, aliases=None, generate=None, contract=None):
+    return {name: component_of(entry, catalog, aliases, generate, contract) for name, entry in (section or {}).items()}
 
 
 def keys_of(section, targets=None):
     targets = dict(targets or {})
     table = {}
     for name, entry in (section or {}).items():
-        keys = {key: entry[key] for key in DEFINITION_KEYS if isinstance(entry, dict) and key in entry}
+        keys = {key: entry[key] for key in Schema.definition if isinstance(entry, dict) and key in entry}
         if targets and keys.get("target") is None:
             inherited = targets.get(keys["output"]) if keys.get("output") is not None else (
                 next(iter(targets.values())) if len(targets) == 1 else None)
@@ -255,33 +240,46 @@ def keys_of(section, targets=None):
     return table
 
 
-def data_params(data, aliases=None, catalog=None):
+def loaders_of(batch, contract):
+    batch = {"size": batch} if not isinstance(batch, dict) else dict(batch)
+    return {name: {"uri": contract.wiring["loader"], "set": name, "params": {"set": name, **batch}}
+            for name in contract.sets}
+
+
+def prep_of(data, preprocessors, keys, contract, record=None):
+    if record is not None:
+        return {"uri": contract.wiring["read_prep"], "params": {"record": str(record)}, "inputs": {}}
+    params = {"fields": dict(data.get("fields") or {}), "preprocessors": preprocessors,
+              "drop": list(data.get("drop") or []), "keys": keys}
+    return {"uri": contract.wiring["fit"], "params": params, "inputs": {"df": "train_df"}}
+
+
+def data_params(data, aliases=None, catalog=None, contract=None, record=None):
     catalog = catalog if catalog is not None else registry
+    contract = contract or Contract.load()
     aliases = aliases or {}
     filters = data.get("filter") or []
     split = data["split"]
     if isinstance(split, dict) and "uri" in split:
         split = call_with_params(split)
     else:
-        split = {"uri": RANDOM_SPLIT, "params": dict(split)}
-    batch = data["batch"]
-    batch = {"size": batch} if not isinstance(batch, dict) else dict(batch)
+        split = {"uri": contract.wiring["default_split"], "params": dict(split)}
     table = data.get("preprocessors") or {}
     preprocessors = {name: call_resolved(entry, aliases, catalog, table) for name, entry in table.items()}
+    keys = keys_of(data.get("preprocessors"))
     return {"source": call_with_params(data["source"]),
             "filter_pre": [item for item in filters if isinstance(item, str)],
             "filter_set": [item for item in filters if isinstance(item, dict)],
             "split": split,
-            "batch": batch,
-            "preprocessors": preprocessors,
-            "preprocessors_keys": keys_of(data.get("preprocessors")),
-            "drop": list(data.get("drop") or []),
-            "fields": dict(data.get("fields") or {}),
+            "loaders": loaders_of(data["batch"], contract),
+            "prep": prep_of(data, preprocessors, keys, contract, record),
+            "preprocessors_keys": keys,
             "feed": call_with_params(data["feed"])}
 
 
-def recipe(config, catalog=None, aliases=None):
+def recipe(config, catalog=None, aliases=None, contract=None, record=None):
     catalog = catalog if catalog is not None else registry
+    contract = contract or Contract.load()
     aliases = aliases or {}
     training = config.get("training") or {}
     templates, models = models_of(config["model"])
@@ -297,15 +295,15 @@ def recipe(config, catalog=None, aliases=None):
     targets = training.get("targets") or {}
     generate = config.get("generate")
     document = {
-        "losses": components_of(losses, catalog, aliases, generate),
-        "metrics": components_of(config.get("metrics"), catalog, aliases, generate),
+        "losses": components_of(losses, catalog, aliases, generate, contract),
+        "metrics": components_of(config.get("metrics"), catalog, aliases, generate, contract),
         "triggers": triggers_of(training, aliases, catalog),
         "plots": {name: call_resolved(entry, aliases, catalog) for name, entry in (config.get("plots") or {}).items()},
-        "progress": {"uri": PROGRESS},
+        "checkpoint": call(checkpoint) if checkpoint is not None else {},
         "blocks": blocks_of(templates, models),
         "flow": {
-            "outputs": list(FLOW_OUTPUTS),
-            "data": {"block": "data", "params": data_params(config["data"], aliases, catalog)},
+            "outputs": ["history", "predictions"],
+            "data": {"block": "data", "params": data_params(config["data"], aliases, catalog, contract, record)},
             "models": {"block": "models", "params": {
                 "trained_items": trained,
                 "composite_items": composites,
@@ -319,7 +317,7 @@ def recipe(config, catalog=None, aliases=None):
                 "optimizer_refs": {item["name"]: f"opt_{item['name']}" for item in optimizers}}},
             "training": {"block": "training", "params": {
                 "turn": call_with_params(training["turn"]),
-                "turn_params": {key: value for key, value in training.items() if key not in TRAINING_FIXED},
+                "turn_params": {key: value for key, value in training.items() if key not in Schema.training_fixed},
                 "losses_keys": keys_of(losses, targets),
                 "metrics_keys": keys_of(config.get("metrics"), targets),
                 "predicts": predicts,
@@ -327,10 +325,10 @@ def recipe(config, catalog=None, aliases=None):
                 "steps": training.get("steps"),
                 "rules": rules,
                 "stop": [f"@triggers.stop_{position}" for position in range(len(training.get("stop") or []))],
-                "checkpoint": None if checkpoint is None else call(checkpoint)}},
+                "history_prefix": contract.history_prefix}},
             "after": {"block": "after", "params": {
                 "report": training.get("report"),
-                "figures": config.get("figures"),
+                "figures": {"uri": contract.wiring["figures"], "params": dict(config.get("figures") or {})},
                 "predicts": predicts,
                 "targets": targets,
                 "generate": None if generate is None else call_resolved(generate, aliases, catalog),

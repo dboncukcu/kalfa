@@ -8,6 +8,7 @@ logger = logger_for("data.source")
 
 
 @lego("/source/kalfa/image_folder", returns="df", alias="image_folder",
+      header="/lego/kalfa/image_folder_header", samples=True,
       description="Images under root/<class>/ as a Dataset with fields image and label")
 def image_folder(path):
     logger.info(f"reading {path}")

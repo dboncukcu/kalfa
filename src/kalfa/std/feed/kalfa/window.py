@@ -86,7 +86,7 @@ class WindowDataset(Dataset):
         return self.row_ids
 
 
-@lego("/feed/kalfa/window", alias="window", refs={"group": "column"},
+@lego("/feed/kalfa/window", alias="window", refs={"group": "column"}, needs_table=True,
       description="Windows of size steps and the next horizon steps of the targets; context takes the tail "
                   "of the previous set at the split boundary, group keeps series apart")
 def window(frame, frames, size, horizon, context=False, group=None):

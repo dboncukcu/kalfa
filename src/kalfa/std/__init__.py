@@ -4,10 +4,11 @@ from pathlib import Path
 from cirak import declare_facts, declare_kinds
 from cirak.registry import registry
 
-from kalfa.kinds import FACTS, KINDS
-
-declare_kinds(*[kind for kind in KINDS if kind not in ("builder", "data")])
-declare_facts(*FACTS)
+declare_kinds("source", "split", "pre", "feed", "loader", "layer", "init", "criterion", "objective", "metric",
+              "adapter", "optimizer", "schedule", "turn", "trigger", "checkpoint", "rule", "generate", "plot",
+              "strategy", "device", "lego")
+declare_facts("uses", "needs_grad", "needs_models", "extras", "grouped", "requires", "sizes", "header", "stream",
+              "samples", "needs_table", "counts", "writes", "enumerates", "describe", "roles")
 
 
 def discover():

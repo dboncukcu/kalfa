@@ -2,7 +2,7 @@ import numpy
 import torch
 
 from kalfa.registration import lego
-from kalfa.std.common import figure
+from kalfa.std.common.figure import Figure
 from kalfa.std.common.runtime import named_outputs, resolve_model
 from kalfa.std.plot.base import bars, first_set
 
@@ -59,7 +59,8 @@ def importances(model, matrix, truth, wire, base, repeats, seed):
       description="The drop in R2 when one feature column is shuffled, the largest first; the model runs "
                   "again for every feature and every repeat, so sample bounds the cost")
 def permutation_importance(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None,
-                           repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None):
+                           repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None, figures=None):
+    figures = figures or Figure()
     loader = (loaders or {}).get(first_set(sets, "test"))
     if loader is None or prep is None or predicts is None:
         return None
@@ -75,10 +76,11 @@ def permutation_importance(predictions, history, models, record, loaders=None, p
     means, deviations = importances(model, matrix, truth, wire, base, repeats, seed)
     order = numpy.argsort(means)[::-1][:int(top)][::-1]
     names = [prep.features[position] for position in order]
-    drawing, axes = figure.sized(figure.width_of(9.5), 0.34 * len(names) + 2.0)
+    drawing, axes = figures.sized(figures.width_of(9.5), 0.34 * len(names) + 2.0)
     axis = axes[0][0]
-    bars(axis, names, [means[position] for position in order], groups, [deviations[position] for position in order])
-    figure.label(axis, "Permutation importance", "drop in R2 when the feature is shuffled", None,
+    bars(figures, axis, names, [means[position] for position in order], groups,
+         [deviations[position] for position in order])
+    figures.label(axis, "Permutation importance", "drop in R2 when the feature is shuffled", None,
                  note=f"R2 = {base:.4f} on {len(matrix):,} points, {int(repeats)} repeats")
-    figure.save(drawing, record, name or "permutation_importance")
+    figures.save(drawing, record, name or "permutation_importance")
     return None

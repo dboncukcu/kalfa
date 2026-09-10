@@ -57,4 +57,5 @@ def test_the_balanced_sampler_is_wired(dataset):
     dataset("04_cnn_images")
     prepared = prepare(["config.yaml"], parse_sets(SETS), dry=False)
     assert prepared.errors == []
-    assert prepared.document["flow"]["data"]["params"]["batch"] == {"size": 16, "eval_size": 32, "balanced": True}
+    loaders = prepared.document["flow"]["data"]["params"]["loaders"]
+    assert loaders["train"]["params"] == {"set": "train", "size": 16, "eval_size": 32, "balanced": True}

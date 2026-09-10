@@ -6,7 +6,7 @@ import pandas
 import pytest
 
 import kalfa  # noqa: F401
-from kalfa.std.common import figure
+from kalfa.std.common.figure import Figure
 from kalfa.std.plot.kalfa.loss_curve import loss_curve
 from kalfa.std.common.history import History
 from kalfa.std.plot.base import panel_title
@@ -114,40 +114,37 @@ def test_sample_writer_and_the_sample_plots(tmp_path):
 
 
 def test_figure_settings_choose_the_format_and_the_panel_size(tmp_path):
-    figure.configure({"format": "pdf", "width": 3.0, "height": 2.0})
-    try:
-        drawing, axis = figure.single()
-        assert tuple(drawing.get_size_inches()) == (3.0, 2.0)
-        path = figure.save(drawing, str(tmp_path), "sized")
-        assert path.name == "sized.pdf" and path.exists()
-        drawing, axes = figure.grid(2, 3)
-        assert tuple(drawing.get_size_inches()) == (9.0, 4.0)
-        figure.pyplot().close(drawing)
-    finally:
-        figure.configure(None)
-    assert figure.settings()["format"] == "png"
+    figures = Figure(format="pdf", width=3.0, height=2.0)
+    drawing, axis = figures.single()
+    assert tuple(drawing.get_size_inches()) == (3.0, 2.0)
+    path = figures.save(drawing, str(tmp_path), "sized")
+    assert path.name == "sized.pdf" and path.exists()
+    drawing, axes = figures.grid(2, 3)
+    assert tuple(drawing.get_size_inches()) == (9.0, 4.0)
+    figures.pyplot().close(drawing)
+    assert Figure().format == "png" and Figure().width is None
 
 
 def test_figure_profile_and_binned_follow_the_data():
     import numpy
 
     x = numpy.linspace(0.0, 1.0, 400)
-    centers, values = figure.profile(x, 2.0 * x, bins=4)
+    centers, values = Figure().profile(x, 2.0 * x, bins=4)
     assert len(centers) == 4 and values[0] < values[-1]
-    edges_x, edges_y, mean = figure.binned(x, x, x, bins=4, min_count=1)
+    edges_x, edges_y, mean = Figure().binned(x, x, x, bins=4, min_count=1)
     assert mean.shape == (4, 4) and numpy.isnan(mean).any() and numpy.nanmin(mean) >= 0.0
 
 
 def test_a_plot_definition_overrides_the_figure_size(tmp_path):
     seen = {}
 
-    def plot(predictions, history, models, record, name=None):
-        seen["size"] = (figure.width_of(1.0), figure.height_of(1.0))
+    def plot(predictions, history, models, record, figures=None):
+        seen["size"] = (figures.width_of(1.0), figures.height_of(1.0))
 
-    run_all(None, [], {}, {"one": plot}, keys={"one": {"width": 12.0, "height": 3.0}},
-            figures={"width": 5.0}, record=str(tmp_path))
-    assert seen["size"] == (12.0, 3.0)
-    assert figure.settings()["width"] is None
+    figures = Figure(width=5.0)
+    run_all(None, [], {}, {"one": plot}, keys={"one": {"width": 12.0, "height": 3.0}}, figures=figures,
+            record=str(tmp_path))
+    assert seen["size"] == (12.0, 3.0) and figures.width == 5.0
 
 
 def test_the_data_and_diagnostic_plots_draw_from_a_run(workdir):

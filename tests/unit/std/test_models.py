@@ -67,7 +67,8 @@ def test_lazy_layers_materialize_under_the_model_seed_on_the_first_batch():
 
 def test_init_roles_and_node_init():
     graph = Graph(("x",), ("y",), (GraphNode("a", nn.Linear(3, 3), ("x",), ("h",)),
-                                   GraphNode("b", nn.Linear(3, 1), ("h",), ("y",), extra={"init": {"weights": zeros()}})))
+                                   GraphNode("b", nn.Linear(3, 1), ("h",), ("y",),
+                                             extra={"init": {"weights": zeros()}})))
     model = Module(graph, seed=1, init={"bias": zeros()})
     assert float(model.nodes["a"].bias.detach().abs().sum()) == 0.0
     assert float(model.nodes["b"].bias.detach().abs().sum()) == 0.0

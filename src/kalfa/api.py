@@ -1,6 +1,7 @@
 import json
 import random
 import shutil
+import sys
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,41 +12,37 @@ import tezgah
 import torch
 from cirak.api import Analysis
 from cirak.build import build_components
-from cirak.errors import CirakError, CirakWarning, ConfigError, render_problems
+from cirak.errors import CirakWarning, ConfigError, error, render_problems
 from cirak.registry import registry
 
 from .aliasing import aliasing_problems
 from .check import Checker
-from .kinds import kalfa_kind
 from .config import Surface, load_surface
+from .contract import Contract
 from .driver import recipe
-from .record import (read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note)
-from .recipe import RUN_INPUTS, analyze, compile, dump, implicit_bindings
+from .errors import KalfaError
+from .kinds import kalfa_kind
+from .record import read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note
+from .recipe import analyze, compile, dump, implicit_bindings
 from .std.checkpoint.base import load
 from .std.common.device import Device
 from .std.common.generation import write_samples
-from .std.common.log import Progress, clock, logger_for, since, sink
+from .std.common.log import Monitor, clock, logger_for, since
 from .std.common.prediction import prediction_table
 from .std.common.runtime import call_model, named_outputs, resolve_model
 from .std.lego.kalfa.apply import apply
 from .std.lego.kalfa.clone import Ema
-from .std.loader.kalfa.torch import torch_loader
 from .std.pre.base import Prep, read_prep
-import sys
-from cirak.errors import error
 
 
 logger = logger_for("run")
-
-
-class KalfaError(CirakError):
-    pass
 
 
 @dataclass
 class Prepared:
     surface: Surface
     problems: list
+    contract: Contract
     sizes: dict | None = None
     header: dict | None = None
     document: dict | None = None
@@ -74,27 +71,29 @@ def has_errors(problems):
     return any(problem.severity == "error" for problem in problems)
 
 
-def prepare(paths, sets=None, inputs=RUN_INPUTS, dry=True) -> Prepared:
+def prepare(paths, sets=None, inputs=None, dry=True, contract=None) -> Prepared:
     started = clock()
-    surface = load_surface(paths, sets)
-    checker = Checker(surface, registry)
+    contract = contract or Contract.load()
+    inputs = contract.run_inputs if inputs is None else list(inputs)
+    surface = load_surface(paths, sets, contract)
+    checker = Checker(surface, registry, contract)
     problems = list(surface.problems)
     blocking = has_errors(problems)
     if not blocking:
         checker.run()
         problems.extend(checker.problems)
         logger.debug(f"checked in {since(started)}: {len(problems)} problems")
-    prepared = Prepared(surface, problems)
+    prepared = Prepared(surface, problems, contract)
     prepared.header = checker.header
     prepared.sizes = checker.sizes() if checker.header is not None else None
     if blocking or has_errors(checker.problems) and not checker.header_only_errors():
         return prepared
     try:
-        prepared.document = recipe(surface.data, registry, surface.aliases)
+        prepared.document = recipe(surface.data, registry, surface.aliases, contract)
     except (KeyError, TypeError, ValueError, AttributeError) as exception:
         problems.append(error("driver_failed", f"the driver cannot shape this config: {exception!r}"))
         return prepared
-    analysis = analyze(prepared.document)
+    analysis = analyze(prepared.document, contract)
     prepared.analysis = analysis
     problems.extend(analysis.problems)
     if has_errors(analysis.problems):
@@ -120,16 +119,17 @@ def gate(problems):
         raise ConfigError(failures)
 
 
-def check(paths, sets=None, load=False) -> Prepared:
-    prepared = prepare(paths, sets, dry=True)
+def check(paths, sets=None, load=False, contract=None) -> Prepared:
+    prepared = prepare(paths, sets, dry=True, contract=contract)
     if load and prepared.document is not None and not prepared.errors:
-        prepared.loaded = loaded_sizes(prepared.document)
+        prepared.loaded = loaded_sizes(prepared.document, prepared.contract)
     return prepared
 
 
-def loaded_sizes(document):
-    outputs = data_outputs(document, ["train_loader", "valid_loader", "test_loader"])
-    return {name: outputs[f"{name}_loader"].dataset.count() for name in ("train", "valid", "test")}
+def loaded_sizes(document, contract=None):
+    contract = contract or Contract.load()
+    outputs = data_outputs(document, [f"{name}_loader" for name in contract.sets], contract)
+    return {name: outputs[f"{name}_loader"].dataset.count() for name in contract.sets}
 
 
 @dataclass
@@ -142,10 +142,11 @@ class Probe:
     notes: dict = field(default_factory=dict)
 
 
-def probe(document) -> Probe:
+def probe(document, contract=None) -> Probe:
+    contract = contract or Contract.load()
     outputs = flow_outputs(document, ("data", "models"),
-                            ["prep", "train_loader", "valid_loader", "test_loader", "models", "composites"])
-    found = Probe(sizes={name: outputs[f"{name}_loader"].dataset.count() for name in ("train", "valid", "test")},
+                           ["prep", *[f"{name}_loader" for name in contract.sets], "models", "composites"], contract)
+    found = Probe(sizes={name: outputs[f"{name}_loader"].dataset.count() for name in contract.sets},
                   prep=outputs.get("prep"))
     if found.prep is not None:
         found.features = len(found.prep.features)
@@ -183,9 +184,6 @@ class RunResult:
     device: Device | None = None
 
 
-DEFAULT_DEVICE = "/device/kalfa/cpu"
-
-
 def build_device(call):
     if isinstance(call, Device):
         return call
@@ -216,18 +214,23 @@ def build_device(call):
     return Device(device, uri, params)
 
 
-def device_of(config):
-    return build_device(config.get("device") if config.get("device") is not None else DEFAULT_DEVICE)
+def device_of(config, contract=None):
+    contract = contract or Contract.load()
+    return build_device(config.get("device") if config.get("device") is not None
+                        else contract.wiring["default_device"])
 
 
 def write_device_note(record, device):
     (Path(record) / "device.json").write_text(json.dumps(device.note(), indent=2))
 
 
-def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None) -> RunResult:
+def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None,
+        contract=None, monitor=None) -> RunResult:
     started = clock()
-    inputs = list(RUN_INPUTS) + (["resume"] if resume is not None else [])
-    prepared = prepare(paths, sets, inputs=inputs, dry=False)
+    contract = contract or Contract.load()
+    monitor = monitor or Monitor()
+    inputs = contract.run_inputs + (["resume"] if resume is not None else [])
+    prepared = prepare(paths, sets, inputs=inputs, dry=False, contract=contract)
     gate(prepared.problems)
     if executor != "serial" and prepared.aliasing:
         gate([error(problem.kind, problem.message, hint=problem.hint) for problem in prepared.aliasing])
@@ -242,6 +245,7 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
     logger.info(f"record {record}")
     target.mkdir(parents=True, exist_ok=True)
     write_resolved(record, prepared.surface)
+    contract.write(target / "contract.yaml")
     copy_plugins(config.get("plugins"), target)
     write_flow(record, prepared.dump())
     if resume_from is not None:
@@ -250,18 +254,17 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
             shutil.copytree(old, target / "checkpoints", dirs_exist_ok=True)
         write_resume_note(record, resume_from, resume)
         logger.info(f"resuming {resume_from} from {Path(resume).name}")
-    device = device_of(config)
+    device = device_of(config, contract)
     logger.info(f"device {device} ({device.uri})")
     write_device_note(record, device)
-    values = {"device": device, "record": record}
+    values = {"device": device, "record": record, "monitor": monitor}
     if resume is not None:
         values["resume"] = str(resume)
-    tezgah.subscribe(prepared.pipeline, sink)
+    tezgah.subscribe(prepared.pipeline, monitor.sink)
     try:
         report = tezgah.run(prepared.pipeline, inputs=values, executor=executor, workers=workers, record_dir=record)
     finally:
-        if Progress.current is not None:
-            Progress.current.close()
+        monitor.finish()
     logger.info(f"finished in {since(started)}")
     return RunResult(record, report, device)
 
@@ -281,14 +284,23 @@ def copy_plugins(names, record):
             shutil.copyfile(source, target / source.name)
 
 
-def resume(run_dir, sets=None, executor="serial", workers=None, when=None) -> RunResult:
+def recorded_contract(run_dir, contract=None):
+    if contract is not None:
+        return contract
+    copy = Path(run_dir) / "contract.yaml"
+    return Contract.load(copy) if copy.exists() else Contract.load()
+
+
+def resume(run_dir, sets=None, executor="serial", workers=None, when=None, contract=None,
+           monitor=None) -> RunResult:
     source = resume_source(run_dir)
     if source is None:
         raise KalfaError(f"{run_dir} has neither checkpoints/last.pt nor final/state.pt; nothing to resume")
     resolved = Path(run_dir) / "resolved.yaml"
     if not resolved.exists():
         raise KalfaError(f"{run_dir} has no resolved.yaml")
-    return run([str(resolved)], sets, executor, workers, resume=source, resume_from=str(run_dir), when=when)
+    return run([str(resolved)], sets, executor, workers, resume=source, resume_from=str(run_dir), when=when,
+               contract=recorded_contract(run_dir, contract), monitor=monitor)
 
 
 def rebuild_models(analysis, store, prep=None):
@@ -330,16 +342,17 @@ class Prediction:
     model: str
 
 
-def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) -> Prediction:
+def predict(run_dir, model=None, which=None, data=None, sets=None, device=None, contract=None) -> Prediction:
     resolved = Path(run_dir) / "resolved.yaml"
     if not resolved.exists():
         raise KalfaError(f"{run_dir} has no resolved.yaml")
-    surface = load_surface([str(resolved)], sets)
+    contract = recorded_contract(run_dir, contract)
+    surface = load_surface([str(resolved)], sets, contract)
     gate(surface.problems)
     config = surface.data
     which = which or config["training"].get("report", "last")
-    document = recipe(config, registry, surface.aliases)
-    analysis = analyze(document)
+    document = recipe(config, registry, surface.aliases, contract, record=run_dir)
+    analysis = analyze(document, contract)
     gate(analysis.problems)
     store = build_components(analysis.data, analysis.expansions, registry)
     prep = read_prep(run_dir)
@@ -360,10 +373,11 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None) 
         frame = apply(df, prep, "test")
         feed = document["flow"]["data"]["params"]["feed"]
         dataset = registry.resolve(feed["uri"])(frame, None, **(feed.get("params") or {}))
-        loader = torch_loader(dataset, "test", document["flow"]["data"]["params"]["batch"])
+        spec = document["flow"]["data"]["params"]["loaders"]["test"]
+        loader = registry.resolve(spec["uri"])(dataset, **spec["params"])
         tag = f"_{Path(data).stem}"
     else:
-        loader = test_loader(document)
+        loader = test_loader(document, contract)
         tag = ""
     if model is not None:
         tag += f"_{model}"
@@ -381,18 +395,19 @@ class Generated:
     samples: torch.Tensor | str
 
 
-def generate(run_dir, which=None, sets=None, device=None) -> Generated:
+def generate(run_dir, which=None, sets=None, device=None, contract=None) -> Generated:
     resolved = Path(run_dir) / "resolved.yaml"
     if not resolved.exists():
         raise KalfaError(f"{run_dir} has no resolved.yaml")
-    surface = load_surface([str(resolved)], sets)
+    contract = recorded_contract(run_dir, contract)
+    surface = load_surface([str(resolved)], sets, contract)
     gate(surface.problems)
     config = surface.data
     if config.get("generate") is None:
         raise KalfaError(f"{run_dir}: the config has no generate section")
     which = which or config["training"].get("report", "last")
-    document = recipe(config, registry, surface.aliases)
-    analysis = analyze(document)
+    document = recipe(config, registry, surface.aliases, contract, record=run_dir)
+    analysis = analyze(document, contract)
     gate(analysis.problems)
     store = build_components(analysis.data, analysis.expansions, registry)
     prep = read_prep(run_dir)
@@ -419,15 +434,15 @@ def generate(run_dir, which=None, sets=None, device=None) -> Generated:
     return Generated(str(path), samples)
 
 
-def data_outputs(document, names):
-    return flow_outputs(document, ("data",), names)
+def data_outputs(document, names, contract=None):
+    return flow_outputs(document, ("data",), names, contract)
 
 
-def flow_outputs(document, blocks, names):
+def flow_outputs(document, blocks, names, contract=None):
     flow = {"outputs": list(names)}
     for block in blocks:
         flow[block] = document["flow"][block]
-    analysis = analyze({**{key: value for key, value in document.items() if key != "flow"}, "flow": flow})
+    analysis = analyze({**{key: value for key, value in document.items() if key != "flow"}, "flow": flow}, contract)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         gate(analysis.problems)
@@ -437,8 +452,8 @@ def flow_outputs(document, blocks, names):
     return report.outputs
 
 
-def test_loader(document):
-    return data_outputs(document, ["test_loader"])["test_loader"]
+def test_loader(document, contract=None):
+    return data_outputs(document, ["test_loader"], contract)["test_loader"]
 
 
 __all__ = ["Generated", "KalfaError", "Prepared", "Prediction", "Probe", "RunResult", "check", "generate",

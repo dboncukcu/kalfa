@@ -57,14 +57,12 @@ class Cursor:
         self.exhausted = False
 
     @classmethod
-    def of(cls, loader, endless):
+    def of(cls, stream, loader, endless):
         if not endless:
             return cls(loader, False)
-        cursor = getattr(loader, "kalfa_cursor", None)
-        if cursor is None:
-            cursor = cls(loader, True)
-            loader.kalfa_cursor = cursor
-        return cursor
+        if isinstance(stream, Cursor) and stream.loader is loader:
+            return stream
+        return cls(loader, True)
 
     def known_empty(self):
         try:

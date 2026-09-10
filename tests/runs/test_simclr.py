@@ -17,7 +17,7 @@ def test_check_resolves_the_view_preprocessor(dataset):
     prepared = check(["config.yaml"], parse_sets(SETS))
     assert prepared.problems == []
     document = prepared.document
-    two = document["flow"]["data"]["params"]["preprocessors"]["two_views"]
+    two = document["flow"]["data"]["params"]["prep"]["params"]["preprocessors"]["two_views"]
     assert two == {"uri": "/pre/kalfa/two_views", "params": {"transform": {"uri": "/pre/kalfa/simclr_aug",
                                                                              "params": {"size": 32}}}}
     assert document["flow"]["data"]["params"]["preprocessors_keys"]["two_views"] == {"sets": ["train"]}

@@ -1,143 +1,17 @@
-import difflib
 import inspect
-import math
 from pathlib import Path
 
-from cirak.errors import error, warning
-
-from .driver import MODEL_KEYS, is_composite, is_shortcut, models_of
-from .kinds import kalfa_kind, names_of, RESERVED_BLOCKS, SETS, TRAINING_FIXED
-from .std.common.optional import installed
-from .std.pre.base import assign_fields, torch_dtype
-from .std.common.runtime import expand_targets
-from .std.source.base import STREAM_SOURCES
-from .std.source.base import header
-from .std.split.base import sizes
-from .config import resolve_alias
-from .record import read_resolved
-from .std.builder.base import weights_path
-from .std.split.base import kfold_sizes
-from .std.strategy.base import Choices, grid_values, parse_space
-
-TOP_KEYS = ("plugins", "params", "seed", "device", "data", "model", "metrics", "losses", "optimizers", "training",
-            "generate", "plots", "figures", "sweep", "record", "alias")
-TOP_REQUIRED = ("data", "model", "losses", "training", "record")
-DATA_KEYS = ("source", "filter", "split", "batch", "preprocessors", "drop", "fields", "feed")
-DATA_REQUIRED = ("source", "split", "batch", "fields", "feed")
-RATIO_SPLITS = ("/split/kalfa/random", "/split/kalfa/sequential")
-BATCH_KEYS = ("size", "eval_size", "shuffle", "drop_last", "workers", "collate", "balanced", "buffer")
-MODEL_SECTION_KEYS = ("templates", "models")
-TEMPLATE_KEYS = ("variables", "inputs", "outputs", "nodes")
-NODE_KEYS = ("uri", "template", "model", "params", "inputs", "outputs", "init", "repeat")
-COMPOSITE_FORBIDDEN = ("optimizer", "init", "ema", "trainable", "weights")
-ENTRY_KEYS = ("uri", "params", "every", "sets", "output", "target")
-OPTIMIZER_KEYS = ("uri", "params", "loss", "schedule")
-RULE_KEYS = ("name", "when", "set", "after")
-PLOT_KEYS = ("uri", "params", "inputs", "sets", "width", "height")
-FIGURE_KEYS = ("format", "width", "height", "dpi", "style")
-FIGURE_FORMATS = ("png", "pdf", "svg")
-PRE_KEYS = ("uri", "params", "sets")
-FIELD_KEYS = ("preprocessors", "target")
-INIT_KEYS = ("weights", "bias", "scale", "patterns")
-REPORTS = ("best", "last")
-SWEEP_KEYS = ("strategy", "space", "objective", "record")
-OBJECTIVE_KEYS = ("monitor", "mode", "at")
-BEST_URI = "/checkpoint/kalfa/best"
-HISTORY_SETS = {"train": "train", "val": "valid", "test": "test"}
+from ..driver import is_composite, is_shortcut, models_of
+from ..kinds import kalfa_kind, names_of
+from ..record import read_resolved
+from ..schema import Schema
+from ..std.builder.base import weights_path
+from ..std.strategy.base import Choices, grid_values, parse_space
 
 
-class Checker:
-    def __init__(self, surface, registry):
-        self.surface = surface
-        self.data = surface.data
-        self.raw = surface.raw
-        self.registry = registry
-        self.problems = []
-        self.templates = {}
-        self.models = {}
-        self.trained = []
-        self.composites = []
-        self.optimizers = {}
-        self.losses = {}
-        self.metrics = {}
-        self.preprocessors = {}
-        self.present = {"train": True, "valid": None, "test": None}
-        self.structural = 0
-        self.header = None
-        self.weight_checks = []
-        self.target_checks = []
-
-    def error(self, kind, message, path=(), hint=None):
-        self.problems.append(error(kind, message, self.surface.source(path), hint))
-
-    def warning(self, kind, message, path=(), hint=None):
-        self.problems.append(warning(kind, message, self.surface.source(path), hint))
-
-    @property
-    def failed(self):
-        return any(problem.severity == "error" for problem in self.problems)
-
-    def run(self):
-        if not self.top():
-            self.structural = len(self.problems)
-            return
-        self.data_section()
-        self.model_section()
-        self.definitions()
-        self.training_section()
-        self.plots_section()
-        self.figures_section()
-        self.generate_section()
-        self.sweep_section()
-        self.structural = len(self.problems)
-        self.data_header()
-        self.target_fields_of(self.data.get("training") or {})
-        for section, name, entry, path in self.target_checks:
-            self.definition_target(section, name, entry, path)
-        for name, definition, weights, path in self.weight_checks:
-            self.weights_of(name, definition, weights, path)
-
-    def header_only_errors(self):
-        return not any(problem.severity == "error" for problem in self.problems[:self.structural])
-
-    def keys(self, mapping, allowed, path, required=()):
-        if not isinstance(mapping, dict):
-            self.error("invalid_section", f"{'.'.join(map(str, path)) or 'config'} must be a mapping", path)
-            return False
-        for key in mapping:
-            if key not in allowed:
-                close = difflib.get_close_matches(str(key), [str(name) for name in allowed], n=1)
-                self.error("unknown_key", f"unknown key {key!r} under {'.'.join(map(str, path)) or 'the config'}",
-                           path + (key,), hint=f"did you mean {close[0]!r}?" if close else None)
-        for key in required:
-            if key not in mapping:
-                self.error("missing_key", f"{'.'.join(map(str, path + (key,)))} is required", path)
-        return True
-
-    def call_of(self, value, path, kinds, what):
-        if isinstance(value, str):
-            uri = value
-        elif isinstance(value, dict) and isinstance(value.get("uri"), str):
-            uri = value["uri"]
-            if "params" in value and not isinstance(value["params"], dict):
-                self.error("invalid_params", f"params of {what} must be a mapping", path)
-        else:
-            self.error("invalid_call", f"{what} must be a lego call: a short name or {{uri, params}}", path)
-            return None
-        if not uri.startswith("/"):
-            return None
-        if self.registry.lookup(uri) is None:
-            close = difflib.get_close_matches(uri, self.registry.uris(), n=1)
-            self.error("unknown_uri", f"{uri} is not registered", path,
-                       hint=f"did you mean {close[0]}?" if close else None)
-            return None
-        kind = kalfa_kind(uri)
-        if kinds and kind is not None and kind not in kinds:
-            self.error("kind_mismatch", f"{uri} is a {kind} lego, {what} needs {' or '.join(kinds)}", path)
-        return uri
-
+class SectionRules:
     def top(self):
-        if not self.keys(self.data, TOP_KEYS, (), TOP_REQUIRED):
+        if not self.keys(self.data, Schema.sections, (), Schema.required):
             return False
         if self.data.get("seed") is None:
             self.warning("no_seed", "seed is not written; torch runs unseeded and two runs differ", ("seed",))
@@ -157,37 +31,37 @@ class Checker:
 
     def data_section(self):
         data = self.data["data"]
-        if not self.keys(data, DATA_KEYS, ("data",), DATA_REQUIRED):
+        if not self.keys(data, Schema.data, ("data",), Schema.data_required):
             return
         if "source" in data:
             self.call_of(data["source"], ("data", "source"), ("source",), "data.source")
         for position, item in enumerate(data.get("filter") or []):
             path = ("data", "filter", position)
             if isinstance(item, dict):
-                self.keys(item, ("query", "sets"), path, ("query",))
+                self.keys(item, Schema.filter, path, ("query",))
                 self.sets_of(item.get("sets"), path)
             elif not isinstance(item, str):
                 self.error("invalid_value", "a filter is a query string or {query, sets}", path)
         split = data.get("split")
         if isinstance(split, dict) and "uri" in split:
-            self.call_of(split, ("data", "split"), ("split",), "data.split")
-            self.present.update(self.split_presence(split))
+            uri = self.call_of(split, ("data", "split"), ("split",), "data.split")
+            self.present.update(self.presence_of(uri, split.get("params") or {}))
         elif isinstance(split, dict):
-            self.keys(split, ("ratios", "seed"), ("data", "split"), ("ratios",))
+            self.keys(split, Schema.ratio_split, ("data", "split"), ("ratios",))
             ratios = split.get("ratios")
             if not (isinstance(ratios, list) and len(ratios) == 3
                     and all(isinstance(part, (int, float)) and not isinstance(part, bool) for part in ratios)):
                 self.error("invalid_value", "split.ratios must be three numbers (train, valid, test)",
                            ("data", "split"))
             else:
-                self.present = {name: ratio > 0 for name, ratio in zip(SETS, ratios)}
+                self.present = {name: ratio > 0 for name, ratio in zip(self.sets, ratios)}
                 if not self.present["train"]:
                     self.error("invalid_value", "the train ratio must be positive", ("data", "split"))
         elif "split" in data:
             self.error("invalid_call", "data.split must be {ratios, seed} or {uri, params}", ("data", "split"))
         batch = data.get("batch")
         if isinstance(batch, dict):
-            self.keys(batch, BATCH_KEYS, ("data", "batch"), ("size",))
+            self.batch_keys(batch)
         elif "batch" in data and (not isinstance(batch, int) or isinstance(batch, bool) or batch <= 0):
             self.error("invalid_value", "data.batch must be a positive size or a mapping with size",
                        ("data", "batch"))
@@ -196,7 +70,7 @@ class Checker:
             for name, entry in preprocessors.items():
                 path = ("data", "preprocessors", name)
                 if isinstance(entry, dict):
-                    self.keys(entry, PRE_KEYS, path, ("uri",))
+                    self.keys(entry, Schema.preprocessor, path, ("uri",))
                     if "sets" in entry:
                         self.sets_of(entry.get("sets"), path)
                 self.call_of(entry, path, ("pre",), f"data.preprocessors.{name}")
@@ -213,7 +87,7 @@ class Checker:
                 path = ("data", "fields", name)
                 if spec is None:
                     spec = {}
-                if not self.keys(spec, FIELD_KEYS, path):
+                if not self.keys(spec, Schema.field, path):
                     continue
                 chain = spec.get("preprocessors") or []
                 if not isinstance(chain, list):
@@ -246,112 +120,33 @@ class Checker:
         if "feed" in data:
             self.call_of(data["feed"], ("data", "feed"), ("feed",), "data.feed")
         source = data.get("source")
-        if isinstance(source, dict) and source.get("uri") in STREAM_SOURCES:
+        if self.fact_of(source, "stream"):
             self.lazy_rules(data)
-
-    def grouped_order(self, data):
-        grouped = {name for name, entry in self.preprocessors.items()
-                   if isinstance(entry, dict) and isinstance(entry.get("uri"), str)
-                   and self.registry.facts(entry["uri"]).get("grouped", False)}
-        seen = {}
-        fields = data.get("fields") or {}
-        if not isinstance(fields, dict):
-            return
-        for pattern, spec in fields.items():
-            chain = [pre for pre in ((spec or {}).get("preprocessors") or []) if pre in grouped]
-            for position, name in enumerate(chain):
-                for later in chain[position + 1:]:
-                    if (later, name) in seen:
-                        self.error("grouped_order", f"preprocessors {name!r} and {later!r} both fit over all their "
-                                                    f"columns and are written in both orders "
-                                                    f"({seen[(later, name)]!r} and {pattern!r}); one order for all "
-                                                    f"the fields, or a second definition under another name",
-                                   ("data", "fields", pattern))
-                    seen[(name, later)] = pattern
-
-    def lazy_rules(self, data):
-        hint = "the lazy set streams the table: split with sequential or given, feed with table, no balanced " \
-               "sampler and no class_weights"
-        split = data.get("split")
-        if isinstance(split, dict) and ("uri" not in split or split.get("uri") == "/split/kalfa/kfold"):
-            self.error("lazy_split", "a stream source cannot be shuffled or folded", ("data", "split"), hint=hint)
-        batch = data.get("batch")
-        if isinstance(batch, dict) and batch.get("balanced"):
-            self.error("lazy_batch", "a stream source cannot be counted for the balanced sampler",
-                       ("data", "batch"), hint=hint)
-        feed = data.get("feed")
-        feed_uri = feed.get("uri") if isinstance(feed, dict) else feed
-        if feed_uri == "/feed/kalfa/window":
-            self.error("lazy_feed", "the window feed needs the table in memory", ("data", "feed"), hint=hint)
-        for name, entry in (self.data.get("losses") or {}).items():
-            if mentions(entry, "/data/kalfa/class_weights"):
-                self.error("lazy_data", f"losses.{name} builds class_weights, which counts the train set",
-                           ("losses", name), hint=hint)
-        for name, entry in (data.get("preprocessors") or {}).items():
-            uri = entry.get("uri") if isinstance(entry, dict) else entry
-            target = self.registry.resolve_quietly(uri) if isinstance(uri, str) else None
-            if target is None:
-                continue
-            try:
-                built = target(**((entry.get("params") if isinstance(entry, dict) else None) or {}))
-            except Exception:
-                continue
-            if built.fits and not built.incremental:
-                self.warning("lazy_fit", f"preprocessor {name!r} ({uri}) has no partial_fit; on a stream its column "
-                                         f"is collected in memory to fit", ("data", "preprocessors", name),
-                             hint="scalers fit incrementally; one_hot and label_encoder collect the column")
-
-    def split_presence(self, split):
-        params = split.get("params") or {}
-        uri = split.get("uri")
-        if uri in RATIO_SPLITS and isinstance(params.get("ratios"), list) and len(params["ratios"]) == 3:
-            return {name: ratio > 0 for name, ratio in zip(SETS, params["ratios"])}
-        if uri == "/split/kalfa/kfold":
-            return {"train": True, "valid": bool(params.get("val")), "test": True}
-        if uri == "/split/kalfa/given":
-            return {"train": True, "valid": params.get("valid") is not None, "test": params.get("test") is not None}
-        return {}
-
-    def column_refs(self):
-        data = self.data.get("data") or {}
-        found = []
-        calls = [("split", data.get("split")), ("feed", data.get("feed"))]
-        for name, entry in (data.get("preprocessors") or {}).items():
-            calls.append((f"preprocessors.{name}", entry))
-        for label, call in calls:
-            if not isinstance(call, dict) or not isinstance(call.get("uri"), str):
-                continue
-            refs = self.registry.facts(call["uri"]).refs
-            for param, ref_type in refs.items():
-                value = (call.get("params") or {}).get(param)
-                if ref_type == "column" and isinstance(value, str):
-                    found.append((value, ("data", *label.split("."), "params", param)))
-        return found
 
     def sets_of(self, sets, path):
         if sets is None:
             return
-        if not isinstance(sets, list) or any(item not in SETS for item in sets):
-            self.error("invalid_value", f"sets must list some of {list(SETS)}", path)
+        if not isinstance(sets, list) or any(item not in self.sets for item in sets):
+            self.error("invalid_value", f"sets must list some of {self.sets}", path)
 
     def model_section(self):
         section = self.data["model"]
-        if is_shortcut(section) and any(key in section for key in MODEL_SECTION_KEYS):
+        if is_shortcut(section) and any(key in section for key in Schema.model):
             self.error("ambiguous_model", "model mixes the single model shortcut with templates or models",
                        ("model",))
             return
         if is_shortcut(section):
-            self.keys(section, MODEL_KEYS, ("model",), ("inputs", "outputs", "nodes"))
+            self.keys(section, Schema.definition_of_model, ("model",), Schema.model_required)
             base = ("model",)
         else:
-            self.keys(section, MODEL_SECTION_KEYS, ("model",), ("models",))
+            self.keys(section, Schema.model, ("model",), ("models",))
             base = None
         self.templates, self.models = models_of(section)
         for name, template in self.templates.items():
             path = ("model", "templates", name)
-            if name in RESERVED_BLOCKS:
+            if name in self.contract.blocks:
                 self.error("model_name_reserved", f"template name {name!r} is reserved for a template block", path)
-            if self.keys(template, TEMPLATE_KEYS, path, ("nodes",)):
+            if self.keys(template, Schema.template, path, ("nodes",)):
                 variables = template.get("variables")
                 if variables is not None and not (isinstance(variables, dict) and all(
                         isinstance(spec, dict) and ("required" in spec or "default" in spec)
@@ -365,17 +160,17 @@ class Checker:
             path = base if base is not None else ("model", "models", name)
             if "." in name:
                 self.error("model_name_dot", f"model name {name!r} contains a dot", path)
-            if name in RESERVED_BLOCKS:
+            if name in self.contract.blocks:
                 self.error("model_name_reserved", f"model name {name!r} is reserved for a template block", path,
-                           hint=f"reserved names: {list(RESERVED_BLOCKS)}")
+                           hint=f"reserved names: {list(self.contract.blocks)}")
             if name in self.templates:
                 self.error("model_name_reserved", f"model {name!r} has the name of a template", path)
-            if base is None and not self.keys(definition, MODEL_KEYS, path, ("inputs", "outputs", "nodes")):
+            if base is None and not self.keys(definition, Schema.definition_of_model, path, Schema.model_required):
                 continue
             composite = is_composite(definition)
             if composite:
                 self.composites.append(name)
-                for key in COMPOSITE_FORBIDDEN:
+                for key in Schema.composite_forbidden:
                     if key in definition:
                         self.error("composite_key", f"composite model {name!r} cannot write {key}", path + (key,))
             else:
@@ -446,7 +241,7 @@ class Checker:
             if len(kinds) != 1:
                 self.error("invalid_value", "a node has exactly one of uri, template or model", node_path)
                 continue
-            self.keys(item, NODE_KEYS, node_path)
+            self.keys(item, Schema.node, node_path)
             if kinds[0] == "uri":
                 self.call_of(item, node_path, ("layer",), "a model node")
                 self.init_of(item.get("init"), node_path + ("init",))
@@ -465,9 +260,10 @@ class Checker:
         if isinstance(init, str):
             self.error("invalid_value", "init is a role mapping: {weights, bias, scale, patterns}", path)
             return
-        if not self.keys(init, INIT_KEYS, path):
+        roles = self.contract.roles()
+        if not self.keys(init, (*roles, *Schema.init), path):
             return
-        for role in ("weights", "bias", "scale"):
+        for role in roles:
             if role in init:
                 self.call_of(init[role], path + (role,), ("init",), f"init.{role}")
         for position, entry in enumerate(init.get("patterns") or []):
@@ -475,7 +271,7 @@ class Checker:
             if not (isinstance(entry, dict) and "match" in entry):
                 self.error("invalid_value", "an init pattern is {match, weights | bias | scale}", entry_path)
                 continue
-            for role in ("weights", "bias", "scale"):
+            for role in roles:
                 if role in entry:
                     self.call_of(entry[role], entry_path + (role,), ("init",), f"init pattern {role}")
 
@@ -498,7 +294,7 @@ class Checker:
                 path = (section, name)
                 if not isinstance(entry, dict):
                     entry = {"uri": entry} if isinstance(entry, str) else {}
-                if not self.keys(entry, ENTRY_KEYS, path, ("uri",)):
+                if not self.keys(entry, Schema.entry, path, ("uri",)):
                     continue
                 uri = self.call_of(entry, path, kinds, f"{section}.{name}")
                 if uri is None:
@@ -534,7 +330,7 @@ class Checker:
         training = self.data.get("training") or {}
         for name, entry in optimizers.items():
             path = ("optimizers", name)
-            if not self.keys(entry, OPTIMIZER_KEYS, path, ("uri",)):
+            if not self.keys(entry, Schema.optimizer, path, ("uri",)):
                 continue
             self.call_of(entry, path, ("optimizer",), f"optimizers.{name}")
             loss = entry.get("loss", training.get("loss") if len(optimizers) == 1 else None)
@@ -566,7 +362,7 @@ class Checker:
                 self.error("missing_key", f"training.{key} is required", ("training",))
         turn_uri = self.call_of(training["turn"], ("training", "turn"), ("turn",), "training.turn") \
             if "turn" in training else None
-        extras = {key: value for key, value in training.items() if key not in TRAINING_FIXED}
+        extras = {key: value for key, value in training.items() if key not in Schema.training_fixed}
         if turn_uri is not None:
             target = self.registry.resolve_quietly(turn_uri)
             names = self.parameters(target)
@@ -594,17 +390,15 @@ class Checker:
             self.error("unresolved_ref", f"training.loss names {training['loss']!r}, which losses does not define",
                        ("training", "loss"))
         report = training.get("report")
-        if "report" in training and report not in REPORTS:
-            self.error("invalid_value", "training.report must be best or last", ("training", "report"))
         checkpoint = training.get("checkpoint")
-        checkpoint_uri = None
         if checkpoint is not None:
-            checkpoint_uri = self.call_of(checkpoint, ("training", "checkpoint"), ("checkpoint",),
-                                          "training.checkpoint")
+            self.call_of(checkpoint, ("training", "checkpoint"), ("checkpoint",), "training.checkpoint")
             self.monitors_of(checkpoint, ("training", "checkpoint"), strict=True)
-        if report == "best" and checkpoint_uri != BEST_URI:
-            self.error("report_mismatch", "report: best needs checkpoint: {uri: best, ...}",
-                       ("training", "report"))
+        written = ["last", *names_of(self.fact_of(checkpoint, "writes"))]
+        if "report" in training and report not in written:
+            self.error("report_mismatch", f"training.report must be last or a checkpoint the policy writes; "
+                                          f"{report!r} is not among {sorted(set(written))}", ("training", "report"),
+                       hint="report: best needs checkpoint: {uri: best, params: {monitor: ...}}")
         stop = training.get("stop") or []
         if not isinstance(stop, list):
             self.error("invalid_value", "training.stop must be a list of triggers", ("training", "stop"))
@@ -618,17 +412,6 @@ class Checker:
         self.targets_of(training)
         self.order_of(training, turn_uri)
 
-    def parameters(self, target):
-        if target is None:
-            return None
-        try:
-            signature = inspect.signature(target)
-        except (TypeError, ValueError):
-            return None
-        if any(parameter.kind is parameter.VAR_KEYWORD for parameter in signature.parameters.values()):
-            return None
-        return set(signature.parameters)
-
     def monitors_of(self, call, path, strict):
         params = call.get("params") if isinstance(call, dict) else None
         monitor = (params or {}).get("monitor")
@@ -639,7 +422,7 @@ class Checker:
             return
         prefix, name = monitor.split("/", 1)
         base = name.split("/", 1)[0]
-        if prefix not in HISTORY_SETS:
+        if prefix not in self.history_sets:
             self.error("invalid_value", f"monitor {monitor!r} must start with train/, val/ or test/", path)
             return
         if strict and prefix == "test":
@@ -647,7 +430,7 @@ class Checker:
         if base not in self.losses and base not in self.metrics:
             self.error("unresolved_ref", f"monitor {monitor!r} names {base!r}, which neither losses nor metrics "
                                          f"define", path)
-        set_name = HISTORY_SETS[prefix]
+        set_name = self.history_sets[prefix]
         if self.present.get(set_name) is False:
             self.error("set_missing", f"monitor {monitor!r} watches the {set_name} set, which the split does not "
                                       f"produce", path)
@@ -659,7 +442,7 @@ class Checker:
         seen = []
         for position, rule in enumerate(rules):
             path = ("training", "rules", position)
-            if not isinstance(rule, dict) or not self.keys(rule, RULE_KEYS, path, ("name", "when", "set")):
+            if not isinstance(rule, dict) or not self.keys(rule, Schema.rule, path, ("name", "when", "set")):
                 continue
             name = rule.get("name")
             if name in seen:
@@ -682,147 +465,6 @@ class Checker:
                 continue
             for key, value in targets.items():
                 self.set_of(key, value, path + ("set", key))
-
-    def set_of(self, key, value, path):
-        owner, _, param = key.partition(".")
-        if not param:
-            if key != "loss":
-                self.error("set_target", f"set target {key!r} is not <opt>.loss, loss, <loss>.<param>, "
-                                         f"<opt>.<param> or <model>.trainable", path)
-            elif len(self.optimizers) != 1:
-                self.error("set_target", "set: {loss: ...} needs exactly one optimizer; write <opt>.loss", path)
-            elif value not in self.losses:
-                self.error("set_value", f"set loss names {value!r}, which losses does not define", path)
-            return
-        if param == "loss":
-            if owner not in self.optimizers:
-                self.error("set_target", f"set target {key!r}: {owner!r} is no optimizer", path)
-            elif value not in self.losses:
-                self.error("set_value", f"set {key} names {value!r}, which losses does not define", path)
-            return
-        if param == "trainable" and owner in self.trained:
-            if not isinstance(value, bool):
-                self.error("set_value", f"set {key} needs a boolean", path)
-            return
-        if owner in self.optimizers:
-            return
-        if owner in self.losses:
-            entry = self.losses[owner]
-            uri = entry.get("uri") if isinstance(entry, dict) else entry
-            names = self.parameters(self.registry.resolve_quietly(uri)) if isinstance(uri, str) else None
-            if names is not None and param not in names:
-                self.error("set_value", f"set {key}: {uri} has no parameter {param!r}", path)
-                return
-            ref_type = self.registry.facts(uri).refs.get(param) if isinstance(uri, str) else None
-            if ref_type is not None and isinstance(value, str):
-                if ref_type == "loss" and value not in self.losses:
-                    self.error("set_value", f"set {key} names {value!r}, which losses does not define", path)
-                elif ref_type != "loss" and resolve_alias(value, self.surface.aliases) is None:
-                    self.error("set_value", f"set {key} names {value!r}, which is no known {ref_type}", path)
-            return
-        self.error("set_target", f"set target {key!r} names neither an optimizer, a loss nor a trained model", path)
-
-    def refs_of(self, uri, params, path):
-        if not isinstance(uri, str) or not isinstance(params, dict):
-            return
-        for param, ref_type in self.registry.facts(uri).refs.items():
-            value = params.get(param)
-            if ref_type == "loss" and isinstance(value, dict):
-                for name in value:
-                    if name not in self.losses:
-                        self.error("unresolved_ref", f"{param}: {name!r} is no losses definition",
-                                   path + ("params", param))
-                continue
-            if not isinstance(value, str):
-                continue
-            if ref_type == "model":
-                base = value[:-4] if value.endswith(".ema") else value
-                if base not in self.models:
-                    self.error("unresolved_ref", f"{param}: {value!r} is no model", path + ("params", param))
-            elif ref_type == "loss":
-                if value not in self.losses:
-                    self.error("unresolved_ref", f"{param}: {value!r} is no losses definition",
-                               path + ("params", param))
-            elif ref_type in ("pre", "preprocessor"):
-                if value not in ((self.data.get("data") or {}).get("preprocessors") or {}):
-                    self.error("unresolved_ref", f"{param}: {value!r} is no data.preprocessors definition",
-                               path + ("params", param))
-            elif ref_type in ("field", "column", "wire", "history", "data"):
-                continue
-            elif ref_type == "generate" and value == "generate":
-                if not isinstance(self.data.get("generate"), (dict, str)):
-                    self.error("generate_missing", f"{param}: generate names the generate section, which the config "
-                                                   f"does not write", path + ("params", param))
-            elif resolve_alias(value, self.surface.aliases) is None:
-                self.error("unresolved_ref", f"{param}: {value!r} is no known {ref_type} lego",
-                           path + ("params", param), hint="a short name needs its alias pack, or write the full URI")
-
-    def compares(self, uri, facts):
-        kind = kalfa_kind(uri)
-        if kind == "criterion":
-            return True
-        uses = names_of(facts.get("uses"))
-        return kind == "metric" and (not uses or "predictions" in uses)
-
-    def target_fields(self):
-        if self.header is None:
-            return None
-        data = self.data.get("data") or {}
-        drop = data.get("drop") or []
-        columns = [name for name in self.header["columns"] if name not in drop]
-        fields = data.get("fields") or {}
-        if not isinstance(fields, dict):
-            return None
-        owners, _ = assign_fields(columns, list(fields))
-        found = []
-        for pattern, spec in fields.items():
-            if (spec or {}).get("target"):
-                found.extend([column for column in columns if owners.get(column) == pattern])
-        return found
-
-    def output_wires(self):
-        training = self.data.get("training") or {}
-        name = training.get("predicts")
-        if name is None:
-            name = self.trained[0] if len(self.trained) == 1 else None
-        if isinstance(name, str) and name.endswith(".ema"):
-            name = name[:-4]
-        definition = self.models.get(name) if isinstance(name, str) else None
-        outputs = (definition or {}).get("outputs")
-        return list(outputs) if isinstance(outputs, list) else None
-
-    def target_selector(self, entry):
-        if entry.get("target") is not None:
-            return entry["target"]
-        targets = (self.data.get("training") or {}).get("targets")
-        if not isinstance(targets, dict) or not targets:
-            return None
-        if entry.get("output") is not None:
-            return targets.get(entry["output"])
-        return next(iter(targets.values())) if len(targets) == 1 else None
-
-    def definition_target(self, section, name, entry, path):
-        selector = self.target_selector(entry)
-        fields = self.target_fields()
-        if selector == "input" or not fields:
-            return
-        if selector is None:
-            if len(fields) > 1:
-                self.error("target_missing", f"{section}.{name} compares against a target and the data has "
-                                             f"{len(fields)} target fields; write target on the definition, or "
-                                             f"training.targets for the output wire it names", path)
-            return
-        self.selector_fields(selector, fields, f"{section}.{name}.target", path)
-
-    def selector_fields(self, selector, fields, label, path):
-        matched = expand_targets(selector, fields)
-        unknown = [field for field in matched if field not in fields]
-        if not matched:
-            self.error("target_not_a_field", f"{label} names {selector!r}, which matches no target field; the "
-                                             f"target fields are {fields}", path)
-        elif unknown:
-            self.warning("target_not_a_field", f"{label} names {unknown}, which the data does not carry as target "
-                                               f"fields; only a feed that writes them puts them in the batch", path)
 
     def targets_of(self, training):
         targets = training.get("targets")
@@ -919,7 +561,7 @@ class Checker:
         nameless = {}
         for name, entry in plots.items():
             path = ("plots", name)
-            if isinstance(entry, dict) and not self.keys(entry, PLOT_KEYS, path, ("uri",)):
+            if isinstance(entry, dict) and not self.keys(entry, Schema.plot, path, ("uri",)):
                 continue
             uri = self.call_of(entry, path, ("plot",), f"plots.{name}")
             if isinstance(entry, dict):
@@ -938,18 +580,11 @@ class Checker:
                 else:
                     nameless[uri] = name
 
-    def requires_of(self, uri, name, path):
-        for library in names_of(self.registry.facts(uri).get("requires")):
-            if not installed(library):
-                self.warning("library_missing", f"plots.{name} ({uri}) wants {library}, which is not installed; "
-                                                f"the plot is skipped or drawn without it", path,
-                             hint=f"pip install {library}")
-
     def sweep_section(self):
         section = self.data.get("sweep")
         if section is None:
             return
-        if not self.keys(section, SWEEP_KEYS, ("sweep",), SWEEP_KEYS):
+        if not self.keys(section, Schema.sweep, ("sweep",), Schema.sweep):
             return
         uri = self.call_of(section["strategy"], ("sweep", "strategy"), ("strategy",), "sweep.strategy")
         try:
@@ -963,13 +598,13 @@ class Checker:
                 self.error("unresolved_ref", f"sweep.space names {name!r}, which params does not define",
                            ("sweep", "space", name),
                            hint="every swept name is a params entry the config reads as $name$")
-            if uri == "/strategy/kalfa/grid" and not isinstance(entry, Choices):
+            if self.fact_of(uri, "enumerates") and not isinstance(entry, Choices):
                 try:
                     grid_values(name, entry)
                 except ValueError as exception:
                     self.error("sweep_space", str(exception), ("sweep", "space", name))
         objective = section.get("objective")
-        if not self.keys(objective, OBJECTIVE_KEYS, ("sweep", "objective"), ("monitor",)):
+        if not self.keys(objective, Schema.objective, ("sweep", "objective"), ("monitor",)):
             return
         self.monitors_of({"params": {"monitor": objective.get("monitor")}}, ("sweep", "objective"), strict=False)
         if objective.get("mode", "min") not in ("min", "max"):
@@ -1000,31 +635,47 @@ class Checker:
                 self.error("unresolved_ref", f"plots input {param}: {name!r} is no model", path + ("inputs", param))
             elif refs[param] == "history":
                 prefix, _, base = name.partition("/")
-                if prefix not in HISTORY_SETS or base.split("/")[0] not in {**self.losses, **self.metrics}:
+                if prefix not in self.history_sets or base.split("/")[0] not in {**self.losses, **self.metrics}:
                     self.error("unresolved_ref", f"plots input {param}: {name!r} is no history key",
                                path + ("inputs", param))
+
+    def wired(self, name, path):
+        uri = self.contract.wiring[name]
+        if self.registry.lookup(uri) is None:
+            self.error("unknown_uri", f"wiring.{name} names {uri}, which is not registered", path)
+            return None
+        return self.registry.resolve(uri)
+
+    def batch_keys(self, batch):
+        target = self.wired("loader", ("data", "batch"))
+        if target is None:
+            return
+        try:
+            signature = inspect.signature(target)
+        except (TypeError, ValueError):
+            return
+        items = [item for name, item in signature.parameters.items() if name not in ("data", "set")]
+        if any(item.kind is item.VAR_KEYWORD for item in items):
+            return
+        self.keys(batch, [item.name for item in items], ("data", "batch"),
+                  [item.name for item in items if item.default is item.empty])
 
     def figures_section(self):
         figures = self.data.get("figures")
         if figures is None:
             return
-        if not self.keys(figures, FIGURE_KEYS, ("figures",)):
+        if not isinstance(figures, dict):
+            self.error("invalid_section", "figures must be a mapping", ("figures",))
             return
-        kind = figures.get("format")
-        if kind is not None and kind not in FIGURE_FORMATS:
-            self.error("invalid_value", f"figures.format must be one of {list(FIGURE_FORMATS)}, got {kind!r}",
-                       ("figures", "format"))
-        style = figures.get("style")
-        if style is not None and style not in ("kalfa", "none"):
-            self.error("invalid_value", f"figures.style must be kalfa or none, got {style!r}",
-                       ("figures", "style"))
-        for key in ("width", "height", "dpi"):
-            value = figures.get(key)
-            if value is None:
-                continue
-            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
-                self.error("invalid_value", f"figures.{key} must be a positive number, got {value!r}",
-                           ("figures", key))
+        target = self.wired("figures", ("figures",))
+        if target is None:
+            return
+        allowed = self.parameters(target) or set(figures)
+        self.keys(figures, sorted(allowed), ("figures",))
+        try:
+            target(**{key: value for key, value in figures.items() if key in allowed})
+        except (TypeError, ValueError) as exception:
+            self.error("invalid_value", str(exception), ("figures",))
 
     def generate_section(self):
         generate = self.data.get("generate")
@@ -1033,107 +684,6 @@ class Checker:
             if isinstance(generate, dict):
                 self.refs_of(uri, generate.get("params"), ("generate",))
 
-    def source_header(self):
-        data = self.data.get("data") or {}
-        source = data.get("source")
-        if not isinstance(source, dict):
-            return None
-        uri = source.get("uri")
-        params = source.get("params") or {}
-        path = params.get("path")
-        if not isinstance(uri, str) or not isinstance(path, str):
-            return None
-        if not Path(path).exists():
-            self.error("source_missing", f"data source {path!r} does not exist", ("data", "source"))
-            return None
-        fields = data.get("fields") or {}
-        if uri == "/source/kalfa/image_folder" and isinstance(fields, dict):
-            for name in fields:
-                if any(char in str(name) for char in "*?["):
-                    self.error("invalid_value", f"field {name!r}: a Dataset source takes field names, not globs",
-                               ("data", "fields", name))
-        try:
-            return header(uri, params)
-        except Exception as exception:
-            self.error("source_unreadable", f"cannot read the header of {path!r}: {exception}", ("data", "source"))
-            return None
-
-    def data_header(self):
-        data = self.data.get("data") or {}
-        header = self.source_header()
-        if header is None:
-            return
-        self.header = header
-        drop = data.get("drop") or []
-        for column in drop:
-            if column not in header["columns"]:
-                self.warning("drop_missing", f"drop names {column!r}, which is no column", ("data", "drop"))
-        columns = [name for name in header["columns"] if name not in drop]
-        fields = data.get("fields") or {}
-        if not isinstance(fields, dict):
-            return
-        owners, problems = assign_fields(columns, list(fields))
-        for kind, message in problems:
-            self.error(kind, message, ("data", "fields"))
-        for column, path in self.column_refs():
-            if column not in header["columns"]:
-                self.error("unresolved_ref", f"{column!r} is no column of the data", path)
-            elif column in drop:
-                self.error("dropped_column_ref", f"column {column!r} is referenced by a lego and cannot be dropped",
-                           path)
-            elif column in owners:
-                self.error("column_in_fields", f"column {column!r} is referenced by a lego; it is not a field and "
-                                               f"does not enter the model", path)
-        for column, pattern in owners.items():
-            spec = fields.get(pattern) or {}
-            chain = spec.get("preprocessors") or []
-            if not chain and torch_dtype(header["dtypes"].get(column)) is None:
-                self.error("dtype_unsupported", f"column {column!r} has dtype {header['dtypes'].get(column)}; "
-                                                f"it needs a preprocessor (cast, one_hot, label_encoder)",
-                           ("data", "fields", pattern))
-            if column == "input":
-                self.error("reserved_field", f"column {column!r} is a reserved field name", ("data", "fields"))
-            if column == "x" and not spec.get("target"):
-                self.error("reserved_field", "column 'x' is reserved for the feature tensor",
-                           ("data", "fields"))
-
-    def sizes(self):
-        header = self.header if self.header is not None else self.source_header()
-        if header is None:
-            return None
-        data = self.data.get("data") or {}
-        split = data.get("split")
-        params = split.get("params") if isinstance(split, dict) and "uri" in split else split
-        ratios = (params or {}).get("ratios") if isinstance(params, dict) else None
-        if isinstance(ratios, list) and (not isinstance(split, dict) or "uri" not in split
-                                         or split.get("uri") in RATIO_SPLITS):
-            try:
-                return sizes(header["rows"], ratios)
-            except ValueError:
-                return None
-        if isinstance(split, dict) and split.get("uri") == "/split/kalfa/kfold" and isinstance(params, dict):
-            try:
-                return kfold_sizes(header["rows"], params)
-            except (ValueError, TypeError, KeyError):
-                return None
-        if isinstance(split, dict) and split.get("uri") == "/split/kalfa/given" and isinstance(params, dict):
-            return self.given_sizes(header, params)
-        return {"train": None, "valid": None, "test": None}
-
-    def given_sizes(self, header, params):
-        found = {"train": header["rows"]}
-        source = (self.data.get("data") or {}).get("source") or {}
-        for name in ("valid", "test"):
-            path = params.get(name)
-            if path is None:
-                found[name] = 0
-                continue
-            try:
-                other = header(source.get("uri"), {**(source.get("params") or {}), "path": path})
-            except Exception:
-                other = None
-            found[name] = other["rows"] if other else None
-        return found
 
 
 def is_selector(value):
@@ -1142,22 +692,3 @@ def is_selector(value):
 
 def turn_extras(registry, uri, target=None):
     return set(names_of(registry.facts(uri).get("extras")))
-
-
-def mentions(value, uri):
-    if isinstance(value, dict):
-        return value.get("uri") == uri or any(mentions(item, uri) for item in value.values())
-    if isinstance(value, list):
-        return any(mentions(item, uri) for item in value)
-    return False
-
-
-def sets_text(sizes, loaded=False):
-    label = "sets (loaded)" if loaded else "sets (before filters, from the file header)"
-    if sizes is None:
-        return f"{label}: unknown (the data header could not be read)"
-    parts = []
-    for name in SETS:
-        size = sizes.get(name)
-        parts.append(f"{name} {'?' if size is None else size if size else 'none'}")
-    return f"{label}: " + ", ".join(parts)

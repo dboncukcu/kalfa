@@ -8,10 +8,29 @@
 # models, emas, composites, opt_<name>, optimizers, counters, rules, epochs_left, *_next, train_metrics, valid_metrics,
 # test_metrics, metrics, effects, rules_0..n, rules_ruled, stop, history, models_final, optimizers_final, emas_final, counters_final, rules_final, selected, predictions. The set name on the bus is valid, the history
 # prefix val/. A foreach node is named <foreach name>_<key>, <foreach name>_<index> without a key; a chain key is <chain>_<index>,
-# <chain>_0 is the entry of the chain. "@losses", "@metrics", "@plots", "@progress" are group references to the component
+# <chain>_0 is the entry of the chain. "@losses", "@metrics", "@plots", "@checkpoint" are references to the component
 # sections of the driver document (cirak @name); they are not block variables. The definition level keys (sets, every, inputs, output, target)
 # are not in the call but in the driver's <section>_keys table carrying the same names as the component table; they come as block variables
 # and go to the lego as params (preprocessors_keys to fit and apply, losses_keys and metrics_keys to turn and evaluate, plots_keys to run_all).
+
+# The contract: what kalfa decides for a config, in two parts. `wiring` is what the driver inserts and what the commands
+# over a record rebuild; `blocks` are the five flow blocks the driver document opens. `kalfa contract --write contract.yaml`
+# exports this file, `--contract my.yaml` runs a config against an edited copy, and every record keeps the copy it ran with
+# as contract.yaml. A step of your own goes into a block here (after.flow.notify: {uri: /lego/acme/slack, inputs: {...}}).
+wiring:
+  criterion_adapter: /adapter/kalfa/criterion    # wraps a criterion written under losses or metrics
+  metric_adapter: /adapter/kalfa/metric          # wraps a metric
+  objective_adapter: /adapter/kalfa/objective    # wraps an objective
+  builder: /builder/kalfa/module                 # builds every model block; its roles fact names the init roles
+  default_split: /split/kalfa/random             # the split of the short form {ratios, seed}
+  default_device: /device/kalfa/cpu              # the device when the config writes none
+  fit: /lego/kalfa/fit                           # the prep step of a run
+  read_prep: /lego/kalfa/read_prep               # the prep step of a command over a record
+  run_inputs: [device, record, monitor]          # the values a command hands to the run
+  history_prefix: {train: train, valid: val, test: test}   # the sets and their prefixes in history.jsonl
+  loader: /loader/kalfa/torch                    # the batch section is its params
+  figures: /lego/kalfa/figures                   # the figures section is its params
+  plot_bus: [prep, train_loader, valid_loader, test_loader, composites, device, counters, optimizers, emas, rules]
 
 blocks:
 
@@ -22,11 +41,9 @@ blocks:
       filter_pre: {default: []}         # the filter strings before the split
       filter_set: {default: []}         # {query, sets} items; the lego picks its own set
       split: {required: true}           # {uri, params}
-      batch: {required: true}           # {size, eval_size, shuffle, drop_last, workers, collate, balanced}
-      preprocessors: {default: {}}
+      loaders: {required: true}         # {set: {uri, params, set}}; the loader of wiring with the batch section as its params
+      prep: {required: true}            # {uri, params, inputs}: fit with the field plan for a run, read_prep with the record for a command over one
       preprocessors_keys: {default: {}} # {name: {sets}}; the definition level keys
-      drop: {default: []}
-      fields: {required: true}
       feed: {required: true}            # {uri, params}
       sets: {default: [train, valid, test]}
     flow:
@@ -40,8 +57,7 @@ blocks:
         foreach: {over: $sets$, item: set, key: $set$,
                   node: {uri: /lego/kalfa/filter_set, params: {set: $set$, filters: $filter_set$},
                          inputs: {df: $set$_df_0}, outputs: [$set$_df]}}
-      prep: {uri: /lego/kalfa/fit, params: {fields: $fields$, preprocessors: $preprocessors$, drop: $drop$, keys: $preprocessors_keys$},
-             inputs: {df: train_df}, outputs: [prep]}
+      prep: {uri: $prep.uri$, params: $prep.params$, inputs: $prep.inputs$, outputs: [prep]}
       frame:
         foreach: {over: $sets$, item: set, key: $set$,
                   node: {uri: /lego/kalfa/apply, params: {set: $set$, keys: $preprocessors_keys$}, inputs: {df: $set$_df, prep: prep},
@@ -52,9 +68,9 @@ blocks:
                          inputs: {frame: $set$_frame, frames: {train: train_frame, valid: valid_frame, test: test_frame}},
                          outputs: [$set$_data]}}
       loader:
-        foreach: {over: $sets$, item: set, key: $set$,
-                  node: {uri: /loader/kalfa/torch, params: {set: $set$, batch: $batch$},
-                         inputs: {data: $set$_data}, outputs: [$set$_loader]}}
+        foreach: {over: $loaders$, item: loader,
+                  node: {uri: $loader.uri$, params: $loader.params$,
+                         inputs: {data: $loader.set$_data}, outputs: [$loader.set$_loader]}}
 
   # ---------------------------------------------------------------- models
   # The driver turns model.templates and every model into blocks (template to block, a nodes list to spec, a mapping to graph;
@@ -114,16 +130,19 @@ blocks:
       metrics_keys: {default: {}}
       rules: {default: []}              # [{name, when, set, after}]
       stop: {default: []}               # the list of triggers
-      checkpoint: {default: null}       # {uri, params} or null
+      # "@checkpoint" is the checkpoint policy of the driver document, one object for init and the checkpoint step; an empty
+      # section without a policy
       sets: {default: [valid, test]}    # the evaluation sets (train is in the turn)
+      history_prefix: {required: true}  # {set: prefix} from the contract's wiring
     flow:
       counters: {uri: /lego/kalfa/const, params: {value: {global_step: 0, turn: 0}}}
       rules:    {uri: /lego/kalfa/const, params: {value: {}}}
-      init:     {uri: /lego/kalfa/init_state, params: {epochs: $epochs$, steps: $steps$},
+      stream:   {uri: /lego/kalfa/const, params: {value: null}}
+      init:     {uri: /lego/kalfa/init_state, params: {epochs: $epochs$, steps: $steps$, policy: "@checkpoint"},
                  inputs: {state: {models: models, optimizers: optimizers, emas: emas, counters: counters, rules: rules}}}
       epochs:
         loop:
-          carry: [models, optimizers, emas, counters, rules]
+          carry: [models, optimizers, emas, counters, rules, stream]
           next: _next
           range: epochs_left
           index: turn_index
@@ -136,9 +155,9 @@ blocks:
                       params: {params: $turn.params$, extra: $turn_params$, losses: "@losses", metrics: "@metrics",
                                losses_keys: $losses_keys$, metrics_keys: $metrics_keys$, predicts: $predicts$, steps: $steps$},
                       inputs: {models: models, optimizers: optimizers, emas: emas, counters: counters,
-                               composites: composites, effects: effects, loader: train_loader},
+                               composites: composites, effects: effects, loader: train_loader, stream: stream},
                       outputs: {models: models_next, optimizers: optimizers_next, emas: emas_next,
-                                counters: counters_next, metrics: train_metrics}}
+                                counters: counters_next, stream: stream_next, metrics: train_metrics}}
             evaluate:
               foreach: {over: $sets$, item: set, key: $set$,
                         node: {uri: /lego/kalfa/evaluate, params: {set: $set$, losses: "@losses", metrics: "@metrics",
@@ -147,7 +166,7 @@ blocks:
                                inputs: {models: models_next, emas: emas_next, composites: composites,
                                         counters: counters_next, effects: effects, loader: $set$_loader},
                                outputs: [$set$_metrics]}}
-            metrics: {uri: /lego/kalfa/merge, inputs: {parts: "*_metrics"}}
+            metrics: {uri: /lego/kalfa/merge, params: {prefixes: $history_prefix$}, inputs: {parts: "*_metrics"}}
             rules_0: {uri: /rule/kalfa/open, inputs: {rules: rules}}
             rule:
               foreach: {over: $rules$, index: i, count: n, chain: rules,
@@ -155,9 +174,9 @@ blocks:
             rules_ruled: {uri: /lego/kalfa/identity, inputs: {value: rules_$n$}}
             stop:    {uri: /rule/kalfa/stop, params: {triggers: $stop$}, inputs: {rules: rules_ruled},
                       outputs: {rules: rules_next, stop: stop}}
-            checkpoint: {uri: /lego/kalfa/checkpoint, params: {policy: $checkpoint$},
+            checkpoint: {uri: /lego/kalfa/checkpoint, params: {policy: "@checkpoint"},
                          inputs: {state: "*_next"}, outputs: []}
-            log:     {uri: /lego/kalfa/history, params: {progress: "@progress"}}
+            log:     {uri: /lego/kalfa/history}
 
   # ---------------------------------------------------------------- after
   after:
@@ -167,17 +186,17 @@ blocks:
       targets: {default: {}}            # {output wire: target selector} from training.targets
       generate: {default: null}         # {uri, params} or null
       plots_keys: {default: {}}         # {name: {inputs, sets, width, height}}; the definition level keys
-      figures: {default: null}          # the figures section: format, width, height, dpi, style
+      figures: {required: true}         # {uri, params}: the figures lego of wiring with the figures section as its params
       # "@plots" is a group reference to the plots section of the driver document, not a block variable
     flow:
       final:   {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: rules_final}}
       report:  {uri: /lego/kalfa/select, params: {which: $report$}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]}
       predict: {uri: /lego/kalfa/predict, params: {predicts: $predicts$, set: test, target_map: $targets$},
                 inputs: {models: selected, composites: composites, loader: test_loader, prep: prep}, outputs: [predictions]}
+      figures: {uri: $figures.uri$, params: $figures.params$, outputs: [figures]}
       # bus is the one place that says what a plot may name in its signature; a new key here reaches every plot.
-      plots:   {uri: /lego/kalfa/run_all, params: {plots: "@plots", keys: $plots_keys$, predicts: $predicts$,
-                                                   figures: $figures$},
-                inputs: {predictions: predictions, history: history, models: selected,
+      plots:   {uri: /lego/kalfa/run_all, params: {plots: "@plots", keys: $plots_keys$, predicts: $predicts$},
+                inputs: {predictions: predictions, history: history, models: selected, figures: figures,
                          bus: {prep: prep, train_loader: train_loader, valid_loader: valid_loader,
                                test_loader: test_loader, composites: composites, device: device,
                                counters: counters_final, optimizers: optimizers_final, emas: emas_final,

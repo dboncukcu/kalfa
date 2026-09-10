@@ -6,7 +6,7 @@ from kalfa.std.common.stream import ParquetChunks, Stream
 logger = logger_for("data.source")
 
 
-@lego("/source/kalfa/parquet_stream", returns="df",
+@lego("/source/kalfa/parquet_stream", returns="df", header="/lego/kalfa/parquet_header", stream=True,
       description="Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit "
                   "without loading the table")
 def parquet_stream(path, chunk=65536):

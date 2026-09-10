@@ -33,28 +33,28 @@ The legos a config writes, by kind.
 | `plot` | plots | 22 |
 | `strategy` | sweep.strategy | 4 |
 | `device` | device, predict --device, generate --device | 4 |
-| `lego` | a param value, or the driver | 2 |
+| `lego` | a param value, or the contract | 1 |
 | `data` | a param value ({uri: name}) | 2 |
 
 ### source
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/source/kalfa/csv` | `csv` | `(path)` | returns: df | Read a CSV file into a DataFrame |
-| `/source/kalfa/csv_stream` |  | `(path, chunk=65536)` | returns: df | Read a CSV file in chunks (the lazy set) |
-| `/source/kalfa/image_folder` | `image_folder` | `(path)` | returns: df | Images under root/<class>/ as a Dataset with fields image and label |
-| `/source/kalfa/parquet` | `parquet` | `(path)` | returns: df | Read a parquet file into a DataFrame |
-| `/source/kalfa/parquet_stream` |  | `(path, chunk=65536)` | returns: df | Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table |
-| `/source/kalfa/text_lines` | `text_lines` | `(path)` | returns: df | The lines of a text file as a Dataset with the field text |
+| `/source/kalfa/csv` | `csv` | `(path)` | returns: df; header: /lego/kalfa/csv_header | Read a CSV file into a DataFrame |
+| `/source/kalfa/csv_stream` |  | `(path, chunk=65536)` | returns: df; header: /lego/kalfa/csv_header; stream: True | Read a CSV file in chunks (the lazy set) |
+| `/source/kalfa/image_folder` | `image_folder` | `(path)` | returns: df; header: /lego/kalfa/image_folder_header; samples: True | Images under root/<class>/ as a Dataset with fields image and label |
+| `/source/kalfa/parquet` | `parquet` | `(path)` | returns: df; header: /lego/kalfa/parquet_header | Read a parquet file into a DataFrame |
+| `/source/kalfa/parquet_stream` |  | `(path, chunk=65536)` | returns: df; header: /lego/kalfa/parquet_header; stream: True | Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table |
+| `/source/kalfa/text_lines` | `text_lines` | `(path)` | returns: df; header: /lego/kalfa/text_lines_header; samples: True | The lines of a text file as a Dataset with the field text |
 
 ### split
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/split/kalfa/given` | `given` | `(df, valid=None, test=None)` | returns: train, valid, test | The source is the train set; valid and test come from the given paths, read like the source (a missing path means no set) |
-| `/split/kalfa/kfold` | `kfold` | `(df, k, fold, val=None, seed=None)` | returns: train, valid, test | k folds of a seeded permutation: the held out fold is the test set, val carves the valid set from the rest; without val there is no valid set |
-| `/split/kalfa/random` | `random_split` | `(df, ratios, seed=None)` | returns: train, valid, test | Shuffle the rows with a seed and cut them by ratios into train, valid and test; the short form of a split without a uri |
-| `/split/kalfa/sequential` | `sequential` | `(df, ratios, group=None)` | returns: train, valid, test; refs: group=column | Cut the rows in their order by ratios; with a group column every group is cut on its own |
+| `/split/kalfa/given` | `given` | `(df, valid=None, test=None)` | returns: train, valid, test; sizes: /lego/kalfa/given_sizes | The source is the train set; valid and test come from the given paths, read like the source (a missing path means no set) |
+| `/split/kalfa/kfold` | `kfold` | `(df, k, fold, val=None, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/kfold_sizes; needs_table: True | k folds of a seeded permutation: the held out fold is the test set, val carves the valid set from the rest; without val there is no valid set |
+| `/split/kalfa/random` | `random_split` | `(df, ratios, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/ratio_sizes; needs_table: True | Shuffle the rows with a seed and cut them by ratios into train, valid and test; the short form of a split without a uri |
+| `/split/kalfa/sequential` | `sequential` | `(df, ratios, group=None)` | returns: train, valid, test; refs: group=column; sizes: /lego/kalfa/ratio_sizes | Cut the rows in their order by ratios; with a group column every group is cut on its own |
 
 ### pre
 
@@ -92,7 +92,7 @@ The legos a config writes, by kind.
 |---|---|---|---|---|
 | `/feed/kalfa/next_token` | `next_token` | `(frame, frames, seq_len)` |  | input_ids and targets windows of seq_len tokens over the set's token stream |
 | `/feed/kalfa/table` | `table` | `(frame, frames=None)` |  | Feature columns as one tensor x and target fields by name; Dataset fields by name |
-| `/feed/kalfa/window` | `window` | `(frame, frames, size, horizon, context=False, group=None)` | refs: group=column | Windows of size steps and the next horizon steps of the targets; context takes the tail of the previous set at the split boundary, group keeps series apart |
+| `/feed/kalfa/window` | `window` | `(frame, frames, size, horizon, context=False, group=None)` | refs: group=column; needs_table: True | Windows of size steps and the next horizon steps of the targets; context takes the tail of the previous set at the split boundary, group keeps series apart |
 
 ### layer
 
@@ -192,25 +192,25 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/turn/kalfa/alternating` | `alternating`, `supervised` | `(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, device=None, prep=None, record=None)` | returns: models, optimizers, emas, counters, metrics; bus: device=device, prep=prep, record=record; mutates: models, optimizers, emas, counters; extras: amp, grad_clip, accumulate | One turn: every step each optimizer in order minimizes its loss for its steps; a turn is an epoch, or K steps with a stream that lives across turns; losses and metrics are the running means of the pass |
+| `/turn/kalfa/alternating` | `alternating`, `supervised` | `(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None)` | returns: models, optimizers, emas, counters, stream, metrics; bus: device=device, prep=prep, record=record; mutates: models, optimizers, emas, counters; extras: amp, grad_clip, accumulate | One turn: every step each optimizer in order minimizes its loss for its steps; a turn is an epoch, or K steps with a stream that lives across turns; losses and metrics are the running means of the pass |
 
 ### trigger
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/trigger/kalfa/after_turn` | `after_turn`, `after_epoch` | `(metrics, turn_index, state, at)` | partial: True | Fires once the given number of turns has ended, counted across resumes |
-| `/trigger/kalfa/metric_above` | `metric_above` | `(metrics, turn_index, state, monitor, value)` | partial: True | Fires when the monitored value rises above value; a missing value is not seen |
-| `/trigger/kalfa/metric_below` | `metric_below` | `(metrics, turn_index, state, monitor, value)` | partial: True | Fires when the monitored value drops below value; a missing value is not seen |
-| `/trigger/kalfa/plateau` | `plateau` | `(metrics, turn_index, state, monitor, patience, mode='min', min_delta=0.0)` | partial: True | Fires after patience turns without improvement of the monitored value; turns without the value are not counted |
-| `/trigger/kalfa/time_budget` | `time_budget` | `(metrics, turn_index, state, minutes)` | partial: True | Fires once the given number of minutes has passed since the first turn it saw |
+| `/trigger/kalfa/after_turn` | `after_turn`, `after_epoch` | `(metrics, turn_index, state, at)` | partial: True; describe: turn ≥ {at} | Fires once the given number of turns has ended, counted across resumes |
+| `/trigger/kalfa/metric_above` | `metric_above` | `(metrics, turn_index, state, monitor, value)` | partial: True; describe: {monitor} > {value} | Fires when the monitored value rises above value; a missing value is not seen |
+| `/trigger/kalfa/metric_below` | `metric_below` | `(metrics, turn_index, state, monitor, value)` | partial: True; describe: {monitor} < {value} | Fires when the monitored value drops below value; a missing value is not seen |
+| `/trigger/kalfa/plateau` | `plateau` | `(metrics, turn_index, state, monitor, patience, mode='min', min_delta=0.0)` | partial: True; describe: {monitor} plateau {patience} | Fires after patience turns without improvement of the monitored value; turns without the value are not counted |
+| `/trigger/kalfa/time_budget` | `time_budget` | `(metrics, turn_index, state, minutes)` | partial: True; describe: after {minutes} minutes | Fires once the given number of minutes has passed since the first turn it saw |
 
 ### checkpoint
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/checkpoint/kalfa/best` | `best` | `(monitor, mode='min')` |  | Write best.pt when the monitored value improves and last.pt every turn |
-| `/checkpoint/kalfa/last` | `last` | `()` |  | Write last.pt every turn |
-| `/checkpoint/kalfa/snapshot` | `snapshot` | `(every)` |  | Write snapshot_<n>.pt every n turns and last.pt every turn |
+| `/checkpoint/kalfa/best` | `best` | `(monitor, mode='min')` | writes: best, last | Write best.pt when the monitored value improves and last.pt every turn |
+| `/checkpoint/kalfa/last` | `last` | `()` | writes: last | Write last.pt every turn |
+| `/checkpoint/kalfa/snapshot` | `snapshot` | `(every)` | writes: last, snapshot | Write snapshot_<n>.pt every n turns and last.pt every turn |
 
 ### generate
 
@@ -224,34 +224,34 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, device=None, name=None)` | partial: True | The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed; the drawing runs on the device of the run, so a composite keeps its referenced models with it |
-| `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
-| `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
-| `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None)` | partial: True | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
-| `/plot/kalfa/error_map` | `error_map` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, output=None, target=None, statistic='residual', bins=55, min_count=15, name=None)` | partial: True; refs: x=column, y=column, target=field | The error of one prediction over a 2d grid of two columns: with statistic residual blue is a prediction below the truth and red above it, with abs the mean absolute error; bins holding fewer than min_count points stay empty |
-| `/plot/kalfa/feature_distributions` | `feature_distributions` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, log=None, bins=80, limit=24, per_row=4, name=None)` | partial: True | A histogram per feature column of a set, in the original units; log names the columns to draw on a log10 axis |
-| `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |
-| `/plot/kalfa/image_grid` | `image_grid` | `(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None)` | partial: True | n outputs of the predicts model on the report set as an image grid |
-| `/plot/kalfa/image_pairs` | `image_pairs` | `(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None)` | partial: True | n inputs of the report set next to the predicts model's outputs (reconstructions) |
-| `/plot/kalfa/loss_curve` | `loss_curve` | `(predictions, history, models, record, series=None, log=False, name=None)` | partial: True | Every history series over the turns, or the named ones |
-| `/plot/kalfa/permutation_importance` | `permutation_importance` | `(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None)` | partial: True | The drop in R2 when one feature column is shuffled, the largest first; the model runs again for every feature and every repeat, so sample bounds the cost |
-| `/plot/kalfa/pred_vs_true` | `pred_vs_true` | `(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70)` | partial: True | Predicted against true values of the test set, one panel per predicted field with its R2, as a hexbin density over many points and a scatter over few; the panel is titled with the field name, plus the output wire when two outputs predict the same field |
-| `/plot/kalfa/residuals` | `residuals` | `(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None)` | partial: True; refs: target=field | Three panels of one prediction's residual: the distribution with its bias and sigma, the residual against the truth as a density, and the mean and median error over equal count bins of the target range |
-| `/plot/kalfa/samples_gif` | `samples_gif` | `(predictions, history, models, record, name=None, duration=400)` | partial: True | The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning when there are none |
-| `/plot/kalfa/samples_matrix` | `samples_matrix` | `(predictions, history, models, record, name=None, n=8)` | partial: True | A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; skipped with a warning when there are none |
-| `/plot/kalfa/target_correlation` | `target_correlation` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, method='spearman', columns=None, top=25, groups=None, name=None)` | partial: True; refs: target=field | The rank correlation of every column with the target, the strongest first; groups maps a column to a group name and colours the bars by it |
-| `/plot/kalfa/target_vs_features` | `target_vs_features` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None)` | partial: True; refs: target=field | One panel per feature: the target against it as a hexbin density with the median profile over equal count bins; it reads the set the definition names (train without one) and draws in the original units |
-| `/plot/seaborn/kde` | `kde` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None)` | partial: True; refs: x=column, y=column, hue=column; requires: seaborn | seaborn's kernel density of one column of a set, or of two as contours; skipped with a warning when seaborn is not installed |
-| `/plot/seaborn/pairplot` | `pairplot` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None)` | partial: True; requires: seaborn | seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; skipped with a warning when seaborn is not installed |
-| `/plot/seaborn/violin` | `violin` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None)` | partial: True; refs: value=column, group=column; requires: seaborn | seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed |
-| `/plot/torchmetrics/binary_precision_recall_curve` |  | `(predictions, history, models, record, name=None)` | partial: True | Precision recall curve of the raw test scores against the binary target |
-| `/plot/torchmetrics/binary_roc` |  | `(predictions, history, models, record, name=None)` | partial: True | ROC curve of the raw test scores against the binary target |
+| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)` | partial: True | The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed; the drawing runs on the device of the run, so a composite keeps its referenced models with it |
+| `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None, figures=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
+| `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
+| `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None, figures=None)` | partial: True | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
+| `/plot/kalfa/error_map` | `error_map` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, output=None, target=None, statistic='residual', bins=55, min_count=15, name=None, figures=None)` | partial: True; refs: x=column, y=column, target=field | The error of one prediction over a 2d grid of two columns: with statistic residual blue is a prediction below the truth and red above it, with abs the mean absolute error; bins holding fewer than min_count points stay empty |
+| `/plot/kalfa/feature_distributions` | `feature_distributions` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, log=None, bins=80, limit=24, per_row=4, name=None, figures=None)` | partial: True | A histogram per feature column of a set, in the original units; log names the columns to draw on a log10 axis |
+| `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None, figures=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |
+| `/plot/kalfa/image_grid` | `image_grid` | `(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None, figures=None)` | partial: True | n outputs of the predicts model on the report set as an image grid |
+| `/plot/kalfa/image_pairs` | `image_pairs` | `(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None, figures=None)` | partial: True | n inputs of the report set next to the predicts model's outputs (reconstructions) |
+| `/plot/kalfa/loss_curve` | `loss_curve` | `(predictions, history, models, record, series=None, log=False, name=None, figures=None)` | partial: True | Every history series over the turns, or the named ones |
+| `/plot/kalfa/permutation_importance` | `permutation_importance` | `(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None, figures=None)` | partial: True | The drop in R2 when one feature column is shuffled, the largest first; the model runs again for every feature and every repeat, so sample bounds the cost |
+| `/plot/kalfa/pred_vs_true` | `pred_vs_true` | `(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70, figures=None)` | partial: True | Predicted against true values of the test set, one panel per predicted field with its R2, as a hexbin density over many points and a scatter over few; the panel is titled with the field name, plus the output wire when two outputs predict the same field |
+| `/plot/kalfa/residuals` | `residuals` | `(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None, figures=None)` | partial: True; refs: target=field | Three panels of one prediction's residual: the distribution with its bias and sigma, the residual against the truth as a density, and the mean and median error over equal count bins of the target range |
+| `/plot/kalfa/samples_gif` | `samples_gif` | `(predictions, history, models, record, name=None, duration=400, figures=None)` | partial: True | The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning when there are none |
+| `/plot/kalfa/samples_matrix` | `samples_matrix` | `(predictions, history, models, record, name=None, n=8, figures=None)` | partial: True | A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; skipped with a warning when there are none |
+| `/plot/kalfa/target_correlation` | `target_correlation` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, method='spearman', columns=None, top=25, groups=None, name=None, figures=None)` | partial: True; refs: target=field | The rank correlation of every column with the target, the strongest first; groups maps a column to a group name and colours the bars by it |
+| `/plot/kalfa/target_vs_features` | `target_vs_features` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None, figures=None)` | partial: True; refs: target=field | One panel per feature: the target against it as a hexbin density with the median profile over equal count bins; it reads the set the definition names (train without one) and draws in the original units |
+| `/plot/seaborn/kde` | `kde` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None, figures=None)` | partial: True; refs: x=column, y=column, hue=column; requires: seaborn | seaborn's kernel density of one column of a set, or of two as contours; skipped with a warning when seaborn is not installed |
+| `/plot/seaborn/pairplot` | `pairplot` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None, figures=None)` | partial: True; requires: seaborn | seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; skipped with a warning when seaborn is not installed |
+| `/plot/seaborn/violin` | `violin` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None, figures=None)` | partial: True; refs: value=column, group=column; requires: seaborn | seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed |
+| `/plot/torchmetrics/binary_precision_recall_curve` |  | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Precision recall curve of the raw test scores against the binary target |
+| `/plot/torchmetrics/binary_roc` |  | `(predictions, history, models, record, name=None, figures=None)` | partial: True | ROC curve of the raw test scores against the binary target |
 
 ### strategy
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/strategy/kalfa/grid` | `grid` | `()` |  | Every combination of the space's choices (a range needs steps); deterministic by id |
+| `/strategy/kalfa/grid` | `grid` | `()` | enumerates: True | Every combination of the space's choices (a range needs steps); deterministic by id |
 | `/strategy/kalfa/optuna` | `optuna` | `(trials, seed=0, sampler='tpe')` |  | trials points proposed by optuna (tpe or random sampler) from the objectives fed back; local loop only, no --id |
 | `/strategy/kalfa/random` | `random` | `(count, seed=0)` |  | count points drawn uniformly from the space with a seed; deterministic by id |
 | `/strategy/kalfa/sobol` | `sobol` | `(count, seed=0, scramble=True)` |  | count points of a scrambled Sobol sequence with a seed; deterministic by id |
@@ -270,46 +270,55 @@ The legos a config writes, by kind.
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/lego/kalfa/pixel_features` |  | `(size=4)` |  | A cheap FID feature extractor for demos and tests: images pooled to size by size and flattened; pass it as fid's extractor param |
-| `/lego/kalfa/progress` |  | `()` |  | The progress display of a run |
 
 ### data
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/data/kalfa/class_weights` | `class_weights` | `(loader, target=None)` |  | Inverse frequency class weights of the train set's target field, mean one; built once the train loader exists |
+| `/data/kalfa/class_weights` | `class_weights` | `(loader, target=None)` | counts: True | Inverse frequency class weights of the train set's target field, mean one; built once the train loader exists |
 | `/data/kalfa/vocab_size` | `vocab_size` | `(prep)` |  | The vocabulary size of the fitted tokenizer among the preprocessors; built once prep exists |
 
 ## Skeleton steps
 
-These are the skeleton steps `src/kalfa/templates/kalfa.yaml` calls; they are not written in a config,
-the template places them and the driver fills their params from the config sections. The list is derived from the
-URIs the template mentions, so it cannot drift. Four more legos are inserted by the driver rather than by the
-template and stay in the catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and
-`/adapter/kalfa/objective`, which wrap the losses and metrics entries of a config by kind) and the progress
-component (`/lego/kalfa/progress`).
+These are the skeleton steps `src/kalfa/contract.yaml` calls: the nodes of its blocks, the loader,
+fit, read_prep and figures legos of its wiring, and the helpers the `sizes` and `header` facts name. They are
+not written in a config; the contract places them and the driver fills their params from the config sections.
+The list is derived from the URIs the contract mentions, so it cannot drift. The rest of the wiring stays in the
+catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and `/adapter/kalfa/objective`,
+which wrap the losses and metrics entries of a config by kind) and the defaults that stand in for a config value
+(`/split/kalfa/random`, `/device/kalfa/cpu`).
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/builder/kalfa/module` |  | `(graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)` | bus: prep=prep, train_loader=train_loader | Build a model graph into an nn.Module under hash(seed, index), apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader |
+| `/builder/kalfa/module` |  | `(graph, seed=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)` | bus: prep=prep, train_loader=train_loader; roles: weights, bias, scale | Build a model graph into an nn.Module under hash(seed, index), apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader |
 | `/lego/kalfa/apply` |  | `(df, prep, set, keys=None)` |  | Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to |
 | `/lego/kalfa/checkpoint` |  | `(state, policy, metrics=None, record=None)` | returns: None; bus: metrics=metrics, record=record | Write the checkpoint files the policy asks for; nothing without a policy |
 | `/lego/kalfa/clone` |  | `(model, decay)` | state: True | An exponential moving average copy of a model with the given decay |
 | `/lego/kalfa/const` |  | `(value)` |  | A fresh copy of a constant value |
+| `/lego/kalfa/csv_header` |  | `(path, chunk=None)` |  | The columns, the dtypes of the first rows and the line count of a CSV file |
 | `/lego/kalfa/evaluate` |  | `(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)` | returns: metrics; bus: device=device, prep=prep, record=record | Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files |
+| `/lego/kalfa/figures` |  | `(format='png', width=None, height=None, dpi=150, style='kalfa')` |  | The look of every plot of a run: the file format, the size of one panel in inches, the dpi and the style (kalfa, or none for matplotlib's own); the figures section is its params and the built object reaches every plot that names figures |
 | `/lego/kalfa/filter` |  | `(df, query)` |  | Keep the rows a pandas query selects; a Dataset source takes field equality queries |
 | `/lego/kalfa/filter_set` |  | `(df, set, filters)` |  | Apply the {query, sets} filters that name this set; the frame passes untouched otherwise |
 | `/lego/kalfa/fit` |  | `(df, fields, preprocessors, drop, keys=None, record=None)` | returns: prep; bus: record=record; state: True | Resolve the field globs and fit every preprocessor chain on the train set; keys carry the sets a preprocessor is limited to |
 | `/lego/kalfa/generate` |  | `(models, composites, prep, generate, record=None)` | returns: None; bus: record=record | Run the generate lego with the report models; nothing without a generate section |
-| `/lego/kalfa/history` |  | `(progress, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)` | returns: None; bus: metrics=metrics, turn_index=turn_index, counters_next=counters_next, optimizers_next=optimizers_next, rules_next=rules_next, record=record | Append the turn's line to history.jsonl and advance the progress display |
+| `/lego/kalfa/given_sizes` |  | `(rows, valid=None, test=None, header=None)` |  | The set sizes of a given split: the source rows for train, the header of every given file for the other sets (header reads a path like the source) |
+| `/lego/kalfa/history` |  | `(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)` | returns: None; bus: monitor=monitor, metrics=metrics, turn_index=turn_index, counters_next=counters_next, optimizers_next=optimizers_next, rules_next=rules_next, record=record | Append the turn's line to history.jsonl and hand it to the monitor |
 | `/lego/kalfa/identity` |  | `(value)` | aliases: value | The value itself |
-| `/lego/kalfa/init_state` |  | `(state, epochs, steps, resume=None, device=None)` | returns: epochs_left; bus: resume=resume, device=device; mutates: state | Move the state to the device, load a checkpoint when resuming, count the turns left |
-| `/lego/kalfa/merge` |  | `(parts)` |  | Merge the per set metrics under train/, val/ and test/ |
+| `/lego/kalfa/image_folder_header` |  | `(path)` |  | The fields, the dtypes, the image count and the classes of an image folder |
+| `/lego/kalfa/init_state` |  | `(state, epochs, steps, policy=None, resume=None, device=None)` | returns: epochs_left; bus: resume=resume, device=device; mutates: state | Move the state to the device, load a checkpoint when resuming and restore the checkpoint policy from it, count the turns left |
+| `/lego/kalfa/kfold_sizes` |  | `(rows, k, fold, val=None, seed=None)` |  | The set sizes a k fold split produces from rows rows; without rows, which sets it produces |
+| `/lego/kalfa/merge` |  | `(parts, prefixes)` |  | Merge the per set metrics under the prefixes of the sets (train/, val/, test/) |
 | `/lego/kalfa/pack` |  | `(items)` | aliases: items | A mapping of the given items |
+| `/lego/kalfa/parquet_header` |  | `(path, chunk=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata |
 | `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict the test set with the report model, invert the target chain, write predictions.parquet |
-| `/lego/kalfa/run_all` |  | `(predictions, history, models, plots, keys=None, predicts=None, figures=None, bus=None, record=None)` | returns: None; bus: record=record | Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height); bus carries everything else the run has (prep, the loaders, the device, the final state) and a plot receives whatever its signature names, plus loaders, predicts, sets and name; figures carries the figure settings of the config |
+| `/lego/kalfa/ratio_sizes` |  | `(rows, ratios, seed=None, group=None)` |  | The set sizes a split by ratios produces from rows rows; without rows, which sets it produces |
+| `/lego/kalfa/read_prep` |  | `(record)` | returns: prep | The fitted preprocessing plan of a record, read from its preprocessors directory |
+| `/lego/kalfa/run_all` |  | `(predictions, history, models, plots, keys=None, predicts=None, bus=None, record=None, figures=None)` | returns: None; bus: record=record, figures=figures | Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height); bus carries everything else the run has (prep, the loaders, the device, the final state) and a plot receives whatever its signature names, plus loaders, predicts, sets, name and figures, the look of the run's plots sized for the definition |
 | `/lego/kalfa/save_final` |  | `(models, optimizers, emas, counters, rules, record=None)` | returns: None; bus: record=record | Write final/state.pt with the full state once training ends |
 | `/lego/kalfa/select` |  | `(models, emas, which, record=None)` | returns: selected; bus: record=record | The report models: copies loaded from best.pt, or the final state for last |
-| `/loader/kalfa/torch` |  | `(data, set, batch)` |  | torch DataLoader; shuffles the train set only, eval_size for the other sets; a stream dataset shuffles through its buffer and takes no sampler or workers |
+| `/lego/kalfa/text_lines_header` |  | `(path)` |  | The text field and the line count of a text file |
+| `/loader/kalfa/torch` |  | `(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)` |  | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; a stream dataset shuffles through buffer rows and takes no sampler or workers |
 | `/rule/kalfa/effects` |  | `(rules)` | returns: effects | The effects the fired rules left for this turn |
 | `/rule/kalfa/open` |  | `(rules)` |  | Open the rule chain of a turn |
 | `/rule/kalfa/rule` |  | `(rules, name, when, set, after=None, metrics=None, turn_index=None)` | returns: rules; bus: metrics=metrics, turn_index=turn_index | Evaluate one rule: skipped until its after rule fired in an earlier turn, sticky once fired, later rules win the same key |

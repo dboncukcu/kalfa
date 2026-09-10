@@ -20,7 +20,8 @@ data:
                                   # | {uri: kfold, params: {k: 5, fold: $fold$, val: 0.15, seed}} (the held out fold is test; val from the training part, without it no valid)
                                   # | {uri: given, params: {valid: b.parquet, test: c.parquet}}
                                   # ratios always has three entries (train, valid, test); 0.0 means no set; a missing set is not in the history
-  batch: null                     # [required] 128 (size) or {size: 128, eval_size: 512, shuffle: true, drop_last: false, workers: 0, collate: null, balanced: false}
+  batch: null                     # [required] 128 (size) or {size: 128, eval_size: 512, shuffle: true, drop_last: false, workers: 0, collate: null, balanced: false, buffer: 4096};
+                                  # the params of the loader lego of the contract's wiring (/loader/kalfa/torch), so its signature is the key list
                                   # the defaults of the loader lego [library]: shuffle on in training, off in evaluation; eval_size = size;
                                   # collate null = the torch default; balanced puts a class balancing sampler over the target field
   preprocessors: {}               # [empty] name: {uri, params, sets}; those that need a fit are fitted on the filtered train set and go into the record;
@@ -80,7 +81,7 @@ generate: null                    # [empty] {uri: sampler_lego, params: {model: 
 sweep: null                       # [empty] {strategy: grid | {uri, params}, space: {param: [choices] | {low, high, log, int, steps}}, objective: {monitor, mode, at}, record: root}; kalfa sweep
 plots: {}                         # [empty] name: {uri, params, inputs: {param: history_key | field | model},
                                   #                sets: [train | valid | test], width, height}
-figures: null                     # [empty] {format: png | pdf | svg, width, height, dpi, style: kalfa | none}
+figures: null                     # [empty] {format: png | pdf | svg, width, height, dpi, style: kalfa | none}; the params of the figures lego of the wiring
                                   # one place for the look of every plot; width and height are one panel, in inches
                                   # not written means every plot keeps its own size and writes png [library: the lego]
 record: null                      # [required] the record directory; $datetime$ is built in (YYYYmmdd_HHMMSS)

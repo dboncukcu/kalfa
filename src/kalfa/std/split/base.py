@@ -37,10 +37,6 @@ def cuts_of(count, ratios):
     return first, min(second, count)
 
 
-def sizes(rows, ratios):
-    first, second = cuts_of(rows, ratios)
-    return {"train": first, "valid": second - first, "test": rows - second}
-
 
 def fold_bounds(count, k):
     sizes = [count // k + (1 if position < count % k else 0) for position in range(k)]
@@ -60,8 +56,3 @@ def kfold_counts(count, k, fold, val):
     rest = count - held
     carve = int(round(rest * float(val or 0.0)))
     return held, carve, rest - carve
-
-
-def kfold_sizes(rows, params):
-    held, carve, train = kfold_counts(rows, params.get("k"), params.get("fold"), params.get("val"))
-    return {"train": train, "valid": carve, "test": held}

@@ -64,7 +64,7 @@ def test_class_weights_and_encoders(dataset):
                                                                                  "cat_a_south"]
     frame = apply(data, prep, "train")
     assert frame.data["churned"].dtype == "int64" and set(frame.data["churned"]) == {0, 1}
-    loader = torch_loader(table(frame), "train", {"size": 64})
+    loader = torch_loader(table(frame), "train", 64)
     weights = class_weights(loader)
     assert weights.shape == (2,) and abs(float(weights.mean()) - 1.0) < 1e-5
     assert prep.inverse("churned", [0, 1]).tolist() == ["no", "yes"]

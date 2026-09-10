@@ -7,7 +7,8 @@ from kalfa.std.source.base import TextLines
 logger = logger_for("data.source")
 
 
-@lego("/source/kalfa/text_lines", returns="df", alias="text_lines",
+@lego("/source/kalfa/text_lines", returns="df", alias="text_lines", header="/lego/kalfa/text_lines_header",
+      samples=True,
       description="The lines of a text file as a Dataset with the field text")
 def text_lines(path):
     logger.info(f"reading {path}")

@@ -17,10 +17,11 @@ from kalfa.std.lego.kalfa.fit import fit
 from kalfa.std.pre.sklearn.minmax_scaler import MinMaxScaler
 from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
 from kalfa.std.source.kalfa.csv import csv
-from kalfa.std.source.base import header
+from kalfa.std.lego.kalfa.csv_header import csv_header
+from kalfa.std.lego.kalfa.parquet_header import parquet_header
 from kalfa.std.source.kalfa.parquet import parquet
 from kalfa.std.split.kalfa.random import random_split
-from kalfa.std.split.base import sizes
+from kalfa.std.lego.kalfa.ratio_sizes import ratio_sizes
 from kalfa.synthetic import housing_frame
 
 
@@ -30,11 +31,10 @@ def test_sources_and_headers(tmp_path):
     data.to_csv(tmp_path / "h.csv", index=False)
     assert len(parquet(str(tmp_path / "h.parquet"))) == 20
     assert len(csv(str(tmp_path / "h.csv"))) == 20
-    head = header("/source/kalfa/parquet", {"path": str(tmp_path / "h.parquet")})
+    head = parquet_header(str(tmp_path / "h.parquet"))
     assert head["rows"] == 20 and head["columns"][-1] == "price" and head["dtypes"]["price"] == "double"
-    head = header("/source/kalfa/csv", {"path": str(tmp_path / "h.csv")})
+    head = csv_header(str(tmp_path / "h.csv"))
     assert head["rows"] == 20 and "x0" in head["columns"]
-    assert header("/source/other/x", {}) is None
 
 
 def test_filters():
@@ -55,7 +55,7 @@ def test_random_split_is_seeded_and_an_empty_ratio_gives_an_empty_frame():
     assert set(first["train"].index) | set(first["valid"].index) | set(first["test"].index) == set(range(100))
     none = random_split(data, [0.8, 0.0, 0.2], seed=1)
     assert len(none["valid"]) == 0 and list(none["valid"].columns) == list(data.columns)
-    assert sizes(100, [0.8, 0.0, 0.2]) == {"train": 80, "valid": 0, "test": 20}
+    assert ratio_sizes(100, [0.8, 0.0, 0.2]) == {"train": 80, "valid": 0, "test": 20}
     with pytest.raises(ValueError):
         random_split(data, [0.5, 0.5], seed=1)
 
@@ -308,13 +308,13 @@ def test_table_feed_names_x_and_targets():
 def test_loader_shuffles_the_train_set_only():
     dataset = table(frame(rows=20, features=2))
     torch.manual_seed(0)
-    train = torch_loader(dataset, "train", {"size": 4})
+    train = torch_loader(dataset, "train", 4)
     first = torch.cat([batch["price"] for batch in train])
     torch.manual_seed(1)
     second = torch.cat([batch["price"] for batch in train])
     assert not torch.equal(first, second)
-    valid = torch_loader(dataset, "valid", {"size": 4, "eval_size": 10})
+    valid = torch_loader(dataset, "valid", 4, eval_size=10)
     batches = list(valid)
     assert len(batches) == 2 and torch.equal(batches[0]["price"], dataset.fields["price"][:10])
     assert set(batches[0]) == {"x", "price"}
-    assert torch_loader(dataset, "train", {"size": 4, "shuffle": False}).batch_size == 4
+    assert torch_loader(dataset, "train", 4, shuffle=False).batch_size == 4

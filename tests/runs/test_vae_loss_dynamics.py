@@ -25,7 +25,8 @@ def test_check_resolves_the_objective_refs(dataset):
     assert vae_loss["params"]["encoder"] == "encoder"
     rules = prepared.document["flow"]["training"]["params"]["rules"]
     assert rules[1]["set"] == {"vae_loss.recon": {"uri": "/criterion/kalfa/huber"}}
-    prepared = check(["config.yaml"], parse_sets(["training.rules=[{name: bad, when: {uri: after_epoch, params: {at: 1}}, "
+    prepared = check(["config.yaml"], parse_sets(["training.rules=[{name: bad, when: {uri: after_epoch, "
+                                                  "params: {at: 1}}, "
                                                   "set: {vae_loss.nothing: 1}}]"]))
     assert [problem.kind for problem in prepared.problems] == ["set_value"]
 
@@ -49,7 +50,8 @@ def test_terms_rules_and_determinism(dataset):
     recon = effects["vae_loss.recon"]
     assert getattr(recon, "func", recon).__name__ == "huber"
     again = run(["config.yaml"], parse_sets(sets, params), when="again")
-    assert [line["val/recon_rmse"] for line in History.read(again.record)] == [line["val/recon_rmse"] for line in history]
+    replayed = [line["val/recon_rmse"] for line in History.read(again.record)]
+    assert replayed == [line["val/recon_rmse"] for line in history]
     assert (record / "plots" / "reconstructions.png").exists() and (record / "plots" / "loss_curve.png").exists()
 
 

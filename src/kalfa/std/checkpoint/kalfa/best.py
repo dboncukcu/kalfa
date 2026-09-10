@@ -4,7 +4,7 @@ from kalfa.registration import lego
 from kalfa.std.checkpoint.base import Policy
 
 
-@lego("/checkpoint/kalfa/best", alias="best",
+@lego("/checkpoint/kalfa/best", alias="best", writes=["best", "last"],
       description="Write best.pt when the monitored value improves and last.pt every turn")
 class Best(Policy):
     def __init__(self, monitor, mode="min"):

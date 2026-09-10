@@ -2,7 +2,7 @@ from kalfa.registration import lego
 from kalfa.std.checkpoint.base import Policy
 
 
-@lego("/checkpoint/kalfa/snapshot", alias="snapshot",
+@lego("/checkpoint/kalfa/snapshot", alias="snapshot", writes=["last", "snapshot"],
       description="Write snapshot_<n>.pt every n turns and last.pt every turn")
 class Snapshot(Policy):
     def __init__(self, every):
