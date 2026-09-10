@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kalfa board</title>
+<style>
+  :root { --ink: #0b0b0b; --muted: #8a8880; --line: #e3e2dd; --surface: #fcfcfb; --accent: #2a78d6; }
+  body { margin: 0; font: 13px/1.45 -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--surface); display: flex; height: 100vh; }
+  nav { width: 300px; border-right: 1px solid var(--line); overflow: auto; padding: 12px; box-sizing: border-box; }
+  main { flex: 1; overflow: auto; padding: 16px 24px; box-sizing: border-box; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  h2 { font-size: 14px; margin: 18px 0 6px; }
+  .group { color: var(--muted); margin: 10px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .item { display: flex; gap: 6px; align-items: center; padding: 3px 6px; border-radius: 4px; cursor: pointer; }
+  .item:hover, .item.active { background: #eef3fb; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.running { background: #eda100; } .dot.finished { background: #1baf7a; } .dot.failed { background: #e34948; }
+  .kind { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .tabs { display: flex; gap: 4px; margin: 12px 0; flex-wrap: wrap; }
+  .tabs button { border: 1px solid var(--line); background: white; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+  .tabs button.active { border-color: var(--accent); color: var(--accent); }
+  pre { background: white; border: 1px solid var(--line); padding: 10px; overflow: auto; max-height: 60vh; font-size: 12px; }
+  table { border-collapse: collapse; font-size: 12px; }
+  td, th { border-bottom: 1px solid var(--line); padding: 4px 8px; text-align: left; white-space: nowrap; }
+  tr.best td { background: #e8f6ef; }
+  .gallery { display: flex; flex-wrap: wrap; gap: 10px; }
+  .gallery figure { margin: 0; width: 320px; } .gallery img { width: 100%; border: 1px solid var(--line); }
+  .gallery figcaption { color: var(--muted); font-size: 11px; }
+  svg { background: white; border: 1px solid var(--line); border-radius: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; margin: 4px 0 12px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: middle; }
+  .meta { color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><h1>kalfa board</h1><div id="tree"></div></nav>
+<main><div id="view"><p class="meta">pick a record on the left</p></div></main>
+<script>
+const palette = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+const state = { path: null, kind: null, offsets: {}, tab: "curves", selected: new Set(), timer: null };
+
+async function api(route, params) {
+  const query = new URLSearchParams(params || {}).toString();
+  const response = await fetch(route + (query ? "?" + query : ""));
+  if (!response.ok) return null;
+  return response.json();
+}
+
+function element(tag, attributes, children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attributes || {})) {
+    if (key === "text") node.textContent = value; else if (key.startsWith("on")) node[key] = value; else node.setAttribute(key, value);
+  }
+  for (const child of children || []) node.append(child);
+  return node;
+}
+
+function chart(series, xs, title) {
+  const width = 760, height = 260, pad = { left: 60, right: 12, top: 26, bottom: 30 };
+  const names = Object.keys(series).filter(name => series[name].some(Number.isFinite));
+  if (!names.length) return element("p", { class: "meta", text: "nothing to draw yet" });
+  const ys = names.flatMap(name => series[name].filter(Number.isFinite));
+  const xl = names.map(name => (xs[name] || []).length ? Math.min(...xs[name]) : 1);
+  const xh = names.map(name => (xs[name] || []).length ? Math.max(...xs[name]) : series[name].length);
+  const xmin = Math.min(...xl), xmax = Math.max(...xh, xmin + 1);
+  let ymin = Math.min(...ys), ymax = Math.max(...ys);
+  if (ymin === ymax) { ymin -= 1; ymax += 1; }
+  const sx = x => pad.left + (x - xmin) / (xmax - xmin) * (width - pad.left - pad.right);
+  const sy = y => height - pad.bottom - (y - ymin) / (ymax - ymin) * (height - pad.top - pad.bottom);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`); svg.setAttribute("width", width); svg.setAttribute("height", height);
+  const draw = (tag, attributes, text) => { const node = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attributes)) node.setAttribute(k, v); if (text !== undefined) node.textContent = text; svg.append(node); return node; };
+  for (let tick = 0; tick <= 4; tick++) {
+    const y = ymin + (ymax - ymin) * tick / 4;
+    draw("line", { x1: pad.left, x2: width - pad.right, y1: sy(y), y2: sy(y), stroke: "#e3e2dd" });
+    draw("text", { x: pad.left - 6, y: sy(y) + 4, "text-anchor": "end", "font-size": 10, fill: "#52514e" }, y.toPrecision(3));
+  }
+  for (let tick = 0; tick <= 4; tick++) {
+    const x = xmin + (xmax - xmin) * tick / 4;
+    draw("text", { x: sx(x), y: height - 8, "text-anchor": "middle", "font-size": 10, fill: "#52514e" }, Math.round(x));
+  }
+  draw("text", { x: pad.left, y: 16, "font-size": 12, "font-weight": "bold", fill: "#0b0b0b" }, title);
+  names.forEach((name, index) => {
+    const points = series[name].map((y, position) => [xs[name] ? xs[name][position] : position + 1, y]).filter(([, y]) => Number.isFinite(y));
+    draw("polyline", { points: points.map(([x, y]) => `${sx(x)},${sy(y)}`).join(" "), fill: "none", stroke: palette[index % palette.length], "stroke-width": 1.5 });
+  });
+  const legend = element("div", { class: "legend" }, names.map((name, index) => element("span", {}, [element("span", { class: "swatch", style: `background:${palette[index % palette.length]}` }), document.createTextNode(name)])));
+  return element("div", {}, [svg, legend]);
+}
+
+function seriesOf(lines, keep, xKey) {
+  const series = {}, xs = {};
+  for (const line of lines) {
+    for (const [key, value] of Object.entries(line)) {
+      if (!keep(key, value)) continue;
+      (series[key] = series[key] || []).push(value);
+      (xs[key] = xs[key] || []).push(line[xKey]);
+    }
+  }
+  return { series, xs };
+}
+
+function isMetric(key, value) { return key.includes("/") && !key.startsWith("lr/") && typeof value === "number"; }
+function isRate(key, value) { return key.startsWith("lr/") && typeof value === "number"; }
+
+async function loadTree() {
+  const tree = await api("/api/tree");
+  const holder = document.getElementById("tree");
+  holder.replaceChildren(element("p", { class: "meta", text: tree.root }));
+  for (const [group, entries] of Object.entries(tree.groups)) {
+    holder.append(element("div", { class: "group", text: group }));
+    for (const entry of entries) {
+      const status = (entry.status || {}).state || "pending";
+      holder.append(element("div", { class: "item" + (entry.path === state.path ? " active" : ""), onclick: () => open(entry.path, entry.kind) }, [
+        element("span", { class: "dot " + status }), element("span", { text: entry.name }), element("span", { class: "kind", text: entry.kind })]));
+    }
+  }
+}
+
+async function open(path, kind) {
+  state.path = path; state.kind = kind; state.offsets = {}; state.selected = new Set();
+  await loadTree();
+  await render();
+}
+
+function header(record) {
+  const status = record.status || {};
+  const manifest = record.manifest || {};
+  return element("div", {}, [
+    element("h1", { text: `${state.path}  ` }, [element("span", { class: "meta", text: `${manifest.kind || "run"} · ${status.state || "?"} · started ${manifest.started || "?"} · last seen ${status.last_seen || "?"}` })])]);
+}
+
+function tabs(names) {
+  return element("div", { class: "tabs" }, names.map(name => element("button", { class: name === state.tab ? "active" : "", text: name, onclick: () => { state.tab = name; render(); } })));
+}
+
+async function runView(record) {
+  const view = document.getElementById("view");
+  const body = element("div", {});
+  if (state.tab === "curves") {
+    const history = await api("/api/history", { path: state.path });
+    const metrics = seriesOf(history.lines, isMetric, "turn");
+    const rates = seriesOf(history.lines, isRate, "turn");
+    const fired = history.lines.filter(line => (line.rules || []).length).map(line => `turn ${line.turn}: ${line.rules.join(", ")}`);
+    body.append(chart(metrics.series, metrics.xs, "history"), chart(rates.series, rates.xs, "learning rates"));
+    if (fired.length) body.append(element("p", { class: "meta", text: "rules fired: " + fired.join("; ") }));
+  } else if (state.tab === "steps") {
+    const steps = await api("/api/steps", { path: state.path });
+    const found = seriesOf(steps.lines, (key, value) => (key.startsWith("loss/") || key.startsWith("grad_norm/")) && typeof value === "number", "step");
+    body.append(chart(found.series, found.xs, "steps"));
+  } else if (state.tab === "plots" || state.tab === "samples") {
+    const names = state.tab === "plots" ? record.plots : record.samples;
+    body.append(element("div", { class: "gallery" }, names.map(name => element("figure", {}, [
+      element("img", { src: `/file?path=${encodeURIComponent(state.path + "/" + state.tab + "/" + name)}` }), element("figcaption", { text: name })]))));
+    if (!names.length) body.append(element("p", { class: "meta", text: "nothing written yet" }));
+  } else if (state.tab === "config") {
+    body.append(element("pre", { text: record.resolved || "no resolved.yaml" }));
+  } else if (state.tab === "notes") {
+    for (const name of ["manifest", "host", "device", "git", "resume", "sweep", "run", "data"]) {
+      if (record[name]) body.append(element("h2", { text: name }), element("pre", { text: JSON.stringify(record[name], null, 2) }));
+    }
+  } else if (state.tab === "events") {
+    const rows = record.events.map(event => element("tr", {}, [element("td", { text: event.kind || "" }), element("td", { text: event.path || "" }), element("td", { text: event.ms !== undefined ? `${event.ms} ms` : "" }), element("td", { text: event.error || event.status || "" })]));
+    body.append(element("table", {}, [element("tr", {}, ["kind", "path", "time", "note"].map(text => element("th", { text }))), ...rows]));
+  } else if (state.tab === "describe") {
+    body.append(element("p", { class: "meta", text: "reading the config under the record's contract" }));
+    const found = await api("/api/describe", { path: state.path });
+    body.replaceChildren(element("pre", { text: found ? found.text : "the record cannot be described" }));
+  }
+  view.replaceChildren(header(record), tabs(["curves", "steps", "plots", "samples", "config", "notes", "events", "describe"]), body);
+}
+
+async function sweepView() {
+  const sweep = await api("/api/sweep", { path: state.path });
+  const view = document.getElementById("view");
+  const objective = sweep.objective || {};
+  const keys = Array.from(new Set(sweep.points.flatMap(point => Object.keys(point.values || {}))));
+  const rows = sweep.points.map(point => {
+    const box = element("input", { type: "checkbox", onchange: event => { if (event.target.checked) state.selected.add(point.path); else state.selected.delete(point.path); overlay(); } });
+    if (state.selected.has(point.path)) box.checked = true;
+    const cells = [element("td", {}, [box]), element("td", { text: point.id ?? "" }), ...keys.map(key => element("td", { text: String(point.values[key] ?? "") })),
+      element("td", { text: (point.status || {}).state || "" }), element("td", { text: point.turns }),
+      element("td", { text: point.objective ? `${point.objective.value.toPrecision(5)} @ ${point.objective.turn}` : "" }),
+      element("td", {}, [element("a", { href: "#", text: "open", onclick: event => { event.preventDefault(); open(point.path, "point"); } })])];
+    return element("tr", { class: sweep.best && sweep.best.path === point.path ? "best" : "" }, cells);
+  });
+  const table = element("table", {}, [element("tr", {}, ["", "id", ...keys, "status", "turns", `${objective.monitor || "objective"} (${objective.mode || "min"})`, ""].map(text => element("th", { text }))), ...rows]);
+  const diffButton = element("button", { text: "diff the two selected", onclick: async () => {
+    const [first, second] = Array.from(state.selected);
+    if (!second) return;
+    const found = await api("/api/diff", { a: first, b: second });
+    document.getElementById("diff").replaceChildren(element("pre", { text: found ? found.diff.join("\n") || "no difference" : "no diff" }));
+  } });
+  view.replaceChildren(element("h1", { text: state.path }, [element("span", { class: "meta", text: ` · ${sweep.points.length} of ${(sweep.manifest || {}).total || "?"} points` })]),
+    element("p", { class: "meta", text: sweep.best ? `best: point ${sweep.best.id} ${JSON.stringify(sweep.best.values)} ${sweep.best.objective.value.toPrecision(5)}` : "no scored point yet" }),
+    table, element("div", { class: "tabs" }, [diffButton]), element("div", { id: "overlay" }), element("div", { id: "diff" }));
+  overlay();
+}
+
+async function overlay() {
+  const holder = document.getElementById("overlay");
+  if (!holder) return;
+  const sweep = await api("/api/sweep", { path: state.path });
+  const monitor = (sweep.objective || {}).monitor;
+  const series = {}, xs = {};
+  for (const path of state.selected) {
+    const history = await api("/api/history", { path });
+    const found = seriesOf(history.lines, (key, value) => key === monitor && typeof value === "number", "turn");
+    if (found.series[monitor]) { series[path] = found.series[monitor]; xs[path] = found.xs[monitor]; }
+  }
+  holder.replaceChildren(Object.keys(series).length ? chart(series, xs, monitor || "objective") : element("p", { class: "meta", text: "tick points to overlay their curves" }));
+}
+
+async function render() {
+  if (!state.path) return;
+  if (state.kind === "sweep") await sweepView();
+  else {
+    const record = await api("/api/record", { path: state.path });
+    if (record) await runView(record);
+  }
+}
+
+setInterval(async () => {
+  if (!state.path) { await loadTree(); return; }
+  const record = state.kind === "sweep" ? null : await api("/api/record", { path: state.path });
+  const running = state.kind === "sweep" || (record && record.status && record.status.state === "running");
+  if (running) await render();
+}, 4000);
+setInterval(loadTree, 10000);
+loadTree();
+</script>
+</body>
+</html>

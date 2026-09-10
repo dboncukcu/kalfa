@@ -1,0 +1,75 @@
+"""The board: a reader of records under a root, served as JSON and one page."""
+
+import json
+import threading
+import urllib.request
+
+from kalfa.board import Board, serve
+from kalfa.record import Record
+
+
+def records(root):
+    run = Record(root / "runs" / "one")
+    run.manifest("run", name="one", params={"lr": 0.1})
+    run.write_text("resolved.yaml", "seed: 7\n")
+    run.append("history.jsonl", {"turn": 1, "global_step": 3, "train/l": 1.0, "val/rmse": 2.0, "lr/m": 0.1,
+                                 "rules": []})
+    run.append("history.jsonl", {"turn": 2, "global_step": 6, "train/l": 0.5, "val/rmse": 1.5, "lr/m": 0.1,
+                                 "rules": ["a"]})
+    run.append("steps.jsonl", {"step": 1, "turn": 1, "loss/m": 1.0, "lr/m": 0.1})
+    (run.directory / "plots").mkdir()
+    (run.directory / "plots" / "loss_curve.png").write_bytes(b"png")
+    sweep = Record(root / "sweeps" / "grid")
+    sweep.manifest("sweep", strategy="/strategy/kalfa/grid",
+                   objective={"monitor": "val/rmse", "mode": "min", "at": "best"}, total=2)
+    for index, value in enumerate((3.0, 1.0)):
+        point = Record(sweep.directory / f"{index:04d}")
+        point.manifest("point", name=f"{index:04d}", id=index, values={"lr": value}, root=str(sweep.directory))
+        point.write_text("resolved.yaml", f"lr: {value}\n")
+        point.append("history.jsonl", {"turn": 1, "global_step": 1, "val/rmse": value, "rules": []})
+    Record(sweep.directory / "0001").write_json("sweep.json", {"id": 1, "point": {"lr": 1.0},
+                                                               "objective": {"value": 1.0, "turn": 1}})
+    Record(sweep.directory / "0001").write_json("run.json", {"status": "ok"})
+    Record(root / "prepared").manifest("data", sets=["train"])
+    return root
+
+
+def test_the_board_reads_the_records_and_their_status(tmp_path):
+    board = Board(records(tmp_path))
+    tree = board.tree()
+    assert sorted(tree["groups"]) == ["runs", "sweeps", "sweeps/grid"]
+    assert [entry["kind"] for entry in tree["groups"]["sweeps/grid"]] == ["point", "point"]
+    run = board.record("runs/one")
+    assert run["status"]["state"] == "running" and run["plots"] == ["loss_curve.png"] and run["resolved"] == "seed: 7\n"
+    assert board.lines("runs/one", "history.jsonl", 1)["lines"][0]["turn"] == 2
+    assert board.lines("runs/one", "steps.jsonl")["offset"] == 1
+    sweep = board.sweep("sweeps/grid")
+    assert [point["status"]["state"] for point in sweep["points"]] == ["running", "finished"]
+    assert sweep["points"][0]["objective"] == {"value": 3.0, "turn": 1} and sweep["best"]["id"] == 1
+    assert "-lr: 3.0" in board.diff("sweeps/grid/0000", "sweeps/grid/0001")["diff"]
+    assert board.record("../outside") is None and board.file("runs/one/resolved.yaml") is None
+    assert board.file("runs/one/plots/loss_curve.png").read_bytes() == b"png" and board.record("nowhere") is None
+
+
+def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
+    server = serve(records(tmp_path), port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        page = urllib.request.urlopen(f"{base}/").read().decode()
+        assert "kalfa board" in page and "/api/tree" in page
+        tree = json.loads(urllib.request.urlopen(f"{base}/api/tree").read())
+        assert "runs" in tree["groups"]
+        history = json.loads(urllib.request.urlopen(f"{base}/api/history?path=runs/one&offset=1").read())
+        assert history["offset"] == 2 and len(history["lines"]) == 1
+        image = urllib.request.urlopen(f"{base}/file?path=runs/one/plots/loss_curve.png")
+        assert image.headers["Content-Type"] == "image/png" and image.read() == b"png"
+        try:
+            urllib.request.urlopen(f"{base}/api/record?path=nowhere")
+            assert False
+        except urllib.error.HTTPError as error:
+            assert error.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()

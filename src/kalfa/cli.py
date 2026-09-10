@@ -9,7 +9,7 @@ from cirak.loader import parse_value
 from cirak.registry import registry
 from tezgah import TezgahError
 
-from . import api, collect, describe, docs, sweep
+from . import api, board, collect, describe, docs, sweep
 from .config import import_plugins, pack_tables, parse_sets
 from .contract import Contract
 from .kinds import kalfa_kind
@@ -181,6 +181,15 @@ def build_parser():
     ls_cmd.add_argument("--kind")
     plugin_option(ls_cmd)
     ls_cmd.set_defaults(handler=cmd_ls)
+
+    board_cmd = commands.add_parser("board", help="a reader of records: serve the runs, points and sweeps under a "
+                                                  "root as a page that follows the growing files; no dependency, "
+                                                  "reach it through an ssh tunnel on a batch system")
+    board_cmd.add_argument("root")
+    board_cmd.add_argument("--host", default="127.0.0.1")
+    board_cmd.add_argument("--port", type=int, default=8080)
+    log_option(board_cmd)
+    board_cmd.set_defaults(handler=cmd_board)
 
     contract_cmd = commands.add_parser("contract", help="print the contract kalfa runs configs by (the wiring and "
                                                         "the flow blocks), or write it with --write for editing")
@@ -487,6 +496,21 @@ def cmd_docs(args) -> int:
     else:
         sys.stdout.write(text)
     return 1 if failed else 0
+
+
+def cmd_board(args) -> int:
+    server = board.serve(args.root, host=args.host, port=args.port)
+    style = style_for(sys.stdout)
+    print(f"kalfa board over {style.cyan(args.root)} at http://{args.host}:{server.server_address[1]}/ "
+          f"(ctrl-c stops it)")
+    with Monitor(level_of(args.log)):
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
+    return 0
 
 
 def cmd_contract(args) -> int:

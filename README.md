@@ -85,6 +85,7 @@ kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep 
 kalfa sweep cfg.yaml --plan [--prepare-data] [--record root]      # write the root once: the manifest, sweep.plan, sweep.sub, sweep.sh
 kalfa prepare cfg.yaml --out DIR                                  # the data block once; kalfa run cfg.yaml --prepared DIR starts from it
 kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
+kalfa board <root> [--port 8080]                                  # a page over the records under a root, following the growing files
 kalfa ls [/alias/kalfa/tabular | /criterion | ... | word]         # packs and legos with their kinds and facts; a word searches
 kalfa docs [--write DOCS.md]                                      # the lego reference generated from the registry
 kalfa contract [--write contract.yaml]                            # the wiring and the flow blocks kalfa runs a config by
@@ -143,7 +144,12 @@ by id; `optuna` is fed back). `kalfa sweep cfg.yaml --plan --record root` writes
 starts: `manifest.json` (the strategy, the space, the objective, the total), `sweep.plan` (`N`, the config, the
 root, regenerated on every plan) and the two site files it never overwrites, `sweep.sub` for HTCondor (`include :
 sweep.plan`, `queue $(N)`) and `sweep.sh` (the environment of the site, then `kalfa sweep cfg.yaml --id $1`);
-`--prepare-data` runs the data block once into `<root>/data/` and every point starts from it. Then `kalfa sweep`
+`--prepare-data` runs the data block once into `<root>/data/` and every point starts from it. `kalfa board <root>`
+watches all of it: a reader of the records under a root, served on `127.0.0.1:8080` with no dependency beyond
+Python, that lists the runs, points and sweeps by their manifests, draws the history and step curves, shows the
+plots, the samples, the config, the notes and the events of a record, the live table of a sweep with the best
+point and the curves of chosen points overlaid, and the difference between two points; on a batch system it runs
+on the login node and the browser reaches it through an ssh tunnel. Then `kalfa sweep`
 runs every point as an ordinary run under `<root>/<id>/` in a
 subprocess, `kalfa collect <root>` writes the table and the best point; on a queue system one job per point with
 `kalfa sweep cfg.yaml --id N --record <shared root>` (`examples/14_sweep_grid`).
