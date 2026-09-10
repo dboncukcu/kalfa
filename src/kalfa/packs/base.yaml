@@ -72,6 +72,8 @@ alias:
   confusion_matrix: /plot/kalfa/confusion_matrix
   forecast_samples: /plot/kalfa/forecast_samples
   architecture: /plot/kalfa/architecture
+  architecture_text: /plot/kalfa/architecture_text
+  torchview: /plot/torchview/architecture
   # objective
   weighted_sum: /objective/kalfa/weighted_sum
   # strategy

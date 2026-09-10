@@ -66,7 +66,7 @@ def test_the_uri_is_the_path():
 
     root = Path(kalfa.std.__file__).parent
     files = sorted(path for path in root.glob("*/*/*.py") if path.name not in ("__init__.py", "base.py"))
-    assert len(files) == len(STD_URIS) == 173
+    assert len(files) == len(STD_URIS) == 175
     modules = {}
     for path in files:
         kind, pack, name = path.relative_to(root).with_suffix("").parts

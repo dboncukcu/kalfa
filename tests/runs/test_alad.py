@@ -42,7 +42,8 @@ def test_two_optimizers_five_models_and_the_score_plots(trained):
             "test/average_precision", "lr/g", "lr/d"} <= set(history[0])
     assert 0.0 <= history[-1]["test/auroc"] <= 1.0
     assert not (record / "checkpoints").exists() and (record / "final" / "state.pt").exists()
-    for name in ("plots/score_histogram.png", "plots/roc.png", "plots/pr_curve.png", "plots/architecture.txt",
+    for name in ("plots/score_histogram.png", "plots/roc.png", "plots/pr_curve.png", "plots/modules.txt",
+                 "plots/architecture_encoder.png", "plots/architecture_anomaly_score.png",
                  "predictions.parquet", "preprocessors/std_scaler.pkl", "preprocessors/log_scaler.pkl",
                  "preprocessors/plan.json", "resolved.yaml"):
         assert (record / name).exists(), name

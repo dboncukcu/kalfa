@@ -33,7 +33,8 @@ wiring:
   figures: /lego/kalfa/figures                   # the figures section is its params
   plot_bus: {prep: prep, train_loader: train_loader, valid_loader: valid_loader, test_loader: test_loader,
              composites: composites, device: device, counters: counters_final, optimizers: optimizers_final,
-             emas: emas_final, rules: rules_final}   # what a plot may name and the wire of the after block it reads
+             emas: emas_final, rules: rules_final, losses: losses, losses_keys: losses_keys}
+             # what a plot may name and the wire of the after block it reads
 
 blocks:
 
@@ -194,6 +195,7 @@ blocks:
       plots_keys: {default: {}}         # {name: {inputs, sets, width, height}}; the definition level keys
       figures: {required: true}         # {uri, params}: the figures lego of wiring with the figures section as its params
       plot_bus: {required: true}        # wiring.plot_bus, {key: wire}
+      losses_keys: {default: {}}        # the table training.losses_keys, for the plots that draw the losses
       # "@plots" is a group reference to the plots section of the driver document, not a block variable
     flow:
       final:   {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: rules_final}}
@@ -201,6 +203,8 @@ blocks:
       predict: {uri: /lego/kalfa/predict, params: {predicts: $predicts$, set: test, target_map: $targets$},
                 inputs: {models: selected, composites: composites, loader: test_loader, prep: prep}, outputs: [predictions]}
       figures: {uri: $figures.uri$, params: $figures.params$, outputs: [figures]}
+      losses:  {uri: /lego/kalfa/identity, params: {value: "@losses"}, outputs: [losses]}
+      losses_keys: {uri: /lego/kalfa/const, params: {value: $losses_keys$}, outputs: [losses_keys]}
       # bus is wiring.plot_bus, the one place that says what a plot may name in its signature; a new key there reaches
       # every plot, and kalfa plots rebuilds the same keys from the record.
       plots:   {uri: /lego/kalfa/run_all, params: {plots: "@plots", keys: $plots_keys$, predicts: $predicts$},

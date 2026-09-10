@@ -68,4 +68,5 @@ flow:
             n_classes: 10, n: 64}}, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, samples_gif: {lego: 
             /plot/kalfa/samples_gif}, samples_matrix: {lego: /plot/kalfa/samples_matrix}}, plot_bus: {prep: prep, 
           train_loader: train_loader, valid_loader: valid_loader, test_loader: test_loader, composites: composites, 
-          device: device, counters: counters_final, optimizers: optimizers_final, emas: emas_final, rules: rules_final}}}
+          device: device, counters: counters_final, optimizers: optimizers_final, emas: emas_final, rules: rules_final, 
+          losses: losses, losses_keys: losses_keys}, losses_keys: {wgan_d: {sets: [train]}, wgan_g: {}}}}

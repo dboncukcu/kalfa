@@ -15,7 +15,8 @@ from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
 from kalfa.std.layer.kalfa.l1_distance import L1Distance
 from kalfa.std.metric.torchmetrics.binary_auroc import binary_auroc
 from kalfa.std.metric.torchmetrics.binary_average_precision import binary_average_precision
-from kalfa.std.plot.kalfa.architecture import architecture
+from kalfa.std.plot.kalfa.architecture_text import architecture_text
+from kalfa.std.plot.torchview.architecture import architecture as torchview_architecture
 from kalfa.std.plot.torchmetrics.binary_precision_recall_curve import binary_precision_recall_curve
 from kalfa.std.plot.torchmetrics.binary_roc import binary_roc
 from kalfa.std.plot.kalfa.class_histogram import class_histogram
@@ -63,12 +64,12 @@ def test_score_plots_write_files(tmp_path):
     class_histogram(predictions, [], {}, str(tmp_path))
     binary_roc(predictions, [], {}, str(tmp_path))
     binary_precision_recall_curve(predictions, [], {}, str(tmp_path))
-    architecture(predictions, [], {"m": nn.Linear(2, 1)}, str(tmp_path))
-    for name in ("class_histogram.png", "binary_roc.png", "binary_precision_recall_curve.png", "architecture.txt"):
+    architecture_text(predictions, [], {"m": nn.Linear(2, 1)}, str(tmp_path))
+    for name in ("class_histogram.png", "binary_roc.png", "binary_precision_recall_curve.png",
+                 "architecture_text.txt"):
         assert (tmp_path / "plots" / name).exists(), name
-    assert "Linear" in (tmp_path / "plots" / "architecture.txt").read_text()
-    assert not list((tmp_path / "plots").glob("architecture_*.png"))
-    architecture(predictions, [], {"m": nn.Linear(2, 1)}, str(tmp_path), loaders={"test": None})
+    assert "Linear" in (tmp_path / "plots" / "architecture_text.txt").read_text()
+    torchview_architecture(predictions, [], {"m": nn.Linear(2, 1)}, str(tmp_path), loaders={"test": None})
     assert not list((tmp_path / "plots").glob("architecture_*.png"))
     assert binary_roc(pandas.DataFrame({"row": [0], "is_anomaly": [1], "raw_s": [0.5]}), [], {}, str(tmp_path)) is None
     assert class_histogram(pandas.DataFrame(), [], {}, str(tmp_path)) is None
@@ -110,10 +111,9 @@ def test_myexample_objectives_register_with_facts_and_run():
 
 
 @pytest.mark.skipif(shutil.which("dot") is None, reason="the graphviz dot binary is not installed")
-def test_architecture_draws_every_model_the_batch_feeds(tmp_path):
+def test_torchview_draws_every_model_the_batch_feeds(tmp_path):
     pytest.importorskip("torchview")
     loaders = {"test": OneBatchLoader(make_batch())}
-    architecture(None, [], {"m": tiny_model(), "plain": nn.Linear(3, 1)}, str(tmp_path), loaders=loaders)
-    assert (tmp_path / "plots" / "architecture.txt").exists()
+    torchview_architecture(None, [], {"m": tiny_model(), "plain": nn.Linear(3, 1)}, str(tmp_path), loaders=loaders)
     assert (tmp_path / "plots" / "architecture_m.png").exists()
     assert not (tmp_path / "plots" / "architecture_plain.png").exists()

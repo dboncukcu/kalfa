@@ -214,6 +214,8 @@ class Tracker:
 
 
 class Loss:
+    reads: str = "predictions"
+
     def loss(self, context: Context, keys: dict | None = None):
         raise NotImplementedError
 

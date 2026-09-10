@@ -58,4 +58,5 @@ flow:
         targets: {}, generate: null, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, confusion: {lego: 
             /plot/kalfa/confusion_matrix}}, plot_bus: {prep: prep, train_loader: train_loader, valid_loader: 
           valid_loader, test_loader: test_loader, composites: composites, device: device, counters: counters_final, 
-          optimizers: optimizers_final, emas: emas_final, rules: rules_final}}}
+          optimizers: optimizers_final, emas: emas_final, rules: rules_final, losses: losses, losses_keys: losses_keys}, 
+        losses_keys: {ce: {}}}}

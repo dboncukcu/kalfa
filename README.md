@@ -16,9 +16,10 @@ kalfa --help
 
 The dependencies come with it: cirak and tezgah (the recipe compiler and the pipeline runner), torch, pandas,
 pyarrow, scikit-learn, torchmetrics, matplotlib, pillow, scipy, ruamel.yaml, tqdm and optuna (the fed back sweep
-strategy); there are no optional extras. The `architecture` plot draws the models when `torchview` and the graphviz
-`dot` binary are installed, and `pairplot`, `violin` and `kde` need `seaborn`; none of the three is a dependency of
-kalfa, and a plot that misses one says so in the log and is skipped.
+strategy); there are no optional extras. The `architecture` plot draws the models with matplotlib from the graph
+the config wrote; the `torchview` plot draws them with torchview when it and the graphviz `dot` binary are
+installed, and `pairplot`, `violin` and `kde` need `seaborn`; none of the three is a dependency of kalfa, and a plot
+that misses one says so in the log and is skipped.
 
 The reference configs, the examples and the test suite live in the repository:
 

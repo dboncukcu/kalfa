@@ -230,6 +230,7 @@ plots:
   roc:             {uri: /plot/torchmetrics/binary_roc}
   pr_curve:        {uri: /plot/torchmetrics/binary_precision_recall_curve}
   architecture:    {uri: /plot/kalfa/architecture}
+  modules:         {uri: /plot/kalfa/architecture_text}
 
 # record: the record directory. $datetime$ is a built in placeholder. The directory holds: the resolved config
 # (aliases and params expanded, runnable again on its own), the weights, the fitted

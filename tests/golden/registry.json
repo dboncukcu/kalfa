@@ -1084,12 +1084,23 @@
       "alias": [
         "architecture"
       ],
-      "description": "The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed; the drawing runs on the device of the run, so a composite keeps its referenced models with it",
+      "description": "kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model) and the shapes one batch traced through it, the wires as labelled arrows, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device",
       "facts": {
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)"
+      "signature": "(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None, losses_keys=None, optimizers=None, name=None, figures=None)"
+    },
+    "/plot/kalfa/architecture_text": {
+      "alias": [
+        "architecture_text"
+      ],
+      "description": "The report models printed as text under plots/<name>.txt, the module repr of each",
+      "facts": {
+        "partial": true
+      },
+      "kind": "plot",
+      "signature": "(predictions, history, models, record, name=None, figures=None)"
     },
     "/plot/kalfa/class_histogram": {
       "alias": [
@@ -1364,6 +1375,18 @@
       },
       "kind": "plot",
       "signature": "(predictions, history, models, record, name=None, figures=None)"
+    },
+    "/plot/torchview/architecture": {
+      "alias": [
+        "torchview"
+      ],
+      "description": "torchview's drawing of every report model the batch feeds, under plots/<name>_<model>.png; it needs the graphviz dot binary and runs on the device of the run, so a composite keeps its referenced models with it",
+      "facts": {
+        "partial": true,
+        "requires": "torchview"
+      },
+      "kind": "plot",
+      "signature": "(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)"
     },
     "/pre/kalfa/abs": {
       "alias": [
@@ -2027,6 +2050,7 @@
       "after_turn": "/trigger/kalfa/after_turn",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
+      "architecture_text": "/plot/kalfa/architecture_text",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2086,6 +2110,7 @@
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchview": "/plot/torchview/architecture",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "xavier": "/init/torch/xavier",
@@ -2100,6 +2125,7 @@
       "after_turn": "/trigger/kalfa/after_turn",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
+      "architecture_text": "/plot/kalfa/architecture_text",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2161,6 +2187,7 @@
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchview": "/plot/torchview/architecture",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "xavier": "/init/torch/xavier",
@@ -2175,6 +2202,7 @@
       "after_turn": "/trigger/kalfa/after_turn",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
+      "architecture_text": "/plot/kalfa/architecture_text",
       "asinh": "/pre/kalfa/asinh",
       "atanh": "/pre/kalfa/atanh",
       "auroc": "/metric/torchmetrics/binary_auroc",
@@ -2260,6 +2288,7 @@
       "target_correlation": "/plot/kalfa/target_correlation",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchview": "/plot/torchview/architecture",
       "violin": "/plot/seaborn/violin",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
       "weighted_sum": "/objective/kalfa/weighted_sum",
@@ -2276,6 +2305,7 @@
       "after_turn": "/trigger/kalfa/after_turn",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
+      "architecture_text": "/plot/kalfa/architecture_text",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2356,6 +2386,7 @@
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "text_lines": "/source/kalfa/text_lines",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchview": "/plot/torchview/architecture",
       "violin": "/plot/seaborn/violin",
       "vocab_size": "/data/kalfa/vocab_size",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
@@ -2373,6 +2404,7 @@
       "after_turn": "/trigger/kalfa/after_turn",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
+      "architecture_text": "/plot/kalfa/architecture_text",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2469,6 +2501,7 @@
       "time_budget": "/trigger/kalfa/time_budget",
       "to_tensor": "/pre/kalfa/to_tensor",
       "to_tensor_signed": "/pre/kalfa/to_tensor_signed",
+      "torchview": "/plot/torchview/architecture",
       "two_views": "/pre/kalfa/two_views",
       "unflatten": "/layer/kalfa/unflatten",
       "vae": "/objective/kalfa/vae",
@@ -2487,6 +2520,8 @@
     "counters",
     "device",
     "emas",
+    "losses",
+    "losses_keys",
     "optimizers",
     "prep",
     "rules",

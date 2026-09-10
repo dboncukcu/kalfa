@@ -494,7 +494,9 @@ def plots(run_dir, only=None, sets=None, device=None, contract=None) -> Plots:
     table = Path(run_dir) / "predictions.parquet"
     predictions = pandas.read_parquet(table) if table.exists() else None
     logger.info(f"redrawing the plots of {run_dir} with the {opened.which} models")
-    bus = {**outputs, "device": device, "counters": counters, "rules": rules}
+    bus = {**outputs, "device": device, "counters": counters, "rules": rules,
+           "losses": opened.store.get("losses") if opened.document.get("losses") else {},
+           "losses_keys": opened.document["flow"]["training"]["params"].get("losses_keys")}
     drawn = draw_plots(opened, only or "all", predictions, History.read(run_dir), selected, bus)
     return Plots(str(run_dir), drawn)
 

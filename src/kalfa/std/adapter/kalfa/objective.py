@@ -35,6 +35,8 @@ class ObjectiveTracker(Tracker):
       description="Call an objective with every model of the run and the batch, plus the step, epoch, rng, "
                   "scaler and losses view its signature names")
 class ObjectiveAdapter(Loss):
+    reads = "models"
+
     def __init__(self, objective):
         self.objective = objective
 

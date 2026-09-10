@@ -30,7 +30,7 @@ The legos a config writes, by kind.
 | `trigger` | training.stop, rules when | 5 |
 | `checkpoint` | training.checkpoint | 3 |
 | `generate` | generate | 3 |
-| `plot` | plots | 22 |
+| `plot` | plots | 24 |
 | `strategy` | sweep.strategy | 4 |
 | `device` | device, predict --device, generate --device | 4 |
 | `rng` | rng | 3 |
@@ -225,7 +225,8 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)` | partial: True | The report models printed as text under plots/architecture.txt, and drawn under plots/architecture_<model>.png when torchview and graphviz are installed; the drawing runs on the device of the run, so a composite keeps its referenced models with it |
+| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None, losses_keys=None, optimizers=None, name=None, figures=None)` | partial: True | kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model) and the shapes one batch traced through it, the wires as labelled arrows, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device |
+| `/plot/kalfa/architecture_text` | `architecture_text` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | The report models printed as text under plots/<name>.txt, the module repr of each |
 | `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None, figures=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
 | `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
 | `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None, figures=None)` | partial: True; needs: train_loader | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
@@ -247,6 +248,7 @@ The legos a config writes, by kind.
 | `/plot/seaborn/violin` | `violin` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None, figures=None)` | partial: True; refs: value=column, group=column; needs: train_loader; requires: seaborn | seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed |
 | `/plot/torchmetrics/binary_precision_recall_curve` |  | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Precision recall curve of the raw test scores against the binary target |
 | `/plot/torchmetrics/binary_roc` |  | `(predictions, history, models, record, name=None, figures=None)` | partial: True | ROC curve of the raw test scores against the binary target |
+| `/plot/torchview/architecture` | `torchview` | `(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)` | partial: True; requires: torchview | torchview's drawing of every report model the batch feeds, under plots/<name>_<model>.png; it needs the graphviz dot binary and runs on the device of the run, so a composite keeps its referenced models with it |
 
 ### strategy
 
@@ -398,6 +400,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
+| `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
@@ -474,6 +478,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
+| `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
@@ -552,6 +558,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
+| `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
@@ -656,6 +664,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
+| `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
@@ -756,6 +766,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
+| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
+| `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |

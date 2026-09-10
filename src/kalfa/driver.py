@@ -348,7 +348,8 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
                 "targets": targets,
                 "generate": None if generate is None else call_resolved(generate, aliases, catalog),
                 "plots_keys": plots_keys_of(config.get("plots")),
-                "plot_bus": contract.plot_bus}},
+                "plot_bus": contract.plot_bus,
+                "losses_keys": keys_of(losses, targets)}},
         },
     }
     return document

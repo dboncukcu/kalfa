@@ -83,6 +83,9 @@ class Module(Model):
         if not any(is_lazy(module) for module in self.nodes.modules()):
             self.build()
 
+    def node_module(self, node):
+        return self.refs[node.name] if node.ref is not None else self.nodes[self.safe[node.name]]
+
     def seeded(self):
         return forked(self.seed)
 

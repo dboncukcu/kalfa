@@ -8,6 +8,10 @@ class Model(nn.Module):
     outputs: list = ()
     initialized = True
     trainable = True
+    graph = None
+
+    def node_module(self, node) -> nn.Module | None:
+        return None
 
 
 def weights_path(spec):
