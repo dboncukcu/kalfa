@@ -36,9 +36,9 @@ flow:
     source: {uri: /source/kalfa/parquet, params: {path: housing.parquet}, outputs: [df_0]}
     split: {uri: /split/kalfa/kfold, params: {k: 5, fold: 0, val: 0.15, seed: 7}, inputs: {df: df_0}, outputs: {train: train_df_0, valid: valid_df_0, test: 
           test_df_0}}
-    set_filter_train: {uri: /lego/kalfa/filter_set, params: {set: train, filters: []}, inputs: {df: train_df_0}, outputs: [train_df]}
-    set_filter_valid: {uri: /lego/kalfa/filter_set, params: {set: valid, filters: []}, inputs: {df: valid_df_0}, outputs: [valid_df]}
-    set_filter_test: {uri: /lego/kalfa/filter_set, params: {set: test, filters: []}, inputs: {df: test_df_0}, outputs: [test_df]}
+    set_transform_train: {uri: /lego/kalfa/transform_set, params: {set: train, transforms: []}, inputs: {df: train_df_0}, outputs: [train_df]}
+    set_transform_valid: {uri: /lego/kalfa/transform_set, params: {set: valid, transforms: []}, inputs: {df: valid_df_0}, outputs: [valid_df]}
+    set_transform_test: {uri: /lego/kalfa/transform_set, params: {set: test, transforms: []}, inputs: {df: test_df_0}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [std_scaler]}, price: {target: true, preprocessors: [target_std]}}, preprocessors: {
             std_scaler: {uri: /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], keys: {std_scaler: {}, target_std: {}}},
       inputs: {df: train_df}, outputs: [prep]}  # implicit: record

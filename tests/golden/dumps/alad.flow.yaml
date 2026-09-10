@@ -118,15 +118,13 @@ flow:
   outputs: [history, predictions]
   data:  # reads: record; exports: prep, train_loader, valid_loader, test_loader
     source: {uri: /source/kalfa/parquet, params: {path: anomaly_data.parquet}, outputs: [df_0]}
-    pre_1: {uri: /lego/kalfa/filter, params: {query: (is_anomaly > -4) & (is_anomaly < 4)}, inputs: {df: df_0}, outputs: [df_1]}
+    pre_1: {uri: /transform/kalfa/filter, params: {query: (is_anomaly > -4) & (is_anomaly < 4)}, inputs: {df: df_0}, outputs: [df_1]}
     split: {uri: /split/kalfa/random, params: {ratios: [0.7, 0.1, 0.2], seed: 42}, inputs: {df: df_1}, outputs: {train: train_df_0, valid: valid_df_0, test: 
           test_df_0}}
-    set_filter_train: {uri: /lego/kalfa/filter_set, params: {set: train, filters: [{query: is_anomaly == 0, sets: [train]}]}, inputs: {df: train_df_0}, outputs: [
-        train_df]}
-    set_filter_valid: {uri: /lego/kalfa/filter_set, params: {set: valid, filters: [{query: is_anomaly == 0, sets: [train]}]}, inputs: {df: valid_df_0}, outputs: [
-        valid_df]}
-    set_filter_test: {uri: /lego/kalfa/filter_set, params: {set: test, filters: [{query: is_anomaly == 0, sets: [train]}]}, inputs: {df: test_df_0}, outputs: [
-          test_df]}
+    set_transform_train: {uri: /lego/kalfa/transform_set, params: {set: train, transforms: [{uri: /transform/kalfa/filter, params: {query: is_anomaly == 0}}]}, 
+        inputs: {df: train_df_0}, outputs: [train_df]}
+    set_transform_valid: {uri: /lego/kalfa/transform_set, params: {set: valid, transforms: []}, inputs: {df: valid_df_0}, outputs: [valid_df]}
+    set_transform_test: {uri: /lego/kalfa/transform_set, params: {set: test, transforms: []}, inputs: {df: test_df_0}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {x?: {preprocessors: [abs_scaler, log_scaler, std_scaler]}, xx*: {preprocessors: [abs_scaler, log_scaler, 
                 std_scaler]}, is_anomaly: {target: true, preprocessors: [cast_int]}}, preprocessors: {abs_scaler: {uri: /pre/kalfa/abs}, log_scaler: {uri: 
               /pre/kalfa/log, params: {base: 10, norm: 1200}}, std_scaler: {uri: /pre/sklearn/standard_scaler}, cast_int: {uri: /pre/kalfa/cast, params: {dtype: 

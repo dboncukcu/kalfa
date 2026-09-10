@@ -37,6 +37,9 @@ class Preprocessor:
     def columns(self, name: str) -> list | None:
         return None
 
+    def extras(self, values) -> dict:
+        return {}
+
 
 class Scaler(Preprocessor):
     rescales = True
@@ -119,6 +122,7 @@ class Field:
     chain: list
     target: bool
     columns: list = field(default_factory=list)
+    extras: list = field(default_factory=list)
 
 
 class ColumnView:
@@ -166,6 +170,7 @@ class Prep:
         for item in self.fields:
             if not item.target:
                 out.extend(item.columns)
+            out.extend(item.extras)
         return out
 
     @property
@@ -256,8 +261,8 @@ class Prep:
         return out
 
     def plan(self):
-        return {"fields": [{"name": item.name, "chain": item.chain, "target": item.target, "columns": item.columns}
-                           for item in self.fields],
+        return {"fields": [{"name": item.name, "chain": item.chain, "target": item.target, "columns": item.columns,
+                            "extras": item.extras} for item in self.fields],
                 "sets": self.sets, "dtypes": self.dtypes, "drop": self.drop}
 
 
@@ -321,8 +326,8 @@ class StreamView:
         for chunk in self.stream.chunks():
             columns = {}
             for item in self.prep.fields:
-                values = run_chain(item, chunk[item.name].to_numpy(), self.prep.fitted, {}, self.sets, self.set_name,
-                                   fit=False)
+                values, extras = run_chain(item, chunk[item.name].to_numpy(), self.prep.fitted, {}, self.sets,
+                                           self.set_name, fit=False)
                 if len(values):
                     values, _ = cast_values(values, item.name)
                 if values.ndim == 1:
@@ -330,6 +335,7 @@ class StreamView:
                 else:
                     for position, column in enumerate(item.columns):
                         columns[column] = values[:, position]
+                columns.update(typed_extras(extras, self.prep.dtypes))
             yield numpy.asarray(chunk.index), pandas.DataFrame(columns, index=chunk.index)
 
 
@@ -353,7 +359,7 @@ def fit_stream(items, df, templates, sets, fitted, dtypes):
             earlier.append(preprocessor)
         head = df.head()
         values = head[item.name].to_numpy() if head is not None else numpy.zeros(0)
-        values = run_chain(item, values, fitted, templates, sets, "train", fit=False)
+        values, extras = run_chain(item, values, fitted, templates, sets, "train", fit=False)
         if len(values):
             values, kind = cast_values(values, item.name)
         else:
@@ -361,6 +367,7 @@ def fit_stream(items, df, templates, sets, fitted, dtypes):
         item.columns = columns_of(item, values, fitted)
         for column in item.columns:
             dtypes[column] = kind
+        item.extras = extra_columns(extras, dtypes)
 
 
 def fit_on_stream(preprocessor, df, name, earlier):
@@ -415,6 +422,7 @@ class ChainFit:
         self.fitted = fitted
         self.set_name = set_name
         self.position = {item.name: 0 for item in items}
+        self.sides = {item.name: {} for item in items}
 
     def skipped(self, name):
         allowed = self.sets.get(name)
@@ -434,6 +442,7 @@ class ChainFit:
         if preprocessor.fits:
             preprocessor.fit(self.values[item.name])
         self.fitted.setdefault(name, {})[item.name] = preprocessor
+        self.sides[item.name].update(named_extras(item.name, preprocessor, self.values[item.name]))
         self.values[item.name] = numpy.asarray(preprocessor.apply(self.values[item.name]))
         self.position[item.name] += 1
 
@@ -482,10 +491,27 @@ class ChainFit:
 
 def fit_chains(items, values_of, templates, sets, fitted, set_name="train"):
     values = {item.name: values_of(item) for item in items}
-    return ChainFit(items, values, templates, sets, fitted, set_name).run()
+    chains = ChainFit(items, values, templates, sets, fitted, set_name)
+    return chains.run(), chains.sides
+
+
+def named_extras(name, preprocessor, values):
+    return {f"{name}_{key}": numpy.asarray(value) for key, value in preprocessor.extras(values).items()}
+
+
+def extra_columns(extras, dtypes):
+    for column, values in extras.items():
+        dtypes[column] = torch_dtype(numpy.asarray(values).dtype) or "float32"
+    return list(extras)
+
+
+def typed_extras(extras, dtypes):
+    return {column: numpy.asarray(values).astype(dtypes.get(column, numpy.asarray(values).dtype))
+            for column, values in extras.items()}
 
 
 def run_chain(item, values, fitted, templates, sets, set_name, fit):
+    extras = {}
     for name in item.chain:
         allowed = sets.get(name)
         if allowed is not None and set_name not in allowed:
@@ -497,8 +523,9 @@ def run_chain(item, values, fitted, templates, sets, set_name, fit):
             fitted.setdefault(name, {})[item.name] = preprocessor
         else:
             preprocessor = fitted_object(fitted, name, item.name)
+        extras.update(named_extras(item.name, preprocessor, values))
         values = numpy.asarray(preprocessor.apply(values))
-    return values
+    return values, extras
 
 
 def columns_of(item, values, fitted):
@@ -561,7 +588,8 @@ def read_prep(record):
                 continue
             with (target / f"{name}.pkl").open("rb") as stream:
                 fitted[name] = pickle.load(stream)
-    fields = [Field(item["name"], list(item["chain"]), bool(item["target"]), list(item["columns"]))
+    fields = [Field(item["name"], list(item["chain"]), bool(item["target"]), list(item["columns"]),
+                    list(item.get("extras") or []))
               for item in plan["fields"]]
     return Prep(fields, fitted, dict(plan["sets"]), dict(plan["dtypes"]), list(plan["drop"]))
 

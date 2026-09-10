@@ -8,6 +8,7 @@ from kalfa.std.pre.base import (
     Prep,
     cast_values,
     columns_of,
+    extra_columns,
     fit_chains,
     fit_stream,
     report_fitted,
@@ -48,7 +49,7 @@ def fit_samples(items, df, templates, dtypes):
 
 def fit_table(items, df, templates, sets, dtypes):
     fitted = {}
-    final = fit_chains(items, lambda item: values_of(df, item.name), templates, sets, fitted)
+    final, sides = fit_chains(items, lambda item: values_of(df, item.name), templates, sets, fitted)
     for item in items:
         values = final[item.name]
         if len(values):
@@ -58,6 +59,7 @@ def fit_table(items, df, templates, sets, dtypes):
         item.columns = columns_of(item, values, fitted)
         for column in item.columns:
             dtypes[column] = kind
+        item.extras = extra_columns(sides.get(item.name, {}), dtypes)
     return fitted
 
 

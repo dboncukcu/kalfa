@@ -16,7 +16,8 @@ rng: null                         # [wiring] the model seed rule, an rng lego: d
 
 data:
   source: null                    # [required] {uri: parquet | csv | image_folder | text_lines | your own lego, params: {path: ...}}
-  filter: []                      # [empty] "query" (before the split) | {query: "...", sets: [train]} (after the split, on those sets)
+  transform: []                   # [empty] frame to frame legos in order: "query" (a filter, the shorthand) | {uri: filter | derive | rename | astype | drop | your own, params, sets: [train]};
+                                  # without sets before the split, with sets after it on those sets; never fitted; predict --data replays what the test set went through
   split: null                     # [required] {ratios: [.7, .15, .15], seed: $seed$} (no uri: the random split, {uri: random_split, params: {ratios, seed}} written out) | {uri: sequential, params: {ratios, group}}
                                   # | {uri: kfold, params: {k: 5, fold: $fold$, val: 0.15, seed}} (the held out fold is test; val from the training part, without it no valid)
                                   # | {uri: given, params: {valid: b.parquet, test: c.parquet}}

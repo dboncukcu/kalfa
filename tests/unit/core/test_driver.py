@@ -65,16 +65,21 @@ def test_ema_items_and_refs():
     assert params["trained_refs"] == {"unet": "unet", "other": "other"}
 
 
-def test_split_and_batch_short_forms_and_filter_kinds():
+def test_split_and_batch_short_forms_and_transform_stages():
     data = {"source": "/source/kalfa/parquet", "split": {"ratios": [0.8, 0.1, 0.1], "seed": 3}, "batch": 32,
-            "filter": ["a > 0", {"query": "b == 1", "sets": ["train"]}], "fields": {}, "feed": "/feed/kalfa/table",
+            "transform": ["a > 0", {"uri": "/transform/kalfa/derive", "params": {"column": "c", "expr": "a + 1"},
+                                    "sets": ["train"]}],
+            "fields": {}, "feed": "/feed/kalfa/table",
             "preprocessors": {"s": {"uri": "/pre/sklearn/standard_scaler", "sets": ["train"]}}}
     params = data_params(data)
     assert params["split"] == {"uri": "/split/kalfa/random", "params": {"ratios": [0.8, 0.1, 0.1], "seed": 3}}
     assert params["loaders"]["train"] == {"uri": "/loader/kalfa/torch", "set": "train",
                                           "params": {"set": "train", "size": 32}}
     assert list(params["loaders"]) == ["train", "valid", "test"]
-    assert params["filter_pre"] == ["a > 0"] and params["filter_set"] == [{"query": "b == 1", "sets": ["train"]}]
+    assert params["transform_pre"] == [{"uri": "/transform/kalfa/filter", "params": {"query": "a > 0"}}]
+    derived = {"uri": "/transform/kalfa/derive", "params": {"column": "c", "expr": "a + 1"}}
+    assert params["set_transforms"]["train"] == {"set": "train", "transforms": [derived]}
+    assert params["set_transforms"]["test"] == {"set": "test", "transforms": []}
     assert params["source"] == {"uri": "/source/kalfa/parquet", "params": {}}
     assert params["feed"] == {"uri": "/feed/kalfa/table", "params": {}}
     assert params["prep"] == {"uri": "/lego/kalfa/fit", "inputs": {"df": "train_df"},

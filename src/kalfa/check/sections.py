@@ -37,13 +37,16 @@ class SectionRules:
             return
         if "source" in data:
             self.call_of(data["source"], ("data", "source"), ("source",), "data.source")
-        for position, item in enumerate(data.get("filter") or []):
-            path = ("data", "filter", position)
+        for position, item in enumerate(data.get("transform") or []):
+            path = ("data", "transform", position)
             if isinstance(item, dict):
-                self.keys(item, Schema.filter, path, ("query",))
-                self.sets_of(item.get("sets"), path)
+                if self.keys(item, Schema.transform, path, ("uri",)):
+                    uri = self.call_of(item, path, ("transform",), f"data.transform[{position}]")
+                    if uri is not None:
+                        self.refs_of(uri, item.get("params"), path)
+                    self.sets_of(item.get("sets"), path)
             elif not isinstance(item, str):
-                self.error("invalid_value", "a filter is a query string or {query, sets}", path)
+                self.error("invalid_value", "a transform is a query string or a lego call {uri, params, sets}", path)
         split = data.get("split")
         if isinstance(split, dict) and "uri" in split:
             uri = self.call_of(split, ("data", "split"), ("split",), "data.split")

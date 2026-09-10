@@ -1,13 +1,16 @@
 """The lazy set: chunked sources, filters and windows on the stream, streamed fit, the stream dataset and loader."""
 
+import functools
+
 import numpy
 import pandas
 import pytest
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.lego.kalfa.filter import filter_rows
-from kalfa.std.lego.kalfa.filter_set import filter_set
+from kalfa.std.lego.kalfa.transform_set import transform_set
+from kalfa.std.transform.kalfa.derive import derive
+from kalfa.std.transform.kalfa.filter import filter_rows
 from kalfa.std.feed.kalfa.table import StreamDataset, table
 from kalfa.std.feed.kalfa.window import window
 from kalfa.std.loader.kalfa.torch import torch_loader
@@ -57,10 +60,12 @@ def test_filters_and_windows_apply_on_the_stream(housing):
     parts = sequential(stream, [0.7, 0.2, 0.1])
     assert [part.rows for part in parts.values()] == [70, 20, 10]
     assert positions(parts["valid"]).tolist() == list(range(70, 90))
-    assert positions(filter_set(parts["train"], "train", [{"query": "price > 200", "sets": ["train"]}])).tolist() == \
+    expensive = [functools.partial(filter_rows, query="price > 200")]
+    assert positions(transform_set(parts["train"], "train", expensive)).tolist() == \
         [position for position in range(70) if frame["price"][position] > 200]
-    assert positions(filter_set(parts["test"], "test", [{"query": "price > 1e9", "sets": ["train"]}])).tolist() == \
-        list(range(90, 100))
+    assert positions(transform_set(parts["test"], "test", [])).tolist() == list(range(90, 100))
+    with pytest.raises(ValueError, match="needs a table"):
+        derive(stream, "twice", "price * 2")
     with pytest.raises(ValueError, match="sequential or given"):
         random_split(stream, [0.7, 0.2, 0.1], seed=1)
     with pytest.raises(ValueError, match="sequential or given"):

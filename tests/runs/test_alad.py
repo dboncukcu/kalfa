@@ -25,8 +25,9 @@ def test_check_the_plugin_config(dataset):
     assert loaded["valid"] == expected["valid"] and loaded["test"] == expected["test"]
     assert 0 < loaded["train"] < expected["train"]
     document = prepared.document
-    assert document["flow"]["data"]["params"]["filter_pre"] == ["(is_anomaly > -4) & (is_anomaly < 4)"]
-    assert document["flow"]["data"]["params"]["filter_set"] == [{"query": "is_anomaly == 0", "sets": ["train"]}]
+    params = document["flow"]["data"]["params"]
+    assert [step["params"]["query"] for step in params["transform_pre"]] == ["(is_anomaly > -4) & (is_anomaly < 4)"]
+    assert [step["params"]["query"] for step in params["set_transforms"]["train"]["transforms"]] == ["is_anomaly == 0"]
     assert document["checkpoint"] == {}
     adv_d = document["losses"]["adv_d"]["params"]["objective"]
     assert adv_d["params"]["criterion"] == {"uri": "/criterion/kalfa/bce_logits"}

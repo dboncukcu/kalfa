@@ -3,7 +3,7 @@
 # the blocks (variables, flow, foreach; over may be a mapping, the key entry names the node, $item.field$ is one level
 # access). The expanded graph is the flow.yaml dump of the resolved run.
 # Rules: no template looks at a config value; only the item count and the presence of a key. Everything that needs a
-# choice is inside a lego (filter_set picks its own set, evaluate returns empty on an empty set, rule reads its after link).
+# choice is inside a lego (transform_set applies what names its set, evaluate returns empty on an empty set, rule reads its after link).
 # Bus keys: df_i, <set>_df, prep, <set>_frame, <set>_data, <set>_loader, <model name>, <model name>_ema,
 # models, emas, composites, opt_<name>, optimizers, counters, rules, epochs_left, *_next, train_metrics, valid_metrics,
 # test_metrics, metrics, effects, rules_0..n, rules_ruled, stop, history, models_final, optimizers_final, emas_final, counters_final, rules_final, selected, predictions. The set name on the bus is valid, the history
@@ -23,6 +23,7 @@ wiring:
   objective_adapter: /adapter/kalfa/objective    # wraps an objective
   builder: /builder/kalfa/module                 # builds every model block; its roles fact names the init roles
   default_split: /split/kalfa/random             # the split of the short form {ratios, seed}
+  filter: /transform/kalfa/filter                # the transform a bare string in data.transform means
   default_device: /device/kalfa/cpu              # the device when the config writes none
   default_rng: /rng/kalfa/derived                # the model seed rule when the config writes none
   fit: /lego/kalfa/fit                           # the prep step of a run
@@ -42,8 +43,8 @@ blocks:
   data:
     variables:
       source: {required: true}          # {uri, params}
-      filter_pre: {default: []}         # the filter strings before the split
-      filter_set: {default: []}         # {query, sets} items; the lego picks its own set
+      transform_pre: {default: []}      # [{uri, params}] before the split, in the order written
+      set_transforms: {required: true}  # {set: {set, transforms: [{uri, params}]}} after the split, per set
       split: {required: true}           # {uri, params}
       loaders: {required: true}         # {set: {uri, params, set}}; the loader of wiring with the batch section as its params
       prep: {required: true}            # {uri, params, inputs}: fit with the field plan for a run, read_prep with the record for a command over one
@@ -53,14 +54,14 @@ blocks:
     flow:
       source: {uri: $source.uri$, params: $source.params$, outputs: [df_0]}
       pre:
-        foreach: {over: $filter_pre$, index: i, count: n, chain: df,
-                  node: {uri: /lego/kalfa/filter, params: {query: $item$}}}
+        foreach: {over: $transform_pre$, index: i, count: n, chain: df,
+                  node: {uri: $item.uri$, params: $item.params$}}
       split: {uri: $split.uri$, params: $split.params$, inputs: {df: df_$n$},
               outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0}}
-      set_filter:
-        foreach: {over: $sets$, item: set, key: $set$,
-                  node: {uri: /lego/kalfa/filter_set, params: {set: $set$, filters: $filter_set$},
-                         inputs: {df: $set$_df_0}, outputs: [$set$_df]}}
+      set_transform:
+        foreach: {over: $set_transforms$, item: entry,
+                  node: {uri: /lego/kalfa/transform_set, params: {set: $entry.set$, transforms: $entry.transforms$},
+                         inputs: {df: $entry.set$_df_0}, outputs: [$entry.set$_df]}}
       prep: {uri: $prep.uri$, params: $prep.params$, inputs: $prep.inputs$, outputs: [prep]}
       frame:
         foreach: {over: $sets$, item: set, key: $set$,

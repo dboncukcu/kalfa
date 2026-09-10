@@ -70,10 +70,25 @@ def columns_section(prepared, style, width, probe=None):
             if span is not None:
                 tensor = f"x[{span[0]}]" if span[0] == span[1] else f"x[{span[0]} … {span[1]}]"
             rows.append([column, dtype, pattern, chain, "feature", tensor])
+    rows.extend(extra_rows(probe, owners))
     lines = table(["column", "dtype", "field", "preprocessors", "role", "tensor"], rows, style, width=width)
     if probe is None:
         lines.append("  " + style.dim("the produced widths and the tensor slots need --load"))
     return lines
+
+
+def extra_rows(probe, owners=None):
+    if probe is None or probe.prep is None:
+        return []
+    features = list(probe.prep.features)
+    rows = []
+    for item in probe.prep.fields:
+        for extra in item.extras:
+            slot = f"x[{features.index(extra)}]" if extra in features else "x"
+            field = owners.get(item.name, item.name) if owners else item.name
+            rows.append([extra, str(probe.prep.dtypes.get(extra, "?")), field, "a side output of the chain",
+                         "feature", slot])
+    return rows
 
 
 def plan_columns(prepared, style, width, probe):
@@ -94,4 +109,6 @@ def plan_columns(prepared, style, width, probe):
         span = f"x[{min(positions)} … {max(positions)}]" if len(positions) > 1 else (
             f"x[{positions[0]}]" if positions else "—")
         rows.append([item.name, dtype, chain, "feature", span])
+    rows.extend([[extra, dtype, chain, role, slot] for extra, dtype, chain, role, slot in
+                 [(row[0], row[1], row[3], row[4], row[5]) for row in extra_rows(probe)]])
     return table(["column", "dtype", "preprocessors", "role", "tensor"], rows, style, width=width)

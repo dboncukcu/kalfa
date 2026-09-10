@@ -5,7 +5,8 @@ from kalfa.registration import lego
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.samples import is_samples
 from kalfa.std.common.stream import is_stream
-from kalfa.std.pre.base import SampleFrame, StreamFrame, StreamView, TableFrame, cast_values, run_chain, sets_of, values_of
+from kalfa.std.pre.base import (SampleFrame, StreamFrame, StreamView, TableFrame, cast_values, run_chain, sets_of,
+                                typed_extras, values_of)
 
 
 logger = logger_for("data.prep")
@@ -26,7 +27,7 @@ def table_frame(df, prep, set, sets):
     for item in prep.fields:
         if item.name not in df.columns:
             raise ValueError(f"the {set} data lacks column {item.name!r}")
-        values = run_chain(item, values_of(df, item.name), prep.fitted, {}, sets, set, fit=False)
+        values, extras = run_chain(item, values_of(df, item.name), prep.fitted, {}, sets, set, fit=False)
         if len(values):
             values, _ = cast_values(values, item.name)
         if values.ndim == 1:
@@ -34,6 +35,7 @@ def table_frame(df, prep, set, sets):
         else:
             for position, column in enumerate(item.columns):
                 columns[column] = values[:, position]
+        columns.update(typed_extras(extras, prep.dtypes))
     data = pandas.DataFrame(columns, index=df.index)
     if len(data) == 0:
         data = pandas.DataFrame({column: numpy.zeros(0, dtype=prep.dtypes[column]) for column in prep.dtypes},

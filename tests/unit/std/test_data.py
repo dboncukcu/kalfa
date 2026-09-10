@@ -1,5 +1,7 @@
 """Data legos: sources, filters, the random split, fit and apply, the table feed and the loader."""
 
+import functools
+
 import numpy
 import pandas
 import pytest
@@ -7,11 +9,11 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import frame
-from kalfa.std.lego.kalfa.filter import filter_rows
-from kalfa.std.lego.kalfa.filter_set import filter_set
+from kalfa.std.lego.kalfa.transform_set import transform_set
+from kalfa.std.transform.kalfa.filter import filter_rows
 from kalfa.std.feed.kalfa.table import table
 from kalfa.std.loader.kalfa.torch import torch_loader
-from kalfa.std.pre.base import Prep, assign_fields, read_prep, specificity, torch_dtype, write_prep
+from kalfa.std.pre.base import assign_fields, read_prep, specificity, torch_dtype
 from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.fit import fit
 from kalfa.std.pre.sklearn.minmax_scaler import MinMaxScaler
@@ -40,10 +42,10 @@ def test_sources_and_headers(tmp_path):
 def test_filters():
     data = pandas.DataFrame({"a": [1, 2, 3, 4], "b": [0, 1, 0, 1]})
     assert filter_rows(data, "a > 2")["a"].tolist() == [3, 4]
-    filters = [{"query": "b == 1", "sets": ["train"]}, {"query": "a < 4", "sets": ["train", "valid"]}]
-    assert filter_set(data, "train", filters)["a"].tolist() == [2]
-    assert filter_set(data, "valid", filters)["a"].tolist() == [1, 2, 3]
-    assert filter_set(data, "test", filters)["a"].tolist() == [1, 2, 3, 4]
+    train = [functools.partial(filter_rows, query="b == 1"), functools.partial(filter_rows, query="a < 4")]
+    assert transform_set(data, "train", train)["a"].tolist() == [2]
+    assert transform_set(data, "valid", train[1:])["a"].tolist() == [1, 2, 3]
+    assert transform_set(data, "test", [])["a"].tolist() == [1, 2, 3, 4]
 
 
 def test_random_split_is_seeded_and_an_empty_ratio_gives_an_empty_frame():
@@ -221,7 +223,7 @@ def test_the_grouped_fact_matches_the_object_the_lego_builds():
             continue
         try:
             built = registry.resolve(uri)()
-        except TypeError:                                   # the lego needs params (Cast, resize, normalize)
+        except (TypeError, ValueError):                     # the lego needs params (Cast, resize, normalize)
             continue
         assert built.grouped == registry.facts(uri).get("grouped", False), uri
 

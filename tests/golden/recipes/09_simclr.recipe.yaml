@@ -31,9 +31,10 @@ blocks:
 flow:
   outputs: [history, predictions]
   data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/stl10/unlabeled}}, 
-        filter_pre: [], filter_set: [], split: {uri: /split/kalfa/random, params: {ratios: [1.0, 0.0, 0.0], seed: 7}}, 
-        loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256, drop_last: true}}, valid: {
-          uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 256, drop_last: true}}, test: {uri: 
+        transform_pre: [], set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, 
+          test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [1.0, 0.0, 0.0], seed: 
+            7}}, loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256, drop_last: true}},
+        valid: {uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 256, drop_last: true}}, test: {uri: 
             /loader/kalfa/torch, set: test, params: {set: test, size: 256, drop_last: true}}}, prep: {uri: 
           /lego/kalfa/fit, params: {fields: {image: {preprocessors: [two_views, to_tensor]}}, preprocessors: {simclr_aug: {
               uri: /pre/kalfa/simclr_aug, params: {size: 96}}, two_views: {uri: /pre/kalfa/two_views, params: {transform: {

@@ -15,8 +15,9 @@ The legos a config writes, by kind.
 | Kind | Where it is written | Count |
 |---|---|---|
 | `source` | data.source | 6 |
+| `transform` | data.transform | 5 |
 | `split` | data.split | 4 |
-| `pre` | data.preprocessors | 25 |
+| `pre` | data.preprocessors | 27 |
 | `feed` | data.feed | 3 |
 | `layer` | model nodes | 18 |
 | `init` | model init | 4 |
@@ -48,6 +49,16 @@ The legos a config writes, by kind.
 | `/source/kalfa/parquet_stream` |  | `(path, chunk=65536)` | returns: df; header: /lego/kalfa/parquet_header; stream: True | Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table |
 | `/source/kalfa/text_lines` | `text_lines` | `(path)` | returns: df; header: /lego/kalfa/text_lines_header; samples: True | The lines of a text file as a Dataset with the field text |
 
+### transform
+
+| URI | Alias | Signature | Facts | Description |
+|---|---|---|---|---|
+| `/transform/kalfa/astype` | `astype` | `(df, columns)` | partial: True; needs_table: True | Cast columns to dtypes, {column: dtype} |
+| `/transform/kalfa/derive` | `derive` | `(df, column, expr)` | partial: True; needs_table: True | A new column from a pandas eval expression over the frame (log10(x), a > b, a + b) |
+| `/transform/kalfa/drop` | `drop` | `(df, columns)` | partial: True; needs_table: True | Drop columns from the frame before anything reads them |
+| `/transform/kalfa/filter` | `filter` | `(df, query)` | partial: True | Keep the rows a pandas query selects; a bare string in data.transform is this call; a stream applies it chunk by chunk and a Dataset source takes field equality queries |
+| `/transform/kalfa/rename` | `rename` | `(df, pattern, to)` | partial: True; needs_table: True | Rename the columns a regular expression matches, pattern to the replacement, backreferences allowed (cms_(.*)_Z_score to z_\1) |
+
 ### split
 
 | URI | Alias | Signature | Facts | Description |
@@ -66,6 +77,7 @@ The legos a config writes, by kind.
 | `/pre/kalfa/atanh` | `atanh` | `(scale=1.0)` |  | artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside (-scale, scale) is an error that names how many and how large |
 | `/pre/kalfa/cast` | `cast` | `(dtype)` |  | Cast a column to a numpy dtype |
 | `/pre/kalfa/char_tokenizer` | `char_tokenizer` | `()` | state: True | Character level tokenizer fitted on the train text; the vocabulary goes into the record |
+| `/pre/kalfa/fill` | `fill` | `(value=None, method=None)` |  | Fill the missing values of a column without a fit: a constant (a number, or a name such as missing that becomes its own category), or method ffill or bfill along the rows |
 | `/pre/kalfa/label_encoder` | `label_encoder` | `()` | state: True | Integer codes of a label column, sorted by label; inverted in reports and predictions, class scores decode to labels |
 | `/pre/kalfa/log` | `log` | `(base=10.0, norm=1.0)` |  | log1p of a column divided by norm, in the given base |
 | `/pre/kalfa/normalize` | `normalize` | `(mean, std)` |  | Normalize an image tensor per channel; mean and std are numbers, lists or the presets imagenet and cifar10 |
@@ -73,6 +85,7 @@ The legos a config writes, by kind.
 | `/pre/kalfa/random_crop_flip` | `random_crop_flip` | `(size)` |  | Random crop of size after padding and a random horizontal flip |
 | `/pre/kalfa/resize` | `resize` | `(size)` |  | Resize an image to size (int or [h, w]) |
 | `/pre/kalfa/simclr_aug` | `simclr_aug` | `(size, scale=(0.5, 1.0))` |  | SimCLR augmentation: random resized crop to size, horizontal flip, brightness jitter |
+| `/pre/kalfa/simple_imputer` | `simple_imputer` | `(strategy='mean', fill_value=None, indicator=False)` |  | Fill the missing values of a column with the train mean, median, most frequent value or a constant; indicator adds <field>_missing, computed before the fill, as a feature of its own |
 | `/pre/kalfa/sinh` | `sinh` | `(scale=1.0, overflow=700.0)` |  | sinh(x / scale), the direction opposite to asinh: it stretches the tails instead of compressing them; a value past overflow is an error, where sinh leaves float64 |
 | `/pre/kalfa/tanh` | `tanh` | `(scale=1.0, eps=1e-15)` |  | tanh(x / scale) into (-1, 1); the inverse clips at 1 - eps, so a value that saturated in float64 (past about 19 scale) comes back at the clip instead of infinity |
 | `/pre/kalfa/to_tensor` | `to_tensor` | `()` |  | Image to a float tensor in [0, 1], channels first |
@@ -309,8 +322,6 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/csv_header` |  | `(path, chunk=None)` |  | The columns, the dtypes of the first rows and the line count of a CSV file |
 | `/lego/kalfa/evaluate` |  | `(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)` | returns: metrics; bus: device=device, prep=prep, record=record | Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files |
 | `/lego/kalfa/figures` |  | `(format='png', width=None, height=None, dpi=150, style='kalfa')` |  | The look of every plot of a run: the file format, the size of one panel in inches, the dpi and the style (kalfa, or none for matplotlib's own); the figures section is its params and the built object reaches every plot that names figures |
-| `/lego/kalfa/filter` |  | `(df, query)` |  | Keep the rows a pandas query selects; a Dataset source takes field equality queries |
-| `/lego/kalfa/filter_set` |  | `(df, set, filters)` |  | Apply the {query, sets} filters that name this set; the frame passes untouched otherwise |
 | `/lego/kalfa/fit` |  | `(df, fields, preprocessors, drop, keys=None, record=None)` | returns: prep; bus: record=record; state: True | Resolve the field globs and fit every preprocessor chain on the train set; keys carry the sets a preprocessor is limited to |
 | `/lego/kalfa/generate` |  | `(models, composites, prep, generate, record=None)` | returns: None; bus: record=record | Run the generate lego with the report models; nothing without a generate section |
 | `/lego/kalfa/given_sizes` |  | `(rows, valid=None, test=None, header=None)` |  | The set sizes of a given split: the source rows for train, the header of every given file for the other sets (header reads a path like the source) |
@@ -329,6 +340,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/save_final` |  | `(models, optimizers, emas, counters, rules, record=None)` | returns: None; bus: record=record | Write final/state.pt with the full state once training ends |
 | `/lego/kalfa/select` |  | `(models, emas, which, record=None)` | returns: selected; bus: record=record | The report models: copies loaded from best.pt, or the final state for last |
 | `/lego/kalfa/text_lines_header` |  | `(path)` |  | The text field and the line count of a text file |
+| `/lego/kalfa/transform_set` |  | `(df, set, transforms)` |  | Apply the transforms that name this set, in order; the frame passes untouched without any |
 | `/loader/kalfa/torch` |  | `(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)` |  | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers |
 | `/rule/kalfa/effects` |  | `(rules)` | returns: effects | The effects the fired rules left for this turn |
 | `/rule/kalfa/open` |  | `(rules)` |  | Open the rule chain of a turn |
@@ -341,6 +353,11 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 
 | Alias | URI | Kind |
 |---|---|---|
+| `filter` | `/transform/kalfa/filter` | transform |
+| `derive` | `/transform/kalfa/derive` | transform |
+| `rename` | `/transform/kalfa/rename` | transform |
+| `astype` | `/transform/kalfa/astype` | transform |
+| `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
@@ -350,6 +367,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `log` | `/pre/kalfa/log` | pre |
 | `one_hot` | `/pre/kalfa/one_hot` | pre |
 | `label_encoder` | `/pre/kalfa/label_encoder` | pre |
+| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
+| `fill` | `/pre/kalfa/fill` | pre |
 | `table` | `/feed/kalfa/table` | feed |
 | `linear` | `/layer/kalfa/linear` | layer |
 | `linear_relu` | `/layer/kalfa/linear_relu` | layer |
@@ -419,6 +438,11 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 
 | Alias | URI | Kind |
 |---|---|---|
+| `filter` | `/transform/kalfa/filter` | transform |
+| `derive` | `/transform/kalfa/derive` | transform |
+| `rename` | `/transform/kalfa/rename` | transform |
+| `astype` | `/transform/kalfa/astype` | transform |
+| `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
@@ -428,6 +452,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `log` | `/pre/kalfa/log` | pre |
 | `one_hot` | `/pre/kalfa/one_hot` | pre |
 | `label_encoder` | `/pre/kalfa/label_encoder` | pre |
+| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
+| `fill` | `/pre/kalfa/fill` | pre |
 | `table` | `/feed/kalfa/table` | feed |
 | `linear` | `/layer/kalfa/linear` | layer |
 | `linear_relu` | `/layer/kalfa/linear_relu` | layer |
@@ -499,6 +525,11 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 
 | Alias | URI | Kind |
 |---|---|---|
+| `filter` | `/transform/kalfa/filter` | transform |
+| `derive` | `/transform/kalfa/derive` | transform |
+| `rename` | `/transform/kalfa/rename` | transform |
+| `astype` | `/transform/kalfa/astype` | transform |
+| `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
@@ -508,6 +539,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `log` | `/pre/kalfa/log` | pre |
 | `one_hot` | `/pre/kalfa/one_hot` | pre |
 | `label_encoder` | `/pre/kalfa/label_encoder` | pre |
+| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
+| `fill` | `/pre/kalfa/fill` | pre |
 | `table` | `/feed/kalfa/table` | feed |
 | `linear` | `/layer/kalfa/linear` | layer |
 | `linear_relu` | `/layer/kalfa/linear_relu` | layer |
@@ -605,6 +638,11 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 
 | Alias | URI | Kind |
 |---|---|---|
+| `filter` | `/transform/kalfa/filter` | transform |
+| `derive` | `/transform/kalfa/derive` | transform |
+| `rename` | `/transform/kalfa/rename` | transform |
+| `astype` | `/transform/kalfa/astype` | transform |
+| `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
@@ -614,6 +652,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `log` | `/pre/kalfa/log` | pre |
 | `one_hot` | `/pre/kalfa/one_hot` | pre |
 | `label_encoder` | `/pre/kalfa/label_encoder` | pre |
+| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
+| `fill` | `/pre/kalfa/fill` | pre |
 | `table` | `/feed/kalfa/table` | feed |
 | `linear` | `/layer/kalfa/linear` | layer |
 | `linear_relu` | `/layer/kalfa/linear_relu` | layer |
@@ -707,6 +747,11 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 
 | Alias | URI | Kind |
 |---|---|---|
+| `filter` | `/transform/kalfa/filter` | transform |
+| `derive` | `/transform/kalfa/derive` | transform |
+| `rename` | `/transform/kalfa/rename` | transform |
+| `astype` | `/transform/kalfa/astype` | transform |
+| `drop` | `/transform/kalfa/drop` | transform |
 | `sequential` | `/split/kalfa/sequential` | split |
 | `given` | `/split/kalfa/given` | split |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
@@ -716,6 +761,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `log` | `/pre/kalfa/log` | pre |
 | `one_hot` | `/pre/kalfa/one_hot` | pre |
 | `label_encoder` | `/pre/kalfa/label_encoder` | pre |
+| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
+| `fill` | `/pre/kalfa/fill` | pre |
 | `table` | `/feed/kalfa/table` | feed |
 | `linear` | `/layer/kalfa/linear` | layer |
 | `linear_relu` | `/layer/kalfa/linear_relu` | layer |

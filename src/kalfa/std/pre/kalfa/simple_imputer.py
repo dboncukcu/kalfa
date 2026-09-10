@@ -1,0 +1,56 @@
+import numpy
+import pandas
+
+from kalfa.registration import lego
+from kalfa.std.pre.base import Preprocessor
+
+
+def most_frequent(values):
+    found, counts = numpy.unique(values, return_counts=True)
+    return found[int(numpy.argmax(counts))]
+
+
+@lego("/pre/kalfa/simple_imputer", alias="simple_imputer",
+      description="Fill the missing values of a column with the train mean, median, most frequent value or a "
+                  "constant; indicator adds <field>_missing, computed before the fill, as a feature of its own")
+class SimpleImputer(Preprocessor):
+    fits = True
+    strategies = ("mean", "median", "most_frequent", "constant")
+
+    def __init__(self, strategy="mean", fill_value=None, indicator=False):
+        if strategy not in self.strategies:
+            raise ValueError(f"simple_imputer.strategy must be one of {list(self.strategies)}, got {strategy!r}")
+        if strategy == "constant" and fill_value is None:
+            raise ValueError("simple_imputer.strategy constant needs fill_value")
+        self.strategy = strategy
+        self.fill_value = fill_value
+        self.indicator = bool(indicator)
+        self.statistic = fill_value
+
+    def fit(self, values):
+        if self.strategy == "constant":
+            return
+        column = numpy.asarray(values)
+        present = column[~pandas.isna(column)]
+        if not len(present):
+            self.statistic = 0.0
+        elif self.strategy == "mean":
+            self.statistic = float(present.astype("float64").mean())
+        elif self.strategy == "median":
+            self.statistic = float(numpy.median(present.astype("float64")))
+        else:
+            self.statistic = most_frequent(present)
+
+    def apply(self, values):
+        column = numpy.asarray(values)
+        mask = pandas.isna(column)
+        if not mask.any():
+            return column
+        out = numpy.array(column, dtype="float64" if column.dtype.kind in "fiu" else object)
+        out[mask] = self.statistic
+        return out
+
+    def extras(self, values):
+        if not self.indicator:
+            return {}
+        return {"missing": pandas.isna(numpy.asarray(values))}

@@ -17,9 +17,9 @@ class Schema:
     builtin_variables = ("datetime",)
     short_calls = (("training", "turn"), ("training", "checkpoint"), ("data", "feed"), ("sweep", "strategy"),
                    ("device",), ("rng",))
-    data = ("source", "filter", "split", "batch", "preprocessors", "drop", "fields", "feed")
+    data = ("source", "transform", "split", "batch", "preprocessors", "drop", "fields", "feed")
     data_required = ("source", "split", "batch", "fields", "feed")
-    filter = ("query", "sets")
+    transform = ("uri", "params", "sets")
     ratio_split = ("ratios", "seed")
     preprocessor = ("uri", "params", "sets")
     field = ("preprocessors", "target")

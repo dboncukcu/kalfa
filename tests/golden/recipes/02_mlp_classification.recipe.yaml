@@ -24,10 +24,11 @@ blocks:
     - {uri: /layer/kalfa/linear, params: {out_features: 2}}
 flow:
   outputs: [history, predictions]
-  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: churn.parquet}}, filter_pre: [], 
-        filter_set: [], split: {uri: /split/kalfa/random, params: {ratios: [0.7, 0.15, 0.15], seed: 7}}, loaders: {train: {
-          uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256}}, valid: {uri: /loader/kalfa/torch, set: 
-            valid, params: {set: valid, size: 256}}, test: {uri: /loader/kalfa/torch, set: test, params: {set: test, 
+  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: churn.parquet}}, transform_pre: [], 
+        set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, test: {set: test, 
+            transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.7, 0.15, 0.15], seed: 7}}, loaders: {
+        train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256}}, valid: {uri: /loader/kalfa/torch,
+          set: valid, params: {set: valid, size: 256}}, test: {uri: /loader/kalfa/torch, set: test, params: {set: test, 
               size: 256}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {num_*: {preprocessors: [std_scaler]}, cat_*: {
               preprocessors: [onehot]}, churned: {target: true, preprocessors: [label]}}, preprocessors: {std_scaler: {
                 uri: /pre/sklearn/standard_scaler}, onehot: {uri: /pre/kalfa/one_hot}, label: {uri: 

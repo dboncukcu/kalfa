@@ -23,6 +23,7 @@
     "predicate",
     "data",
     "source",
+    "transform",
     "split",
     "pre",
     "feed",
@@ -591,20 +592,6 @@
       "kind": "lego",
       "signature": "(format='png', width=None, height=None, dpi=150, style='kalfa')"
     },
-    "/lego/kalfa/filter": {
-      "alias": [],
-      "description": "Keep the rows a pandas query selects; a Dataset source takes field equality queries",
-      "facts": {},
-      "kind": "lego",
-      "signature": "(df, query)"
-    },
-    "/lego/kalfa/filter_set": {
-      "alias": [],
-      "description": "Apply the {query, sets} filters that name this set; the frame passes untouched otherwise",
-      "facts": {},
-      "kind": "lego",
-      "signature": "(df, set, filters)"
-    },
     "/lego/kalfa/fit": {
       "alias": [],
       "description": "Resolve the field globs and fit every preprocessor chain on the train set; keys carry the sets a preprocessor is limited to",
@@ -800,6 +787,13 @@
       "facts": {},
       "kind": "lego",
       "signature": "(path)"
+    },
+    "/lego/kalfa/transform_set": {
+      "alias": [],
+      "description": "Apply the transforms that name this set, in order; the frame passes untouched without any",
+      "facts": {},
+      "kind": "lego",
+      "signature": "(df, set, transforms)"
     },
     "/loader/kalfa/torch": {
       "alias": [],
@@ -1435,6 +1429,15 @@
       "kind": "pre",
       "signature": "()"
     },
+    "/pre/kalfa/fill": {
+      "alias": [
+        "fill"
+      ],
+      "description": "Fill the missing values of a column without a fit: a constant (a number, or a name such as missing that becomes its own category), or method ffill or bfill along the rows",
+      "facts": {},
+      "kind": "pre",
+      "signature": "(value=None, method=None)"
+    },
     "/pre/kalfa/label_encoder": {
       "alias": [
         "label_encoder"
@@ -1501,6 +1504,15 @@
       "facts": {},
       "kind": "pre",
       "signature": "(size, scale=(0.5, 1.0))"
+    },
+    "/pre/kalfa/simple_imputer": {
+      "alias": [
+        "simple_imputer"
+      ],
+      "description": "Fill the missing values of a column with the train mean, median, most frequent value or a constant; indicator adds <field>_missing, computed before the fill, as a feature of its own",
+      "facts": {},
+      "kind": "pre",
+      "signature": "(strategy='mean', fill_value=None, indicator=False)"
     },
     "/pre/kalfa/sinh": {
       "alias": [
@@ -1943,6 +1955,65 @@
       "kind": "strategy",
       "signature": "(count, seed=0, scramble=True)"
     },
+    "/transform/kalfa/astype": {
+      "alias": [
+        "astype"
+      ],
+      "description": "Cast columns to dtypes, {column: dtype}",
+      "facts": {
+        "needs_table": true,
+        "partial": true
+      },
+      "kind": "transform",
+      "signature": "(df, columns)"
+    },
+    "/transform/kalfa/derive": {
+      "alias": [
+        "derive"
+      ],
+      "description": "A new column from a pandas eval expression over the frame (log10(x), a > b, a + b)",
+      "facts": {
+        "needs_table": true,
+        "partial": true
+      },
+      "kind": "transform",
+      "signature": "(df, column, expr)"
+    },
+    "/transform/kalfa/drop": {
+      "alias": [
+        "drop"
+      ],
+      "description": "Drop columns from the frame before anything reads them",
+      "facts": {
+        "needs_table": true,
+        "partial": true
+      },
+      "kind": "transform",
+      "signature": "(df, columns)"
+    },
+    "/transform/kalfa/filter": {
+      "alias": [
+        "filter"
+      ],
+      "description": "Keep the rows a pandas query selects; a bare string in data.transform is this call; a stream applies it chunk by chunk and a Dataset source takes field equality queries",
+      "facts": {
+        "partial": true
+      },
+      "kind": "transform",
+      "signature": "(df, query)"
+    },
+    "/transform/kalfa/rename": {
+      "alias": [
+        "rename"
+      ],
+      "description": "Rename the columns a regular expression matches, pattern to the replacement, backreferences allowed (cms_(.*)_Z_score to z_\\1)",
+      "facts": {
+        "needs_table": true,
+        "partial": true
+      },
+      "kind": "transform",
+      "signature": "(df, pattern, to)"
+    },
     "/trigger/kalfa/after_turn": {
       "alias": [
         "after_turn",
@@ -2051,6 +2122,7 @@
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
+      "astype": "/transform/kalfa/astype",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2063,9 +2135,13 @@
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "cuda": "/device/kalfa/cuda",
+      "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "f1": "/metric/torchmetrics/f1",
+      "fill": "/pre/kalfa/fill",
+      "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
@@ -2099,10 +2175,12 @@
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "random": "/strategy/kalfa/random",
       "relu": "/layer/torch/relu",
+      "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
       "rmse": "/metric/kalfa/rmse",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",
@@ -2126,6 +2204,7 @@
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
+      "astype": "/transform/kalfa/astype",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2139,9 +2218,13 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv_stream",
       "cuda": "/device/kalfa/cuda",
+      "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "f1": "/metric/torchmetrics/f1",
+      "fill": "/pre/kalfa/fill",
+      "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
@@ -2176,10 +2259,12 @@
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "random": "/strategy/kalfa/random",
       "relu": "/layer/torch/relu",
+      "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
       "rmse": "/metric/kalfa/rmse",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",
@@ -2204,6 +2289,7 @@
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
       "asinh": "/pre/kalfa/asinh",
+      "astype": "/transform/kalfa/astype",
       "atanh": "/pre/kalfa/atanh",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
@@ -2220,11 +2306,15 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
       "cuda": "/device/kalfa/cuda",
+      "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
       "feature_distributions": "/plot/kalfa/feature_distributions",
+      "fill": "/pre/kalfa/fill",
+      "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
@@ -2270,12 +2360,14 @@
       "random": "/strategy/kalfa/random",
       "random_split": "/split/kalfa/random",
       "relu": "/layer/torch/relu",
+      "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
       "residuals": "/plot/kalfa/residuals",
       "rmse": "/metric/kalfa/rmse",
       "robust_scaler": "/pre/sklearn/robust_scaler",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "simple_imputer": "/pre/kalfa/simple_imputer",
       "sinh": "/pre/kalfa/sinh",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
@@ -2306,6 +2398,7 @@
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
+      "astype": "/transform/kalfa/astype",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2322,12 +2415,16 @@
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
       "cuda": "/device/kalfa/cuda",
+      "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "embedding": "/layer/torch/embedding",
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
       "feature_distributions": "/plot/kalfa/feature_distributions",
+      "fill": "/pre/kalfa/fill",
+      "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "given": "/split/kalfa/given",
@@ -2370,12 +2467,14 @@
       "random": "/strategy/kalfa/random",
       "random_split": "/split/kalfa/random",
       "relu": "/layer/torch/relu",
+      "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
       "residuals": "/plot/kalfa/residuals",
       "rmse": "/metric/kalfa/rmse",
       "sample_writer": "/metric/kalfa/sample_writer",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",
@@ -2405,6 +2504,7 @@
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
+      "astype": "/transform/kalfa/astype",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -2423,14 +2523,18 @@
       "cuda": "/device/kalfa/cuda",
       "ddpm": "/objective/kalfa/ddpm",
       "ddpm_sampler": "/generate/kalfa/ddpm_sampler",
+      "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
       "distill": "/objective/kalfa/distill",
+      "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "embedding": "/layer/torch/embedding",
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
       "feature_distributions": "/plot/kalfa/feature_distributions",
       "fid": "/metric/kalfa/fid",
+      "fill": "/pre/kalfa/fill",
+      "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
       "forecast_samples": "/plot/kalfa/forecast_samples",
       "gan_sampler": "/generate/kalfa/gan_sampler",
@@ -2480,6 +2584,7 @@
       "random_split": "/split/kalfa/random",
       "recon_error": "/metric/kalfa/recon_error",
       "relu": "/layer/torch/relu",
+      "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
       "residuals": "/plot/kalfa/residuals",
       "resize": "/pre/kalfa/resize",
@@ -2490,6 +2595,7 @@
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
       "simclr_aug": "/pre/kalfa/simclr_aug",
+      "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",

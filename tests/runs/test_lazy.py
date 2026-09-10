@@ -18,7 +18,7 @@ def lazy_config(epochs=2):
     config["include"] = ["/alias/kalfa/lazy"]
     config["data"]["source"] = {"uri": "parquet", "params": {"path": "housing.parquet", "chunk": 300}}
     config["data"]["split"] = {"uri": "sequential", "params": {"ratios": [0.7, 0.15, 0.15]}}
-    config["data"]["filter"] = ["price > 0"]
+    config["data"]["transform"] = ["price > 0"]
     config["record"] = "runs/lazy_$datetime$"
     return config
 

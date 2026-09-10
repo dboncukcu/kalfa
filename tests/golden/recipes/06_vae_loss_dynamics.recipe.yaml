@@ -41,13 +41,14 @@ blocks:
       x_hat: {model: decoder, inputs: [z]}
 flow:
   outputs: [history, predictions]
-  data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/mnist}}, filter_pre: [], 
-        filter_set: [], split: {uri: /split/kalfa/random, params: {ratios: [0.9, 0.1, 0.0], seed: 7}}, loaders: {train: {
-          uri: /loader/kalfa/torch, set: train, params: {set: train, size: 128}}, valid: {uri: /loader/kalfa/torch, set: 
-            valid, params: {set: valid, size: 128}}, test: {uri: /loader/kalfa/torch, set: test, params: {set: test, 
-              size: 128}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [to_tensor]}}, 
-            preprocessors: {to_tensor: {uri: /pre/kalfa/to_tensor}}, drop: [], keys: {to_tensor: {}}}, inputs: {df: 
-            train_df}}, preprocessors_keys: {to_tensor: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
+  data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/mnist}}, transform_pre: [], 
+        set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, test: {set: test, 
+            transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.9, 0.1, 0.0], seed: 7}}, loaders: {
+          train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 128}}, valid: {uri: 
+            /loader/kalfa/torch, set: valid, params: {set: valid, size: 128}}, test: {uri: /loader/kalfa/torch, set: 
+            test, params: {set: test, size: 128}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [
+                to_tensor]}}, preprocessors: {to_tensor: {uri: /pre/kalfa/to_tensor}}, drop: [], keys: {to_tensor: {}}}, 
+          inputs: {df: train_df}}, preprocessors_keys: {to_tensor: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: encoder, index: 0, init: null, trainable: true, weights: null},
         {name: decoder, index: 1, init: null, trainable: true, weights: null}], composite_items: [name: vae], ema_items: [],
       trained_refs: {encoder: encoder, decoder: decoder}, composite_refs: {vae: vae}, ema_refs: {}, seed: 7, rng: {uri: 

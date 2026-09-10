@@ -247,6 +247,16 @@ def plots_keys_of(plots):
     return table
 
 
+def transforms_of(data, contract):
+    entries = [{"uri": contract.wiring["filter"], "params": {"query": item}} if isinstance(item, str) else item
+               for item in data.get("transform") or []]
+    pre = [call_with_params(entry) for entry in entries if not entry.get("sets")]
+    per_set = {name: {"set": name, "transforms": [call_with_params(entry) for entry in entries
+                                                   if name in (entry.get("sets") or [])]}
+               for name in contract.sets}
+    return pre, per_set
+
+
 def rng_of(config, contract):
     if config.get("rng") is not None:
         return call_with_params(config["rng"])
@@ -271,7 +281,7 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
     catalog = catalog if catalog is not None else registry
     contract = contract or Contract.load()
     aliases = aliases or {}
-    filters = data.get("filter") or []
+    transform_pre, set_transforms = transforms_of(data, contract)
     split = data["split"]
     if isinstance(split, dict) and "uri" in split:
         split = call_with_params(split)
@@ -281,8 +291,8 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
     preprocessors = {name: call_resolved(entry, aliases, catalog, table) for name, entry in table.items()}
     keys = keys_of(data.get("preprocessors"))
     return {"source": call_with_params(data["source"]),
-            "filter_pre": [item for item in filters if isinstance(item, str)],
-            "filter_set": [item for item in filters if isinstance(item, dict)],
+            "transform_pre": transform_pre,
+            "set_transforms": set_transforms,
             "split": split,
             "loaders": loaders_of(data["batch"], contract),
             "prep": prep_of(data, preprocessors, keys, contract, record),

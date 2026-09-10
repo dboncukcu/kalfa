@@ -1,5 +1,11 @@
 # /alias/kalfa/base: the short names every pack shares; the four packs include it and add their own.
 alias:
+  # transform
+  filter: /transform/kalfa/filter
+  derive: /transform/kalfa/derive
+  rename: /transform/kalfa/rename
+  astype: /transform/kalfa/astype
+  drop: /transform/kalfa/drop
   # split
   sequential: /split/kalfa/sequential
   given: /split/kalfa/given
@@ -11,6 +17,8 @@ alias:
   log: /pre/kalfa/log
   one_hot: /pre/kalfa/one_hot
   label_encoder: /pre/kalfa/label_encoder
+  simple_imputer: /pre/kalfa/simple_imputer
+  fill: /pre/kalfa/fill
   # feed
   table: /feed/kalfa/table
   # layer

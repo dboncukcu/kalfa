@@ -404,11 +404,23 @@ def new_loader(opened, data):
         source = opened.config["data"]["source"]
         df = registry.resolve(source["uri"])(**{**(source.get("params") or {}), "path": data})
     params = opened.document["flow"]["data"]["params"]
+    df = replay_transforms(opened, df, params)
     frame = apply(df, opened.prep, "test")
     feed = params["feed"]
     dataset = registry.resolve(feed["uri"])(frame, None, **(feed.get("params") or {}))
     spec = params["loaders"]["test"]
     return registry.resolve(spec["uri"])(dataset, **spec["params"])
+
+
+def replay_transforms(opened, df, params):
+    steps = [*(params.get("transform_pre") or []),
+             *((params.get("set_transforms") or {}).get("test") or {}).get("transforms", [])]
+    before = len(df) if isinstance(df, pandas.DataFrame) else None
+    for step in steps:
+        df = opened.store.resolve_params(step)(df)
+    if steps and before is not None:
+        logger.info(f"{len(steps)} transforms replayed, {before - len(df)} of {before} rows dropped")
+    return df
 
 
 def chosen_plots(table, chosen):

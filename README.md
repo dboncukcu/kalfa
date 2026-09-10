@@ -165,7 +165,7 @@ figures lego the contract names (`/lego/kalfa/figures`), so `check` validates it
 
 `check --dump` prints the graph that will run (`flow.yaml`), `--recipe` the document the driver hands to cirak;
 `--layers` shows the layer tree and the overridden leaves. The set table is from the file header, before the
-filters; `--load` runs the data block and prints the real sizes.
+transforms; `--load` runs the data block and prints the real sizes.
 
 ## Python API
 
@@ -320,7 +320,7 @@ So `parquet  housing.parquet` reads as the source lego and its file, `grouped_ta
 lego and its parameters, and `random  0.8 / 0.1 / 0.1  seed=7` as the split lego, its ratios and its seed.
 
 Statically it reads the file header and the compiled recipe, so it needs no data beyond the source header.
-`--load` runs the data and model blocks for real (nothing is written): the set sizes after the filters, the widths
+`--load` runs the data and model blocks for real (nothing is written): the set sizes after the transforms, the widths
 a fitted `one_hot` produces, the tensor slots of every column, and the parameter counts of models whose layers are
 lazy until the first batch. `--section data|model|training|after|columns|wiring` narrows the output, `--wiring`
 adds the implicit bindings of the compiled pipeline to the default sections. Tables are fitted to the width the

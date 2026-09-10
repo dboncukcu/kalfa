@@ -39,6 +39,10 @@ class DataRules:
                        ("data", "batch"), hint=hint)
         if self.fact_of(data.get("feed"), "needs_table"):
             self.error("lazy_feed", "the feed needs the table in memory", ("data", "feed"), hint=hint)
+        for position, item in enumerate(data.get("transform") or []):
+            if isinstance(item, dict) and self.fact_of(item, "needs_table"):
+                self.error("lazy_transform", f"transform {position} ({item.get('uri')}) needs the table in memory; "
+                                             f"a stream takes filter only", ("data", "transform", position), hint=hint)
         for name, entry in (self.data.get("losses") or {}).items():
             for uri in uris_in(entry):
                 if self.registry.lookup(uri) is not None and self.registry.facts(uri).get("counts"):

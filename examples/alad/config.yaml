@@ -28,15 +28,15 @@ params:
 seed: $seed$
 
 # data: the data pipeline. The order is fixed and independent of the writing order:
-# source -> filter (those without sets) -> split -> filter (those with sets) -> fit on the train set -> apply
+# source -> transform (those without sets) -> split -> transform (those with sets) -> fit on the train set -> apply
 data:
   # source: the lego that brings the data; it returns a DataFrame or a Dataset.
   source: {uri: /source/kalfa/parquet, params: {path: anomaly_data.parquet}}
-  # filter: pandas query strings. A plain string: on all the data before the split.
-  # {query, sets}: after the split, on those sets only. Filters of the same stage are joined with "and".
-  filter:
-    - {query: "is_anomaly == 0", sets: [train]}
+  # transform: frame to frame legos in the order written; a bare string is a filter (a pandas query). An entry
+  # without sets runs on all the data before the split, one with sets after the split on those sets only.
+  transform:
     - "(is_anomaly > -4) & (is_anomaly < 4)"
+    - {uri: filter, params: {query: "is_anomaly == 0"}, sets: [train]}
   # split: the split lego; ratios in the order train, valid, test.
   split: {ratios: [0.7, 0.1, 0.2], seed: $seed$}
   # batch: the batch size (the short form; the long form is {size, workers, shuffle, ...}).

@@ -12,7 +12,7 @@ config.yaml                                                                     
   source      parquet  anomaly_data.parquet               2 000 rows · 9 columns
   split       random  0.7 / 0.1 / 0.2  seed=42            train 1 400  ·  valid 200  ·  test 400
   batch       50                                          feed  table
-  filters     (is_anomaly > -4) & (is_anomaly < 4), query=is_anomaly == 0 sets=[train]
+  transforms  filter query=(is_anomaly > -4) & (is_anomaly < 4)  ·  after the split: filter query=is_anomaly == 0 (train)
   drop        xx6, xx7
 
   field       columns         preprocessors                           role

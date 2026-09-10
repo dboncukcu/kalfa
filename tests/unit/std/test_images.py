@@ -1,11 +1,10 @@
 """The Dataset pipeline of the image configs: image_folder, samples, per item chains, the balanced sampler."""
 
-import numpy
 import pytest
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.lego.kalfa.filter_set import filter_set
+from kalfa.std.transform.kalfa.filter import filter_rows
 from kalfa.std.feed.kalfa.table import SampleDataset, table
 from kalfa.std.layer.kalfa.unflatten import unflatten
 from kalfa.std.loader.kalfa.torch import balanced_sampler, torch_loader
@@ -57,8 +56,8 @@ def test_samples_query_subset_and_splits(folder):
     assert set(parts["train"].index) | set(parts["valid"].index) | set(parts["test"].index) == set(range(24))
     folds = kfold(samples, k=4, fold=1, val=0.5, seed=1)
     assert [len(folds[name]) for name in ("train", "valid", "test")] == [9, 9, 6]
-    filtered = filter_set(samples, "train", [{"query": "label == 0", "sets": ["train"]}])
-    assert len(filtered) == 8 and len(filter_set(samples, "valid", [{"query": "label == 0", "sets": ["train"]}])) == 24
+    filtered = filter_rows(samples, "label == 0")
+    assert len(filtered) == 8 and len(samples) == 24
 
 
 def test_fit_apply_and_sample_dataset_in_dataset_mode(folder, tmp_path):

@@ -17,9 +17,10 @@ blocks: {model: {inputs: [x], outputs: [y], spec: [{uri: /layer/torch/gru, param
           /layer/torch/last_step, {uri: /layer/kalfa/linear, params: {out_features: 24}}]}}
 flow:
   outputs: [history, predictions]
-  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: energy.parquet}}, filter_pre: [], 
-        filter_set: [], split: {uri: /split/kalfa/sequential, params: {ratios: [0.7, 0.15, 0.15], group: site_id}}, 
-        loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64}}, valid: {uri: 
+  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: energy.parquet}}, transform_pre: [], 
+        set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, test: {set: test, 
+            transforms: []}}, split: {uri: /split/kalfa/sequential, params: {ratios: [0.7, 0.15, 0.15], group: site_id}},
+      loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64}}, valid: {uri: 
             /loader/kalfa/torch, set: valid, params: {set: valid, size: 64}}, test: {uri: /loader/kalfa/torch, set: test,
           params: {set: test, size: 64}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [
                   std_scaler]}, load: {target: true, preprocessors: [target_std]}}, preprocessors: {std_scaler: {uri: 

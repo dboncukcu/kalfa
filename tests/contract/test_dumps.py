@@ -84,7 +84,10 @@ def test_the_alad_recipe_details():
     assert [item["name"] for item in optimizers] == ["g", "d"]
     assert optimizers[0]["models"] == {"encoder": "encoder", "generator": "generator"}
     data = document["flow"]["data"]["params"]
-    assert data["filter_pre"] == ["(is_anomaly > -4) & (is_anomaly < 4)"]
-    assert data["filter_set"] == [{"query": "is_anomaly == 0", "sets": ["train"]}]
+    assert data["transform_pre"] == [{"uri": "/transform/kalfa/filter",
+                                      "params": {"query": "(is_anomaly > -4) & (is_anomaly < 4)"}}]
+    assert data["set_transforms"]["train"]["transforms"] == [{"uri": "/transform/kalfa/filter",
+                                                              "params": {"query": "is_anomaly == 0"}}]
+    assert data["set_transforms"]["valid"]["transforms"] == []
     assert data["prep"]["params"]["drop"] == ["xx6", "xx7"]
     assert document["checkpoint"] == {}

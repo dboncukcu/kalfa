@@ -17,6 +17,15 @@ def split_text(split, style=PLAIN):
     return f"{text}  {body}".rstrip()
 
 
+def transform_texts(params, style):
+    before = [call_text(item, style=style) for item in params.get("transform_pre") or []]
+    after = []
+    for name, entry in (params.get("set_transforms") or {}).items():
+        for item in entry.get("transforms") or []:
+            after.append(f"{call_text(item, style=style)} ({name})")
+    return before, after
+
+
 def sizes_line(sizes, style, sets):
     if sizes is None:
         return style.dim("sizes unknown")
@@ -42,9 +51,12 @@ def data_section(prepared, style, width, probe=None):
     size = batch_size(params)
     lines.append(field_line("batch", f"{pad(number(size, style), 44)}{style.dim('feed')}  "
                                     f"{call_text(params.get('feed'), style=style)}", style))
-    filters = list(params.get("filter_pre") or []) + list(params.get("filter_set") or [])
-    if filters:
-        lines.append(field_line("filters", ", ".join(call_text(item, style=style) for item in filters), style))
+    before, after = transform_texts(params, style)
+    if before or after:
+        text = ", ".join(before) or style.dim("none before the split")
+        if after:
+            text += f"  {DOT}  after the split: " + ", ".join(after)
+        lines.append(field_line("transforms", text, style))
     _, drop, _ = field_plan(prepared)
     if drop:
         lines.append(field_line("drop", ", ".join(str(name) for name in drop), style))
@@ -105,11 +117,12 @@ def load_text(prepared, style, sizes=None):
               or call_text(params.get("source"), style=style))
     rows = f" {count(prepared.header['rows'])} rows" if prepared.header is not None else ""
     names = ", ".join(field_plan(prepared)[2])
-    filters = len(list(params.get("filter_pre") or []) + list(params.get("filter_set") or []))
+    before, after = transform_texts(params, style)
+    transforms = len(before) + len(after)
     size = batch_size(params)
     steps = [f"{source}{rows}"]
-    if filters:
-        steps.append(f"{filters} filters")
+    if transforms:
+        steps.append(f"{transforms} transforms")
     steps.append(f"split {split_text(params.get('split'), style)}")
     steps.append(f"fitted {names} on train" if names else "no preprocessors")
     steps.append(f"{short((params.get('feed') or {}).get('uri')) or 'feed'} feed")

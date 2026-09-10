@@ -23,12 +23,13 @@ blocks: {model: {inputs: [x], outputs: [y], spec: [{uri: /layer/kalfa/linear_rel
           /layer/kalfa/linear_relu, params: {out_features: 128}}, {uri: /layer/kalfa/linear, params: {out_features: 1}}]}}
 flow:
   outputs: [history, predictions]
-  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: housing.parquet}}, filter_pre: [], 
-        filter_set: [], split: {uri: /split/kalfa/kfold, params: {k: 5, fold: 0, val: 0.15, seed: 7}}, loaders: {train: {
-          uri: /loader/kalfa/torch, set: train, params: {set: train, size: 128}}, valid: {uri: /loader/kalfa/torch, set: 
-            valid, params: {set: valid, size: 128}}, test: {uri: /loader/kalfa/torch, set: test, params: {set: test, 
-              size: 128}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [std_scaler]}, price: {
-                target: true, preprocessors: [target_std]}}, preprocessors: {std_scaler: {uri: 
+  data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: housing.parquet}}, transform_pre: [], 
+        set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, test: {set: test, 
+            transforms: []}}, split: {uri: /split/kalfa/kfold, params: {k: 5, fold: 0, val: 0.15, seed: 7}}, loaders: {
+          train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 128}}, valid: {uri: 
+            /loader/kalfa/torch, set: valid, params: {set: valid, size: 128}}, test: {uri: /loader/kalfa/torch, set: 
+            test, params: {set: test, size: 128}}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [
+                  std_scaler]}, price: {target: true, preprocessors: [target_std]}}, preprocessors: {std_scaler: {uri: 
                 /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], keys: {
               std_scaler: {}, target_std: {}}}, inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, target_std: {}},
       feed: {uri: /feed/kalfa/table, params: {}}}}

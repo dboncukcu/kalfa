@@ -29,9 +29,10 @@ blocks:
     - {uri: /layer/kalfa/linear, params: {out_features: 10}}
 flow:
   outputs: [history, predictions]
-  data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/cifar10}}, filter_pre: [], 
-        filter_set: [], split: {uri: /split/kalfa/random, params: {ratios: [0.9, 0.1, 0.0], seed: 7}}, loaders: {train: {
-          uri: /loader/kalfa/torch, set: train, params: {set: train, size: 128, eval_size: 512}}, valid: {uri: 
+  data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/cifar10}}, transform_pre: [],
+      set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []}, test: {set: test, 
+            transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.9, 0.1, 0.0], seed: 7}}, loaders: {
+          train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 128, eval_size: 512}}, valid: {uri: 
             /loader/kalfa/torch, set: valid, params: {set: valid, size: 128, eval_size: 512}}, test: {uri: 
             /loader/kalfa/torch, set: test, params: {set: test, size: 128, eval_size: 512}}}, prep: {uri: 
           /lego/kalfa/fit, params: {fields: {image: {preprocessors: [to_tensor, normalize]}, label: {target: true}}, 
