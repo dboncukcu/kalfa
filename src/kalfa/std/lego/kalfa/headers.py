@@ -7,25 +7,37 @@ from kalfa.std.common.files import read_json
 from kalfa.std.source.kalfa.samples import ImageFolder, TextLines
 
 
+def listed(names, columns, path):
+    if columns is None:
+        return list(names)
+    missing = [name for name in columns if name not in names]
+    if missing:
+        raise KeyError(f"source columns {missing!r} are not in {path!r}; write names the file has")
+    return list(columns)
+
+
 @lego("/lego/kalfa/parquet_header",
-      description="The columns, their arrow types and the row count of a parquet file, from its metadata")
-def parquet_header(path, chunk=None):
+      description="The columns, their arrow types and the row count of a parquet file, from its metadata; the "
+                  "listed columns only when the source names them")
+def parquet_header(path, chunk=None, columns=None):
     import pyarrow.parquet
 
     handle = pyarrow.parquet.ParquetFile(path)
     schema = handle.schema_arrow
-    return {"columns": list(schema.names), "dtypes": {name: str(schema.field(name).type) for name in schema.names},
+    names = listed(schema.names, columns, path)
+    return {"columns": names, "dtypes": {name: str(schema.field(name).type) for name in names},
             "rows": handle.metadata.num_rows}
 
 
 @lego("/lego/kalfa/csv_header",
-      description="The columns, the dtypes of the first rows and the line count of a CSV file")
-def csv_header(path, chunk=None):
+      description="The columns, the dtypes of the first rows and the line count of a CSV file; the listed columns "
+                  "only when the source names them")
+def csv_header(path, chunk=None, columns=None):
     head = pandas.read_csv(path, nrows=64)
+    names = listed(list(head.columns), columns, path)
     with open(path, "rb") as stream:
         rows = max(sum(1 for _ in stream) - 1, 0)
-    return {"columns": list(head.columns), "dtypes": {name: str(dtype) for name, dtype in head.dtypes.items()},
-            "rows": rows}
+    return {"columns": names, "dtypes": {name: str(head.dtypes[name]) for name in names}, "rows": rows}
 
 
 @lego("/lego/kalfa/image_folder_header",

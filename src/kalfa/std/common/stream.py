@@ -5,15 +5,16 @@ import pandas
 
 
 class ParquetChunks:
-    def __init__(self, path, chunk=65536):
+    def __init__(self, path, chunk=65536, columns=None):
         import pyarrow.parquet
 
         self.path = str(path)
         self.chunk = int(chunk)
+        self.selected = None if columns is None else list(columns)
         if not Path(self.path).is_file():
             raise FileNotFoundError(f"parquet file {path!r} does not exist")
         handle = pyarrow.parquet.ParquetFile(self.path)
-        self.columns = list(handle.schema_arrow.names)
+        self.columns = list(handle.schema_arrow.names) if self.selected is None else list(self.selected)
         self.rows = int(handle.metadata.num_rows)
 
     def chunks(self):
@@ -21,7 +22,7 @@ class ParquetChunks:
 
         handle = pyarrow.parquet.ParquetFile(self.path)
         offset = 0
-        for batch in handle.iter_batches(batch_size=self.chunk):
+        for batch in handle.iter_batches(batch_size=self.chunk, columns=self.selected):
             frame = batch.to_pandas()
             frame.index = range(offset, offset + len(frame))
             offset += len(frame)
@@ -29,18 +30,19 @@ class ParquetChunks:
 
 
 class CsvChunks:
-    def __init__(self, path, chunk=65536):
+    def __init__(self, path, chunk=65536, columns=None):
         self.path = str(path)
         self.chunk = int(chunk)
+        self.selected = None if columns is None else list(columns)
         if not Path(self.path).is_file():
             raise FileNotFoundError(f"csv file {path!r} does not exist")
-        self.columns = list(pandas.read_csv(self.path, nrows=0).columns)
+        self.columns = list(pandas.read_csv(self.path, nrows=0, usecols=self.selected).columns)
         with open(self.path, "rb") as stream:
             self.rows = max(sum(1 for _ in stream) - 1, 0)
 
     def chunks(self):
         offset = 0
-        for frame in pandas.read_csv(self.path, chunksize=self.chunk):
+        for frame in pandas.read_csv(self.path, chunksize=self.chunk, usecols=self.selected):
             frame.index = range(offset, offset + len(frame))
             offset += len(frame)
             yield frame

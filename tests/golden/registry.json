@@ -1594,10 +1594,10 @@
     },
     "/lego/kalfa/csv_header": {
       "alias": [],
-      "description": "The columns, the dtypes of the first rows and the line count of a CSV file",
+      "description": "The columns, the dtypes of the first rows and the line count of a CSV file; the listed columns only when the source names them",
       "facts": {},
       "kind": "lego",
-      "signature": "(path, chunk=None)"
+      "signature": "(path, chunk=None, columns=None)"
     },
     "/lego/kalfa/data_report": {
       "alias": [],
@@ -1756,10 +1756,10 @@
     },
     "/lego/kalfa/parquet_header": {
       "alias": [],
-      "description": "The columns, their arrow types and the row count of a parquet file, from its metadata",
+      "description": "The columns, their arrow types and the row count of a parquet file, from its metadata; the listed columns only when the source names them",
       "facts": {},
       "kind": "lego",
-      "signature": "(path, chunk=None)"
+      "signature": "(path, chunk=None, columns=None)"
     },
     "/lego/kalfa/pixel_features": {
       "alias": [],
@@ -2881,13 +2881,13 @@
       "alias": [
         "csv"
       ],
-      "description": "Read a CSV file into a DataFrame",
+      "description": "Read a CSV file into a DataFrame; columns lists the ones to read, the others stay on disk",
       "facts": {
         "header": "/lego/kalfa/csv_header",
         "returns": "df"
       },
       "kind": "source",
-      "signature": "(path)"
+      "signature": "(path, columns=None)"
     },
     "/source/kalfa/csv_stream": {
       "alias": [],
@@ -2898,7 +2898,7 @@
         "stream": true
       },
       "kind": "source",
-      "signature": "(path, chunk=65536)"
+      "signature": "(path, chunk=65536, columns=None)"
     },
     "/source/kalfa/image_folder": {
       "alias": [
@@ -2917,13 +2917,13 @@
       "alias": [
         "parquet"
       ],
-      "description": "Read a parquet file into a DataFrame",
+      "description": "Read a parquet file into a DataFrame; columns lists the ones to read, the others stay on disk",
       "facts": {
         "header": "/lego/kalfa/parquet_header",
         "returns": "df"
       },
       "kind": "source",
-      "signature": "(path)"
+      "signature": "(path, columns=None)"
     },
     "/source/kalfa/parquet_stream": {
       "alias": [],
@@ -2934,7 +2934,7 @@
         "stream": true
       },
       "kind": "source",
-      "signature": "(path, chunk=65536)"
+      "signature": "(path, chunk=65536, columns=None)"
     },
     "/source/kalfa/prepared": {
       "alias": [],

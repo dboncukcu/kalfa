@@ -126,3 +126,11 @@ def test_stream_dataset_and_loader(housing):
     with pytest.raises(ValueError, match="yields no rows"):
         list(torch_loader(empty, "train", 4))
     assert list(torch_loader(table(apply(parts["train"].empty(), prep, "valid")), "valid", 4)) == []
+
+
+def test_a_stream_reads_the_listed_columns(housing):
+    directory, _ = housing
+    stream = parquet_stream(str(directory / "housing.parquet"), chunk=30, columns=["price"])
+    assert all(list(frame.columns) == ["price"] for frame in stream.chunks())
+    stream = csv_stream(str(directory / "housing.csv"), chunk=30, columns=["x0", "price"])
+    assert all(list(frame.columns) == ["x0", "price"] for frame in stream.chunks())

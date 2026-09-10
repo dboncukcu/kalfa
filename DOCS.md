@@ -45,11 +45,11 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/source/kalfa/csv` | `csv` | `(path)` | returns: df; header: /lego/kalfa/csv_header | Read a CSV file into a DataFrame |
-| `/source/kalfa/csv_stream` |  | `(path, chunk=65536)` | returns: df; header: /lego/kalfa/csv_header; stream: True | Read a CSV file in chunks (the lazy set) |
+| `/source/kalfa/csv` | `csv` | `(path, columns=None)` | returns: df; header: /lego/kalfa/csv_header | Read a CSV file into a DataFrame; columns lists the ones to read, the others stay on disk |
+| `/source/kalfa/csv_stream` |  | `(path, chunk=65536, columns=None)` | returns: df; header: /lego/kalfa/csv_header; stream: True | Read a CSV file in chunks (the lazy set) |
 | `/source/kalfa/image_folder` | `image_folder` | `(path)` | returns: df; header: /lego/kalfa/image_folder_header; samples: True | Images under root/<class>/ as a Dataset with fields image and label |
-| `/source/kalfa/parquet` | `parquet` | `(path)` | returns: df; header: /lego/kalfa/parquet_header | Read a parquet file into a DataFrame |
-| `/source/kalfa/parquet_stream` |  | `(path, chunk=65536)` | returns: df; header: /lego/kalfa/parquet_header; stream: True | Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table |
+| `/source/kalfa/parquet` | `parquet` | `(path, columns=None)` | returns: df; header: /lego/kalfa/parquet_header | Read a parquet file into a DataFrame; columns lists the ones to read, the others stay on disk |
+| `/source/kalfa/parquet_stream` |  | `(path, chunk=65536, columns=None)` | returns: df; header: /lego/kalfa/parquet_header; stream: True | Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table |
 | `/source/kalfa/prepared` |  | `(path)` | returns: df; header: /lego/kalfa/prepared_header | The data kalfa prepare wrote: the sets of a table read back into one frame marked by set, or the items of a Dataset source read from where they are with the split kept as positions |
 | `/source/kalfa/text_lines` | `text_lines` | `(path)` | returns: df; header: /lego/kalfa/text_lines_header; samples: True | The lines of a text file as a Dataset with the field text |
 
@@ -453,7 +453,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/checkpoint` |  | `(state, policy, metrics=None, record=None)` | returns: None; bus: metrics=metrics, record=record | Write the checkpoint files the policy asks for; nothing without a policy |
 | `/lego/kalfa/clone` |  | `(model, decay)` | state: True | An exponential moving average copy of a model with the given decay |
 | `/lego/kalfa/const` |  | `(value)` |  | A fresh copy of a constant value |
-| `/lego/kalfa/csv_header` |  | `(path, chunk=None)` |  | The columns, the dtypes of the first rows and the line count of a CSV file |
+| `/lego/kalfa/csv_header` |  | `(path, chunk=None, columns=None)` |  | The columns, the dtypes of the first rows and the line count of a CSV file; the listed columns only when the source names them |
 | `/lego/kalfa/data_report` |  | `(stages, split, after, fitted, prep, frames, loaders, record=None)` | returns: data_report; bus: record=record | The shape of the data at every stage of the data block, read from the bus keys the stages wrote: the rows and columns of the source and after every transform, the sets after the split and after their transforms, the fitted frame transforms and preprocessors, the features and targets, the loaders; written to the record as data.json |
 | `/lego/kalfa/evaluate` |  | `(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)` | returns: metrics; bus: device=device, prep=prep, record=record | Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files |
 | `/lego/kalfa/figures` |  | `(format='png', width=None, height=None, dpi=150, style='kalfa')` |  | The look of every plot of a run: the file format, the size of one panel in inches, the dpi and the style (kalfa, or none for matplotlib's own); the figures section is its params and the built object reaches every plot that names figures |
@@ -468,7 +468,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/kfold_sizes` |  | `(rows, k, fold, val=None, seed=None)` |  | The set sizes a k fold split produces from rows rows; without rows, which sets it produces |
 | `/lego/kalfa/merge` |  | `(parts, prefixes)` |  | Merge the per set metrics under the prefixes of the sets (train/, val/, test/) |
 | `/lego/kalfa/pack` |  | `(items)` | aliases: items | A mapping of the given items |
-| `/lego/kalfa/parquet_header` |  | `(path, chunk=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata |
+| `/lego/kalfa/parquet_header` |  | `(path, chunk=None, columns=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata; the listed columns only when the source names them |
 | `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict a set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet for the test set and predictions_<set>.parquet for another |
 | `/lego/kalfa/prepared_header` |  | `(path)` |  | The header a prepared directory recorded in its manifest: the columns, the dtypes and the rows |
 | `/lego/kalfa/prepared_sizes` |  | `(rows, path)` |  | The set sizes a prepared directory recorded in its manifest |

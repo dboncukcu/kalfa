@@ -33,6 +33,13 @@ def test_sources_and_headers(tmp_path):
     assert head["rows"] == 20 and head["columns"][-1] == "price" and head["dtypes"]["price"] == "double"
     head = csv_header(str(tmp_path / "h.csv"))
     assert head["rows"] == 20 and "x0" in head["columns"]
+    assert list(parquet(str(tmp_path / "h.parquet"), columns=["price", "x0"]).columns) == ["price", "x0"]
+    assert list(csv(str(tmp_path / "h.csv"), columns=["x0", "price"]).columns) == ["x0", "price"]
+    head = parquet_header(str(tmp_path / "h.parquet"), columns=["price"])
+    assert head["columns"] == ["price"] and list(head["dtypes"]) == ["price"] and head["rows"] == 20
+    assert csv_header(str(tmp_path / "h.csv"), columns=["x1"])["columns"] == ["x1"]
+    with pytest.raises(KeyError, match="nope"):
+        parquet_header(str(tmp_path / "h.parquet"), columns=["nope"])
 
 
 def test_filters():
