@@ -17,6 +17,10 @@ def split_text(split, style=PLAIN):
     return f"{text}  {body}".rstrip()
 
 
+def batch_text(size, style):
+    return number(size, style) if size is not None else style.dim("the whole set")
+
+
 def transform_texts(params, style):
     before = [call_text(item, style=style) for item in params.get("transform_pre") or []]
     after = []
@@ -49,7 +53,7 @@ def data_section(prepared, style, width, probe=None):
     lines.append(field_line("split", f"{pad(split_text(params.get('split'), style), 44)}"
                                      f"{sizes_line(sizes, style, prepared.contract.sets)}", style))
     size = batch_size(params)
-    lines.append(field_line("batch", f"{pad(number(size, style), 44)}{style.dim('feed')}  "
+    lines.append(field_line("batch", f"{pad(batch_text(size, style), 44)}{style.dim('feed')}  "
                                     f"{call_text(params.get('feed'), style=style)}", style))
     before, after = transform_texts(params, style)
     if before or after:
@@ -102,7 +106,7 @@ def data_tree(prepared, params, sizes, style, probe, sets):
     shape = ""
     if probe is not None and probe.features is not None:
         size = batch_size(params)
-        shape = f" {ARROW} x [{number(size, style)}, {probe.features}]"
+        shape = f" {ARROW} x [{batch_text(size, style)}, {probe.features}]"
     steps = {}
     for name in sets:
         steps[name] = "no preprocessors" if not names else (f"fit {fitted}" if name == "train" else "apply")

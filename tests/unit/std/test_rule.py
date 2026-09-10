@@ -86,6 +86,35 @@ def test_after_sticky_and_last_wins():
     assert effects(rules) == {"loss": "z"}
 
 
+def test_a_rule_with_sticky_false_is_asked_every_turn_and_its_trigger_starts_over():
+    count = {"calls": 0}
+
+    def every_other(metrics, turn_index, state):
+        count["calls"] += 1
+        seen = state.get("seen", 0) + 1
+        return seen >= 2, {"seen": seen}
+
+    specs = [{"name": "cut", "when": every_other, "set": {"main.lr": {"times": 0.5}, "loss": "x"}, "sticky": False},
+             {"name": "then", "when": trig(True), "set": {"loss": "y"}, "after": "cut"}]
+
+    def run(rules):
+        current = open_rules(rules)
+        for spec in specs:
+            current = rule(current, spec["name"], spec["when"], spec["set"], spec.get("after"), None, 0,
+                           sticky=spec.get("sticky", True))
+        return stop(current, [], None)["rules"]
+
+    rules = run({})
+    assert rules["fired"] == [] and rules["effects"] == {} and rules["triggers"]["cut"] == {"seen": 1}
+    rules = run(rules)
+    assert rules["fired"] == ["cut"] and rules["effects"] == {"main.lr": {"times": 0.5}, "loss": "x"}
+    assert rules["sticky"] == [] and rules["ever"] == ["cut"] and rules["triggers"]["cut"] == {}
+    rules = run(rules)
+    assert rules["fired"] == ["then"] and rules["effects"] == {"loss": "y"} and count["calls"] == 3
+    rules = run(rules)
+    assert rules["fired"] == ["cut"] and rules["effects"] == {"main.lr": {"times": 0.5}, "loss": "y"}
+
+
 def test_list_order_wins_over_firing_order():
     specs = [{"name": "first", "when": trig(False), "set": {"loss": "x"}},
              {"name": "second", "when": trig(True), "set": {"loss": "y"}}]

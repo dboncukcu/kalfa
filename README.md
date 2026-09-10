@@ -71,11 +71,13 @@ in `CONFIG.md` section 3).
 kalfa run cfg.yaml [--set path=value ...] [-p name=value ...]     # check, compile, train; opens the record directory
                     [--executor thread --workers N]               # serial by default; under thread an aliasing warning is an error
                     [--log info|debug] [--no-progress]            # print what the run is doing; drop the progress bar
+                    [--progress steps] [--log-every N] [--tensorboard]   # an inner bar over the steps; a line every N steps; event files
 kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--load]
                                                                   # only the problems; --load runs the data block
 kalfa describe cfg.yaml [--load] [--section data|model|...] [--wiring] [--save report.txt]
                                                                   # the config as an analysis, after the same checks
-kalfa predict runs/x [--model name] [--which best|last] [--data new.parquet] [--device cuda] [--plots [a,b]]
+kalfa predict runs/x [--model name] [--which best|last|final] [--data new.parquet] [--device cuda] [--plots [a,b]]
+kalfa export runs/x [--format onnx|torchscript|state_dict] [--model name] [--out DIR]   # a model in another format
 kalfa generate runs/x [--which best|last] [--device cuda]         # writes samples/ with the sampler of the generate section
 kalfa plots runs/x [--only a,b] [--set figures.format=pdf]        # redraw the plots section from the record; nothing trains
 kalfa resume runs/x [--set training.epochs=N]                     # continues from last.pt or final/ into a new directory
@@ -114,7 +116,8 @@ uses. `resume`, `predict` and `generate` take the same option.
 `--no-progress` (on `run` and `resume`) leaves the tqdm bar out: it is never created and tqdm is never imported.
 `--log info --no-progress` is then the plain form, one line per turn carrying every loss and metric of that turn
 and the learning rates, nothing redrawing itself; `--no-progress` on its own is a silent run that says only how it
-ended. The bar is not disabled on its own when stderr is not a terminal, because a notebook is exactly such a
+ended. `--progress steps` adds an inner bar over the steps of a turn and `--log-every N` a line every N steps under
+`--log`, with the loss, the learning rate and the gradient norm of every optimizer. The bar is not disabled on its own when stderr is not a terminal, because a notebook is exactly such a
 stream and that is where a bar is worth the most. The bar itself comes from `tqdm.auto`, so a notebook draws the
 ipywidgets one and a terminal the plain one.
 
@@ -261,7 +264,8 @@ never written into (an error).
 | `resolved.yaml` | the config with its aliases and `$param$`s resolved; the source of every overridden value in a comment; runs again on its own |
 | `contract.yaml` | the contract the run was compiled by (the wiring and the flow blocks); `predict`, `generate` and `resume` read it back |
 | `flow.yaml` | the tezgah graph that ran: the component tables, the model blocks, the expanded flow and tezgah's resolution comments |
-| `history.jsonl` | per turn the `train/`, `val/`, `test/` values, `global_step`, `lr/<optimizer>`, the rules that fired |
+| `history.jsonl` | per turn the `train/`, `val/`, `test/` values, `global_step`, `lr/<optimizer>`, `seconds`, the rules that fired |
+| `steps.jsonl` | per update `step`, `turn`, `loss/<optimizer>`, `lr/<optimizer>` and, under `grad_clip`, `grad_norm/<optimizer>`; `loss_curve` with `x: step` draws it |
 | `data.json` | the shape of the data at every stage of the data block: rows and columns per transform, the sets, the fitted objects, the features and targets, the loaders; `data_pipeline` draws it |
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |
 | `checkpoints/` | `best.pt`, `last.pt` (by policy); models, optimizers, EMAs, counters, rule states, RNG |
@@ -272,6 +276,9 @@ never written into (an error).
 | `samples/` | the output of `generate`: `samples.pt` (for images `grid.png` too), `samples.txt` for text; `turn_<n>.*` from `sample_writer` |
 | `plugins/` | copies of the plugin modules the run imported, so predict, generate and resume work from the record |
 | `device.json` | the chosen device and the device lego that picked it |
+| `git.json` | the commit of the config's repository and whether it was dirty |
+| `export/` | what `kalfa export` wrote, `<model>.onnx`, `.pt` |
+| `tensorboard/` | under `--tensorboard`, the event files of every history and step value and the params as hparams |
 | `resume.json` | in a resumed run the source run and the checkpoint |
 
 `kalfa predict` rewrites `predictions.parquet` on the run's own test set; with `--data`

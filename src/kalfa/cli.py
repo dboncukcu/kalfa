@@ -76,7 +76,7 @@ def build_parser():
     predict_cmd = commands.add_parser("predict", help="predict with a recorded run")
     predict_cmd.add_argument("run")
     predict_cmd.add_argument("--model", help="any model of the run, composites and .ema copies included")
-    predict_cmd.add_argument("--which", choices=["best", "last"])
+    predict_cmd.add_argument("--which", choices=["best", "last", "final"])
     predict_cmd.add_argument("--data", help="predict on this file instead of the run's test set")
     predict_cmd.add_argument("--plots", nargs="?", const="all", metavar="NAMES",
                              help="draw the plots section on the predictions just made: every plot, or a comma "
@@ -89,12 +89,26 @@ def build_parser():
 
     generate_cmd = commands.add_parser("generate", help="run the generate lego of a recorded run")
     generate_cmd.add_argument("run")
-    generate_cmd.add_argument("--which", choices=["best", "last"])
+    generate_cmd.add_argument("--which", choices=["best", "last", "final"])
     device_option(generate_cmd)
     set_option(generate_cmd)
     contract_option(generate_cmd)
     log_option(generate_cmd)
     generate_cmd.set_defaults(handler=cmd_generate)
+
+    export_cmd = commands.add_parser("export", help="write a model of a recorded run in another format: onnx, "
+                                                    "torchscript or state_dict, or an export lego of your own")
+    export_cmd.add_argument("run")
+    export_cmd.add_argument("--format", default="state_dict", metavar="NAME",
+                            help="an export lego by alias or URI (default state_dict)")
+    export_cmd.add_argument("--model", help="any model of the run, composites included; the predicts model without")
+    export_cmd.add_argument("--which", choices=["best", "last", "final"])
+    export_cmd.add_argument("--out", metavar="DIR", help="the directory to write into (default <run>/export)")
+    device_option(export_cmd)
+    set_option(export_cmd)
+    contract_option(export_cmd)
+    log_option(export_cmd)
+    export_cmd.set_defaults(handler=cmd_export)
 
     plots_cmd = commands.add_parser("plots", help="redraw the plots section of a recorded run from its files and its "
                                                   "data; nothing is fitted or trained again")
@@ -209,6 +223,19 @@ def progress_option(command):
     command.add_argument("--no-progress", action="store_true",
                          help="no progress bar; with --log the turn lines take its place, without it the run says "
                               "nothing until it ends")
+    command.add_argument("--progress", choices=["turns", "steps"], default="turns",
+                         help="the bar over the turns (the default), or an inner bar over the steps of a turn too")
+    command.add_argument("--log-every", type=int, metavar="N",
+                         help="under --log, a line every N steps with the loss, the learning rate and the "
+                              "gradient norm of every optimizer")
+    command.add_argument("--tensorboard", action="store_true",
+                         help="write TensorBoard event files under <record>/tensorboard (the tensorboard package "
+                              "is optional): every history and step value, the params as hparams")
+
+
+def monitor_of(args):
+    progress = False if args.no_progress else ("steps" if args.progress == "steps" else True)
+    return Monitor(level_of(args.log), progress=progress, log_every=args.log_every, tensorboard=args.tensorboard)
 
 
 def set_option(command):
@@ -276,8 +303,7 @@ def cmd_check(args) -> int:
 
 def cmd_run(args) -> int:
     style = style_for(sys.stdout)
-    with Monitor(level_of(args.log), progress=not args.no_progress) as monitor, \
-            warnings.catch_warnings(record=True) as caught:
+    with monitor_of(args) as monitor, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         monitor.echo_warnings(caught)
         result = api.run(args.config, layer_of(args), executor=args.executor, workers=args.workers,
@@ -290,8 +316,7 @@ def cmd_run(args) -> int:
 
 def cmd_resume(args) -> int:
     style = style_for(sys.stdout)
-    with Monitor(level_of(args.log), progress=not args.no_progress) as monitor, \
-            warnings.catch_warnings(record=True) as caught:
+    with monitor_of(args) as monitor, warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         monitor.echo_warnings(caught)
         result = api.resume(args.run, layer_of(args), executor=args.executor, workers=args.workers,
@@ -342,6 +367,19 @@ def cmd_predict(args) -> int:
     print(f"predicted {len(result.table)} rows with {style.bold(result.model)}: {style.cyan(result.path)}")
     if result.plots:
         print(f"plots {', '.join(result.plots)}: {style.cyan(str(Path(args.run) / 'plots'))}")
+    return 0
+
+
+def cmd_export(args) -> int:
+    with Monitor(level_of(args.log)), warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        result = api.export(args.run, format=args.format, model=args.model, which=args.which, out=args.out,
+                            sets=layer_of(args), device=device_value(args), contract=contract_of(args))
+    style = style_for(sys.stdout)
+    if result.path is None:
+        print(style.yellow(f"nothing written: {result.format} could not export {result.model}"), file=sys.stderr)
+        return 1
+    print(f"exported {style.bold(result.model)} as {result.format}: {style.cyan(result.path)}")
     return 0
 
 

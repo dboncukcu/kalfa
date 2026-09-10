@@ -8,5 +8,5 @@ def open_rules(rules):
     out = copy.deepcopy(rules or {})
     out["fired"] = []
     out["pending"] = {}
-    out["ready"] = list(out.get("sticky") or [])
+    out["ready"] = list(dict.fromkeys([*(out.get("sticky") or []), *(out.get("ever") or [])]))
     return out

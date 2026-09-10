@@ -18,7 +18,7 @@ class Schema:
     short_calls = (("training", "turn"), ("training", "checkpoint"), ("data", "feed"), ("sweep", "strategy"),
                    ("device",), ("rng",))
     data = ("source", "transform", "split", "frame", "batch", "preprocessors", "drop", "fields", "feed")
-    data_required = ("source", "split", "batch", "fields", "feed")
+    data_required = ("source", "split", "fields", "feed")
     transform = ("uri", "params", "sets")
     ratio_split = ("ratios", "seed")
     preprocessor = ("uri", "params", "sets")
@@ -35,7 +35,7 @@ class Schema:
     optimizer = ("uri", "params", "loss", "schedule")
     training_fixed = ("turn", "predicts", "targets", "epochs", "steps", "loss", "checkpoint", "report", "stop",
                       "rules")
-    rule = ("name", "when", "set", "after")
+    rule = ("name", "when", "set", "after", "sticky")
     plot = ("uri", "params", "inputs", "sets", "width", "height")
     sweep = ("strategy", "space", "objective", "record")
     objective = ("monitor", "mode", "at")

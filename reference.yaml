@@ -23,7 +23,7 @@ data:
                                   # | {uri: kfold, params: {k: 5, fold: $fold$, val: 0.15, seed}} (the held out fold is test; val from the training part, without it no valid)
                                   # | {uri: given, params: {valid: b.parquet, test: c.parquet}}
                                   # ratios always has three entries (train, valid, test); 0.0 means no set; a missing set is not in the history
-  batch: null                     # [required] 128 (size) or {size: 128, eval_size: 512, shuffle: true, drop_last: false, workers: 0, collate: null, balanced: false, buffer: 4096};
+  batch: null                     # [empty] 128 (size) or {size: 128, eval_size: 512, shuffle: true, drop_last: false | auto, workers: 0, collate: null, balanced: false, buffer: 4096}; not written: the whole set as one batch;
                                   # the params of the loader lego of the contract's wiring (/loader/kalfa/torch), so its signature is the key list
                                   # the defaults of the loader lego [library]: shuffle on in training, off in evaluation; eval_size = size;
                                   # collate null = the torch default; balanced puts a class balancing sampler over the target field
@@ -76,7 +76,7 @@ training:
                                   # the intermediate records; final/ is always written when the run ends; the default of mode is min [library: the lego]
   report: null                    # [required] best | last; the identity of the model after training (plots, predictions, generate, kalfa predict); best needs checkpoint best
   stop: []                        # [empty] [{uri: plateau, params: {monitor: val/rmse, patience: 6}}, ...]; test/ cannot be watched; a missing set cannot be watched
-  rules: []                       # [empty] [{name, when: {uri, params}, set: {target: value}, after: name}]
+  rules: []                       # [empty] [{name, when: {uri, params}, set: {target: value | {times: 0.5} | {plus: -0.1}}, after: name, sticky: true}]; sticky false asks the rule every turn
                                   # the set targets: <opt>.loss | loss | <loss>.<param> | <opt>.<param> | <model>.trainable
   # amp, grad_clip, accumulate and every other key go to the turn's params; not in the signature is an error
 

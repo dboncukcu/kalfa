@@ -92,13 +92,13 @@ flow:
     build_opt_main: {uri: /optimizer/torch/adam, params: {params: {lr: 0.001}, schedule: null, loss: total}, inputs: {models: {head: head, combine: combine, 
             tail: tail}}, outputs: [opt_main]}
     optimizers: {uri: /lego/kalfa/pack, inputs: {items: {main: opt_main}}, outputs: [optimizers]}
-  training: # reads: models, optimizers, emas, device, composites, train_loader, prep, record, valid_loader, test_loader, monitor; exports: history, models_final, optimizers_final, emas_final, counters_final, rules_final
+  training: # reads: models, optimizers, emas, device, composites, train_loader, prep, record, monitor, valid_loader, test_loader; exports: history, models_final, optimizers_final, emas_final, counters_final, rules_final
     counters: {uri: /lego/kalfa/const, params: {value: {global_step: 0, turn: 0}}, outputs: [counters]}
     rules: {uri: /lego/kalfa/const, params: {value: {}}, outputs: [rules]}
     stream: {uri: /lego/kalfa/const, params: {value: null}, outputs: [stream]}
     init: {uri: /lego/kalfa/init_state, params: {epochs: 30, steps: null, policy: '@checkpoint'}, inputs: {state: {models: models, optimizers: optimizers, emas: 
             emas, counters: counters, rules: rules}}, outputs: [epochs_left]}  # implicit: device
-    epochs: # reads: composites, train_loader, device, prep, record, valid_loader, test_loader, monitor
+    epochs: # reads: composites, train_loader, device, prep, record, monitor, valid_loader, test_loader
       loop:
         carry: [models, optimizers, emas, counters, rules, stream]
         next: _next
@@ -113,14 +113,14 @@ flow:
           emas: emas_final
           counters: counters_final
           rules: rules_final
-        body:  # reads: rules, models, optimizers, emas, counters, composites, train_loader, stream, device, prep, record, valid_loader, test_loader, monitor, turn_index; exports: models_next, optimizers_next, emas_next, counters_next, stream_next, metrics, rules_next, stop
+        body:  # reads: rules, models, optimizers, emas, counters, composites, train_loader, stream, device, prep, record, monitor, valid_loader, test_loader, turn_index; exports: models_next, optimizers_next, emas_next, counters_next, stream_next, metrics, rules_next, stop
           effects: {uri: /rule/kalfa/effects, inputs: {rules: rules}, outputs: [effects]}
           turn: {uri: /turn/kalfa/alternating, params: {params: {}, extra: {}, losses: '@losses', metrics: '@metrics', losses_keys: {l_y: {output: y_hat, target: 
                     y_*}, l_z: {output: z_hat, target: z}, l_tail: {output: tail_logit, target: z_tail}, total: {}}, metrics_keys: {rmse_y: {output: y_hat, 
                     target: y_*}, rmse_z: {output: z_hat, target: z}, auroc_tail: {output: tail_logit, target: z_tail}}, predicts: full, steps: null}, inputs: {
                 models: models, optimizers: optimizers, emas: emas, counters: counters, composites: composites, effects: effects, loader: train_loader, stream: 
                 stream}, outputs: {models: models_next, optimizers: optimizers_next, emas: emas_next, counters: counters_next, stream: stream_next, metrics: 
-                train_metrics}}  # implicit: device, prep, record
+                train_metrics}}  # implicit: device, prep, record, monitor
           evaluate_valid: {uri: /lego/kalfa/evaluate, params: {set: valid, losses: '@losses', metrics: '@metrics', losses_keys: {l_y: {output: y_hat, target: 
                     y_*}, l_z: {output: z_hat, target: z}, l_tail: {output: tail_logit, target: z_tail}, total: {}}, metrics_keys: {rmse_y: {output: y_hat, 
                     target: y_*}, rmse_z: {output: z_hat, target: z}, auroc_tail: {output: tail_logit, target: z_tail}}, predicts: full}, inputs: {models: 

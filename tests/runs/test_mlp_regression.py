@@ -20,7 +20,7 @@ FORCED_RULES = ("training.rules=[{name: to_huber, when: {uri: after_epoch, param
 
 
 def history_without_bookkeeping(history):
-    return [{key: value for key, value in line.items() if key not in ("turn", "global_step", "rules")
+    return [{key: value for key, value in line.items() if key not in ("turn", "global_step", "rules", "seconds")
              and not key.startswith("lr/")} for line in history]
 
 

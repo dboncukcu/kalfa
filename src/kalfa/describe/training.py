@@ -57,6 +57,14 @@ def definition_table(label, definitions, keys_table, style, width, notes, sets):
     return ["", *table(headers, rows, style, width=width)]
 
 
+def effect_text(value):
+    if isinstance(value, dict) and "times" in value:
+        return f"×{value['times']}"
+    if isinstance(value, dict) and "plus" in value:
+        return f"+{value['plus']}"
+    return str(value)
+
+
 def training_section(prepared, style, width, probe=None):
     document = prepared.document
     if document is None:
@@ -115,8 +123,10 @@ def training_section(prepared, style, width, probe=None):
         rows = []
         for rule in rules:
             when = trigger_text(triggers.get(reference(rule.get("when"))), style)
-            sets = ", ".join(f"{key} := {value}" for key, value in (rule.get("set") or {}).items())
-            after = style.dim(f"after {rule['after']}") if rule.get("after") else ""
-            rows.append([when, ARROW, rule.get("name"), sets, after])
+            sets = ", ".join(f"{key} := {effect_text(value)}" for key, value in (rule.get("set") or {}).items())
+            notes = [f"after {rule['after']}"] if rule.get("after") else []
+            if rule.get("sticky") is False:
+                notes.append("every turn")
+            rows.append([when, ARROW, rule.get("name"), sets, style.dim(", ".join(notes))])
         lines.extend(table(["", "", "", "", ""], rows, style, indent="    ", width=width)[2:])
     return lines

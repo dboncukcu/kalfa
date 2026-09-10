@@ -42,9 +42,9 @@ flow:
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {
           loss_mse: {}, loss_huber: {}, loss_mae: {}, loss_logcosh: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: 
         model, epochs: 20, steps: null, rules: [{name: to_huber, when: '@triggers.to_huber', set: {loss: loss_huber}, 
-            after: null}, {name: to_mae, when: '@triggers.to_mae', set: {loss: loss_mae}, after: to_huber}, {name: 
-            to_logcosh, when: '@triggers.to_logcosh', set: {loss: loss_logcosh}, after: to_mae}], stop: ['@triggers.stop_0'],
-      history_prefix: {train: train, valid: val, test: test}}}
+            after: null, sticky: true}, {name: to_mae, when: '@triggers.to_mae', set: {loss: loss_mae}, after: to_huber, 
+            sticky: true}, {name: to_logcosh, when: '@triggers.to_logcosh', set: {loss: loss_logcosh}, after: to_mae, 
+            sticky: true}], stop: ['@triggers.stop_0'], history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: best, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: model, targets: {},
       generate: null, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, pred_vs_true: {lego: 
             /plot/kalfa/pred_vs_true}, data_pipeline: {lego: /plot/kalfa/data_pipeline}}, plot_bus: {prep: prep, 

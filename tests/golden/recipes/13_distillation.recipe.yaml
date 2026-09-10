@@ -49,8 +49,8 @@ flow:
               0.001}, loss: kd, schedule: null, models: {student: student}}], optimizer_refs: {main: opt_main}}}
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {
           kd: {}}, metrics_keys: {accuracy: {}}, predicts: student, epochs: 40, steps: null, rules: [{name: cool_down, 
-            when: '@triggers.cool_down', set: {main.lr: 0.0001}, after: null}], stop: ['@triggers.stop_0'], 
-        history_prefix: {train: train, valid: val, test: test}}}
+            when: '@triggers.cool_down', set: {main.lr: 0.0001}, after: null, sticky: true}], stop: ['@triggers.stop_0'],
+      history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: best, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: student, 
         targets: {}, generate: null, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, confusion: {lego: 
             /plot/kalfa/confusion_matrix}}, plot_bus: {prep: prep, train_loader: train_loader, valid_loader: 

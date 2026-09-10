@@ -5,6 +5,13 @@ from ..std.common.runtime import expand_targets
 from ..std.pre.base import assign_fields
 
 
+def relative_effect(value):
+    if len(value) != 1 or next(iter(value)) not in ("times", "plus"):
+        return False
+    amount = next(iter(value.values()))
+    return isinstance(amount, (int, float)) and not isinstance(amount, bool)
+
+
 class RefRules:
     def set_of(self, key, value, path):
         owner, _, param = key.partition(".")
@@ -28,6 +35,13 @@ class RefRules:
                 self.error("set_value", f"set {key} needs a boolean", path)
             return
         if owner in self.optimizers:
+            if isinstance(value, dict) and not relative_effect(value):
+                self.error("set_value", f"set {key}: a relative effect is {{times: x}} or {{plus: x}} with a number",
+                           path)
+            return
+        if isinstance(value, dict):
+            self.error("set_value", f"set {key}: a relative effect ({{times}}, {{plus}}) changes an optimizer "
+                                    f"param only", path)
             return
         if owner in self.losses:
             entry = self.losses[owner]

@@ -14,6 +14,7 @@ alias:
   target_encoding: /frame/kalfa/target_encoding
   # pre
   standard_scaler: /pre/sklearn/standard_scaler
+  median_std_scaler: /pre/kalfa/median_std_scaler
   minmax_scaler: /pre/sklearn/minmax_scaler
   cast: /pre/kalfa/cast
   abs: /pre/kalfa/abs
@@ -31,6 +32,9 @@ alias:
   flatten: /layer/torch/flatten
   relu: /layer/torch/relu
   leaky_relu: /layer/torch/leaky_relu
+  batch_norm: /layer/torch/batch_norm
+  layer_norm: /layer/torch/layer_norm
+  group_norm: /layer/torch/group_norm
   dropout: /layer/torch/dropout
   reparam: /layer/kalfa/reparam
   l1_distance: /layer/kalfa/l1_distance
@@ -40,9 +44,11 @@ alias:
   normal: /init/torch/normal
   xavier: /init/torch/xavier
   kaiming: /init/torch/kaiming
+  kaiming_uniform: /init/torch/kaiming_uniform
   zeros: /init/torch/zeros
   # criterion
   mse: /criterion/kalfa/mse
+  weighted_mse: /criterion/kalfa/weighted_mse
   huber: /criterion/kalfa/huber
   mae: /criterion/kalfa/mae
   log_cosh: /criterion/kalfa/log_cosh
@@ -98,6 +104,10 @@ alias:
   cpu: /device/kalfa/cpu
   cuda: /device/kalfa/cuda
   mps: /device/kalfa/mps
+  # export
+  onnx: /export/kalfa/onnx
+  torchscript: /export/kalfa/torchscript
+  state_dict: /export/kalfa/state_dict
   # rng
   derived: /rng/kalfa/derived
   indexed: /rng/kalfa/indexed

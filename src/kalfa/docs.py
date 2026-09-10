@@ -125,7 +125,7 @@ def render(uris=None, plugins=None):
         "schedule": "optimizer schedule", "turn": "training.turn", "trigger": "training.stop, rules when",
         "checkpoint": "training.checkpoint", "rule": "the contract", "generate": "generate",
         "plot": "plots", "strategy": "sweep.strategy", "device": "device, predict --device, generate --device",
-        "rng": "rng",
+        "rng": "rng", "export": "kalfa export --format",
         "lego": "a param value, or the contract", "builder": "the contract",
         "data": "a param value ({uri: name})",
     }

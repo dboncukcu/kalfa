@@ -36,3 +36,5 @@ alias:
   kde: /plot/seaborn/kde
   # data
   class_weights: /data/kalfa/class_weights
+  target_weights: /data/kalfa/target_weights
+  feature_width: /data/kalfa/feature_width

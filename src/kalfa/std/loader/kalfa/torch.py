@@ -17,6 +17,20 @@ def report_built(loader, set, size):
     return loader
 
 
+def resolved_size(size, data):
+    if size is not None:
+        return int(size)
+    if isinstance(data, torch.utils.data.IterableDataset):
+        raise ValueError("a stream dataset needs batch.size; without batches the whole set would have to be read")
+    return max(len(data), 1)
+
+
+def resolved_drop_last(drop_last, data, size):
+    if drop_last == "auto":
+        return len(data) % size == 1
+    return bool(drop_last)
+
+
 def balanced_sampler(data):
     targets = list(data.targets)
     if len(targets) != 1:
@@ -40,15 +54,16 @@ def stream_loader(data, train, size, shuffle, drop_last, workers, collate, balan
 
 @lego("/loader/kalfa/torch",
       description="torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches "
-                  "in order for the other sets; balanced puts a class balancing sampler over the single target "
-                  "field; every worker is seeded from the torch seed on its own; a stream dataset shuffles "
-                  "through buffer rows and takes no sampler or workers")
-def torch_loader(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None,
+                  "in order for the other sets, the whole set as one batch without a size; drop_last auto drops "
+                  "the last train batch only when it would hold one row; balanced puts a class balancing sampler "
+                  "over the single target field; every worker is seeded from the torch seed on its own; a stream "
+                  "dataset shuffles through buffer rows and takes no sampler or workers")
+def torch_loader(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None,
                  balanced=False, buffer=4096):
     train = set == "train"
-    size = int(size) if train else int(eval_size or size)
+    size = resolved_size(size if train else (eval_size or size), data)
     shuffle = bool(shuffle) if train else False
-    drop_last = bool(drop_last) if train else False
+    drop_last = resolved_drop_last(drop_last, data, size) if train else False
     workers = int(workers or 0)
     if isinstance(data, torch.utils.data.IterableDataset):
         return report_built(stream_loader(data, train, size, shuffle, drop_last, workers, collate, balanced, buffer),

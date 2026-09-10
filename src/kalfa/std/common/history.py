@@ -23,21 +23,35 @@ class History:
         return cls(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
 
     @staticmethod
-    def line(metrics, counters, optimizers, rules):
+    def line(metrics, counters, optimizers, rules, seconds=None):
         found = {"turn": int((counters or {}).get("turn", 0)),
                  "global_step": int((counters or {}).get("global_step", 0))}
         found.update(metrics or {})
         for name, optimizer in (optimizers or {}).items():
             found[f"lr/{name}"] = optimizer.lr()
+        if seconds is not None:
+            found["seconds"] = round(float(seconds), 3)
         found["rules"] = list((rules or {}).get("fired") or [])
         return found
 
+    @classmethod
+    def read_steps(cls, record):
+        path = Path(record) / "steps.jsonl"
+        if not path.exists():
+            return cls()
+        return cls(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+
     @staticmethod
     def append(record, line):
+        History.append_steps(record, [line], "history.jsonl")
+
+    @staticmethod
+    def append_steps(record, lines, name="steps.jsonl"):
         target = Path(record)
         target.mkdir(parents=True, exist_ok=True)
-        with (target / "history.jsonl").open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(line, default=float) + "\n")
+        with (target / name).open("a", encoding="utf-8") as stream:
+            for line in lines:
+                stream.write(json.dumps(line, default=float) + "\n")
 
     def __len__(self):
         return len(self.lines)
@@ -50,6 +64,9 @@ class History:
 
     def __eq__(self, other):
         return isinstance(other, History) and self.lines == other.lines
+
+    def positions(self, key="turn"):
+        return [line.get(key, position + 1) for position, line in enumerate(self.lines)]
 
     def series(self, names=None):
         found = {}

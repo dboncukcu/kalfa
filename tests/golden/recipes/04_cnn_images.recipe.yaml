@@ -54,8 +54,8 @@ flow:
               head: head}}], optimizer_refs: {main: opt_main}}}
   training: {block: training, params: {turn: {uri: /turn/kalfa/alternating, params: {}}, turn_params: {}, losses_keys: {
           ce: {}}, metrics_keys: {accuracy: {}}, predicts: classifier, epochs: 20, steps: null, rules: [{name: unfreeze, 
-            when: '@triggers.unfreeze', set: {backbone.trainable: true}, after: null}], stop: ['@triggers.stop_0'], 
-        history_prefix: {train: train, valid: val, test: test}}}
+            when: '@triggers.unfreeze', set: {backbone.trainable: true}, after: null, sticky: true}], stop: ['@triggers.stop_0'],
+      history_prefix: {train: train, valid: val, test: test}}}
   after: {block: after, params: {report: best, figures: {uri: /lego/kalfa/figures, params: {}}, predicts: classifier, 
         targets: {}, generate: null, plots_keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, confusion: {lego: 
             /plot/kalfa/confusion_matrix}}, plot_bus: {prep: prep, train_loader: train_loader, valid_loader: 

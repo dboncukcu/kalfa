@@ -97,6 +97,33 @@ def test_apply_effects_on_params_and_trainable():
         apply_effects({"ghost.x": 1}, {"model": model}, {"model": optimizer}, losses)
 
 
+def test_every_update_writes_a_step_line(tmp_path):
+    from kalfa.std.common.history import History
+
+    model, optimizer, losses, metrics, loader, counters = setup(rows=16)
+    out = alternating({"model": model}, {"model": optimizer}, {}, counters, {}, {}, loader, {}, {"grad_clip": 1.0},
+                      losses, metrics, {}, {}, "model", None, device=Device.cpu(), record=str(tmp_path))
+    steps = History.read_steps(tmp_path)
+    assert [line["step"] for line in steps] == [1, 2] and steps[0]["turn"] == 1 and "loss_mse" in out["metrics"]
+    assert set(steps[0]) == {"step", "turn", "loss/model", "lr/model", "grad_norm/model"}
+    assert steps[0]["lr/model"] == 0.05 and steps[0]["grad_norm/model"] > 0.0
+    assert steps.series() == {"loss/model": [steps[0]["loss/model"], steps[1]["loss/model"]],
+                              "grad_norm/model": [steps[0]["grad_norm/model"], steps[1]["grad_norm/model"]]}
+    assert steps.positions("step") == [1, 2] and History.read_steps(tmp_path / "nowhere").lines == []
+
+
+def test_relative_effects_change_an_optimizer_param_once():
+    model = tiny_model()
+    optimizer = Sgd({"model": model}, {"lr": 0.4, "momentum": 0.9}, None, "l")
+    apply_effects({"model.lr": {"times": 0.5}, "model.momentum": {"plus": -0.4}}, {"model": model},
+                  {"model": optimizer}, {})
+    assert optimizer.params["lr"] == pytest.approx(0.2) and optimizer.params["momentum"] == pytest.approx(0.5)
+    with pytest.raises(KeyError):
+        apply_effects({"model.ghost": {"times": 2.0}}, {"model": model}, {"model": optimizer}, {})
+    with pytest.raises(KeyError):
+        apply_effects({"model.lr": {"twice": 2.0}}, {"model": model}, {"model": optimizer}, {})
+
+
 def test_two_optimizers_update_only_their_own_models():
     a = tiny_model(seed=1, index=0)
     b = tiny_model(seed=1, index=1)

@@ -102,6 +102,22 @@ def test_predict_takes_the_log_option(workdir, capsys):
     assert "predicting with net (best weights)" in err and "300 rows ->" in err
 
 
+def test_progress_steps_log_every_and_export(workdir, capsys):
+    config = minimal()
+    config["record"] = "runs/stepped"
+    path = write_config(workdir / "cfg.yaml", config)
+    assert main(["run", path, "--log", "--progress", "steps", "--log-every", "5"]) == 0
+    err = capsys.readouterr().err
+    assert "training.step   step 5 " in err and "step 1 " not in err and "turn 1" in err
+    assert (workdir / "runs" / "stepped" / "steps.jsonl").exists()
+    assert (workdir / "runs" / "stepped" / "git.json").exists()
+    assert main(["export", "runs/stepped", "--format", "torchscript", "--which", "final"]) == 0
+    out = capsys.readouterr().out
+    assert "exported net as /export/kalfa/torchscript" in out
+    assert (workdir / "runs" / "stepped" / "export" / "net.pt").exists()
+    assert main(["export", "runs/stepped", "--format", "adam"]) == 1
+
+
 def test_plots_command_and_predict_plots(workdir, capsys):
     config = minimal()
     config["record"] = "runs/drawn"

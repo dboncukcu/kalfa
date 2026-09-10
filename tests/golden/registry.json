@@ -46,6 +46,7 @@
     "strategy",
     "device",
     "rng",
+    "export",
     "lego"
   ],
   "legos": {
@@ -202,6 +203,20 @@
       "kind": "criterion",
       "signature": "(predictions, targets)"
     },
+    "/criterion/kalfa/weighted_mse": {
+      "alias": [
+        "weighted_mse"
+      ],
+      "description": "Mean squared error with a weight per target column; weights is a list in column order or {uri: target_weights, params: {weights: {column: 3.0, 'glob*': 1.5, default: 1.0}}}, named against the target columns the dataset carries",
+      "facts": {
+        "partial": true,
+        "refs": {
+          "weights": "data"
+        }
+      },
+      "kind": "criterion",
+      "signature": "(predictions, targets, weights)"
+    },
     "/data/kalfa/class_weights": {
       "alias": [
         "class_weights"
@@ -212,6 +227,24 @@
       },
       "kind": "data",
       "signature": "(loader, target=None)"
+    },
+    "/data/kalfa/feature_width": {
+      "alias": [
+        "feature_width"
+      ],
+      "description": "The width of the feature tensor x, from the fitted plan the train loader carries; for a layer whose shape follows it (layer_norm)",
+      "facts": {},
+      "kind": "data",
+      "signature": "(loader)"
+    },
+    "/data/kalfa/target_weights": {
+      "alias": [
+        "target_weights"
+      ],
+      "description": "A weight per target column, from names and globs resolved against the columns of the target field the dataset carries (every target field in order without target), default for the rest; built once the train loader exists",
+      "facts": {},
+      "kind": "data",
+      "signature": "(loader, weights, target=None)"
     },
     "/data/kalfa/vocab_size": {
       "alias": [
@@ -257,6 +290,35 @@
       "facts": {},
       "kind": "device",
       "signature": "()"
+    },
+    "/export/kalfa/onnx": {
+      "alias": [
+        "onnx"
+      ],
+      "description": "The model exported to <stem>.onnx from one traced batch, the wires as the input and output names, at the opset given",
+      "facts": {
+        "requires": "onnx"
+      },
+      "kind": "export",
+      "signature": "(model, inputs, directory, stem, opset=17)"
+    },
+    "/export/kalfa/state_dict": {
+      "alias": [
+        "state_dict"
+      ],
+      "description": "The model's state_dict as <stem>.pt, the plain torch weights",
+      "facts": {},
+      "kind": "export",
+      "signature": "(model, inputs, directory, stem)"
+    },
+    "/export/kalfa/torchscript": {
+      "alias": [
+        "torchscript"
+      ],
+      "description": "The model traced with one batch and saved as <stem>.pt with torch.jit",
+      "facts": {},
+      "kind": "export",
+      "signature": "(model, inputs, directory, stem)"
     },
     "/feed/kalfa/next_token": {
       "alias": [
@@ -370,6 +432,15 @@
       "kind": "init",
       "signature": "(nonlinearity='relu')"
     },
+    "/init/torch/kaiming_uniform": {
+      "alias": [
+        "kaiming_uniform"
+      ],
+      "description": "Kaiming uniform initialization",
+      "facts": {},
+      "kind": "init",
+      "signature": "(nonlinearity='relu')"
+    },
     "/init/torch/normal": {
       "alias": [
         "normal"
@@ -460,6 +531,15 @@
       "kind": "layer",
       "signature": "(shape)"
     },
+    "/layer/torch/batch_norm": {
+      "alias": [
+        "batch_norm"
+      ],
+      "description": "torch.nn.BatchNorm over the feature axis, lazy in the number of features: dims 1 for (batch, features) and sequences, 2 for images, 3 for volumes",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dims=1, eps=1e-05, momentum=0.1, affine=True)"
+    },
     "/layer/torch/concat": {
       "alias": [
         "concat"
@@ -505,6 +585,15 @@
       "kind": "layer",
       "signature": "()"
     },
+    "/layer/torch/group_norm": {
+      "alias": [
+        "group_norm"
+      ],
+      "description": "torch.nn.GroupNorm: num_groups groups over num_channels channels",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(num_groups, num_channels, eps=1e-05, affine=True)"
+    },
     "/layer/torch/gru": {
       "alias": [
         "gru"
@@ -522,6 +611,15 @@
       "facts": {},
       "kind": "layer",
       "signature": "()"
+    },
+    "/layer/torch/layer_norm": {
+      "alias": [
+        "layer_norm"
+      ],
+      "description": "torch.nn.LayerNorm over the last axis; normalized_shape is its width, a number or {uri: feature_width} for the width of the feature tensor",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(normalized_shape, eps=1e-05, elementwise_affine=True)"
     },
     "/layer/torch/leaky_relu": {
       "alias": [
@@ -687,7 +785,7 @@
     },
     "/lego/kalfa/history": {
       "alias": [],
-      "description": "Append the turn's line to history.jsonl and hand it to the monitor",
+      "description": "Append the turn's line to history.jsonl, its duration as seconds, and hand it to the monitor",
       "facts": {
         "bus": {
           "counters_next": "counters_next",
@@ -867,10 +965,10 @@
     },
     "/loader/kalfa/torch": {
       "alias": [],
-      "description": "torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers",
+      "description": "torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets, the whole set as one batch without a size; drop_last auto drops the last train batch only when it would hold one row; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers",
       "facts": {},
       "kind": "loader",
-      "signature": "(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)"
+      "signature": "(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)"
     },
     "/metric/kalfa/fid": {
       "alias": [
@@ -1283,12 +1381,12 @@
       "alias": [
         "loss_curve"
       ],
-      "description": "Every history series over the turns, or the named ones",
+      "description": "Every history series over the turns, or the named ones; x: step draws the per update series of steps.jsonl (the loss, the gradient norm of every optimizer) over the steps instead",
       "facts": {
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, series=None, log=False, name=None, figures=None)"
+      "signature": "(predictions, history, models, record, series=None, log=False, x='turn', name=None, figures=None)"
     },
     "/plot/kalfa/permutation_importance": {
       "alias": [
@@ -1542,6 +1640,17 @@
       "kind": "pre",
       "signature": "(base=10.0, norm=1.0)"
     },
+    "/pre/kalfa/median_std_scaler": {
+      "alias": [
+        "median_std_scaler"
+      ],
+      "description": "Center a column on its median and scale it by its standard deviation: the center an outlier does not move, the scale of a standard scaler",
+      "facts": {
+        "grouped": true
+      },
+      "kind": "pre",
+      "signature": "()"
+    },
     "/pre/kalfa/normalize": {
       "alias": [
         "normalize"
@@ -1790,7 +1899,7 @@
     },
     "/rule/kalfa/rule": {
       "alias": [],
-      "description": "Evaluate one rule: skipped until its after rule fired in an earlier turn, sticky once fired, later rules win the same key",
+      "description": "Evaluate one rule: skipped until its after rule fired in an earlier turn; a sticky rule keeps its effects once fired and is not asked again; with sticky false it is asked every turn, its relative effects (times, plus) apply once per firing and its trigger starts over; later rules win the same key",
       "facts": {
         "bus": {
           "metrics": "metrics",
@@ -1799,7 +1908,7 @@
         "returns": "rules"
       },
       "kind": "rule",
-      "signature": "(rules, name, when, set, after=None, metrics=None, turn_index=None)"
+      "signature": "(rules, name, when, set, after=None, metrics=None, turn_index=None, sticky=True)"
     },
     "/rule/kalfa/stop": {
       "alias": [],
@@ -2164,10 +2273,11 @@
         "alternating",
         "supervised"
       ],
-      "description": "One turn: every step each optimizer in order minimizes its loss for its steps; a turn is an epoch, or K steps with a stream that lives across turns; losses and metrics are the running means of the pass",
+      "description": "One turn: every step each optimizer in order minimizes its loss for its steps; a turn is an epoch, or K steps with a stream that lives across turns; losses and metrics are the running means of the pass; every update writes a line to steps.jsonl (the loss, the learning rate and, under grad_clip, the gradient norm of each optimizer) and reaches the monitor",
       "facts": {
         "bus": {
           "device": "device",
+          "monitor": "monitor",
           "prep": "prep",
           "record": "record"
         },
@@ -2192,7 +2302,7 @@
         ]
       },
       "kind": "turn",
-      "signature": "(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None)"
+      "signature": "(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None, monitor=None)"
     }
   },
   "packs": {
@@ -2210,6 +2320,7 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
       "cast": "/pre/kalfa/cast",
@@ -2232,15 +2343,18 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
+      "kaiming_uniform": "/init/torch/kaiming_uniform",
       "l1_distance": "/layer/kalfa/l1_distance",
       "label_encoder": "/pre/kalfa/label_encoder",
       "last": "/checkpoint/kalfa/last",
       "last_step": "/layer/torch/last_step",
+      "layer_norm": "/layer/torch/layer_norm",
       "leaky_relu": "/layer/torch/leaky_relu",
       "linear": "/layer/kalfa/linear",
       "linear_relu": "/layer/kalfa/linear_relu",
@@ -2249,6 +2363,7 @@
       "log_cosh": "/criterion/kalfa/log_cosh",
       "loss_curve": "/plot/kalfa/loss_curve",
       "mae": "/criterion/kalfa/mae",
+      "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
@@ -2256,6 +2371,7 @@
       "mse": "/criterion/kalfa/mse",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
+      "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "plateau": "/trigger/kalfa/plateau",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
@@ -2270,13 +2386,16 @@
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",
+      "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "target_encoding": "/frame/kalfa/target_encoding",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
+      "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "xavier": "/init/torch/xavier",
       "zeros": "/init/torch/zeros"
@@ -2295,6 +2414,7 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
       "cast": "/pre/kalfa/cast",
@@ -2318,15 +2438,18 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
+      "kaiming_uniform": "/init/torch/kaiming_uniform",
       "l1_distance": "/layer/kalfa/l1_distance",
       "label_encoder": "/pre/kalfa/label_encoder",
       "last": "/checkpoint/kalfa/last",
       "last_step": "/layer/torch/last_step",
+      "layer_norm": "/layer/torch/layer_norm",
       "leaky_relu": "/layer/torch/leaky_relu",
       "linear": "/layer/kalfa/linear",
       "linear_relu": "/layer/kalfa/linear_relu",
@@ -2335,6 +2458,7 @@
       "log_cosh": "/criterion/kalfa/log_cosh",
       "loss_curve": "/plot/kalfa/loss_curve",
       "mae": "/criterion/kalfa/mae",
+      "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
@@ -2342,6 +2466,7 @@
       "mse": "/criterion/kalfa/mse",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
+      "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "parquet": "/source/kalfa/parquet_stream",
       "plateau": "/trigger/kalfa/plateau",
@@ -2357,13 +2482,16 @@
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",
+      "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "target_encoding": "/frame/kalfa/target_encoding",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
+      "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "xavier": "/init/torch/xavier",
       "zeros": "/init/torch/zeros"
@@ -2384,6 +2512,7 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
       "cast": "/pre/kalfa/cast",
@@ -2404,6 +2533,7 @@
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
       "feature_distributions": "/plot/kalfa/feature_distributions",
+      "feature_width": "/data/kalfa/feature_width",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
@@ -2411,11 +2541,13 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
+      "kaiming_uniform": "/init/torch/kaiming_uniform",
       "kbins_discretizer": "/pre/sklearn/kbins_discretizer",
       "kde": "/plot/seaborn/kde",
       "kfold": "/split/kalfa/kfold",
@@ -2424,6 +2556,7 @@
       "label_encoder": "/pre/kalfa/label_encoder",
       "last": "/checkpoint/kalfa/last",
       "last_step": "/layer/torch/last_step",
+      "layer_norm": "/layer/torch/layer_norm",
       "leaky_relu": "/layer/torch/leaky_relu",
       "linear": "/layer/kalfa/linear",
       "linear_relu": "/layer/kalfa/linear_relu",
@@ -2433,6 +2566,7 @@
       "loss_curve": "/plot/kalfa/loss_curve",
       "mae": "/criterion/kalfa/mae",
       "max_abs_scaler": "/pre/sklearn/max_abs_scaler",
+      "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
@@ -2440,6 +2574,7 @@
       "mse": "/criterion/kalfa/mse",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
+      "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "pairplot": "/plot/seaborn/pairplot",
       "parquet": "/source/kalfa/parquet",
@@ -2465,6 +2600,7 @@
       "sobol": "/strategy/kalfa/sobol",
       "spline_transformer": "/pre/sklearn/spline_transformer",
       "standard_scaler": "/pre/sklearn/standard_scaler",
+      "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
@@ -2472,10 +2608,13 @@
       "target_correlation": "/plot/kalfa/target_correlation",
       "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
+      "target_weights": "/data/kalfa/target_weights",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
       "violin": "/plot/seaborn/violin",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
+      "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "window": "/feed/kalfa/window",
       "xavier": "/init/torch/xavier",
@@ -2495,6 +2634,7 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
       "cast": "/pre/kalfa/cast",
@@ -2524,17 +2664,20 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
       "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
+      "kaiming_uniform": "/init/torch/kaiming_uniform",
       "kde": "/plot/seaborn/kde",
       "kfold": "/split/kalfa/kfold",
       "l1_distance": "/layer/kalfa/l1_distance",
       "label_encoder": "/pre/kalfa/label_encoder",
       "last": "/checkpoint/kalfa/last",
       "last_step": "/layer/torch/last_step",
+      "layer_norm": "/layer/torch/layer_norm",
       "leaky_relu": "/layer/torch/leaky_relu",
       "linear": "/layer/kalfa/linear",
       "linear_relu": "/layer/kalfa/linear_relu",
@@ -2544,6 +2687,7 @@
       "log_cosh": "/criterion/kalfa/log_cosh",
       "loss_curve": "/plot/kalfa/loss_curve",
       "mae": "/criterion/kalfa/mae",
+      "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
@@ -2552,6 +2696,7 @@
       "next_token": "/feed/kalfa/next_token",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
+      "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "pairplot": "/plot/seaborn/pairplot",
       "parquet": "/source/kalfa/parquet",
@@ -2573,6 +2718,7 @@
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",
+      "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
@@ -2581,10 +2727,12 @@
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "text_lines": "/source/kalfa/text_lines",
       "time_budget": "/trigger/kalfa/time_budget",
+      "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
       "violin": "/plot/seaborn/violin",
       "vocab_size": "/data/kalfa/vocab_size",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
+      "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "window": "/feed/kalfa/window",
       "xavier": "/init/torch/xavier",
@@ -2604,6 +2752,7 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
       "cast": "/pre/kalfa/cast",
@@ -2638,6 +2787,7 @@
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
       "grid": "/strategy/kalfa/grid",
+      "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
       "huber": "/criterion/kalfa/huber",
@@ -2646,12 +2796,14 @@
       "image_pairs": "/plot/kalfa/image_pairs",
       "indexed": "/rng/kalfa/indexed",
       "kaiming": "/init/torch/kaiming",
+      "kaiming_uniform": "/init/torch/kaiming_uniform",
       "kde": "/plot/seaborn/kde",
       "kfold": "/split/kalfa/kfold",
       "l1_distance": "/layer/kalfa/l1_distance",
       "label_encoder": "/pre/kalfa/label_encoder",
       "last": "/checkpoint/kalfa/last",
       "last_step": "/layer/torch/last_step",
+      "layer_norm": "/layer/torch/layer_norm",
       "leaky_relu": "/layer/torch/leaky_relu",
       "linear": "/layer/kalfa/linear",
       "linear_betas": "/schedule/kalfa/linear_betas",
@@ -2662,6 +2814,7 @@
       "loss_curve": "/plot/kalfa/loss_curve",
       "mae": "/criterion/kalfa/mae",
       "maxpool": "/layer/torch/maxpool",
+      "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
@@ -2671,6 +2824,7 @@
       "normalize": "/pre/kalfa/normalize",
       "ntxent": "/objective/kalfa/ntxent",
       "one_hot": "/pre/kalfa/one_hot",
+      "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "pairplot": "/plot/seaborn/pairplot",
       "parquet": "/source/kalfa/parquet",
@@ -2697,6 +2851,7 @@
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "standard_scaler": "/pre/sklearn/standard_scaler",
+      "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
@@ -2706,12 +2861,14 @@
       "time_budget": "/trigger/kalfa/time_budget",
       "to_tensor": "/pre/kalfa/to_tensor",
       "to_tensor_signed": "/pre/kalfa/to_tensor_signed",
+      "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
       "two_views": "/pre/kalfa/two_views",
       "unflatten": "/layer/kalfa/unflatten",
       "vae": "/objective/kalfa/vae",
       "violin": "/plot/seaborn/violin",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
+      "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "wgan_g": "/objective/kalfa/wgan_g",
       "wgan_gp_d": "/objective/kalfa/wgan_gp_d",

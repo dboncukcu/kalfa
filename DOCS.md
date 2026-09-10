@@ -18,11 +18,11 @@ The legos a config writes, by kind.
 | `transform` | data.transform | 5 |
 | `split` | data.split | 4 |
 | `frame` | data.frame | 2 |
-| `pre` | data.preprocessors | 27 |
+| `pre` | data.preprocessors | 28 |
 | `feed` | data.feed | 3 |
-| `layer` | model nodes | 18 |
-| `init` | model init | 4 |
-| `criterion` | losses, metrics | 6 |
+| `layer` | model nodes | 21 |
+| `init` | model init | 5 |
+| `criterion` | losses, metrics | 7 |
 | `objective` | losses | 7 |
 | `metric` | metrics | 9 |
 | `adapter` | the driver | 3 |
@@ -36,8 +36,9 @@ The legos a config writes, by kind.
 | `strategy` | sweep.strategy | 4 |
 | `device` | device, predict --device, generate --device | 4 |
 | `rng` | rng | 3 |
+| `export` | kalfa export --format | 3 |
 | `lego` | a param value, or the contract | 1 |
-| `data` | a param value ({uri: name}) | 2 |
+| `data` | a param value ({uri: name}) | 4 |
 
 ### source
 
@@ -88,6 +89,7 @@ The legos a config writes, by kind.
 | `/pre/kalfa/fill` | `fill` | `(value=None, method=None)` |  | Fill the missing values of a column without a fit: a constant (a number, or a name such as missing that becomes its own category), or method ffill or bfill along the rows |
 | `/pre/kalfa/label_encoder` | `label_encoder` | `()` | state: True | Integer codes of a label column, sorted by label; inverted in reports and predictions, class scores decode to labels |
 | `/pre/kalfa/log` | `log` | `(base=10.0, norm=1.0)` |  | log1p of a column divided by norm, in the given base |
+| `/pre/kalfa/median_std_scaler` | `median_std_scaler` | `()` | grouped: True | Center a column on its median and scale it by its standard deviation: the center an outlier does not move, the scale of a standard scaler |
 | `/pre/kalfa/normalize` | `normalize` | `(mean, std)` |  | Normalize an image tensor per channel; mean and std are numbers, lists or the presets imagenet and cifar10 |
 | `/pre/kalfa/one_hot` | `one_hot` | `()` | state: True | One hot columns <field>_<category> of a categorical column; unknown categories give zeros |
 | `/pre/kalfa/random_crop_flip` | `random_crop_flip` | `(size)` |  | Random crop of size after padding and a random horizontal flip |
@@ -127,13 +129,16 @@ The legos a config writes, by kind.
 | `/layer/kalfa/polynomial` | `polynomial` | `(degree=2, interaction_only=False, bias=False, keep=True)` |  | Polynomial expansion of the feature vector: the features and every product of degree of them (interaction_only drops the squares, bias adds a constant column, keep: false returns the products alone); the place for feature interactions, computed per batch |
 | `/layer/kalfa/reparam` | `reparam` | `()` |  | Sample z from mu and logvar in train mode, return mu in eval mode |
 | `/layer/kalfa/unflatten` | `unflatten` | `(shape)` |  | Reshape the features of every sample to shape |
+| `/layer/torch/batch_norm` | `batch_norm` | `(dims=1, eps=1e-05, momentum=0.1, affine=True)` |  | torch.nn.BatchNorm over the feature axis, lazy in the number of features: dims 1 for (batch, features) and sequences, 2 for images, 3 for volumes |
 | `/layer/torch/concat` | `concat` | `(dim=1)` |  | Concatenate wires along a dimension |
 | `/layer/torch/conv2d` | `conv2d` | `(out_channels, kernel, stride=1, padding=0, in_channels=None)` |  | 2d convolution; without in_channels the input channels are taken from the first batch |
 | `/layer/torch/dropout` | `dropout` | `(p=0.5)` |  | Dropout |
 | `/layer/torch/embedding` | `embedding` | `(num, dim)` |  | torch.nn.Embedding(num, dim); num may be a kind data component such as vocab_size |
 | `/layer/torch/flatten` | `flatten` | `()` |  | Flatten every dimension but the batch |
+| `/layer/torch/group_norm` | `group_norm` | `(num_groups, num_channels, eps=1e-05, affine=True)` |  | torch.nn.GroupNorm: num_groups groups over num_channels channels |
 | `/layer/torch/gru` | `gru` | `(hidden, layers=1)` |  | GRU over (batch, steps, features) returning every step; the input width comes from the first batch |
 | `/layer/torch/last_step` | `last_step` | `()` |  | The last step of a sequence |
+| `/layer/torch/layer_norm` | `layer_norm` | `(normalized_shape, eps=1e-05, elementwise_affine=True)` |  | torch.nn.LayerNorm over the last axis; normalized_shape is its width, a number or {uri: feature_width} for the width of the feature tensor |
 | `/layer/torch/leaky_relu` | `leaky_relu` | `(negative_slope=0.01)` |  | LeakyReLU activation |
 | `/layer/torch/linear` |  | `(in_features, out_features)` |  | torch.nn.Linear |
 | `/layer/torch/maxpool` | `maxpool` | `(kernel, stride=None)` |  | 2d max pooling |
@@ -144,6 +149,7 @@ The legos a config writes, by kind.
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/init/torch/kaiming` | `kaiming` | `(nonlinearity='relu')` |  | Kaiming normal initialization |
+| `/init/torch/kaiming_uniform` | `kaiming_uniform` | `(nonlinearity='relu')` |  | Kaiming uniform initialization |
 | `/init/torch/normal` | `normal` | `(std, mean=0.0)` |  | Normal initialization with std and mean |
 | `/init/torch/xavier` | `xavier` | `(gain=1.0)` |  | Xavier uniform initialization |
 | `/init/torch/zeros` | `zeros` | `()` |  | Zero initialization |
@@ -158,6 +164,7 @@ The legos a config writes, by kind.
 | `/criterion/kalfa/log_cosh` | `log_cosh` | `(predictions, targets)` | partial: True | log(cosh(error)) loss |
 | `/criterion/kalfa/mae` | `mae` | `(predictions, targets)` | partial: True | Mean absolute error |
 | `/criterion/kalfa/mse` | `mse` | `(predictions, targets)` | partial: True | Mean squared error |
+| `/criterion/kalfa/weighted_mse` | `weighted_mse` | `(predictions, targets, weights)` | partial: True; refs: weights=data | Mean squared error with a weight per target column; weights is a list in column order or {uri: target_weights, params: {weights: {column: 3.0, 'glob*': 1.5, default: 1.0}}}, named against the target columns the dataset carries |
 
 ### objective
 
@@ -214,7 +221,7 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/turn/kalfa/alternating` | `alternating`, `supervised` | `(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None)` | returns: models, optimizers, emas, counters, stream, metrics; bus: device=device, prep=prep, record=record; mutates: models, optimizers, emas, counters; extras: amp, grad_clip, accumulate | One turn: every step each optimizer in order minimizes its loss for its steps; a turn is an epoch, or K steps with a stream that lives across turns; losses and metrics are the running means of the pass |
+| `/turn/kalfa/alternating` | `alternating`, `supervised` | `(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None, monitor=None)` | returns: models, optimizers, emas, counters, stream, metrics; bus: device=device, prep=prep, record=record, monitor=monitor; mutates: models, optimizers, emas, counters; extras: amp, grad_clip, accumulate | One turn: every step each optimizer in order minimizes its loss for its steps; a turn is an epoch, or K steps with a stream that lives across turns; losses and metrics are the running means of the pass; every update writes a line to steps.jsonl (the loss, the learning rate and, under grad_clip, the gradient norm of each optimizer) and reaches the monitor |
 
 ### trigger
 
@@ -257,7 +264,7 @@ The legos a config writes, by kind.
 | `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None, figures=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |
 | `/plot/kalfa/image_grid` | `image_grid` | `(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None, figures=None)` | partial: True | n outputs of the predicts model on the report set as an image grid |
 | `/plot/kalfa/image_pairs` | `image_pairs` | `(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None, figures=None)` | partial: True | n inputs of the report set next to the predicts model's outputs (reconstructions) |
-| `/plot/kalfa/loss_curve` | `loss_curve` | `(predictions, history, models, record, series=None, log=False, name=None, figures=None)` | partial: True | Every history series over the turns, or the named ones |
+| `/plot/kalfa/loss_curve` | `loss_curve` | `(predictions, history, models, record, series=None, log=False, x='turn', name=None, figures=None)` | partial: True | Every history series over the turns, or the named ones; x: step draws the per update series of steps.jsonl (the loss, the gradient norm of every optimizer) over the steps instead |
 | `/plot/kalfa/permutation_importance` | `permutation_importance` | `(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None, figures=None)` | partial: True | The drop in R2 when one feature column is shuffled, the largest first; the model runs again for every feature and every repeat, so sample bounds the cost |
 | `/plot/kalfa/pred_vs_true` | `pred_vs_true` | `(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70, figures=None)` | partial: True | Predicted against true values of the test set, one panel per predicted field with its R2, as a hexbin density over many points and a scatter over few; the panel is titled with the field name, plus the output wire when two outputs predict the same field |
 | `/plot/kalfa/residuals` | `residuals` | `(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None, figures=None)` | partial: True; refs: target=field | Three panels of one prediction's residual: the distribution with its bias and sigma, the residual against the truth as a density, and the mean and median error over equal count bins of the target range |
@@ -298,6 +305,14 @@ The legos a config writes, by kind.
 | `/rng/kalfa/global` | `global` | `(seed, name, index)` | partial: True | One global stream: no model touches the RNG, every build draws from the stream the seed started in build order, the way a plain script does |
 | `/rng/kalfa/indexed` | `indexed` | `(seed, name, index)` | partial: True | A substream per model by position: the build runs under sha256(seed:index), the rule of the runs made before the rng key, which reproduce with it; None without a seed |
 
+### export
+
+| URI | Alias | Signature | Facts | Description |
+|---|---|---|---|---|
+| `/export/kalfa/onnx` | `onnx` | `(model, inputs, directory, stem, opset=17)` | requires: onnx | The model exported to <stem>.onnx from one traced batch, the wires as the input and output names, at the opset given |
+| `/export/kalfa/state_dict` | `state_dict` | `(model, inputs, directory, stem)` |  | The model's state_dict as <stem>.pt, the plain torch weights |
+| `/export/kalfa/torchscript` | `torchscript` | `(model, inputs, directory, stem)` |  | The model traced with one batch and saved as <stem>.pt with torch.jit |
+
 ### lego
 
 | URI | Alias | Signature | Facts | Description |
@@ -309,6 +324,8 @@ The legos a config writes, by kind.
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/data/kalfa/class_weights` | `class_weights` | `(loader, target=None)` | counts: True | Inverse frequency class weights of the train set's target field, mean one; built once the train loader exists |
+| `/data/kalfa/feature_width` | `feature_width` | `(loader)` |  | The width of the feature tensor x, from the fitted plan the train loader carries; for a layer whose shape follows it (layer_norm) |
+| `/data/kalfa/target_weights` | `target_weights` | `(loader, weights, target=None)` |  | A weight per target column, from names and globs resolved against the columns of the target field the dataset carries (every target field in order without target), default for the rest; built once the train loader exists |
 | `/data/kalfa/vocab_size` | `vocab_size` | `(prep)` |  | The vocabulary size of the fitted tokenizer among the preprocessors; built once prep exists |
 
 ## Skeleton steps
@@ -337,7 +354,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/fit_frames` |  | `(df, frames, record=None)` | returns: frames; bus: record=record; state: True | Fit the frame transforms on the train set, each on what the ones before it produced, and keep them in the record under fitted/frames |
 | `/lego/kalfa/generate` |  | `(models, composites, prep, generate, record=None)` | returns: None; bus: record=record | Run the generate lego with the report models; nothing without a generate section |
 | `/lego/kalfa/given_sizes` |  | `(rows, valid=None, test=None, header=None)` |  | The set sizes of a given split: the source rows for train, the header of every given file for the other sets (header reads a path like the source) |
-| `/lego/kalfa/history` |  | `(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)` | returns: None; bus: monitor=monitor, metrics=metrics, turn_index=turn_index, counters_next=counters_next, optimizers_next=optimizers_next, rules_next=rules_next, record=record | Append the turn's line to history.jsonl and hand it to the monitor |
+| `/lego/kalfa/history` |  | `(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)` | returns: None; bus: monitor=monitor, metrics=metrics, turn_index=turn_index, counters_next=counters_next, optimizers_next=optimizers_next, rules_next=rules_next, record=record | Append the turn's line to history.jsonl, its duration as seconds, and hand it to the monitor |
 | `/lego/kalfa/identity` |  | `(value)` | aliases: value | The value itself |
 | `/lego/kalfa/image_folder_header` |  | `(path)` |  | The fields, the dtypes, the image count and the classes of an image folder |
 | `/lego/kalfa/init_state` |  | `(state, epochs, steps, policy=None, resume=None, device=None)` | returns: epochs_left; bus: resume=resume, device=device; mutates: state | Move the state to the device, load a checkpoint when resuming and restore the checkpoint policy from it, count the turns left |
@@ -354,10 +371,10 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/select` |  | `(models, emas, which, record=None)` | returns: selected; bus: record=record | The report models: copies loaded from best.pt, or the final state for last |
 | `/lego/kalfa/text_lines_header` |  | `(path)` |  | The text field and the line count of a text file |
 | `/lego/kalfa/transform_set` |  | `(df, set, transforms)` |  | Apply the transforms that name this set, in order; the frame passes untouched without any |
-| `/loader/kalfa/torch` |  | `(data, set, size, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)` |  | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers |
+| `/loader/kalfa/torch` |  | `(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)` |  | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets, the whole set as one batch without a size; drop_last auto drops the last train batch only when it would hold one row; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers |
 | `/rule/kalfa/effects` |  | `(rules)` | returns: effects | The effects the fired rules left for this turn |
 | `/rule/kalfa/open` |  | `(rules)` |  | Open the rule chain of a turn |
-| `/rule/kalfa/rule` |  | `(rules, name, when, set, after=None, metrics=None, turn_index=None)` | returns: rules; bus: metrics=metrics, turn_index=turn_index | Evaluate one rule: skipped until its after rule fired in an earlier turn, sticky once fired, later rules win the same key |
+| `/rule/kalfa/rule` |  | `(rules, name, when, set, after=None, metrics=None, turn_index=None, sticky=True)` | returns: rules; bus: metrics=metrics, turn_index=turn_index | Evaluate one rule: skipped until its after rule fired in an earlier turn; a sticky rule keeps its effects once fired and is not asked again; with sticky false it is asked every turn, its relative effects (times, plus) apply once per firing and its trigger starts over; later rules win the same key |
 | `/rule/kalfa/stop` |  | `(rules, triggers, metrics=None)` | returns: rules, stop; bus: metrics=metrics | Close the chain: the stop triggers are or'ed, their states kept under rules.stop |
 
 ## Alias packs
@@ -376,6 +393,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_statistic` | `/frame/kalfa/group_statistic` | frame |
 | `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
+| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
 | `abs` | `/pre/kalfa/abs` | pre |
@@ -391,6 +409,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `flatten` | `/layer/torch/flatten` | layer |
 | `relu` | `/layer/torch/relu` | layer |
 | `leaky_relu` | `/layer/torch/leaky_relu` | layer |
+| `batch_norm` | `/layer/torch/batch_norm` | layer |
+| `layer_norm` | `/layer/torch/layer_norm` | layer |
+| `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
@@ -399,8 +420,10 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
+| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
 | `zeros` | `/init/torch/zeros` | init |
 | `mse` | `/criterion/kalfa/mse` | criterion |
+| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
 | `huber` | `/criterion/kalfa/huber` | criterion |
 | `mae` | `/criterion/kalfa/mae` | criterion |
 | `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
@@ -446,6 +469,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `onnx` | `/export/kalfa/onnx` | export |
+| `torchscript` | `/export/kalfa/torchscript` | export |
+| `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
 | `global` | `/rng/kalfa/global` | rng |
@@ -464,6 +490,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_statistic` | `/frame/kalfa/group_statistic` | frame |
 | `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
+| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
 | `abs` | `/pre/kalfa/abs` | pre |
@@ -479,6 +506,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `flatten` | `/layer/torch/flatten` | layer |
 | `relu` | `/layer/torch/relu` | layer |
 | `leaky_relu` | `/layer/torch/leaky_relu` | layer |
+| `batch_norm` | `/layer/torch/batch_norm` | layer |
+| `layer_norm` | `/layer/torch/layer_norm` | layer |
+| `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
@@ -487,8 +517,10 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
+| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
 | `zeros` | `/init/torch/zeros` | init |
 | `mse` | `/criterion/kalfa/mse` | criterion |
+| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
 | `huber` | `/criterion/kalfa/huber` | criterion |
 | `mae` | `/criterion/kalfa/mae` | criterion |
 | `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
@@ -534,6 +566,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `onnx` | `/export/kalfa/onnx` | export |
+| `torchscript` | `/export/kalfa/torchscript` | export |
+| `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
 | `global` | `/rng/kalfa/global` | rng |
@@ -554,6 +589,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_statistic` | `/frame/kalfa/group_statistic` | frame |
 | `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
+| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
 | `abs` | `/pre/kalfa/abs` | pre |
@@ -569,6 +605,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `flatten` | `/layer/torch/flatten` | layer |
 | `relu` | `/layer/torch/relu` | layer |
 | `leaky_relu` | `/layer/torch/leaky_relu` | layer |
+| `batch_norm` | `/layer/torch/batch_norm` | layer |
+| `layer_norm` | `/layer/torch/layer_norm` | layer |
+| `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
@@ -577,8 +616,10 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
+| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
 | `zeros` | `/init/torch/zeros` | init |
 | `mse` | `/criterion/kalfa/mse` | criterion |
+| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
 | `huber` | `/criterion/kalfa/huber` | criterion |
 | `mae` | `/criterion/kalfa/mae` | criterion |
 | `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
@@ -624,6 +665,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `onnx` | `/export/kalfa/onnx` | export |
+| `torchscript` | `/export/kalfa/torchscript` | export |
+| `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
 | `global` | `/rng/kalfa/global` | rng |
@@ -655,6 +699,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `violin` | `/plot/seaborn/violin` | plot |
 | `kde` | `/plot/seaborn/kde` | plot |
 | `class_weights` | `/data/kalfa/class_weights` | data |
+| `target_weights` | `/data/kalfa/target_weights` | data |
+| `feature_width` | `/data/kalfa/feature_width` | data |
 
 ### /alias/kalfa/text
 
@@ -670,6 +716,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_statistic` | `/frame/kalfa/group_statistic` | frame |
 | `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
+| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
 | `abs` | `/pre/kalfa/abs` | pre |
@@ -685,6 +732,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `flatten` | `/layer/torch/flatten` | layer |
 | `relu` | `/layer/torch/relu` | layer |
 | `leaky_relu` | `/layer/torch/leaky_relu` | layer |
+| `batch_norm` | `/layer/torch/batch_norm` | layer |
+| `layer_norm` | `/layer/torch/layer_norm` | layer |
+| `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
@@ -693,8 +743,10 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
+| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
 | `zeros` | `/init/torch/zeros` | init |
 | `mse` | `/criterion/kalfa/mse` | criterion |
+| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
 | `huber` | `/criterion/kalfa/huber` | criterion |
 | `mae` | `/criterion/kalfa/mae` | criterion |
 | `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
@@ -740,6 +792,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `onnx` | `/export/kalfa/onnx` | export |
+| `torchscript` | `/export/kalfa/torchscript` | export |
+| `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
 | `global` | `/rng/kalfa/global` | rng |
@@ -782,6 +837,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_statistic` | `/frame/kalfa/group_statistic` | frame |
 | `target_encoding` | `/frame/kalfa/target_encoding` | frame |
 | `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
+| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
 | `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
 | `cast` | `/pre/kalfa/cast` | pre |
 | `abs` | `/pre/kalfa/abs` | pre |
@@ -797,6 +853,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `flatten` | `/layer/torch/flatten` | layer |
 | `relu` | `/layer/torch/relu` | layer |
 | `leaky_relu` | `/layer/torch/leaky_relu` | layer |
+| `batch_norm` | `/layer/torch/batch_norm` | layer |
+| `layer_norm` | `/layer/torch/layer_norm` | layer |
+| `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
@@ -805,8 +864,10 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
+| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
 | `zeros` | `/init/torch/zeros` | init |
 | `mse` | `/criterion/kalfa/mse` | criterion |
+| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
 | `huber` | `/criterion/kalfa/huber` | criterion |
 | `mae` | `/criterion/kalfa/mae` | criterion |
 | `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
@@ -852,6 +913,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `onnx` | `/export/kalfa/onnx` | export |
+| `torchscript` | `/export/kalfa/torchscript` | export |
+| `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
 | `global` | `/rng/kalfa/global` | rng |

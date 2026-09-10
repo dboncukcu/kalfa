@@ -301,7 +301,7 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
             "transform_pre": transform_pre,
             "set_transforms": set_transforms,
             "split": split,
-            "loaders": loaders_of(data["batch"], contract),
+            "loaders": loaders_of(data.get("batch"), contract),
             "frames": frames_of(data, contract, record),
             "prep": prep_of(data, preprocessors, keys, contract, record),
             "preprocessors_keys": keys,
@@ -320,7 +320,8 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
     predicts = predicts_of(training, trained, composites)
     losses = config.get("losses") or {}
     rules = [{"name": rule["name"], "when": f"@triggers.{rule['name']}",
-              "set": set_values(rule.get("set"), losses, aliases, catalog), "after": rule.get("after")}
+              "set": set_values(rule.get("set"), losses, aliases, catalog), "after": rule.get("after"),
+              "sticky": bool(rule.get("sticky", True))}
              for rule in training.get("rules") or []]
     checkpoint = training.get("checkpoint")
     targets = training.get("targets") or {}

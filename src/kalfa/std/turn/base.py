@@ -27,6 +27,14 @@ def effective_loss(name, effects, optimizers):
     return optimizers[name].loss
 
 
+def relative(current, value):
+    if "times" in value:
+        return current * float(value["times"])
+    if "plus" in value:
+        return current + float(value["plus"])
+    raise KeyError(f"a relative effect is {{times: x}} or {{plus: x}}, got {sorted(value)}")
+
+
 def apply_effects(effects, models, optimizers, losses):
     table = dict(losses)
     for key, value in effects.items():
@@ -41,6 +49,11 @@ def apply_effects(effects, models, optimizers, losses):
             for parameter in model.parameters():
                 parameter.requires_grad_(bool(value))
         elif owner in optimizers:
+            if isinstance(value, dict):
+                current = optimizers[owner].params.get(param)
+                if current is None:
+                    raise KeyError(f"rule effect {key!r} is relative, but the optimizer has no {param!r} to change")
+                value = relative(float(current), value)
             optimizers[owner].set_param(param, value)
         elif owner in table:
             table[owner] = table[owner].with_param(param, value)
@@ -63,6 +76,12 @@ class Cursor:
         if isinstance(stream, Cursor) and stream.loader is loader:
             return stream
         return cls(loader, True)
+
+    def batches(self):
+        try:
+            return len(self.loader)
+        except TypeError:
+            return None
 
     def known_empty(self):
         try:
@@ -94,10 +113,10 @@ def backward(scaled, scaler):
 
 def clip_gradients(optimizer, grad_clip, scaler):
     if grad_clip is None:
-        return
+        return None
     if scaler is not None and scaler.is_enabled():
         scaler.unscale_(optimizer.torch())
-    torch.nn.utils.clip_grad_norm_(optimizer.parameters(), float(grad_clip))
+    return float(torch.nn.utils.clip_grad_norm_(optimizer.parameters(), float(grad_clip)))
 
 
 def step_optimizer(optimizer, scaler):
@@ -108,10 +127,18 @@ def step_optimizer(optimizer, scaler):
         optimizer.step()
 
 
+@dataclass
+class Update:
+    context: Context
+    loss: float
+    norm: float | None = None
+
+
 def update(name, entry, keys, batches, scope, step, settings, tracker=None):
     optimizer = scope.optimizers[name]
     optimizer.zero_grad()
     last = None
+    total = 0.0
     for batch in batches:
         context = Context(scope.device.move(batch), scope, step)
         with scope.device.autocast(settings.amp):
@@ -121,12 +148,13 @@ def update(name, entry, keys, batches, scope, step, settings, tracker=None):
             raise ValueError(f"the loss of optimizer {name!r} carries no gradient; its models are not trainable or "
                              f"the loss does not depend on them")
         backward(scalar / len(batches), scope.scaler)
+        total += float(scalar.detach()) / len(batches)
         if tracker is not None:
             tracker.record(value, context.size)
         last = context
-    clip_gradients(optimizer, settings.grad_clip, scope.scaler)
+    norm = clip_gradients(optimizer, settings.grad_clip, scope.scaler)
     step_optimizer(optimizer, scope.scaler)
     for model_name in optimizer.models:
         if model_name in scope.emas:
             scope.emas[model_name].shift(optimizer.models[model_name])
-    return last
+    return Update(last, total, norm)

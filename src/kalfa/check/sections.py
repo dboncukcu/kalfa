@@ -75,7 +75,7 @@ class SectionRules:
         batch = data.get("batch")
         if isinstance(batch, dict):
             self.batch_keys(batch)
-        elif "batch" in data and (not isinstance(batch, int) or isinstance(batch, bool) or batch <= 0):
+        elif batch is not None and (not isinstance(batch, int) or isinstance(batch, bool) or batch <= 0):
             self.error("invalid_value", "data.batch must be a positive size or a mapping with size",
                        ("data", "batch"))
         preprocessors = data.get("preprocessors") or {}
@@ -462,6 +462,8 @@ class SectionRules:
                 self.error("duplicate_name", f"rule {name!r} is defined twice", path)
             if isinstance(name, str) and name.startswith("stop_"):
                 self.error("invalid_value", f"rule name {name!r} is reserved for stop triggers", path)
+            if "sticky" in rule and not isinstance(rule["sticky"], bool):
+                self.error("invalid_value", f"rule {name!r}: sticky must be true or false", path + ("sticky",))
             after = rule.get("after")
             if after is not None and after not in seen:
                 self.error("unresolved_ref", f"rule {name!r} waits for {after!r}, which is no earlier rule", path)

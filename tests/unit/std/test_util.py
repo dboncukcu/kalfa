@@ -77,6 +77,21 @@ def test_no_progress_keeps_the_bar_out():
         assert monitor.bar is None
 
 
+def test_the_monitor_draws_the_inner_bar_and_logs_every_n_steps():
+    stream = StringIO()
+    with Monitor(logging.INFO, progress="steps", stream=stream, log_every=2) as monitor:
+        monitor.turn_begins(3)
+        assert monitor.inner is not None and monitor.inner.total == 3
+        for step in (1, 2, 3):
+            monitor.step({"step": step, "turn": 1, "loss/m": 0.5 / step, "lr/m": 0.1})
+        assert monitor.inner.n == 3
+        monitor.turn({"turn": 1, "global_step": 3, "train/l": 0.5})
+        assert monitor.inner is None
+    text = stream.getvalue()
+    assert "training.step   step 2  loss/m 0.25  lr/m 0.1" in text and "step 1 " not in text
+    assert "step 3 " not in text and "turn 1  train/l 0.5" in text
+
+
 def test_turn_line_carries_every_value():
     line = {"turn": 2, "global_step": 8, "train/mse": 1.0, "val/mse": 2.0, "test/mse": 3.0, "train/rmse": 4.0,
             "val/rmse": 5.0, "test/rmse": 6.0, "train/mae": 7.0, "val/mae": 8.0, "lr/model": 0.001, "rules": []}

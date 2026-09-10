@@ -1,5 +1,6 @@
 import json
 import shutil
+import subprocess
 import sys
 import warnings
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ from .std.common.history import History
 from .std.common.log import Monitor, clock, logger_for, since
 from .std.common.prediction import prediction_table
 from .std.common.rng import seed_all
+from .std.export.base import traced_inputs
 from .std.common.runtime import call_model, named_outputs, resolve_model
 from .std.frame.base import read_frames
 from .std.lego.kalfa.apply import apply
@@ -237,6 +239,22 @@ def write_device_note(record, device):
     (Path(record) / "device.json").write_text(json.dumps(device.note(), indent=2))
 
 
+def git_note(root):
+    try:
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True)
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True,
+                                check=True)
+    except (OSError, subprocess.CalledProcessError):
+        return {"commit": None, "dirty": None}
+    return {"commit": commit.stdout.strip(), "dirty": bool(status.stdout.strip())}
+
+
+def write_git_note(record, paths):
+    files = [path for path in paths if not isinstance(path, dict)]
+    root = Path(files[0]).resolve().parent if files else Path.cwd()
+    (Path(record) / "git.json").write_text(json.dumps(git_note(root), indent=2))
+
+
 def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None,
         contract=None, monitor=None) -> RunResult:
     started = clock()
@@ -271,12 +289,16 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
     device = device_of(config, contract)
     logger.info(f"device {device} ({device.uri})")
     write_device_note(record, device)
+    write_git_note(record, paths)
+    monitor.open(record)
     values = {"device": device, "record": record, "monitor": monitor}
     if resume is not None:
         values["resume"] = str(resume)
     tezgah.subscribe(prepared.pipeline, monitor.sink)
     try:
         report = tezgah.run(prepared.pipeline, inputs=values, executor=executor, workers=workers, record_dir=record)
+        history = report.outputs.get("history") or []
+        monitor.summary(config.get("params"), history[-1] if history else None)
     finally:
         monitor.finish()
     logger.info(f"finished in {since(started)}")
@@ -336,6 +358,11 @@ def rebuild_models(analysis, store, prep=None):
 
 def weights_of(run_dir, which):
     base = Path(run_dir)
+    if which == "final":
+        path = base / "final" / "state.pt"
+        if not path.exists():
+            raise KalfaError(f"{run_dir} has no final/state.pt; the run has not ended")
+        return path
     if which == "best":
         path = base / "checkpoints" / "best.pt"
         if not path.exists():
@@ -518,6 +545,42 @@ def plots(run_dir, only=None, sets=None, device=None, contract=None) -> Plots:
 
 
 @dataclass
+class Exported:
+    path: str | None
+    model: str
+    format: str
+
+
+def export(run_dir, format="state_dict", model=None, which=None, out=None, sets=None, device=None,
+           contract=None) -> Exported:
+    opened = open_record(run_dir, which, sets, contract)
+    uri = format if format.startswith("/") else registry.aliases().get(format)
+    if uri is None or registry.lookup(uri) is None:
+        raise KalfaError(f"export format {format!r} is no export lego; the std ones are onnx, torchscript and "
+                         f"state_dict")
+    if kalfa_kind(uri) != "export":
+        raise KalfaError(f"{uri} is a {kalfa_kind(uri)} lego, not an export")
+    models, composites = opened.rebuild()
+    name = model or opened.after.get("predicts")
+    target = resolve_model(name, models, composites)
+    device = build_device(device) if device is not None else Device.cpu()
+    device.place(models)
+    device.place(composites)
+    loader = record_loaders(opened.document, opened.contract)["test"]
+    batch = device.move(next(iter(loader)))
+    directory = Path(out) if out is not None else Path(run_dir) / "export"
+    inputs = traced_inputs(target, batch)
+    target.eval()
+    with torch.no_grad():
+        target(*inputs)
+    logger.info(f"exporting {name} ({opened.which} weights) as {uri}")
+    path = registry.resolve(uri)(target, inputs, directory, name)
+    if path is not None:
+        logger.info(f"wrote {path}")
+    return Exported(str(path) if path is not None else None, name, uri)
+
+
+@dataclass
 class Generated:
     path: str | None
     samples: torch.Tensor | str
@@ -564,6 +627,6 @@ def flow_outputs(document, blocks, names, contract=None):
     return report.outputs
 
 
-__all__ = ["Generated", "KalfaError", "Opened", "Plots", "Prepared", "Prediction", "Probe", "RunResult", "check",
-           "generate", "open_record", "plots", "predict", "prepare", "probe", "read_resolved", "resume", "run",
-           "seed_all"]
+__all__ = ["Exported", "Generated", "KalfaError", "Opened", "Plots", "Prepared", "Prediction", "Probe", "RunResult",
+           "check", "export", "generate", "open_record", "plots", "predict", "prepare", "probe", "read_resolved",
+           "resume", "run", "seed_all"]

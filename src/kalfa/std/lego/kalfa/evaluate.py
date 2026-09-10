@@ -3,7 +3,8 @@ import torch
 from kalfa.registration import lego
 from kalfa.std.common.device import Device
 from kalfa.std.common.log import clock, logger_for, since
-from kalfa.std.common.runtime import Context, Pass, active_entries, collect_results, observe_all, set_modes
+from kalfa.std.common.runtime import (Context, Pass, active_entries, collect_results, observe_all, resolve_entries,
+                                      set_modes)
 
 
 logger = logger_for("training.eval")
@@ -23,6 +24,7 @@ def evaluate(models, emas, composites, counters, effects, loader, set, losses, m
     if not trackers:
         return {}
     set_modes(models, train=False, composites=composites)
+    resolve_entries(metrics, loader=loader)
     device = device or Device.cpu()
     scope = Pass(models, composites, emas, predicts, list(loader.dataset.targets), epoch=turn, device=device,
                  rng=device.generator(), prep=prep, set_name=set, losses=losses, losses_keys=dict(losses_keys or {}),
