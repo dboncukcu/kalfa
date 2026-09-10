@@ -17,6 +17,7 @@ plots:
   pr_curve: {uri: /plot/torchmetrics/binary_precision_recall_curve}
   architecture: {uri: /plot/kalfa/architecture}
   modules: {uri: /plot/kalfa/architecture_text}
+calibrate: {}
 checkpoint: {}
 blocks:
   mlp_hidden:
@@ -119,14 +120,14 @@ flow:
             valid, transforms: []}, test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {
             ratios: [0.7, 0.1, 0.2], seed: 42}}, loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: 
               train, size: 50}}, valid: {uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 50}}, test: {
-            uri: /loader/kalfa/torch, set: test, params: {set: test, size: 50}}}, frames: {uri: /lego/kalfa/fit_frames, 
-          params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x?: {
-                preprocessors: [abs_scaler, log_scaler, std_scaler]}, xx*: {preprocessors: [abs_scaler, log_scaler, 
-                  std_scaler]}, is_anomaly: {target: true, preprocessors: [cast_int]}}, preprocessors: {abs_scaler: {uri: 
-                /pre/kalfa/abs}, log_scaler: {uri: /pre/kalfa/log, params: {base: 10, norm: 1200}}, std_scaler: {uri: 
-                /pre/sklearn/standard_scaler}, cast_int: {uri: /pre/kalfa/cast, params: {dtype: int}}}, drop: [xx6, xx7],
-          keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: train_df}}, 
-        preprocessors_keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, feed: {uri: 
+            uri: /loader/kalfa/torch, set: test, params: {set: test, size: 50}}}, mask: null, frames: {uri: 
+          /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
+          fields: {x?: {preprocessors: [abs_scaler, log_scaler, std_scaler]}, xx*: {preprocessors: [abs_scaler, 
+                  log_scaler, std_scaler]}, is_anomaly: {target: true, preprocessors: [cast_int]}}, preprocessors: {
+              abs_scaler: {uri: /pre/kalfa/abs}, log_scaler: {uri: /pre/kalfa/log, params: {base: 10, norm: 1200}}, 
+              std_scaler: {uri: /pre/sklearn/standard_scaler}, cast_int: {uri: /pre/kalfa/cast, params: {dtype: int}}}, 
+            drop: [xx6, xx7], keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: 
+            train_df}}, preprocessors_keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, feed: {uri: 
           /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: encoder, index: 0, init: null, trainable: true, weights: null},
         {name: generator, index: 1, init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}, trainable: true, 

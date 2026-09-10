@@ -8,7 +8,7 @@
 # models, emas, composites, opt_<name>, optimizers, counters, rules, epochs_left, *_next, train_metrics, valid_metrics,
 # test_metrics, metrics, effects, rules_0..n, rules_ruled, stop, history, models_final, optimizers_final, emas_final, counters_final, rules_final, selected, predictions. The set name on the bus is valid, the history
 # prefix val/. A foreach node is named <foreach name>_<key>, <foreach name>_<index> without a key; a chain key is <chain>_<index>,
-# <chain>_0 is the entry of the chain. "@losses", "@metrics", "@plots", "@checkpoint" are references to the component
+# <chain>_0 is the entry of the chain. "@losses", "@metrics", "@plots", "@checkpoint", "@calibrate" are references to the component
 # sections of the driver document (cirak @name); they are not block variables. The definition level keys (sets, every, inputs, output, target)
 # are not in the call but in the driver's <section>_keys table carrying the same names as the component table; they come as block variables
 # and go to the lego as params (preprocessors_keys to fit and apply, losses_keys and metrics_keys to turn and evaluate, plots_keys to run_all).
@@ -51,6 +51,7 @@ blocks:
       frames: {required: true}          # {uri, params, inputs}: fit_frames with the frame list for a run, read_frames with the record for a command over one
       split: {required: true}           # {uri, params}
       loaders: {required: true}         # {set: {uri, params, set}}; the loader of wiring with the batch section as its params
+      mask: {default: null}             # a query; the rows it selects stay in the frame and are not scored
       prep: {required: true}            # {uri, params, inputs}: fit with the field plan for a run, read_prep with the record for a command over one
       preprocessors_keys: {default: {}} # {name: {sets}}; the definition level keys
       feed: {required: true}            # {uri, params}
@@ -73,7 +74,8 @@ blocks:
       prep: {uri: $prep.uri$, params: $prep.params$, inputs: $prep.inputs$, outputs: [prep]}
       frame:
         foreach: {over: $sets$, item: set, key: $set$,
-                  node: {uri: /lego/kalfa/apply, params: {set: $set$, keys: $preprocessors_keys$}, inputs: {df: $set$_df, prep: prep},
+                  node: {uri: /lego/kalfa/apply, params: {set: $set$, keys: $preprocessors_keys$, mask: $mask$},
+                         inputs: {df: $set$_df, prep: prep},
                          outputs: [$set$_frame]}}
       feed:
         foreach: {over: $sets$, item: set, key: $set$,
@@ -214,8 +216,16 @@ blocks:
     flow:
       final:   {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: rules_final}}
       report:  {uri: /lego/kalfa/select, params: {which: $report$}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]}
+      # "@calibrate" is the calibrate section of the driver document: what the run learns at the end that is neither
+      # weights nor a column transform, fitted on the report models and the sets, kept under fitted/calibrate
+      calibrate: {uri: /lego/kalfa/calibrate, params: {calibrations: "@calibrate", predicts: $predicts$},
+                  inputs: {models: selected, composites: composites, prep: prep,
+                           loaders: {train: train_loader, valid: valid_loader, test: test_loader}},
+                  outputs: [calibrations]}
       predict: {uri: /lego/kalfa/predict, params: {predicts: $predicts$, set: test, target_map: $targets$},
-                inputs: {models: selected, composites: composites, loader: test_loader, prep: prep}, outputs: [predictions]}
+                inputs: {models: selected, composites: composites, loader: test_loader, prep: prep,
+                         calibrations: calibrations},
+                outputs: [predictions]}
       figures: {uri: $figures.uri$, params: $figures.params$, outputs: [figures]}
       losses:  {uri: /lego/kalfa/identity, params: {value: "@losses"}, outputs: [losses]}
       losses_keys: {uri: /lego/kalfa/const, params: {value: $losses_keys$}, outputs: [losses_keys]}

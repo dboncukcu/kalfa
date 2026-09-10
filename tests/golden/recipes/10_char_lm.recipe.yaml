@@ -10,6 +10,7 @@ triggers:
   stop_0: {uri: /trigger/kalfa/plateau, params: {monitor: val/perplexity, patience: 10}}
 plots:
   loss_curve: {uri: /plot/kalfa/loss_curve, params: {series: [train/lm, val/perplexity]}}
+calibrate: {}
 checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/perplexity}}
 blocks:
   gpt:
@@ -26,8 +27,8 @@ flow:
           test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.98, 0.02, 0.0], seed: 
             7}}, loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64}}, valid: {uri: 
             /loader/kalfa/torch, set: valid, params: {set: valid, size: 64}}, test: {uri: /loader/kalfa/torch, set: test,
-          params: {set: test, size: 64}}}, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: 
-            train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {text: {preprocessors: [tokenizer]}}, 
+          params: {set: test, size: 64}}}, mask: null, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, 
+          inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {text: {preprocessors: [tokenizer]}}, 
             preprocessors: {tokenizer: {uri: /pre/kalfa/char_tokenizer}}, drop: [], keys: {tokenizer: {}}}, inputs: {df: 
             train_df}}, preprocessors_keys: {tokenizer: {}}, feed: {uri: /feed/kalfa/next_token, params: {seq_len: 128}}}}
   models: {block: models, params: {trained_items: [{name: gpt, index: 0, init: null, trainable: true, weights: null}], 

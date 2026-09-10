@@ -284,6 +284,7 @@ class Frame:
 class TableFrame(Frame):
     data: object = None
     extra: object = None
+    mask: object = None
 
     @property
     def index(self):

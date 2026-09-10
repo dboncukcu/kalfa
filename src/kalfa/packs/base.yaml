@@ -104,6 +104,8 @@ alias:
   cpu: /device/kalfa/cpu
   cuda: /device/kalfa/cuda
   mps: /device/kalfa/mps
+  # calibrate
+  threshold: /calibrate/kalfa/threshold
   # export
   onnx: /export/kalfa/onnx
   torchscript: /export/kalfa/torchscript

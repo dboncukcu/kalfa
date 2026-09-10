@@ -302,6 +302,7 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None):
             "set_transforms": set_transforms,
             "split": split,
             "loaders": loaders_of(data.get("batch"), contract),
+            "mask": data.get("mask"),
             "frames": frames_of(data, contract, record),
             "prep": prep_of(data, preprocessors, keys, contract, record),
             "preprocessors_keys": keys,
@@ -331,6 +332,8 @@ def recipe(config, catalog=None, aliases=None, contract=None, record=None):
         "metrics": components_of(config.get("metrics"), catalog, aliases, generate, contract),
         "triggers": triggers_of(training, aliases, catalog),
         "plots": {name: call_resolved(entry, aliases, catalog) for name, entry in (config.get("plots") or {}).items()},
+        "calibrate": {name: call_resolved(entry, aliases, catalog)
+                      for name, entry in (config.get("calibrate") or {}).items()},
         "checkpoint": call(checkpoint) if checkpoint is not None else {},
         "blocks": blocks_of(templates, models),
         "flow": {

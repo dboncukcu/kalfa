@@ -87,6 +87,9 @@ class DataRules:
         if data.get("frame"):
             self.error("lazy_frame", "a stream source cannot fit a frame transform; it needs the table in memory",
                        ("data", "frame"), hint=hint)
+        if data.get("mask") is not None:
+            self.error("lazy_mask", "a stream source cannot carry a mask; it needs the table in memory",
+                       ("data", "mask"), hint=hint)
         for position, item in enumerate(data.get("transform") or []):
             if isinstance(item, dict) and self.fact_of(item, "needs_table"):
                 self.error("lazy_transform", f"transform {position} ({item.get('uri')}) needs the table in memory; "

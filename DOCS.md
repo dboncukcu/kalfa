@@ -37,6 +37,7 @@ The legos a config writes, by kind.
 | `device` | device, predict --device, generate --device | 4 |
 | `rng` | rng | 3 |
 | `export` | kalfa export --format | 3 |
+| `calibrate` | calibrate | 1 |
 | `lego` | a param value, or the contract | 1 |
 | `data` | a param value ({uri: name}) | 4 |
 
@@ -313,6 +314,12 @@ The legos a config writes, by kind.
 | `/export/kalfa/state_dict` | `state_dict` | `(model, inputs, directory, stem)` |  | The model's state_dict as <stem>.pt, the plain torch weights |
 | `/export/kalfa/torchscript` | `torchscript` | `(model, inputs, directory, stem)` |  | The model traced with one batch and saved as <stem>.pt with torch.jit |
 
+### calibrate
+
+| URI | Alias | Signature | Facts | Description |
+|---|---|---|---|---|
+| `/calibrate/kalfa/threshold` | `threshold` | `(set='valid', quantile=0.95, output=None)` |  | A decision threshold read off a held out set at the end of training: the quantile of the raw output of the predicts model on that set; at predict time flag_<output> marks the rows above it |
+
 ### lego
 
 | URI | Alias | Signature | Facts | Description |
@@ -341,8 +348,9 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/builder/kalfa/module` |  | `(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)` | bus: prep=prep, train_loader=train_loader; roles: weights, bias, scale | Build a model graph into an nn.Module in the stream the rng lego derives from the seed, the name and the index, apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader |
-| `/lego/kalfa/apply` |  | `(df, prep, set, keys=None)` |  | Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to |
+| `/lego/kalfa/apply` |  | `(df, prep, set, keys=None, mask=None)` |  | Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to; the rows the mask query selects stay in the frame and are not scored, the loader leaves them out and the plots see them as masked |
 | `/lego/kalfa/apply_frames` |  | `(df, frames)` |  | Apply the fitted frame transforms to one set, in the order they were fitted |
+| `/lego/kalfa/calibrate` |  | `(models, composites, prep, loaders, calibrations, predicts, record=None, device=None)` | returns: calibrations; bus: record=record, device=device | Fit every calibration of the calibrate section on the report models and the sets, in order, and keep them in the record under fitted/calibrate; predict applies them to its table |
 | `/lego/kalfa/checkpoint` |  | `(state, policy, metrics=None, record=None)` | returns: None; bus: metrics=metrics, record=record | Write the checkpoint files the policy asks for; nothing without a policy |
 | `/lego/kalfa/clone` |  | `(model, decay)` | state: True | An exponential moving average copy of a model with the given decay |
 | `/lego/kalfa/const` |  | `(value)` |  | A fresh copy of a constant value |
@@ -362,7 +370,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/merge` |  | `(parts, prefixes)` |  | Merge the per set metrics under the prefixes of the sets (train/, val/, test/) |
 | `/lego/kalfa/pack` |  | `(items)` | aliases: items | A mapping of the given items |
 | `/lego/kalfa/parquet_header` |  | `(path, chunk=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata |
-| `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict the test set with the report model, invert the target chain, write predictions.parquet |
+| `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict the test set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet |
 | `/lego/kalfa/ratio_sizes` |  | `(rows, ratios, seed=None, group=None)` |  | The set sizes a split by ratios produces from rows rows; without rows, which sets it produces |
 | `/lego/kalfa/read_frames` |  | `(record)` | returns: frames | The fitted frame transforms of a record, read from fitted/frames |
 | `/lego/kalfa/read_prep` |  | `(record)` | returns: prep | The fitted preprocessing plan of a record, read from its preprocessors directory |
@@ -469,6 +477,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
 | `torchscript` | `/export/kalfa/torchscript` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
@@ -566,6 +575,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
 | `torchscript` | `/export/kalfa/torchscript` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
@@ -665,6 +675,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
 | `torchscript` | `/export/kalfa/torchscript` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
@@ -792,6 +803,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
 | `torchscript` | `/export/kalfa/torchscript` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
@@ -913,6 +925,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `cpu` | `/device/kalfa/cpu` | device |
 | `cuda` | `/device/kalfa/cuda` | device |
 | `mps` | `/device/kalfa/mps` | device |
+| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
 | `torchscript` | `/export/kalfa/torchscript` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |

@@ -47,6 +47,7 @@
     "device",
     "rng",
     "export",
+    "calibrate",
     "lego"
   ],
   "legos": {
@@ -95,6 +96,15 @@
       },
       "kind": "builder",
       "signature": "(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)"
+    },
+    "/calibrate/kalfa/threshold": {
+      "alias": [
+        "threshold"
+      ],
+      "description": "A decision threshold read off a held out set at the end of training: the quantile of the raw output of the predicts model on that set; at predict time flag_<output> marks the rows above it",
+      "facts": {},
+      "kind": "calibrate",
+      "signature": "(set='valid', quantile=0.95, output=None)"
     },
     "/checkpoint/kalfa/best": {
       "alias": [
@@ -657,10 +667,10 @@
     },
     "/lego/kalfa/apply": {
       "alias": [],
-      "description": "Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to",
+      "description": "Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to; the rows the mask query selects stay in the frame and are not scored, the loader leaves them out and the plots see them as masked",
       "facts": {},
       "kind": "lego",
-      "signature": "(df, prep, set, keys=None)"
+      "signature": "(df, prep, set, keys=None, mask=None)"
     },
     "/lego/kalfa/apply_frames": {
       "alias": [],
@@ -668,6 +678,19 @@
       "facts": {},
       "kind": "lego",
       "signature": "(df, frames)"
+    },
+    "/lego/kalfa/calibrate": {
+      "alias": [],
+      "description": "Fit every calibration of the calibrate section on the report models and the sets, in order, and keep them in the record under fitted/calibrate; predict applies them to its table",
+      "facts": {
+        "bus": {
+          "device": "device",
+          "record": "record"
+        },
+        "returns": "calibrations"
+      },
+      "kind": "lego",
+      "signature": "(models, composites, prep, loaders, calibrations, predicts, record=None, device=None)"
     },
     "/lego/kalfa/checkpoint": {
       "alias": [],
@@ -876,7 +899,7 @@
     },
     "/lego/kalfa/predict": {
       "alias": [],
-      "description": "Predict the test set with the report model, invert the target chain, write predictions.parquet",
+      "description": "Predict the test set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet",
       "facts": {
         "bus": {
           "device": "device",
@@ -885,7 +908,7 @@
         "returns": "predictions"
       },
       "kind": "lego",
-      "signature": "(models, composites, loader, prep, predicts, set, target_map=None, record=None, device=None)"
+      "signature": "(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)"
     },
     "/lego/kalfa/ratio_sizes": {
       "alias": [],
@@ -2391,6 +2414,7 @@
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "target_encoding": "/frame/kalfa/target_encoding",
+      "threshold": "/calibrate/kalfa/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
@@ -2487,6 +2511,7 @@
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "target_encoding": "/frame/kalfa/target_encoding",
+      "threshold": "/calibrate/kalfa/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
@@ -2609,6 +2634,7 @@
       "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "target_weights": "/data/kalfa/target_weights",
+      "threshold": "/calibrate/kalfa/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
@@ -2726,6 +2752,7 @@
       "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "text_lines": "/source/kalfa/text_lines",
+      "threshold": "/calibrate/kalfa/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
@@ -2858,6 +2885,7 @@
       "target_correlation": "/plot/kalfa/target_correlation",
       "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
+      "threshold": "/calibrate/kalfa/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "to_tensor": "/pre/kalfa/to_tensor",
       "to_tensor_signed": "/pre/kalfa/to_tensor_signed",

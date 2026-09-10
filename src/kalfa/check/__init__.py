@@ -53,6 +53,7 @@ class Checker(SectionRules, DataRules, RefRules):
         self.training_section()
         self.plots_section()
         self.figures_section()
+        self.calibrate_section()
         self.generate_section()
         self.sweep_section()
         self.structural = len(self.problems)

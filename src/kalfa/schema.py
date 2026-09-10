@@ -11,13 +11,14 @@ class Ref:
 
 class Schema:
     sections = ("include", "plugins", "params", "alias", "seed", "device", "rng", "data", "model", "metrics", "losses",
+                "calibrate",
                 "optimizers", "training", "generate", "plots", "figures", "sweep", "record")
     required = ("data", "model", "losses", "training", "record")
     unresolved = ("include", "plugins", "params", "alias")
     builtin_variables = ("datetime",)
     short_calls = (("training", "turn"), ("training", "checkpoint"), ("data", "feed"), ("sweep", "strategy"),
                    ("device",), ("rng",))
-    data = ("source", "transform", "split", "frame", "batch", "preprocessors", "drop", "fields", "feed")
+    data = ("source", "transform", "split", "frame", "batch", "mask", "preprocessors", "drop", "fields", "feed")
     data_required = ("source", "split", "fields", "feed")
     transform = ("uri", "params", "sets")
     ratio_split = ("ratios", "seed")

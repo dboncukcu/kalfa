@@ -120,7 +120,8 @@ def test_same_seed_same_history_and_no_seed_warns(dataset):
     dataset("01_mlp_regression")
     first = run(["config.yaml"], parse_sets(params=["epochs=2"]), when="seed_a")
     second = run(["config.yaml"], parse_sets(params=["epochs=2"]), when="seed_b")
-    assert History.read(first.record) == History.read(second.record)
+    assert history_without_bookkeeping(History.read(first.record)) == \
+        history_without_bookkeeping(History.read(second.record))
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         run(["config.yaml"], parse_sets(["seed=null"], ["epochs=1"]), when="unseeded")

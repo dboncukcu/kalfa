@@ -18,6 +18,11 @@ def after_section(prepared, style, width, probe=None):
     figures = prepared.surface.data.get("figures")
     if figures:
         lines.append(field_line("figures", ", ".join(f"{key} {value}" for key, value in figures.items()), style))
+    calibrations = group_of(document, "calibrate")
+    if calibrations:
+        lines.append(field_line("calibrate", ", ".join(f"{name} ({call_text(call, style=style)})"
+                                                       for name, call in calibrations.items())
+                                             + f"  {ARROW} fitted/calibrate/", style))
     generate = params.get("generate")
     if generate:
         lines.append(field_line("generate", f"{call_text(generate, style=style)}  {ARROW} samples/", style))

@@ -56,7 +56,7 @@ def test_check_recipe_prints_the_driver_document(workdir, capsys):
     assert main(["check", example("01_mlp_regression"), "--recipe"]) == 0
     out = capsys.readouterr().out
     document = YAML(typ="safe").load(out.split("---\n", 1)[1])
-    assert list(document) == ["losses", "metrics", "triggers", "plots", "checkpoint", "blocks", "flow"]
+    assert list(document) == ["losses", "metrics", "triggers", "plots", "calibrate", "checkpoint", "blocks", "flow"]
 
 
 def test_check_dump_prints_the_flow(workdir, capsys):

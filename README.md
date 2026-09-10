@@ -270,7 +270,7 @@ never written into (an error).
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |
 | `checkpoints/` | `best.pt`, `last.pt` (by policy); models, optimizers, EMAs, counters, rule states, RNG |
 | `final/state.pt` | always, once the run ends, with the same scope |
-| `fitted/` | the fitted state: `preprocessors/` (one file per name and `plan.json`, the column chains) and `frames/` (the frame transforms); `predict`, `plots` and `resume` read from here |
+| `fitted/` | the fitted state: `preprocessors/` (one file per name and `plan.json`, the column chains), `frames/` (the frame transforms) and `calibrate/` (the calibrations and their notes); `predict`, `plots` and `resume` read from here |
 | `predictions.parquet` | the test set: `row`, the targets (inverted), `pred_<output>` (inverted), `raw_<output>`; with `training.targets` one column per predicted field, `pred_<output>_<field>` |
 | `plots/` | the outputs of the plot legos, named after the definition (`plots.roc` → `roc.png`, or the format `figures` asks for; `architecture` writes text); `kalfa plots` redraws them from the record and `predict --plots` writes them with the suffix of its predictions file (`roc_new.png`) |
 | `samples/` | the output of `generate`: `samples.pt` (for images `grid.png` too), `samples.txt` for text; `turn_<n>.*` from `sample_writer` |
@@ -420,6 +420,8 @@ attributes without building the object:
 | model | `kalfa.std.builder.base.Model` (an `nn.Module`) | `inputs`, `outputs`, `initialized`, `trainable`; the std builder's `Module` and the EMA copy are the two implementations |
 | dataset | `kalfa.std.feed.base.Dataset` and `IterableDataset` (a stream) | `inputs`, `targets`, `frame`, `rows()`, `labels(name)`, `size()` (`None` for a stream), `count()` |
 | checkpoint policy | `kalfa.std.checkpoint.base.Policy` | `monitor`, `tags(metrics)`, `state()`, `restore(state)` |
+| frame transform | `kalfa.std.frame.base.FrameTransform` | `fit(df)` on the train set, `apply(df)` per set |
+| calibration | `kalfa.std.calibrate.base.Calibration` | `fit(models, loaders, prep, device, predicts)` at the end of a run, `apply(table)` on the predictions, `note()` for `calibrate.json` |
 | optimizer | `kalfa.std.optimizer.base.Optimizer` | `torch_class`; the base creates the torch optimizer on first use, applies the schedule and answers `lr()` |
 | strategy | `kalfa.std.strategy.base.Strategy` | `deterministic`, `total(space)`, `point(space, index)`, or `ask` and `tell` |
 | losses and metrics entries | `kalfa.std.common.runtime.Loss` | the three std adapters (`/adapter/kalfa/criterion`, `metric`, `objective`) wrap every entry, so the tables are uniform: `loss(context, keys)`, `tracker(name, keys, rescale)`, `with_param(name, value)`, `resolve(**available)` |

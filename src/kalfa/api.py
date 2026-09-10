@@ -23,6 +23,7 @@ from .errors import KalfaError
 from .kinds import kalfa_kind
 from .record import read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note
 from .recipe import analyze, compile, dump, implicit_bindings
+from .std.calibrate.base import read_calibrations
 from .std.checkpoint.base import load, load_into
 from .std.common.device import Device
 from .std.common.generation import write_samples
@@ -385,6 +386,7 @@ class Opened:
     store: ComponentStore
     prep: Prep
     frames: list = field(default_factory=list)
+    calibrations: dict = field(default_factory=dict)
     models: dict | None = None
     composites: dict | None = None
     payload: dict | None = None
@@ -418,7 +420,7 @@ def open_record(run_dir, which=None, sets=None, contract=None) -> Opened:
     gate(analysis.problems)
     store = build_components(analysis.data, analysis.expansions, registry)
     return Opened(str(run_dir), contract, surface, which or config["training"].get("report", "last"), document,
-                  analysis, store, read_prep(run_dir), read_frames(run_dir))
+                  analysis, store, read_prep(run_dir), read_frames(run_dir), read_calibrations(run_dir))
 
 
 def record_loaders(document, contract=None):
@@ -435,7 +437,7 @@ def new_loader(opened, data):
         df = registry.resolve(source["uri"])(**{**(source.get("params") or {}), "path": data})
     params = opened.document["flow"]["data"]["params"]
     df = apply_frames(replay_transforms(opened, df, params), opened.frames)
-    frame = apply(df, opened.prep, "test")
+    frame = apply(df, opened.prep, "test", mask=params.get("mask"))
     feed = params["feed"]
     dataset = registry.resolve(feed["uri"])(frame, None, **(feed.get("params") or {}))
     spec = params["loaders"]["test"]
@@ -502,6 +504,8 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None, 
         tag += f"_{model}"
     loader = loaders["test"]
     table = prediction_table(target, loader, opened.prep, loader.dataset, device, opened.after.get("targets"))
+    for item in opened.calibrations.values():
+        table = item.apply(table)
     path = Path(run_dir) / f"predictions{tag}.parquet"
     table.to_parquet(path, index=False)
     logger.info(f"{len(table)} rows -> {path}")

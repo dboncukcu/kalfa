@@ -87,6 +87,8 @@ def set_frame(loaders, prep, set_name="train"):
     for column in (list(extra.columns) if extra is not None else []):
         if column not in table.columns:
             table[column] = extra[column].to_numpy()
+    if frame.mask is not None:
+        table["masked"] = ~numpy.asarray(frame.mask, dtype=bool)
     return table if len(table.columns) else None
 
 

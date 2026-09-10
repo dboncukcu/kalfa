@@ -13,6 +13,7 @@ components:
     stop_0: {uri: /trigger/kalfa/plateau, params: {monitor: val/perplexity, patience: 10}}
   plots:
     loss_curve: {uri: /plot/kalfa/loss_curve, params: {series: [train/lm, val/perplexity]}}
+  calibrate: {}
   checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/perplexity}}
 blocks:
   gpt:
@@ -37,9 +38,9 @@ flow:
     framed_test: {uri: /lego/kalfa/apply_frames, inputs: {df: test_df_1, frames: frames}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {text: {preprocessors: [tokenizer]}}, preprocessors: {tokenizer: {uri: /pre/kalfa/char_tokenizer}}, drop: [], 
           keys: {tokenizer: {}}}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
-    frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {tokenizer: {}}}, inputs: {df: train_df, prep: prep}, outputs: [train_frame]}
-    frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {tokenizer: {}}}, inputs: {df: valid_df, prep: prep}, outputs: [valid_frame]}
-    frame_test: {uri: /lego/kalfa/apply, params: {set: test, keys: {tokenizer: {}}}, inputs: {df: test_df, prep: prep}, outputs: [test_frame]}
+    frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {tokenizer: {}}, mask: null}, inputs: {df: train_df, prep: prep}, outputs: [train_frame]}
+    frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {tokenizer: {}}, mask: null}, inputs: {df: valid_df, prep: prep}, outputs: [valid_frame]}
+    frame_test: {uri: /lego/kalfa/apply, params: {set: test, keys: {tokenizer: {}}, mask: null}, inputs: {df: test_df, prep: prep}, outputs: [test_frame]}
     feed_train: {uri: /feed/kalfa/next_token, params: {seq_len: 128}, inputs: {frame: train_frame, frames: {train: train_frame, valid: valid_frame, test: 
             test_frame}}, outputs: [train_data]}
     feed_valid: {uri: /feed/kalfa/next_token, params: {seq_len: 128}, inputs: {frame: valid_frame, frames: {train: train_frame, valid: valid_frame, test: 
@@ -101,12 +102,14 @@ flow:
           stop: {uri: /rule/kalfa/stop, params: {triggers: ['@triggers.stop_0']}, inputs: {rules: rules_ruled}, outputs: {rules: rules_next, stop: stop}}  # implicit: metrics
           checkpoint: {uri: /lego/kalfa/checkpoint, params: {policy: '@checkpoint'}, inputs: {state: '*_next'}, outputs: []} # state *_next: counters_next, emas_next, models_next, optimizers_next, rules_next, stream_next; implicit: metrics, record
           log: {uri: /lego/kalfa/history, outputs: []} # implicit: monitor, metrics, turn_index, counters_next, optimizers_next, rules_next, record
-  after: # reads: models_final, optimizers_final, emas_final, counters_final, rules_final, record, composites, test_loader, prep, device, history, train_loader, valid_loader, data_report, train_df, train_frame; exports: predictions
+  after: # reads: models_final, optimizers_final, emas_final, counters_final, rules_final, record, composites, prep, train_loader, valid_loader, test_loader, device, history, data_report, train_df, train_frame; exports: predictions
     final: {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: 
           rules_final}, outputs: []}  # implicit: record
     report: {uri: /lego/kalfa/select, params: {which: best}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]} # implicit: record
+    calibrate: {uri: /lego/kalfa/calibrate, params: {calibrations: '@calibrate', predicts: gpt}, inputs: {models: selected, composites: composites, prep: prep, 
+          loaders: {train: train_loader, valid: valid_loader, test: test_loader}}, outputs: [calibrations]} # implicit: record, device
     predict: {uri: /lego/kalfa/predict, params: {predicts: gpt, set: test, target_map: {}}, inputs: {models: selected, composites: composites, loader: 
-          test_loader, prep: prep}, outputs: [predictions]} # implicit: record, device
+          test_loader, prep: prep, calibrations: calibrations}, outputs: [predictions]} # implicit: record, device
     figures: {uri: /lego/kalfa/figures, outputs: [figures]}
     losses: {uri: /lego/kalfa/identity, params: {value: '@losses'}, outputs: [losses]}
     losses_keys: {uri: /lego/kalfa/const, params: {value: {lm: {target: targets}}}, outputs: [losses_keys]}

@@ -11,7 +11,8 @@ class TableDataset(Dataset):
         self.frame = frame
         self.inputs = ["x"]
         self.targets = list(frame.targets)
-        data = frame.data
+        data = frame.data if frame.mask is None else frame.data[frame.mask]
+        self.index = numpy.asarray(data.index)
         if len(frame.features):
             self.x = torch.from_numpy(numpy.array(data[frame.features].to_numpy(dtype="float32"), copy=True))
         else:
@@ -33,7 +34,7 @@ class TableDataset(Dataset):
         return item
 
     def rows(self):
-        return numpy.asarray(self.frame.index)
+        return self.index
 
     def labels(self, name):
         return self.fields[name]

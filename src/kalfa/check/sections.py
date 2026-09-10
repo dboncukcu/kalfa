@@ -47,6 +47,11 @@ class SectionRules:
                     self.sets_of(item.get("sets"), path)
             elif not isinstance(item, str):
                 self.error("invalid_value", "a transform is a query string or a lego call {uri, params, sets}", path)
+        if data.get("mask") is not None and not isinstance(data["mask"], str):
+            self.error("invalid_value", "data.mask is a pandas query string", ("data", "mask"))
+        if data.get("mask") is not None and self.fact_of(data.get("source"), "samples"):
+            self.error("mask_needs_table", "a Dataset source has no frame to mask; data.mask needs a table",
+                       ("data", "mask"))
         for position, item in enumerate(data.get("frame") or []):
             path = ("data", "frame", position)
             uri = self.call_of(item, path, ("frame",), f"data.frame[{position}]")
@@ -691,6 +696,19 @@ class SectionRules:
             target(**{key: value for key, value in figures.items() if key in allowed})
         except (TypeError, ValueError) as exception:
             self.error("invalid_value", str(exception), ("figures",))
+
+    def calibrate_section(self):
+        table = self.data.get("calibrate")
+        if table is None:
+            return
+        if not isinstance(table, dict):
+            self.error("invalid_section", "calibrate must be a mapping of named lego calls", ("calibrate",))
+            return
+        for name, entry in table.items():
+            path = ("calibrate", name)
+            uri = self.call_of(entry, path, ("calibrate",), f"calibrate.{name}")
+            if isinstance(entry, dict):
+                self.refs_of(uri, entry.get("params"), path)
 
     def generate_section(self):
         generate = self.data.get("generate")

@@ -12,6 +12,7 @@ metrics:
 triggers: {}
 plots:
   loss_curve: {uri: /plot/kalfa/loss_curve}
+calibrate: {}
 checkpoint: {uri: /checkpoint/kalfa/last}
 blocks:
   unet:
@@ -26,8 +27,8 @@ flow:
             transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [1.0, 0.0, 0.0], seed: 7}}, loaders: {
           train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 128}}, valid: {uri: 
             /loader/kalfa/torch, set: valid, params: {set: valid, size: 128}}, test: {uri: /loader/kalfa/torch, set: 
-            test, params: {set: test, size: 128}}}, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {
-          df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [to_signed]}}, 
+            test, params: {set: test, size: 128}}}, mask: null, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []},
+        inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [to_signed]}}, 
             preprocessors: {to_signed: {uri: /pre/kalfa/to_tensor_signed}}, drop: [], keys: {to_signed: {}}}, inputs: {
             df: train_df}}, preprocessors_keys: {to_signed: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: unet, index: 0, init: null, trainable: true, weights: null}], 

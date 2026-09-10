@@ -27,6 +27,7 @@ data:
                                   # the params of the loader lego of the contract's wiring (/loader/kalfa/torch), so its signature is the key list
                                   # the defaults of the loader lego [library]: shuffle on in training, off in evaluation; eval_size = size;
                                   # collate null = the torch default; balanced puts a class balancing sampler over the target field
+  mask: null                      # [empty] a pandas query; the rows it selects stay in the frame (masked for the plots) and are not scored (out of the loaders)
   preprocessors: {}               # [empty] name: {uri, params, sets}; those that need a fit are fitted on the filtered train set and go into the record;
                                   # sets: [train] on those sets only (predict data is treated like test); a definition used in no chain and by no refs is a warning
   drop: []                        # [empty] columns dropped before the field mapping; column typed params (group) cannot be dropped
@@ -80,6 +81,7 @@ training:
                                   # the set targets: <opt>.loss | loss | <loss>.<param> | <opt>.<param> | <model>.trainable
   # amp, grad_clip, accumulate and every other key go to the turn's params; not in the signature is an error
 
+calibrate: {}                     # [empty] name: {uri: threshold | your own, params}; fitted on the report models and the sets at the end of a run, kept under fitted/calibrate, applied to the predictions
 generate: null                    # [empty] {uri: sampler_lego, params: {model: unet.ema, ...}}; at the end of training (with the report model) and kalfa generate
 sweep: null                       # [empty] {strategy: grid | {uri, params}, space: {param: [choices] | {low, high, log, int, steps}}, objective: {monitor, mode, at}, record: root}; kalfa sweep
 plots: {}                         # [empty] name: {uri, params, inputs: {param: history_key | field | model},

@@ -22,7 +22,13 @@ def sample_frame(df, prep, set, sets):
     return SampleFrame([], prep.targets, set, dataset=df, fields=[item.name for item in prep.fields], chains=chains)
 
 
-def table_frame(df, prep, set, sets):
+def kept_rows(df, mask):
+    if mask is None:
+        return None
+    return ~numpy.asarray(df.eval(mask), dtype=bool)
+
+
+def table_frame(df, prep, set, sets, mask=None):
     columns = {}
     for item in prep.fields:
         if item.name not in df.columns:
@@ -42,13 +48,14 @@ def table_frame(df, prep, set, sets):
                                 index=df.index)
     named = {item.name for item in prep.fields}
     extra = df[[column for column in df.columns if column not in named and column not in prep.drop]]
-    return TableFrame(prep.features, prep.targets, set, data=data, extra=extra)
+    return TableFrame(prep.features, prep.targets, set, data=data, extra=extra, mask=kept_rows(df, mask))
 
 
 @lego("/lego/kalfa/apply",
       description="Apply the fitted chains to one set and type its columns; keys carry the sets a "
-                  "preprocessor is limited to")
-def apply(df, prep, set, keys=None):
+                  "preprocessor is limited to; the rows the mask query selects stay in the frame and are not "
+                  "scored, the loader leaves them out and the plots see them as masked")
+def apply(df, prep, set, keys=None, mask=None):
     logger.debug(f"applying the chains to the {set} set")
     sets = sets_of(keys) if keys is not None else prep.sets
     if is_stream(df):
@@ -58,4 +65,4 @@ def apply(df, prep, set, keys=None):
         return StreamFrame(prep.features, prep.targets, set, stream=StreamView(df, prep, set, sets))
     if is_samples(df):
         return sample_frame(df, prep, set, sets)
-    return table_frame(df, prep, set, sets)
+    return table_frame(df, prep, set, sets, mask)

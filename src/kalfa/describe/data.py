@@ -68,6 +68,8 @@ def data_section(prepared, style, width, probe=None):
     _, drop, _ = field_plan(prepared)
     if drop:
         lines.append(field_line("drop", ", ".join(str(name) for name in drop), style))
+    if params.get("mask") is not None:
+        lines.append(field_line("mask", f"{params['mask']}  {style.dim('kept in the frame, not scored')}", style))
     lines.append("")
     lines.extend(fields_table(prepared, style, width))
     lines.append("")

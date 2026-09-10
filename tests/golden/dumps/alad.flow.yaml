@@ -20,6 +20,7 @@ components:
     pr_curve: {uri: /plot/torchmetrics/binary_precision_recall_curve}
     architecture: {uri: /plot/kalfa/architecture}
     modules: {uri: /plot/kalfa/architecture_text}
+  calibrate: {}
   checkpoint: {}
 blocks:
   mlp_hidden:
@@ -133,12 +134,12 @@ flow:
                 std_scaler]}, is_anomaly: {target: true, preprocessors: [cast_int]}}, preprocessors: {abs_scaler: {uri: /pre/kalfa/abs}, log_scaler: {uri: 
               /pre/kalfa/log, params: {base: 10, norm: 1200}}, std_scaler: {uri: /pre/sklearn/standard_scaler}, cast_int: {uri: /pre/kalfa/cast, params: {dtype: 
                 int}}}, drop: [xx6, xx7], keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
-    frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: train_df, 
-          prep: prep}, outputs: [train_frame]}
-    frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: valid_df, 
-          prep: prep}, outputs: [valid_frame]}
-    frame_test: {uri: /lego/kalfa/apply, params: {set: test, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: test_df, prep: 
-          prep}, outputs: [test_frame]}
+    frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, mask: null}, inputs: {df: 
+          train_df, prep: prep}, outputs: [train_frame]}
+    frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, mask: null}, inputs: {df: 
+          valid_df, prep: prep}, outputs: [valid_frame]}
+    frame_test: {uri: /lego/kalfa/apply, params: {set: test, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, mask: null}, inputs: {df: 
+          test_df, prep: prep}, outputs: [test_frame]}
     feed_train: {uri: /feed/kalfa/table, inputs: {frame: train_frame, frames: {train: train_frame, valid: valid_frame, test: test_frame}}, outputs: [train_data]}
     feed_valid: {uri: /feed/kalfa/table, inputs: {frame: valid_frame, frames: {train: train_frame, valid: valid_frame, test: test_frame}}, outputs: [valid_data]}
     feed_test: {uri: /feed/kalfa/table, inputs: {frame: test_frame, frames: {train: train_frame, valid: valid_frame, test: test_frame}}, outputs: [test_data]}
@@ -207,12 +208,14 @@ flow:
           stop: {uri: /rule/kalfa/stop, params: {triggers: []}, inputs: {rules: rules_ruled}, outputs: {rules: rules_next, stop: stop}}  # implicit: metrics
           checkpoint: {uri: /lego/kalfa/checkpoint, params: {policy: '@checkpoint'}, inputs: {state: '*_next'}, outputs: []} # state *_next: counters_next, emas_next, models_next, optimizers_next, rules_next, stream_next; implicit: metrics, record
           log: {uri: /lego/kalfa/history, outputs: []} # implicit: monitor, metrics, turn_index, counters_next, optimizers_next, rules_next, record
-  after: # reads: models_final, optimizers_final, emas_final, counters_final, rules_final, record, composites, test_loader, prep, device, history, train_loader, valid_loader, data_report, train_df, train_frame; exports: predictions
+  after: # reads: models_final, optimizers_final, emas_final, counters_final, rules_final, record, composites, prep, train_loader, valid_loader, test_loader, device, history, data_report, train_df, train_frame; exports: predictions
     final: {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: 
           rules_final}, outputs: []}  # implicit: record
     report: {uri: /lego/kalfa/select, params: {which: last}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]} # implicit: record
+    calibrate: {uri: /lego/kalfa/calibrate, params: {calibrations: '@calibrate', predicts: anomaly_score}, inputs: {models: selected, composites: composites, 
+          prep: prep, loaders: {train: train_loader, valid: valid_loader, test: test_loader}}, outputs: [calibrations]} # implicit: record, device
     predict: {uri: /lego/kalfa/predict, params: {predicts: anomaly_score, set: test, target_map: {}}, inputs: {models: selected, composites: composites, loader: 
-          test_loader, prep: prep}, outputs: [predictions]} # implicit: record, device
+          test_loader, prep: prep, calibrations: calibrations}, outputs: [predictions]} # implicit: record, device
     figures: {uri: /lego/kalfa/figures, outputs: [figures]}
     losses: {uri: /lego/kalfa/identity, params: {value: '@losses'}, outputs: [losses]}
     losses_keys: {uri: /lego/kalfa/const, params: {value: {adv_d: {}, adv_g: {}}}, outputs: [losses_keys]}

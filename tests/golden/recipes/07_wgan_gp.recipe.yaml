@@ -18,6 +18,7 @@ plots:
   loss_curve: {uri: /plot/kalfa/loss_curve, params: {series: [train/wgan_d, train/wgan_g, val/fid]}}
   samples_gif: {uri: /plot/kalfa/samples_gif}
   samples_matrix: {uri: /plot/kalfa/samples_matrix, params: {n: 8}}
+calibrate: {}
 checkpoint: {uri: /checkpoint/kalfa/best, params: {monitor: val/fid}}
 blocks:
   cond_embed:
@@ -46,7 +47,7 @@ flow:
             transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.95, 0.05, 0.0], seed: 7}}, loaders: {
         train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64, drop_last: true}}, valid: {uri: 
             /loader/kalfa/torch, set: valid, params: {set: valid, size: 64, drop_last: true}}, test: {uri: 
-            /loader/kalfa/torch, set: test, params: {set: test, size: 64, drop_last: true}}}, frames: {uri: 
+            /loader/kalfa/torch, set: test, params: {set: test, size: 64, drop_last: true}}}, mask: null, frames: {uri: 
           /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
           fields: {image: {preprocessors: [to_signed]}, label: {target: true}}, preprocessors: {to_signed: {uri: 
                 /pre/kalfa/to_tensor_signed}}, drop: [], keys: {to_signed: {}}}, inputs: {df: train_df}}, 

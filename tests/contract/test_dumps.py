@@ -39,7 +39,7 @@ def test_the_recipe_is_the_driver_document(name):
     expected = golden("recipes", name, "recipe")
     assert expected.pop("include") == ["../../../src/kalfa/contract.yaml"]
     assert plain(document) == plain(expected)
-    assert list(document) == ["losses", "metrics", "triggers", "plots", "checkpoint", "blocks", "flow"]
+    assert list(document) == ["losses", "metrics", "triggers", "plots", "calibrate", "checkpoint", "blocks", "flow"]
     assert list(document["flow"]) == ["outputs", "data", "models", "optimizers", "training", "after"]
 
 
