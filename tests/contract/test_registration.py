@@ -66,16 +66,15 @@ def test_the_uri_is_the_path():
 
     root = Path(kalfa.std.__file__).parent
     files = sorted(path for path in root.glob("*/*/*.py") if path.name not in ("__init__.py", "base.py"))
-    assert len(files) == len(STD_URIS) == 205
-    modules = {}
-    for path in files:
-        kind, pack, name = path.relative_to(root).with_suffix("").parts
-        uri = f"/{kind}/{pack}/{name}"
-        assert uri in STD_URIS, f"{path} registers no lego"
-        modules[uri] = f"kalfa.std.{kind}.{pack}.{name}"
+    modules = {"kalfa.std." + ".".join(path.relative_to(root).with_suffix("").parts) for path in files}
+    registered = set()
     for uri in STD_URIS:
-        target = registry.lookup(uri).target
-        assert target.__module__ == modules[uri], (uri, target.__module__)
+        kind, pack, name = uri.strip("/").split("/")
+        module = registry.lookup(uri).target.__module__
+        assert module.startswith(f"kalfa.std.{kind}.{pack}."), (uri, module)
+        registered.add(module)
+    assert registered == modules, modules ^ registered
+    assert len(STD_URIS) == 302
     packages = {path.parent for path in root.rglob("*.py")}
     for directory in packages:
         assert (directory / "__init__.py").exists(), directory

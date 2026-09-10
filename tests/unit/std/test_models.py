@@ -9,19 +9,13 @@ import kalfa  # noqa: F401
 from helpers import tiny_model
 from kalfa.std.builder.kalfa.module import Module, apply_roles, model_seed, module
 from kalfa.std.common.rng import derived_seed
-from kalfa.std.init.torch.normal import normal
-from kalfa.std.init.torch.xavier import xavier
-from kalfa.std.init.torch.zeros import zeros
-from kalfa.std.layer.torch.concat import Concat
+from kalfa.std.init.torch.initializers import normal, xavier, zeros
+from kalfa.std.layer.kalfa.blocks import linear, linear_relu
+from kalfa.std.layer.kalfa.features import L2Normalize, Polynomial
+from kalfa.std.layer.torch.activations import leaky_relu, relu
 from kalfa.std.layer.torch.dropout import dropout
-from kalfa.std.layer.torch.flatten import flatten
-from kalfa.std.layer.kalfa.l2_normalize import L2Normalize
-from kalfa.std.layer.torch.leaky_relu import leaky_relu
-from kalfa.std.layer.kalfa.linear import linear
-from kalfa.std.layer.kalfa.linear_relu import linear_relu
-from kalfa.std.layer.kalfa.polynomial import Polynomial
-from kalfa.std.layer.torch.relu import relu
 from kalfa.std.layer.torch.linear import torch_linear
+from kalfa.std.layer.torch.shape import Concat, flatten
 from kalfa.std.lego.kalfa.clone import Ema
 
 

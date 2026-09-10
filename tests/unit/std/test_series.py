@@ -7,16 +7,14 @@ import torch
 
 import kalfa  # noqa: F401
 from kalfa.std.feed.kalfa.window import WindowDataset, previous_frames, window
-from kalfa.std.layer.torch.gru import Gru
-from kalfa.std.layer.torch.last_step import LastStep
-from kalfa.std.plot.kalfa.forecast_samples import forecast_samples
+from kalfa.std.layer.torch.recurrent import Gru
+from kalfa.std.layer.torch.shape import LastStep
+from kalfa.std.lego.kalfa.prep import apply, fit
+from kalfa.std.lego.kalfa.sizes import kfold_sizes
+from kalfa.std.plot.kalfa.predictions import forecast_samples
 from kalfa.std.pre.base import TableFrame
-from kalfa.std.lego.kalfa.apply import apply
-from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
-from kalfa.std.split.kalfa.kfold import kfold
-from kalfa.std.lego.kalfa.kfold_sizes import kfold_sizes
-from kalfa.std.split.kalfa.sequential import sequential
+from kalfa.std.pre.sklearn.scalers import StandardScaler
+from kalfa.std.split.kalfa.splits import kfold, sequential
 from kalfa.synthetic import energy_frame
 
 

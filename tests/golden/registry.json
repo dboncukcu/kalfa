@@ -514,6 +514,15 @@
       "kind": "layer",
       "signature": "(out_features, in_features=None)"
     },
+    "/layer/kalfa/mlp": {
+      "alias": [
+        "mlp"
+      ],
+      "description": "A multilayer perceptron in one node: a linear layer, the activation and dropout for every width, then a plain linear layer of out_features when it is written; lazy without in_features",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(widths, activation='relu', dropout=0.0, out_features=None, in_features=None)"
+    },
     "/layer/kalfa/polynomial": {
       "alias": [
         "polynomial"
@@ -541,6 +550,96 @@
       "kind": "layer",
       "signature": "(shape)"
     },
+    "/layer/torch/adaptive_avgpool": {
+      "alias": [
+        "adaptive_avgpool"
+      ],
+      "description": "torch.nn.AdaptiveAvgPool2d to output_size, a number or [height, width]",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(output_size=1)"
+    },
+    "/layer/torch/adaptive_avgpool1d": {
+      "alias": [
+        "adaptive_avgpool1d"
+      ],
+      "description": "torch.nn.AdaptiveAvgPool1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(output_size=1)"
+    },
+    "/layer/torch/adaptive_avgpool3d": {
+      "alias": [
+        "adaptive_avgpool3d"
+      ],
+      "description": "torch.nn.AdaptiveAvgPool3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(output_size=1)"
+    },
+    "/layer/torch/adaptive_maxpool": {
+      "alias": [
+        "adaptive_maxpool"
+      ],
+      "description": "torch.nn.AdaptiveMaxPool2d to output_size, a number or [height, width]",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(output_size=1)"
+    },
+    "/layer/torch/adaptive_maxpool1d": {
+      "alias": [
+        "adaptive_maxpool1d"
+      ],
+      "description": "torch.nn.AdaptiveMaxPool1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(output_size=1)"
+    },
+    "/layer/torch/adaptive_maxpool3d": {
+      "alias": [
+        "adaptive_maxpool3d"
+      ],
+      "description": "torch.nn.AdaptiveMaxPool3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(output_size=1)"
+    },
+    "/layer/torch/alpha_dropout": {
+      "alias": [
+        "alpha_dropout"
+      ],
+      "description": "torch.nn.AlphaDropout, the dropout of selu",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(p=0.5)"
+    },
+    "/layer/torch/avgpool": {
+      "alias": [
+        "avgpool"
+      ],
+      "description": "torch.nn.AvgPool2d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
+    },
+    "/layer/torch/avgpool1d": {
+      "alias": [
+        "avgpool1d"
+      ],
+      "description": "torch.nn.AvgPool1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
+    },
+    "/layer/torch/avgpool3d": {
+      "alias": [
+        "avgpool3d"
+      ],
+      "description": "torch.nn.AvgPool3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
+    },
     "/layer/torch/batch_norm": {
       "alias": [
         "batch_norm"
@@ -549,6 +648,60 @@
       "facts": {},
       "kind": "layer",
       "signature": "(dims=1, eps=1e-05, momentum=0.1, affine=True)"
+    },
+    "/layer/torch/bilinear": {
+      "alias": [
+        "bilinear"
+      ],
+      "description": "torch.nn.Bilinear over two inputs of in1_features and in2_features",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(in1_features, in2_features, out_features, bias=True)"
+    },
+    "/layer/torch/celu": {
+      "alias": [
+        "celu"
+      ],
+      "description": "torch.nn.CELU with alpha",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(alpha=1.0)"
+    },
+    "/layer/torch/channel_shuffle": {
+      "alias": [
+        "channel_shuffle"
+      ],
+      "description": "torch.nn.ChannelShuffle over groups",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(groups)"
+    },
+    "/layer/torch/circular_pad": {
+      "alias": [
+        "circular_pad"
+      ],
+      "description": "torch.nn.CircularPad2d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/circular_pad1d": {
+      "alias": [
+        "circular_pad1d"
+      ],
+      "description": "torch.nn.CircularPad1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/circular_pad3d": {
+      "alias": [
+        "circular_pad3d"
+      ],
+      "description": "torch.nn.CircularPad3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
     },
     "/layer/torch/concat": {
       "alias": [
@@ -559,6 +712,42 @@
       "kind": "layer",
       "signature": "(dim=1)"
     },
+    "/layer/torch/constant_pad": {
+      "alias": [
+        "constant_pad"
+      ],
+      "description": "torch.nn.ConstantPad2d with value",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding, value=0.0)"
+    },
+    "/layer/torch/constant_pad1d": {
+      "alias": [
+        "constant_pad1d"
+      ],
+      "description": "torch.nn.ConstantPad1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding, value=0.0)"
+    },
+    "/layer/torch/constant_pad3d": {
+      "alias": [
+        "constant_pad3d"
+      ],
+      "description": "torch.nn.ConstantPad3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding, value=0.0)"
+    },
+    "/layer/torch/conv1d": {
+      "alias": [
+        "conv1d"
+      ],
+      "description": "torch.nn.Conv1d; without in_channels the input channels are taken from the first batch",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)"
+    },
     "/layer/torch/conv2d": {
       "alias": [
         "conv2d"
@@ -566,16 +755,97 @@
       "description": "2d convolution; without in_channels the input channels are taken from the first batch",
       "facts": {},
       "kind": "layer",
-      "signature": "(out_channels, kernel, stride=1, padding=0, in_channels=None)"
+      "signature": "(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)"
+    },
+    "/layer/torch/conv3d": {
+      "alias": [
+        "conv3d"
+      ],
+      "description": "torch.nn.Conv3d; without in_channels the input channels are taken from the first batch",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)"
+    },
+    "/layer/torch/conv_transpose1d": {
+      "alias": [
+        "conv_transpose1d"
+      ],
+      "description": "torch.nn.ConvTranspose1d; without in_channels the input channels are taken from the first batch",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)"
+    },
+    "/layer/torch/conv_transpose2d": {
+      "alias": [
+        "conv_transpose2d"
+      ],
+      "description": "torch.nn.ConvTranspose2d; without in_channels the input channels are taken from the first batch",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)"
+    },
+    "/layer/torch/conv_transpose3d": {
+      "alias": [
+        "conv_transpose3d"
+      ],
+      "description": "torch.nn.ConvTranspose3d; without in_channels the input channels are taken from the first batch",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)"
+    },
+    "/layer/torch/cosine_similarity": {
+      "alias": [
+        "cosine_similarity"
+      ],
+      "description": "torch.nn.CosineSimilarity of two inputs along dim",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dim=1, eps=1e-08)"
     },
     "/layer/torch/dropout": {
       "alias": [
         "dropout"
       ],
-      "description": "Dropout",
+      "description": "torch.nn.Dropout",
       "facts": {},
       "kind": "layer",
       "signature": "(p=0.5)"
+    },
+    "/layer/torch/dropout1d": {
+      "alias": [
+        "dropout1d"
+      ],
+      "description": "torch.nn.Dropout1d, whole channels of a sequence",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(p=0.5)"
+    },
+    "/layer/torch/dropout2d": {
+      "alias": [
+        "dropout2d"
+      ],
+      "description": "torch.nn.Dropout2d, whole channels of an image",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(p=0.5)"
+    },
+    "/layer/torch/dropout3d": {
+      "alias": [
+        "dropout3d"
+      ],
+      "description": "torch.nn.Dropout3d, whole channels of a volume",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(p=0.5)"
+    },
+    "/layer/torch/elu": {
+      "alias": [
+        "elu"
+      ],
+      "description": "torch.nn.ELU with alpha",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(alpha=1.0)"
     },
     "/layer/torch/embedding": {
       "alias": [
@@ -584,16 +854,79 @@
       "description": "torch.nn.Embedding(num, dim); num may be a kind data component such as vocab_size",
       "facts": {},
       "kind": "layer",
-      "signature": "(num, dim)"
+      "signature": "(num, dim, padding_idx=None)"
+    },
+    "/layer/torch/embedding_bag": {
+      "alias": [
+        "embedding_bag"
+      ],
+      "description": "torch.nn.EmbeddingBag(num, dim), the mean, sum or max of a bag of ids; num may be vocab_size",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(num, dim, mode='mean')"
+    },
+    "/layer/torch/feature_alpha_dropout": {
+      "alias": [
+        "feature_alpha_dropout"
+      ],
+      "description": "torch.nn.FeatureAlphaDropout, alpha dropout of whole channels",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(p=0.5)"
     },
     "/layer/torch/flatten": {
       "alias": [
         "flatten"
       ],
-      "description": "Flatten every dimension but the batch",
+      "description": "torch.nn.Flatten from start_dim to end_dim",
       "facts": {},
       "kind": "layer",
-      "signature": "()"
+      "signature": "(start_dim=1, end_dim=-1)"
+    },
+    "/layer/torch/fold": {
+      "alias": [
+        "fold"
+      ],
+      "description": "torch.nn.Fold, sliding blocks back into an image of output_size",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(output_size, kernel, dilation=1, padding=0, stride=1)"
+    },
+    "/layer/torch/fractional_maxpool": {
+      "alias": [
+        "fractional_maxpool"
+      ],
+      "description": "torch.nn.FractionalMaxPool2d to output_size or output_ratio",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, output_size=None, output_ratio=None)"
+    },
+    "/layer/torch/fractional_maxpool3d": {
+      "alias": [
+        "fractional_maxpool3d"
+      ],
+      "description": "torch.nn.FractionalMaxPool3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, output_size=None, output_ratio=None)"
+    },
+    "/layer/torch/gelu": {
+      "alias": [
+        "gelu"
+      ],
+      "description": "torch.nn.GELU; approximate none or tanh",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(approximate='none')"
+    },
+    "/layer/torch/glu": {
+      "alias": [
+        "glu"
+      ],
+      "description": "torch.nn.GLU, the gated linear unit over dim",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dim=-1)"
     },
     "/layer/torch/group_norm": {
       "alias": [
@@ -611,7 +944,70 @@
       "description": "GRU over (batch, steps, features) returning every step; the input width comes from the first batch",
       "facts": {},
       "kind": "layer",
-      "signature": "(hidden, layers=1)"
+      "signature": "(hidden, layers=1, dropout=0.0, bidirectional=False)"
+    },
+    "/layer/torch/gru_cell": {
+      "alias": [
+        "gru_cell"
+      ],
+      "description": "torch.nn.GRUCell over one step; two inputs, x and h",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(input_size, hidden, bias=True)"
+    },
+    "/layer/torch/hardshrink": {
+      "alias": [
+        "hardshrink"
+      ],
+      "description": "torch.nn.Hardshrink, zero inside [-lambd, lambd]",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(lambd=0.5)"
+    },
+    "/layer/torch/hardsigmoid": {
+      "alias": [
+        "hardsigmoid"
+      ],
+      "description": "torch.nn.Hardsigmoid",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/hardswish": {
+      "alias": [
+        "hardswish"
+      ],
+      "description": "torch.nn.Hardswish",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/hardtanh": {
+      "alias": [
+        "hardtanh"
+      ],
+      "description": "torch.nn.Hardtanh clipped to [min_val, max_val]",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(min_val=-1.0, max_val=1.0)"
+    },
+    "/layer/torch/identity": {
+      "alias": [
+        "identity"
+      ],
+      "description": "torch.nn.Identity, the input as it is",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/instance_norm": {
+      "alias": [
+        "instance_norm"
+      ],
+      "description": "torch.nn.InstanceNorm, lazy in the number of features: dims 1 for sequences, 2 for images, 3 for volumes",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dims=2, eps=1e-05, momentum=0.1, affine=False)"
     },
     "/layer/torch/last_step": {
       "alias": [
@@ -635,35 +1031,510 @@
       "alias": [
         "leaky_relu"
       ],
-      "description": "LeakyReLU activation",
+      "description": "torch.nn.LeakyReLU with negative_slope",
       "facts": {},
       "kind": "layer",
       "signature": "(negative_slope=0.01)"
     },
     "/layer/torch/linear": {
       "alias": [],
-      "description": "torch.nn.Linear",
+      "description": "torch.nn.Linear with in_features written out",
       "facts": {},
       "kind": "layer",
-      "signature": "(in_features, out_features)"
+      "signature": "(in_features, out_features, bias=True)"
+    },
+    "/layer/torch/local_response_norm": {
+      "alias": [
+        "local_response_norm"
+      ],
+      "description": "torch.nn.LocalResponseNorm over size neighbouring channels",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(size, alpha=0.0001, beta=0.75, k=1.0)"
+    },
+    "/layer/torch/log_sigmoid": {
+      "alias": [
+        "log_sigmoid"
+      ],
+      "description": "torch.nn.LogSigmoid",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/log_softmax": {
+      "alias": [
+        "log_softmax"
+      ],
+      "description": "torch.nn.LogSoftmax over dim",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dim=-1)"
+    },
+    "/layer/torch/lppool": {
+      "alias": [
+        "lppool"
+      ],
+      "description": "torch.nn.LPPool2d, the power average pool of norm_type",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(norm_type, kernel, stride=None)"
+    },
+    "/layer/torch/lppool1d": {
+      "alias": [
+        "lppool1d"
+      ],
+      "description": "torch.nn.LPPool1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(norm_type, kernel, stride=None)"
+    },
+    "/layer/torch/lppool3d": {
+      "alias": [
+        "lppool3d"
+      ],
+      "description": "torch.nn.LPPool3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(norm_type, kernel, stride=None)"
+    },
+    "/layer/torch/lstm": {
+      "alias": [
+        "lstm"
+      ],
+      "description": "LSTM over (batch, steps, features) returning every step; the input width comes from the first batch",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(hidden, layers=1, dropout=0.0, bidirectional=False)"
+    },
+    "/layer/torch/lstm_cell": {
+      "alias": [
+        "lstm_cell"
+      ],
+      "description": "torch.nn.LSTMCell over one step; inputs x and (h, c), outputs (h, c)",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(input_size, hidden, bias=True)"
+    },
+    "/layer/torch/max_unpool": {
+      "alias": [
+        "max_unpool"
+      ],
+      "description": "torch.nn.MaxUnpool2d, the inverse of a max pool that kept its indices; two inputs",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
+    },
+    "/layer/torch/max_unpool1d": {
+      "alias": [
+        "max_unpool1d"
+      ],
+      "description": "torch.nn.MaxUnpool1d; two inputs",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
+    },
+    "/layer/torch/max_unpool3d": {
+      "alias": [
+        "max_unpool3d"
+      ],
+      "description": "torch.nn.MaxUnpool3d; two inputs",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
     },
     "/layer/torch/maxpool": {
       "alias": [
         "maxpool"
       ],
-      "description": "2d max pooling",
+      "description": "torch.nn.MaxPool2d",
       "facts": {},
       "kind": "layer",
-      "signature": "(kernel, stride=None)"
+      "signature": "(kernel, stride=None, padding=0)"
+    },
+    "/layer/torch/maxpool1d": {
+      "alias": [
+        "maxpool1d"
+      ],
+      "description": "torch.nn.MaxPool1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
+    },
+    "/layer/torch/maxpool3d": {
+      "alias": [
+        "maxpool3d"
+      ],
+      "description": "torch.nn.MaxPool3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, stride=None, padding=0)"
+    },
+    "/layer/torch/mish": {
+      "alias": [
+        "mish"
+      ],
+      "description": "torch.nn.Mish",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/multihead_attention": {
+      "alias": [
+        "multihead_attention"
+      ],
+      "description": "torch.nn.MultiheadAttention over (batch, steps, embed_dim); inputs query, key and value, outputs the attended values and the weights",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(embed_dim, heads, dropout=0.0, bias=True, batch_first=True)"
+    },
+    "/layer/torch/pairwise_distance": {
+      "alias": [
+        "pairwise_distance"
+      ],
+      "description": "torch.nn.PairwiseDistance of two inputs, the p norm of their difference",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(p=2.0, eps=1e-06, keepdim=False)"
+    },
+    "/layer/torch/pixel_shuffle": {
+      "alias": [
+        "pixel_shuffle"
+      ],
+      "description": "torch.nn.PixelShuffle by factor",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(factor)"
+    },
+    "/layer/torch/pixel_unshuffle": {
+      "alias": [
+        "pixel_unshuffle"
+      ],
+      "description": "torch.nn.PixelUnshuffle by factor",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(factor)"
+    },
+    "/layer/torch/prelu": {
+      "alias": [
+        "prelu"
+      ],
+      "description": "torch.nn.PReLU, a learned slope per channel (num_parameters) starting at init",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(num_parameters=1, init=0.25)"
+    },
+    "/layer/torch/reflection_pad": {
+      "alias": [
+        "reflection_pad"
+      ],
+      "description": "torch.nn.ReflectionPad2d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/reflection_pad1d": {
+      "alias": [
+        "reflection_pad1d"
+      ],
+      "description": "torch.nn.ReflectionPad1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/reflection_pad3d": {
+      "alias": [
+        "reflection_pad3d"
+      ],
+      "description": "torch.nn.ReflectionPad3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
     },
     "/layer/torch/relu": {
       "alias": [
         "relu"
       ],
-      "description": "ReLU activation",
+      "description": "torch.nn.ReLU",
       "facts": {},
       "kind": "layer",
       "signature": "()"
+    },
+    "/layer/torch/relu6": {
+      "alias": [
+        "relu6"
+      ],
+      "description": "torch.nn.ReLU6, ReLU clipped at 6",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/replication_pad": {
+      "alias": [
+        "replication_pad"
+      ],
+      "description": "torch.nn.ReplicationPad2d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/replication_pad1d": {
+      "alias": [
+        "replication_pad1d"
+      ],
+      "description": "torch.nn.ReplicationPad1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/replication_pad3d": {
+      "alias": [
+        "replication_pad3d"
+      ],
+      "description": "torch.nn.ReplicationPad3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/rms_norm": {
+      "alias": [
+        "rms_norm"
+      ],
+      "description": "torch.nn.RMSNorm over the last axis; normalized_shape is its width, a number or {uri: feature_width}",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(normalized_shape, eps=None, elementwise_affine=True)"
+    },
+    "/layer/torch/rnn": {
+      "alias": [
+        "rnn"
+      ],
+      "description": "Elman RNN over (batch, steps, features) returning every step, nonlinearity tanh or relu; the input width comes from the first batch",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(hidden, layers=1, dropout=0.0, bidirectional=False, nonlinearity='tanh')"
+    },
+    "/layer/torch/rnn_cell": {
+      "alias": [
+        "rnn_cell"
+      ],
+      "description": "torch.nn.RNNCell over one step; two inputs, x and h",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(input_size, hidden, bias=True, nonlinearity='tanh')"
+    },
+    "/layer/torch/rrelu": {
+      "alias": [
+        "rrelu"
+      ],
+      "description": "torch.nn.RReLU, a random slope in [lower, upper] in train mode",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(lower=0.125, upper=0.3333333333333333)"
+    },
+    "/layer/torch/selu": {
+      "alias": [
+        "selu"
+      ],
+      "description": "torch.nn.SELU, self normalizing; pairs with alpha_dropout",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/sigmoid": {
+      "alias": [
+        "sigmoid"
+      ],
+      "description": "torch.nn.Sigmoid",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/silu": {
+      "alias": [
+        "silu"
+      ],
+      "description": "torch.nn.SiLU, x times sigmoid(x)",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/softmax": {
+      "alias": [
+        "softmax"
+      ],
+      "description": "torch.nn.Softmax over dim",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dim=-1)"
+    },
+    "/layer/torch/softmax2d": {
+      "alias": [
+        "softmax2d"
+      ],
+      "description": "torch.nn.Softmax2d, the softmax over the channels of an image",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/softmin": {
+      "alias": [
+        "softmin"
+      ],
+      "description": "torch.nn.Softmin over dim",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dim=-1)"
+    },
+    "/layer/torch/softplus": {
+      "alias": [
+        "softplus"
+      ],
+      "description": "torch.nn.Softplus with beta and the linear threshold",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(beta=1.0, threshold=20.0)"
+    },
+    "/layer/torch/softshrink": {
+      "alias": [
+        "softshrink"
+      ],
+      "description": "torch.nn.Softshrink, shrunk toward zero by lambd",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(lambd=0.5)"
+    },
+    "/layer/torch/softsign": {
+      "alias": [
+        "softsign"
+      ],
+      "description": "torch.nn.Softsign, x over 1 plus |x|",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/tanh": {
+      "alias": [
+        "tanh_layer"
+      ],
+      "description": "torch.nn.Tanh; the alias is tanh_layer because tanh names the preprocessor",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/tanhshrink": {
+      "alias": [
+        "tanhshrink"
+      ],
+      "description": "torch.nn.Tanhshrink, x minus tanh(x)",
+      "facts": {},
+      "kind": "layer",
+      "signature": "()"
+    },
+    "/layer/torch/threshold": {
+      "alias": [
+        "threshold_layer"
+      ],
+      "description": "torch.nn.Threshold: value where x is at or below threshold; the alias is threshold_layer because threshold names the calibration",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(threshold, value)"
+    },
+    "/layer/torch/transformer": {
+      "alias": [
+        "transformer"
+      ],
+      "description": "torch.nn.Transformer, the encoder and the decoder; inputs the source and the target sequences",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(d_model=512, heads=8, encoder_layers=6, decoder_layers=6, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)"
+    },
+    "/layer/torch/transformer_decoder": {
+      "alias": [
+        "transformer_decoder"
+      ],
+      "description": "torch.nn.TransformerDecoder of layers decoder layers; inputs the target sequence and the memory",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(d_model, heads, layers, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)"
+    },
+    "/layer/torch/transformer_decoder_layer": {
+      "alias": [
+        "transformer_decoder_layer"
+      ],
+      "description": "torch.nn.TransformerDecoderLayer; inputs the target sequence and the memory",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(d_model, heads, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)"
+    },
+    "/layer/torch/transformer_encoder": {
+      "alias": [
+        "transformer_encoder"
+      ],
+      "description": "torch.nn.TransformerEncoder of layers encoder layers over (batch, steps, d_model)",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(d_model, heads, layers, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)"
+    },
+    "/layer/torch/transformer_encoder_layer": {
+      "alias": [
+        "transformer_encoder_layer"
+      ],
+      "description": "torch.nn.TransformerEncoderLayer over (batch, steps, d_model)",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(d_model, heads, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)"
+    },
+    "/layer/torch/unflatten": {
+      "alias": [],
+      "description": "torch.nn.Unflatten of dim into size; the alias unflatten names kalfa's per sample reshape",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(dim, size)"
+    },
+    "/layer/torch/unfold": {
+      "alias": [
+        "unfold"
+      ],
+      "description": "torch.nn.Unfold, an image into sliding blocks",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(kernel, dilation=1, padding=0, stride=1)"
+    },
+    "/layer/torch/upsample": {
+      "alias": [
+        "upsample"
+      ],
+      "description": "torch.nn.Upsample to size or by scale_factor; mode nearest, linear, bilinear, bicubic or trilinear",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(size=None, scale_factor=None, mode='nearest', align_corners=None)"
+    },
+    "/layer/torch/zero_pad": {
+      "alias": [
+        "zero_pad"
+      ],
+      "description": "torch.nn.ZeroPad2d; padding is a number or [left, right, top, bottom]",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/zero_pad1d": {
+      "alias": [
+        "zero_pad1d"
+      ],
+      "description": "torch.nn.ZeroPad1d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
+    },
+    "/layer/torch/zero_pad3d": {
+      "alias": [
+        "zero_pad3d"
+      ],
+      "description": "torch.nn.ZeroPad3d",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(padding)"
     },
     "/lego/kalfa/apply": {
       "alias": [],
@@ -2372,8 +3243,15 @@
       "accuracy": "/metric/torchmetrics/accuracy",
       "adam": "/optimizer/torch/adam",
       "adamw": "/optimizer/torch/adamw",
+      "adaptive_avgpool": "/layer/torch/adaptive_avgpool",
+      "adaptive_avgpool1d": "/layer/torch/adaptive_avgpool1d",
+      "adaptive_avgpool3d": "/layer/torch/adaptive_avgpool3d",
+      "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
+      "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
+      "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
+      "alpha_dropout": "/layer/torch/alpha_dropout",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
@@ -2381,13 +3259,31 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "avgpool": "/layer/torch/avgpool",
+      "avgpool1d": "/layer/torch/avgpool1d",
+      "avgpool3d": "/layer/torch/avgpool3d",
       "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
+      "bilinear": "/layer/torch/bilinear",
       "cast": "/pre/kalfa/cast",
+      "celu": "/layer/torch/celu",
+      "channel_shuffle": "/layer/torch/channel_shuffle",
+      "circular_pad": "/layer/torch/circular_pad",
+      "circular_pad1d": "/layer/torch/circular_pad1d",
+      "circular_pad3d": "/layer/torch/circular_pad3d",
       "class_histogram": "/plot/kalfa/class_histogram",
       "concat": "/layer/torch/concat",
       "confusion_matrix": "/plot/kalfa/confusion_matrix",
+      "constant_pad": "/layer/torch/constant_pad",
+      "constant_pad1d": "/layer/torch/constant_pad1d",
+      "constant_pad3d": "/layer/torch/constant_pad3d",
+      "conv1d": "/layer/torch/conv1d",
+      "conv3d": "/layer/torch/conv3d",
+      "conv_transpose1d": "/layer/torch/conv_transpose1d",
+      "conv_transpose2d": "/layer/torch/conv_transpose2d",
+      "conv_transpose3d": "/layer/torch/conv_transpose3d",
+      "cosine_similarity": "/layer/torch/cosine_similarity",
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "cuda": "/device/kalfa/cuda",
@@ -2396,19 +3292,37 @@
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
+      "dropout1d": "/layer/torch/dropout1d",
+      "dropout2d": "/layer/torch/dropout2d",
+      "dropout3d": "/layer/torch/dropout3d",
+      "elu": "/layer/torch/elu",
+      "embedding_bag": "/layer/torch/embedding_bag",
       "f1": "/metric/torchmetrics/f1",
+      "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
+      "fold": "/layer/torch/fold",
       "forecast_samples": "/plot/kalfa/forecast_samples",
+      "fractional_maxpool": "/layer/torch/fractional_maxpool",
+      "fractional_maxpool3d": "/layer/torch/fractional_maxpool3d",
+      "gelu": "/layer/torch/gelu",
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
+      "glu": "/layer/torch/glu",
       "grid": "/strategy/kalfa/grid",
       "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
+      "gru_cell": "/layer/torch/gru_cell",
+      "hardshrink": "/layer/torch/hardshrink",
+      "hardsigmoid": "/layer/torch/hardsigmoid",
+      "hardswish": "/layer/torch/hardswish",
+      "hardtanh": "/layer/torch/hardtanh",
       "huber": "/criterion/kalfa/huber",
+      "identity": "/layer/torch/identity",
       "indexed": "/rng/kalfa/indexed",
+      "instance_norm": "/layer/torch/instance_norm",
       "kaiming": "/init/torch/kaiming",
       "kaiming_uniform": "/init/torch/kaiming_uniform",
       "l1_distance": "/layer/kalfa/l1_distance",
@@ -2420,46 +3334,99 @@
       "linear": "/layer/kalfa/linear",
       "linear_relu": "/layer/kalfa/linear_relu",
       "linear_warmup": "/schedule/kalfa/linear_warmup",
+      "local_response_norm": "/layer/torch/local_response_norm",
       "log": "/pre/kalfa/log",
       "log_cosh": "/criterion/kalfa/log_cosh",
+      "log_sigmoid": "/layer/torch/log_sigmoid",
+      "log_softmax": "/layer/torch/log_softmax",
       "loss_curve": "/plot/kalfa/loss_curve",
+      "lppool": "/layer/torch/lppool",
+      "lppool1d": "/layer/torch/lppool1d",
+      "lppool3d": "/layer/torch/lppool3d",
+      "lstm": "/layer/torch/lstm",
+      "lstm_cell": "/layer/torch/lstm_cell",
       "mae": "/criterion/kalfa/mae",
+      "max_unpool": "/layer/torch/max_unpool",
+      "max_unpool1d": "/layer/torch/max_unpool1d",
+      "max_unpool3d": "/layer/torch/max_unpool3d",
+      "maxpool1d": "/layer/torch/maxpool1d",
+      "maxpool3d": "/layer/torch/maxpool3d",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
+      "mish": "/layer/torch/mish",
+      "mlp": "/layer/kalfa/mlp",
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
+      "multihead_attention": "/layer/torch/multihead_attention",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
+      "pairwise_distance": "/layer/torch/pairwise_distance",
+      "pixel_shuffle": "/layer/torch/pixel_shuffle",
+      "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
+      "prelu": "/layer/torch/prelu",
       "random": "/strategy/kalfa/random",
+      "reflection_pad": "/layer/torch/reflection_pad",
+      "reflection_pad1d": "/layer/torch/reflection_pad1d",
+      "reflection_pad3d": "/layer/torch/reflection_pad3d",
       "relu": "/layer/torch/relu",
+      "relu6": "/layer/torch/relu6",
       "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
+      "replication_pad": "/layer/torch/replication_pad",
+      "replication_pad1d": "/layer/torch/replication_pad1d",
+      "replication_pad3d": "/layer/torch/replication_pad3d",
+      "rms_norm": "/layer/torch/rms_norm",
       "rmse": "/metric/kalfa/rmse",
+      "rnn": "/layer/torch/rnn",
+      "rnn_cell": "/layer/torch/rnn_cell",
+      "rrelu": "/layer/torch/rrelu",
+      "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "sigmoid": "/layer/torch/sigmoid",
+      "silu": "/layer/torch/silu",
       "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
+      "softmax": "/layer/torch/softmax",
+      "softmax2d": "/layer/torch/softmax2d",
+      "softmin": "/layer/torch/softmin",
+      "softplus": "/layer/torch/softplus",
+      "softshrink": "/layer/torch/softshrink",
+      "softsign": "/layer/torch/softsign",
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
+      "tanh_layer": "/layer/torch/tanh",
+      "tanhshrink": "/layer/torch/tanhshrink",
       "target_encoding": "/frame/kalfa/target_encoding",
       "threshold": "/calibrate/kalfa/threshold",
+      "threshold_layer": "/layer/torch/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
+      "transformer": "/layer/torch/transformer",
+      "transformer_decoder": "/layer/torch/transformer_decoder",
+      "transformer_decoder_layer": "/layer/torch/transformer_decoder_layer",
+      "transformer_encoder": "/layer/torch/transformer_encoder",
+      "transformer_encoder_layer": "/layer/torch/transformer_encoder_layer",
+      "unfold": "/layer/torch/unfold",
+      "upsample": "/layer/torch/upsample",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
       "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "xavier": "/init/torch/xavier",
+      "zero_pad": "/layer/torch/zero_pad",
+      "zero_pad1d": "/layer/torch/zero_pad1d",
+      "zero_pad3d": "/layer/torch/zero_pad3d",
       "zeros": "/init/torch/zeros"
     },
     "/alias/kalfa/lazy": {
@@ -2467,8 +3434,15 @@
       "accuracy": "/metric/torchmetrics/accuracy",
       "adam": "/optimizer/torch/adam",
       "adamw": "/optimizer/torch/adamw",
+      "adaptive_avgpool": "/layer/torch/adaptive_avgpool",
+      "adaptive_avgpool1d": "/layer/torch/adaptive_avgpool1d",
+      "adaptive_avgpool3d": "/layer/torch/adaptive_avgpool3d",
+      "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
+      "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
+      "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
+      "alpha_dropout": "/layer/torch/alpha_dropout",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
@@ -2476,13 +3450,31 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "avgpool": "/layer/torch/avgpool",
+      "avgpool1d": "/layer/torch/avgpool1d",
+      "avgpool3d": "/layer/torch/avgpool3d",
       "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
+      "bilinear": "/layer/torch/bilinear",
       "cast": "/pre/kalfa/cast",
+      "celu": "/layer/torch/celu",
+      "channel_shuffle": "/layer/torch/channel_shuffle",
+      "circular_pad": "/layer/torch/circular_pad",
+      "circular_pad1d": "/layer/torch/circular_pad1d",
+      "circular_pad3d": "/layer/torch/circular_pad3d",
       "class_histogram": "/plot/kalfa/class_histogram",
       "concat": "/layer/torch/concat",
       "confusion_matrix": "/plot/kalfa/confusion_matrix",
+      "constant_pad": "/layer/torch/constant_pad",
+      "constant_pad1d": "/layer/torch/constant_pad1d",
+      "constant_pad3d": "/layer/torch/constant_pad3d",
+      "conv1d": "/layer/torch/conv1d",
+      "conv3d": "/layer/torch/conv3d",
+      "conv_transpose1d": "/layer/torch/conv_transpose1d",
+      "conv_transpose2d": "/layer/torch/conv_transpose2d",
+      "conv_transpose3d": "/layer/torch/conv_transpose3d",
+      "cosine_similarity": "/layer/torch/cosine_similarity",
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv_stream",
@@ -2492,19 +3484,37 @@
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
+      "dropout1d": "/layer/torch/dropout1d",
+      "dropout2d": "/layer/torch/dropout2d",
+      "dropout3d": "/layer/torch/dropout3d",
+      "elu": "/layer/torch/elu",
+      "embedding_bag": "/layer/torch/embedding_bag",
       "f1": "/metric/torchmetrics/f1",
+      "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
+      "fold": "/layer/torch/fold",
       "forecast_samples": "/plot/kalfa/forecast_samples",
+      "fractional_maxpool": "/layer/torch/fractional_maxpool",
+      "fractional_maxpool3d": "/layer/torch/fractional_maxpool3d",
+      "gelu": "/layer/torch/gelu",
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
+      "glu": "/layer/torch/glu",
       "grid": "/strategy/kalfa/grid",
       "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
+      "gru_cell": "/layer/torch/gru_cell",
+      "hardshrink": "/layer/torch/hardshrink",
+      "hardsigmoid": "/layer/torch/hardsigmoid",
+      "hardswish": "/layer/torch/hardswish",
+      "hardtanh": "/layer/torch/hardtanh",
       "huber": "/criterion/kalfa/huber",
+      "identity": "/layer/torch/identity",
       "indexed": "/rng/kalfa/indexed",
+      "instance_norm": "/layer/torch/instance_norm",
       "kaiming": "/init/torch/kaiming",
       "kaiming_uniform": "/init/torch/kaiming_uniform",
       "l1_distance": "/layer/kalfa/l1_distance",
@@ -2516,47 +3526,100 @@
       "linear": "/layer/kalfa/linear",
       "linear_relu": "/layer/kalfa/linear_relu",
       "linear_warmup": "/schedule/kalfa/linear_warmup",
+      "local_response_norm": "/layer/torch/local_response_norm",
       "log": "/pre/kalfa/log",
       "log_cosh": "/criterion/kalfa/log_cosh",
+      "log_sigmoid": "/layer/torch/log_sigmoid",
+      "log_softmax": "/layer/torch/log_softmax",
       "loss_curve": "/plot/kalfa/loss_curve",
+      "lppool": "/layer/torch/lppool",
+      "lppool1d": "/layer/torch/lppool1d",
+      "lppool3d": "/layer/torch/lppool3d",
+      "lstm": "/layer/torch/lstm",
+      "lstm_cell": "/layer/torch/lstm_cell",
       "mae": "/criterion/kalfa/mae",
+      "max_unpool": "/layer/torch/max_unpool",
+      "max_unpool1d": "/layer/torch/max_unpool1d",
+      "max_unpool3d": "/layer/torch/max_unpool3d",
+      "maxpool1d": "/layer/torch/maxpool1d",
+      "maxpool3d": "/layer/torch/maxpool3d",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
+      "mish": "/layer/torch/mish",
+      "mlp": "/layer/kalfa/mlp",
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
+      "multihead_attention": "/layer/torch/multihead_attention",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
+      "pairwise_distance": "/layer/torch/pairwise_distance",
       "parquet": "/source/kalfa/parquet_stream",
+      "pixel_shuffle": "/layer/torch/pixel_shuffle",
+      "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
+      "prelu": "/layer/torch/prelu",
       "random": "/strategy/kalfa/random",
+      "reflection_pad": "/layer/torch/reflection_pad",
+      "reflection_pad1d": "/layer/torch/reflection_pad1d",
+      "reflection_pad3d": "/layer/torch/reflection_pad3d",
       "relu": "/layer/torch/relu",
+      "relu6": "/layer/torch/relu6",
       "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
+      "replication_pad": "/layer/torch/replication_pad",
+      "replication_pad1d": "/layer/torch/replication_pad1d",
+      "replication_pad3d": "/layer/torch/replication_pad3d",
+      "rms_norm": "/layer/torch/rms_norm",
       "rmse": "/metric/kalfa/rmse",
+      "rnn": "/layer/torch/rnn",
+      "rnn_cell": "/layer/torch/rnn_cell",
+      "rrelu": "/layer/torch/rrelu",
+      "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "sigmoid": "/layer/torch/sigmoid",
+      "silu": "/layer/torch/silu",
       "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
+      "softmax": "/layer/torch/softmax",
+      "softmax2d": "/layer/torch/softmax2d",
+      "softmin": "/layer/torch/softmin",
+      "softplus": "/layer/torch/softplus",
+      "softshrink": "/layer/torch/softshrink",
+      "softsign": "/layer/torch/softsign",
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
+      "tanh_layer": "/layer/torch/tanh",
+      "tanhshrink": "/layer/torch/tanhshrink",
       "target_encoding": "/frame/kalfa/target_encoding",
       "threshold": "/calibrate/kalfa/threshold",
+      "threshold_layer": "/layer/torch/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
+      "transformer": "/layer/torch/transformer",
+      "transformer_decoder": "/layer/torch/transformer_decoder",
+      "transformer_decoder_layer": "/layer/torch/transformer_decoder_layer",
+      "transformer_encoder": "/layer/torch/transformer_encoder",
+      "transformer_encoder_layer": "/layer/torch/transformer_encoder_layer",
+      "unfold": "/layer/torch/unfold",
+      "upsample": "/layer/torch/upsample",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
       "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "xavier": "/init/torch/xavier",
+      "zero_pad": "/layer/torch/zero_pad",
+      "zero_pad1d": "/layer/torch/zero_pad1d",
+      "zero_pad3d": "/layer/torch/zero_pad3d",
       "zeros": "/init/torch/zeros"
     },
     "/alias/kalfa/tabular": {
@@ -2564,8 +3627,15 @@
       "accuracy": "/metric/torchmetrics/accuracy",
       "adam": "/optimizer/torch/adam",
       "adamw": "/optimizer/torch/adamw",
+      "adaptive_avgpool": "/layer/torch/adaptive_avgpool",
+      "adaptive_avgpool1d": "/layer/torch/adaptive_avgpool1d",
+      "adaptive_avgpool3d": "/layer/torch/adaptive_avgpool3d",
+      "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
+      "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
+      "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
+      "alpha_dropout": "/layer/torch/alpha_dropout",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
@@ -2575,15 +3645,33 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "avgpool": "/layer/torch/avgpool",
+      "avgpool1d": "/layer/torch/avgpool1d",
+      "avgpool3d": "/layer/torch/avgpool3d",
       "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
+      "bilinear": "/layer/torch/bilinear",
       "cast": "/pre/kalfa/cast",
+      "celu": "/layer/torch/celu",
+      "channel_shuffle": "/layer/torch/channel_shuffle",
+      "circular_pad": "/layer/torch/circular_pad",
+      "circular_pad1d": "/layer/torch/circular_pad1d",
+      "circular_pad3d": "/layer/torch/circular_pad3d",
       "class_histogram": "/plot/kalfa/class_histogram",
       "class_weights": "/data/kalfa/class_weights",
       "concat": "/layer/torch/concat",
       "confusion_matrix": "/plot/kalfa/confusion_matrix",
+      "constant_pad": "/layer/torch/constant_pad",
+      "constant_pad1d": "/layer/torch/constant_pad1d",
+      "constant_pad3d": "/layer/torch/constant_pad3d",
+      "conv1d": "/layer/torch/conv1d",
+      "conv3d": "/layer/torch/conv3d",
+      "conv_transpose1d": "/layer/torch/conv_transpose1d",
+      "conv_transpose2d": "/layer/torch/conv_transpose2d",
+      "conv_transpose3d": "/layer/torch/conv_transpose3d",
       "correlation_heatmap": "/plot/kalfa/correlation_heatmap",
+      "cosine_similarity": "/layer/torch/cosine_similarity",
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
@@ -2593,22 +3681,40 @@
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
+      "dropout1d": "/layer/torch/dropout1d",
+      "dropout2d": "/layer/torch/dropout2d",
+      "dropout3d": "/layer/torch/dropout3d",
+      "elu": "/layer/torch/elu",
+      "embedding_bag": "/layer/torch/embedding_bag",
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
+      "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
       "feature_distributions": "/plot/kalfa/feature_distributions",
       "feature_width": "/data/kalfa/feature_width",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
+      "fold": "/layer/torch/fold",
       "forecast_samples": "/plot/kalfa/forecast_samples",
+      "fractional_maxpool": "/layer/torch/fractional_maxpool",
+      "fractional_maxpool3d": "/layer/torch/fractional_maxpool3d",
+      "gelu": "/layer/torch/gelu",
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
+      "glu": "/layer/torch/glu",
       "grid": "/strategy/kalfa/grid",
       "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
+      "gru_cell": "/layer/torch/gru_cell",
+      "hardshrink": "/layer/torch/hardshrink",
+      "hardsigmoid": "/layer/torch/hardsigmoid",
+      "hardswish": "/layer/torch/hardswish",
+      "hardtanh": "/layer/torch/hardtanh",
       "huber": "/criterion/kalfa/huber",
+      "identity": "/layer/torch/identity",
       "indexed": "/rng/kalfa/indexed",
+      "instance_norm": "/layer/torch/instance_norm",
       "kaiming": "/init/torch/kaiming",
       "kaiming_uniform": "/init/torch/kaiming_uniform",
       "kbins_discretizer": "/pre/sklearn/kbins_discretizer",
@@ -2624,43 +3730,83 @@
       "linear": "/layer/kalfa/linear",
       "linear_relu": "/layer/kalfa/linear_relu",
       "linear_warmup": "/schedule/kalfa/linear_warmup",
+      "local_response_norm": "/layer/torch/local_response_norm",
       "log": "/pre/kalfa/log",
       "log_cosh": "/criterion/kalfa/log_cosh",
+      "log_sigmoid": "/layer/torch/log_sigmoid",
+      "log_softmax": "/layer/torch/log_softmax",
       "loss_curve": "/plot/kalfa/loss_curve",
+      "lppool": "/layer/torch/lppool",
+      "lppool1d": "/layer/torch/lppool1d",
+      "lppool3d": "/layer/torch/lppool3d",
+      "lstm": "/layer/torch/lstm",
+      "lstm_cell": "/layer/torch/lstm_cell",
       "mae": "/criterion/kalfa/mae",
       "max_abs_scaler": "/pre/sklearn/max_abs_scaler",
+      "max_unpool": "/layer/torch/max_unpool",
+      "max_unpool1d": "/layer/torch/max_unpool1d",
+      "max_unpool3d": "/layer/torch/max_unpool3d",
+      "maxpool1d": "/layer/torch/maxpool1d",
+      "maxpool3d": "/layer/torch/maxpool3d",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
+      "mish": "/layer/torch/mish",
+      "mlp": "/layer/kalfa/mlp",
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
+      "multihead_attention": "/layer/torch/multihead_attention",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "pairplot": "/plot/seaborn/pairplot",
+      "pairwise_distance": "/layer/torch/pairwise_distance",
       "parquet": "/source/kalfa/parquet",
       "permutation_importance": "/plot/kalfa/permutation_importance",
+      "pixel_shuffle": "/layer/torch/pixel_shuffle",
+      "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
       "polynomial": "/layer/kalfa/polynomial",
       "power_transformer": "/pre/sklearn/power_transformer",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
+      "prelu": "/layer/torch/prelu",
       "quantile_transformer": "/pre/sklearn/quantile_transformer",
       "random": "/strategy/kalfa/random",
       "random_split": "/split/kalfa/random",
+      "reflection_pad": "/layer/torch/reflection_pad",
+      "reflection_pad1d": "/layer/torch/reflection_pad1d",
+      "reflection_pad3d": "/layer/torch/reflection_pad3d",
       "relu": "/layer/torch/relu",
+      "relu6": "/layer/torch/relu6",
       "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
+      "replication_pad": "/layer/torch/replication_pad",
+      "replication_pad1d": "/layer/torch/replication_pad1d",
+      "replication_pad3d": "/layer/torch/replication_pad3d",
       "residuals": "/plot/kalfa/residuals",
+      "rms_norm": "/layer/torch/rms_norm",
       "rmse": "/metric/kalfa/rmse",
+      "rnn": "/layer/torch/rnn",
+      "rnn_cell": "/layer/torch/rnn_cell",
       "robust_scaler": "/pre/sklearn/robust_scaler",
+      "rrelu": "/layer/torch/rrelu",
+      "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "sigmoid": "/layer/torch/sigmoid",
+      "silu": "/layer/torch/silu",
       "simple_imputer": "/pre/kalfa/simple_imputer",
       "sinh": "/pre/kalfa/sinh",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
+      "softmax": "/layer/torch/softmax",
+      "softmax2d": "/layer/torch/softmax2d",
+      "softmin": "/layer/torch/softmin",
+      "softplus": "/layer/torch/softplus",
+      "softshrink": "/layer/torch/softshrink",
+      "softsign": "/layer/torch/softsign",
       "spline_transformer": "/pre/sklearn/spline_transformer",
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
@@ -2668,20 +3814,33 @@
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "tanh": "/pre/kalfa/tanh",
+      "tanh_layer": "/layer/torch/tanh",
+      "tanhshrink": "/layer/torch/tanhshrink",
       "target_correlation": "/plot/kalfa/target_correlation",
       "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "target_weights": "/data/kalfa/target_weights",
       "threshold": "/calibrate/kalfa/threshold",
+      "threshold_layer": "/layer/torch/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
+      "transformer": "/layer/torch/transformer",
+      "transformer_decoder": "/layer/torch/transformer_decoder",
+      "transformer_decoder_layer": "/layer/torch/transformer_decoder_layer",
+      "transformer_encoder": "/layer/torch/transformer_encoder",
+      "transformer_encoder_layer": "/layer/torch/transformer_encoder_layer",
+      "unfold": "/layer/torch/unfold",
+      "upsample": "/layer/torch/upsample",
       "violin": "/plot/seaborn/violin",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
       "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "window": "/feed/kalfa/window",
       "xavier": "/init/torch/xavier",
+      "zero_pad": "/layer/torch/zero_pad",
+      "zero_pad1d": "/layer/torch/zero_pad1d",
+      "zero_pad3d": "/layer/torch/zero_pad3d",
       "zeros": "/init/torch/zeros"
     },
     "/alias/kalfa/text": {
@@ -2689,8 +3848,15 @@
       "accuracy": "/metric/torchmetrics/accuracy",
       "adam": "/optimizer/torch/adam",
       "adamw": "/optimizer/torch/adamw",
+      "adaptive_avgpool": "/layer/torch/adaptive_avgpool",
+      "adaptive_avgpool1d": "/layer/torch/adaptive_avgpool1d",
+      "adaptive_avgpool3d": "/layer/torch/adaptive_avgpool3d",
+      "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
+      "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
+      "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
+      "alpha_dropout": "/layer/torch/alpha_dropout",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
@@ -2698,16 +3864,34 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "avgpool": "/layer/torch/avgpool",
+      "avgpool1d": "/layer/torch/avgpool1d",
+      "avgpool3d": "/layer/torch/avgpool3d",
       "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
+      "bilinear": "/layer/torch/bilinear",
       "cast": "/pre/kalfa/cast",
+      "celu": "/layer/torch/celu",
+      "channel_shuffle": "/layer/torch/channel_shuffle",
       "char_tokenizer": "/pre/kalfa/char_tokenizer",
+      "circular_pad": "/layer/torch/circular_pad",
+      "circular_pad1d": "/layer/torch/circular_pad1d",
+      "circular_pad3d": "/layer/torch/circular_pad3d",
       "class_histogram": "/plot/kalfa/class_histogram",
       "class_weights": "/data/kalfa/class_weights",
       "concat": "/layer/torch/concat",
       "confusion_matrix": "/plot/kalfa/confusion_matrix",
+      "constant_pad": "/layer/torch/constant_pad",
+      "constant_pad1d": "/layer/torch/constant_pad1d",
+      "constant_pad3d": "/layer/torch/constant_pad3d",
+      "conv1d": "/layer/torch/conv1d",
+      "conv3d": "/layer/torch/conv3d",
+      "conv_transpose1d": "/layer/torch/conv_transpose1d",
+      "conv_transpose2d": "/layer/torch/conv_transpose2d",
+      "conv_transpose3d": "/layer/torch/conv_transpose3d",
       "correlation_heatmap": "/plot/kalfa/correlation_heatmap",
+      "cosine_similarity": "/layer/torch/cosine_similarity",
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
@@ -2717,22 +3901,40 @@
       "derived": "/rng/kalfa/derived",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
+      "dropout1d": "/layer/torch/dropout1d",
+      "dropout2d": "/layer/torch/dropout2d",
+      "dropout3d": "/layer/torch/dropout3d",
+      "elu": "/layer/torch/elu",
       "embedding": "/layer/torch/embedding",
+      "embedding_bag": "/layer/torch/embedding_bag",
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
+      "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
       "feature_distributions": "/plot/kalfa/feature_distributions",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
+      "fold": "/layer/torch/fold",
       "forecast_samples": "/plot/kalfa/forecast_samples",
+      "fractional_maxpool": "/layer/torch/fractional_maxpool",
+      "fractional_maxpool3d": "/layer/torch/fractional_maxpool3d",
+      "gelu": "/layer/torch/gelu",
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
+      "glu": "/layer/torch/glu",
       "grid": "/strategy/kalfa/grid",
       "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
+      "gru_cell": "/layer/torch/gru_cell",
+      "hardshrink": "/layer/torch/hardshrink",
+      "hardsigmoid": "/layer/torch/hardsigmoid",
+      "hardswish": "/layer/torch/hardswish",
+      "hardtanh": "/layer/torch/hardtanh",
       "huber": "/criterion/kalfa/huber",
+      "identity": "/layer/torch/identity",
       "indexed": "/rng/kalfa/indexed",
+      "instance_norm": "/layer/torch/instance_norm",
       "kaiming": "/init/torch/kaiming",
       "kaiming_uniform": "/init/torch/kaiming_uniform",
       "kde": "/plot/seaborn/kde",
@@ -2747,53 +3949,103 @@
       "linear_relu": "/layer/kalfa/linear_relu",
       "linear_warmup": "/schedule/kalfa/linear_warmup",
       "lm_sampler": "/generate/kalfa/lm_sampler",
+      "local_response_norm": "/layer/torch/local_response_norm",
       "log": "/pre/kalfa/log",
       "log_cosh": "/criterion/kalfa/log_cosh",
+      "log_sigmoid": "/layer/torch/log_sigmoid",
+      "log_softmax": "/layer/torch/log_softmax",
       "loss_curve": "/plot/kalfa/loss_curve",
+      "lppool": "/layer/torch/lppool",
+      "lppool1d": "/layer/torch/lppool1d",
+      "lppool3d": "/layer/torch/lppool3d",
+      "lstm": "/layer/torch/lstm",
+      "lstm_cell": "/layer/torch/lstm_cell",
       "mae": "/criterion/kalfa/mae",
+      "max_unpool": "/layer/torch/max_unpool",
+      "max_unpool1d": "/layer/torch/max_unpool1d",
+      "max_unpool3d": "/layer/torch/max_unpool3d",
+      "maxpool1d": "/layer/torch/maxpool1d",
+      "maxpool3d": "/layer/torch/maxpool3d",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
+      "mish": "/layer/torch/mish",
+      "mlp": "/layer/kalfa/mlp",
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
+      "multihead_attention": "/layer/torch/multihead_attention",
       "next_token": "/feed/kalfa/next_token",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "pairplot": "/plot/seaborn/pairplot",
+      "pairwise_distance": "/layer/torch/pairwise_distance",
       "parquet": "/source/kalfa/parquet",
       "permutation_importance": "/plot/kalfa/permutation_importance",
       "perplexity": "/metric/kalfa/perplexity",
+      "pixel_shuffle": "/layer/torch/pixel_shuffle",
+      "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
+      "prelu": "/layer/torch/prelu",
       "random": "/strategy/kalfa/random",
       "random_split": "/split/kalfa/random",
+      "reflection_pad": "/layer/torch/reflection_pad",
+      "reflection_pad1d": "/layer/torch/reflection_pad1d",
+      "reflection_pad3d": "/layer/torch/reflection_pad3d",
       "relu": "/layer/torch/relu",
+      "relu6": "/layer/torch/relu6",
       "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
+      "replication_pad": "/layer/torch/replication_pad",
+      "replication_pad1d": "/layer/torch/replication_pad1d",
+      "replication_pad3d": "/layer/torch/replication_pad3d",
       "residuals": "/plot/kalfa/residuals",
+      "rms_norm": "/layer/torch/rms_norm",
       "rmse": "/metric/kalfa/rmse",
+      "rnn": "/layer/torch/rnn",
+      "rnn_cell": "/layer/torch/rnn_cell",
+      "rrelu": "/layer/torch/rrelu",
       "sample_writer": "/metric/kalfa/sample_writer",
+      "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "sigmoid": "/layer/torch/sigmoid",
+      "silu": "/layer/torch/silu",
       "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
+      "softmax": "/layer/torch/softmax",
+      "softmax2d": "/layer/torch/softmax2d",
+      "softmin": "/layer/torch/softmin",
+      "softplus": "/layer/torch/softplus",
+      "softshrink": "/layer/torch/softshrink",
+      "softsign": "/layer/torch/softsign",
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
+      "tanh_layer": "/layer/torch/tanh",
+      "tanhshrink": "/layer/torch/tanhshrink",
       "target_correlation": "/plot/kalfa/target_correlation",
       "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "text_lines": "/source/kalfa/text_lines",
       "threshold": "/calibrate/kalfa/threshold",
+      "threshold_layer": "/layer/torch/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
+      "transformer": "/layer/torch/transformer",
+      "transformer_decoder": "/layer/torch/transformer_decoder",
+      "transformer_decoder_layer": "/layer/torch/transformer_decoder_layer",
+      "transformer_encoder": "/layer/torch/transformer_encoder",
+      "transformer_encoder_layer": "/layer/torch/transformer_encoder_layer",
+      "unfold": "/layer/torch/unfold",
+      "upsample": "/layer/torch/upsample",
       "violin": "/plot/seaborn/violin",
       "vocab_size": "/data/kalfa/vocab_size",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
@@ -2801,6 +4053,9 @@
       "weighted_sum": "/objective/kalfa/weighted_sum",
       "window": "/feed/kalfa/window",
       "xavier": "/init/torch/xavier",
+      "zero_pad": "/layer/torch/zero_pad",
+      "zero_pad1d": "/layer/torch/zero_pad1d",
+      "zero_pad3d": "/layer/torch/zero_pad3d",
       "zeros": "/init/torch/zeros"
     },
     "/alias/kalfa/vision": {
@@ -2808,8 +4063,15 @@
       "accuracy": "/metric/torchmetrics/accuracy",
       "adam": "/optimizer/torch/adam",
       "adamw": "/optimizer/torch/adamw",
+      "adaptive_avgpool": "/layer/torch/adaptive_avgpool",
+      "adaptive_avgpool1d": "/layer/torch/adaptive_avgpool1d",
+      "adaptive_avgpool3d": "/layer/torch/adaptive_avgpool3d",
+      "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
+      "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
+      "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
+      "alpha_dropout": "/layer/torch/alpha_dropout",
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
@@ -2817,16 +4079,34 @@
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
+      "avgpool": "/layer/torch/avgpool",
+      "avgpool1d": "/layer/torch/avgpool1d",
+      "avgpool3d": "/layer/torch/avgpool3d",
       "batch_norm": "/layer/torch/batch_norm",
       "bce_logits": "/criterion/kalfa/bce_logits",
       "best": "/checkpoint/kalfa/best",
+      "bilinear": "/layer/torch/bilinear",
       "cast": "/pre/kalfa/cast",
+      "celu": "/layer/torch/celu",
+      "channel_shuffle": "/layer/torch/channel_shuffle",
+      "circular_pad": "/layer/torch/circular_pad",
+      "circular_pad1d": "/layer/torch/circular_pad1d",
+      "circular_pad3d": "/layer/torch/circular_pad3d",
       "class_histogram": "/plot/kalfa/class_histogram",
       "class_weights": "/data/kalfa/class_weights",
       "concat": "/layer/torch/concat",
       "confusion_matrix": "/plot/kalfa/confusion_matrix",
+      "constant_pad": "/layer/torch/constant_pad",
+      "constant_pad1d": "/layer/torch/constant_pad1d",
+      "constant_pad3d": "/layer/torch/constant_pad3d",
+      "conv1d": "/layer/torch/conv1d",
       "conv2d": "/layer/torch/conv2d",
+      "conv3d": "/layer/torch/conv3d",
+      "conv_transpose1d": "/layer/torch/conv_transpose1d",
+      "conv_transpose2d": "/layer/torch/conv_transpose2d",
+      "conv_transpose3d": "/layer/torch/conv_transpose3d",
       "correlation_heatmap": "/plot/kalfa/correlation_heatmap",
+      "cosine_similarity": "/layer/torch/cosine_similarity",
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
       "csv": "/source/kalfa/csv",
@@ -2839,27 +4119,45 @@
       "distill": "/objective/kalfa/distill",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
+      "dropout1d": "/layer/torch/dropout1d",
+      "dropout2d": "/layer/torch/dropout2d",
+      "dropout3d": "/layer/torch/dropout3d",
+      "elu": "/layer/torch/elu",
       "embedding": "/layer/torch/embedding",
+      "embedding_bag": "/layer/torch/embedding_bag",
       "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
+      "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
       "feature_distributions": "/plot/kalfa/feature_distributions",
       "fid": "/metric/kalfa/fid",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
+      "fold": "/layer/torch/fold",
       "forecast_samples": "/plot/kalfa/forecast_samples",
+      "fractional_maxpool": "/layer/torch/fractional_maxpool",
+      "fractional_maxpool3d": "/layer/torch/fractional_maxpool3d",
       "gan_sampler": "/generate/kalfa/gan_sampler",
+      "gelu": "/layer/torch/gelu",
       "given": "/split/kalfa/given",
       "global": "/rng/kalfa/global",
+      "glu": "/layer/torch/glu",
       "grid": "/strategy/kalfa/grid",
       "group_norm": "/layer/torch/group_norm",
       "group_statistic": "/frame/kalfa/group_statistic",
       "gru": "/layer/torch/gru",
+      "gru_cell": "/layer/torch/gru_cell",
+      "hardshrink": "/layer/torch/hardshrink",
+      "hardsigmoid": "/layer/torch/hardsigmoid",
+      "hardswish": "/layer/torch/hardswish",
+      "hardtanh": "/layer/torch/hardtanh",
       "huber": "/criterion/kalfa/huber",
+      "identity": "/layer/torch/identity",
       "image_folder": "/source/kalfa/image_folder",
       "image_grid": "/plot/kalfa/image_grid",
       "image_pairs": "/plot/kalfa/image_pairs",
       "indexed": "/rng/kalfa/indexed",
+      "instance_norm": "/layer/torch/instance_norm",
       "kaiming": "/init/torch/kaiming",
       "kaiming_uniform": "/init/torch/kaiming_uniform",
       "kde": "/plot/seaborn/kde",
@@ -2874,17 +4172,33 @@
       "linear_betas": "/schedule/kalfa/linear_betas",
       "linear_relu": "/layer/kalfa/linear_relu",
       "linear_warmup": "/schedule/kalfa/linear_warmup",
+      "local_response_norm": "/layer/torch/local_response_norm",
       "log": "/pre/kalfa/log",
       "log_cosh": "/criterion/kalfa/log_cosh",
+      "log_sigmoid": "/layer/torch/log_sigmoid",
+      "log_softmax": "/layer/torch/log_softmax",
       "loss_curve": "/plot/kalfa/loss_curve",
+      "lppool": "/layer/torch/lppool",
+      "lppool1d": "/layer/torch/lppool1d",
+      "lppool3d": "/layer/torch/lppool3d",
+      "lstm": "/layer/torch/lstm",
+      "lstm_cell": "/layer/torch/lstm_cell",
       "mae": "/criterion/kalfa/mae",
+      "max_unpool": "/layer/torch/max_unpool",
+      "max_unpool1d": "/layer/torch/max_unpool1d",
+      "max_unpool3d": "/layer/torch/max_unpool3d",
       "maxpool": "/layer/torch/maxpool",
+      "maxpool1d": "/layer/torch/maxpool1d",
+      "maxpool3d": "/layer/torch/maxpool3d",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
       "minmax_scaler": "/pre/sklearn/minmax_scaler",
+      "mish": "/layer/torch/mish",
+      "mlp": "/layer/kalfa/mlp",
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
+      "multihead_attention": "/layer/torch/multihead_attention",
       "normal": "/init/torch/normal",
       "normalize": "/pre/kalfa/normalize",
       "ntxent": "/objective/kalfa/ntxent",
@@ -2892,45 +4206,79 @@
       "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
       "pairplot": "/plot/seaborn/pairplot",
+      "pairwise_distance": "/layer/torch/pairwise_distance",
       "parquet": "/source/kalfa/parquet",
       "permutation_importance": "/plot/kalfa/permutation_importance",
+      "pixel_shuffle": "/layer/torch/pixel_shuffle",
+      "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
+      "prelu": "/layer/torch/prelu",
       "random": "/strategy/kalfa/random",
       "random_crop_flip": "/pre/kalfa/random_crop_flip",
       "random_split": "/split/kalfa/random",
       "recon_error": "/metric/kalfa/recon_error",
+      "reflection_pad": "/layer/torch/reflection_pad",
+      "reflection_pad1d": "/layer/torch/reflection_pad1d",
+      "reflection_pad3d": "/layer/torch/reflection_pad3d",
       "relu": "/layer/torch/relu",
+      "relu6": "/layer/torch/relu6",
       "rename": "/transform/kalfa/rename",
       "reparam": "/layer/kalfa/reparam",
+      "replication_pad": "/layer/torch/replication_pad",
+      "replication_pad1d": "/layer/torch/replication_pad1d",
+      "replication_pad3d": "/layer/torch/replication_pad3d",
       "residuals": "/plot/kalfa/residuals",
       "resize": "/pre/kalfa/resize",
+      "rms_norm": "/layer/torch/rms_norm",
       "rmse": "/metric/kalfa/rmse",
+      "rnn": "/layer/torch/rnn",
+      "rnn_cell": "/layer/torch/rnn_cell",
+      "rrelu": "/layer/torch/rrelu",
       "sample_writer": "/metric/kalfa/sample_writer",
       "samples_gif": "/plot/kalfa/samples_gif",
       "samples_matrix": "/plot/kalfa/samples_matrix",
+      "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
+      "sigmoid": "/layer/torch/sigmoid",
+      "silu": "/layer/torch/silu",
       "simclr_aug": "/pre/kalfa/simclr_aug",
       "simple_imputer": "/pre/kalfa/simple_imputer",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
+      "softmax": "/layer/torch/softmax",
+      "softmax2d": "/layer/torch/softmax2d",
+      "softmin": "/layer/torch/softmin",
+      "softplus": "/layer/torch/softplus",
+      "softshrink": "/layer/torch/softshrink",
+      "softsign": "/layer/torch/softsign",
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
+      "tanh_layer": "/layer/torch/tanh",
+      "tanhshrink": "/layer/torch/tanhshrink",
       "target_correlation": "/plot/kalfa/target_correlation",
       "target_encoding": "/frame/kalfa/target_encoding",
       "target_vs_features": "/plot/kalfa/target_vs_features",
       "threshold": "/calibrate/kalfa/threshold",
+      "threshold_layer": "/layer/torch/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
       "to_tensor": "/pre/kalfa/to_tensor",
       "to_tensor_signed": "/pre/kalfa/to_tensor_signed",
       "torchscript": "/export/kalfa/torchscript",
       "torchview": "/plot/torchview/architecture",
+      "transformer": "/layer/torch/transformer",
+      "transformer_decoder": "/layer/torch/transformer_decoder",
+      "transformer_decoder_layer": "/layer/torch/transformer_decoder_layer",
+      "transformer_encoder": "/layer/torch/transformer_encoder",
+      "transformer_encoder_layer": "/layer/torch/transformer_encoder_layer",
       "two_views": "/pre/kalfa/two_views",
       "unflatten": "/layer/kalfa/unflatten",
+      "unfold": "/layer/torch/unfold",
+      "upsample": "/layer/torch/upsample",
       "vae": "/objective/kalfa/vae",
       "violin": "/plot/seaborn/violin",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
@@ -2940,6 +4288,9 @@
       "wgan_gp_d": "/objective/kalfa/wgan_gp_d",
       "window": "/feed/kalfa/window",
       "xavier": "/init/torch/xavier",
+      "zero_pad": "/layer/torch/zero_pad",
+      "zero_pad1d": "/layer/torch/zero_pad1d",
+      "zero_pad3d": "/layer/torch/zero_pad3d",
       "zeros": "/init/torch/zeros"
     }
   },

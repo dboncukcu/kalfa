@@ -6,10 +6,9 @@ from torch import nn
 from kalfa.registration import lego
 from kalfa.std.builder.base import Model, weights_path
 from kalfa.std.checkpoint.base import load
-from kalfa.std.common.deferred import DeferredLayer
+from kalfa.std.common.deferred import DeferredLayer, LazyLayer
 from kalfa.std.common.log import clock, logger_for, since
 from kalfa.std.common.rng import derived_seed, forked
-from kalfa.std.layer.base import LazyLayer
 
 
 logger = logger_for("models")

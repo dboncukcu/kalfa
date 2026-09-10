@@ -12,10 +12,9 @@ from kalfa.std.calibrate.base import read_calibrations
 from kalfa.std.calibrate.kalfa.threshold import Threshold
 from kalfa.std.common.device import Device
 from kalfa.std.feed.kalfa.table import table
-from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.calibrate import calibrate
-from kalfa.std.lego.kalfa.fit import fit
 from kalfa.std.lego.kalfa.predict import predict
+from kalfa.std.lego.kalfa.prep import apply, fit
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.plot.base import set_frame
 from kalfa.synthetic import housing_frame

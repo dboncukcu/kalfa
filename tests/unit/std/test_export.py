@@ -5,10 +5,7 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import batch, tiny_model
-from kalfa.std.export.base import traced_inputs
-from kalfa.std.export.kalfa.onnx import onnx
-from kalfa.std.export.kalfa.state_dict import state_dict
-from kalfa.std.export.kalfa.torchscript import torchscript
+from kalfa.std.export.kalfa.formats import onnx, state_dict, torchscript, traced_inputs
 
 
 def test_state_dict_and_torchscript_write_the_model(tmp_path):

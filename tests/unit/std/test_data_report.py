@@ -3,15 +3,14 @@
 import json
 
 import kalfa  # noqa: F401
-from kalfa.synthetic import housing_frame
 from kalfa.std.feed.kalfa.table import table
-from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.data_report import data_report, stage_entries
-from kalfa.std.lego.kalfa.fit import fit
+from kalfa.std.lego.kalfa.prep import apply, fit
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.plot.kalfa.data_pipeline import data_pipeline, histogram_columns, stage_lines
-from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
-from kalfa.std.transform.kalfa.derive import derive
+from kalfa.std.pre.sklearn.scalers import StandardScaler
+from kalfa.std.transform.kalfa.table import derive
+from kalfa.synthetic import housing_frame
 
 
 def pieces(tmp_path):

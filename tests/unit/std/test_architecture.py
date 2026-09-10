@@ -7,10 +7,10 @@ import kalfa  # noqa: F401
 from helpers import frame, tiny_model
 from kalfa.std.adapter.kalfa.criterion import CriterionAdapter
 from kalfa.std.adapter.kalfa.objective import ObjectiveAdapter
-from kalfa.std.criterion.kalfa.mse import mse
+from kalfa.std.criterion.kalfa.regression import mse
 from kalfa.std.feed.kalfa.table import table
 from kalfa.std.loader.kalfa.torch import torch_loader
-from kalfa.std.optimizer.torch.sgd import Sgd
+from kalfa.std.optimizer.torch.optimizers import Sgd
 from kalfa.std.plot.kalfa.architecture import architecture, graph_layout, traced_shapes, training_layout
 
 

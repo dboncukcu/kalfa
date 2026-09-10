@@ -5,9 +5,7 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import tiny_model
-from kalfa.std.optimizer.torch.adam import Adam
-from kalfa.std.optimizer.torch.adamw import AdamW
-from kalfa.std.optimizer.torch.sgd import Sgd
+from kalfa.std.optimizer.torch.optimizers import Adam, AdamW, Sgd
 
 
 def test_lazy_optimizer_builds_on_first_step_and_carries_loss_and_schedule():
@@ -61,7 +59,7 @@ def test_state_dict_round_trip_with_pending_state():
 def test_schedule_scales_the_learning_rate_by_updates():
     import functools
 
-    from kalfa.std.schedule.kalfa.linear_warmup import linear_warmup
+    from kalfa.std.schedule.kalfa.schedules import linear_warmup
 
     model = tiny_model()
     schedule = functools.partial(linear_warmup, start=0.0, end=1.0, steps=4)

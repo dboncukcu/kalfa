@@ -580,6 +580,12 @@ def print_pack(table, style, kind):
         print(f"  {style.cyan(name.ljust(width))}  {style.yellow((found or '').ljust(10))}  {uri}")
 
 
+def module_of(entry):
+    if isinstance(entry.target, str):
+        return ""
+    return entry.target.__module__
+
+
 def print_entries(entries, style, aliases=False):
     entries = [entry for entry in entries if not entry.fragment]
     if not entries:
@@ -595,6 +601,7 @@ def print_entries(entries, style, aliases=False):
         facts = {name: value for name, value in entry.facts.declared().items() if name != "kind"}
         if facts:
             line += "  " + style.dim(facts_text(facts))
+        line += "  " + style.dim(module_of(entry))
         print(line)
         if aliases:
             names = {}

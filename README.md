@@ -477,18 +477,24 @@ computes a value the lego does not already have (guard it with `log.isEnabledFor
 then `plugins: [acme_legos]` works anywhere the package is installed. Aliases declared by plugin legos are usable
 without a pack.
 
-**The std tree.** The URI of a std lego is its path: `/pre/sklearn/standard_scaler` is
-`src/kalfa/std/pre/sklearn/standard_scaler.py`, one lego per file, the registered thing last in the file.
-`src/kalfa/std/__init__.py` imports every `std/<kind>/<pack>/<name>.py`, so adding a lego is adding a file; a
-contract test checks that every file registers the lego its path names and nothing else. Code two legos of a kind
-share sits in the kind's `base.py` (`std/pre/base.py`: the field plan, `Prep`, the frames, the base classes
-`Preprocessor`, `Scaler`, `Encoder`, `Tokenizer`), code two legos of one pack share in the pack's `base.py`
-(`std/pre/sklearn/base.py`), and code that crosses kinds in `std/common/` (`runtime`, `figure`, `log`, `samples`,
-`stream`, `deferred`, `prediction`, `generation`, `diffusion`). `common/` never imports a lego module, a `base.py`
-imports `common/`, a lego module imports `common/` and its bases. The base classes the legos build on are
-`Preprocessor` (`pre/base.py`), `Metric` (`metric/base.py`), `Loss` (`common/runtime.py`), `Model`
-(`builder/base.py`), `Dataset` (`feed/base.py`), `Policy` (`checkpoint/base.py`), `Optimizer`
-(`optimizer/base.py`) and `Strategy` (`strategy/base.py`); a plugin subclasses them.
+**The std tree.** The URI of a std lego is `/<kind>/<pack>/<name>` and its module sits under
+`src/kalfa/std/<kind>/<pack>/`: a file holds one lego with a body of its own (`std/pre/kalfa/char_tokenizer.py`) or
+a family of small legos of one kind and one pack (`std/criterion/kalfa/regression.py` holds `mse`, `mae`, `huber`,
+`log_cosh` and `weighted_mse`; `std/layer/torch/activations.py` the activations), the helpers of the family above
+them in the same file and the registered things last. `src/kalfa/std/__init__.py` imports every
+`std/<kind>/<pack>/*.py`, so adding a lego is adding it to its family or adding a file; a contract test checks that
+every std lego is registered from a module of its kind and pack and that every module registers one, and `kalfa ls`
+prints the module after the facts. Code two families of a kind share, and the base classes, sit in the kind's
+`base.py` (`std/pre/base.py`: the field plan, `Prep`, the frames, the base classes `Preprocessor`, `Scaler`,
+`Encoder`, `Tokenizer`), code two legos of one pack share in the pack's `base.py` (`std/pre/sklearn/base.py`), and
+code that crosses kinds in `std/common/` (`runtime`, `figure`, `log`, `samples`, `stream`, `deferred`, `prediction`,
+`generation`, `diffusion`). A kind whose legos share nothing but a family has no `base.py`. `common/` never imports
+a lego module, a `base.py` imports `common/`, a lego module imports `common/`, its bases and the family file that
+owns a helper it borrows (`lego/kalfa/headers.py` takes `ImageFolder` from `source/kalfa/samples.py`). The base
+classes the legos build on are `Preprocessor` (`pre/base.py`), `Metric` (`metric/base.py`), `Loss`
+(`common/runtime.py`), `Model` (`builder/base.py`), `Dataset` (`feed/base.py`), `Policy` (`checkpoint/base.py`),
+`Optimizer` (`optimizer/base.py`), `Strategy` (`strategy/base.py`), `FrameTransform` (`frame/base.py`) and
+`Calibration` (`calibrate/base.py`); a plugin subclasses them.
 
 **Adding an example.** Write `examples/<nn>_<name>/config.yaml` with a comment header (aliases from a pack, paths
 relative to the folder), `make_data.py` on top of `kalfa.synthetic`, the plugin module next to them when the

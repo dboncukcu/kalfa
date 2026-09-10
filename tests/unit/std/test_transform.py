@@ -5,12 +5,8 @@ import functools
 import pandas
 
 import kalfa  # noqa: F401
-from kalfa.std.lego.kalfa.transform_set import transform_set
-from kalfa.std.transform.kalfa.astype import astype
-from kalfa.std.transform.kalfa.derive import derive
-from kalfa.std.transform.kalfa.drop import drop
-from kalfa.std.transform.kalfa.filter import filter_rows
-from kalfa.std.transform.kalfa.rename import rename
+from kalfa.std.lego.kalfa.data_steps import transform_set
+from kalfa.std.transform.kalfa.table import astype, derive, drop, filter_rows, rename
 
 
 def test_the_std_transforms_reshape_a_table():

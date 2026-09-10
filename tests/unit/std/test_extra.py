@@ -12,17 +12,14 @@ from torch import nn
 
 import kalfa  # noqa: F401
 from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
-from kalfa.std.layer.kalfa.l1_distance import L1Distance
-from kalfa.std.metric.torchmetrics.binary_auroc import binary_auroc
-from kalfa.std.metric.torchmetrics.binary_average_precision import binary_average_precision
-from kalfa.std.plot.kalfa.architecture_text import architecture_text
-from kalfa.std.plot.torchview.architecture import architecture as torchview_architecture
-from kalfa.std.plot.torchmetrics.binary_precision_recall_curve import binary_precision_recall_curve
-from kalfa.std.plot.torchmetrics.binary_roc import binary_roc
-from kalfa.std.plot.kalfa.class_histogram import class_histogram
 from kalfa.std.common.runtime import Context, Pass
-from helpers import batch as make_batch
-from helpers import tiny_model
+from kalfa.std.layer.kalfa.wires import L1Distance
+from kalfa.std.metric.torchmetrics.classification import binary_auroc, binary_average_precision
+from kalfa.std.plot.kalfa.architecture import architecture_text
+from kalfa.std.plot.kalfa.classification import class_histogram
+from kalfa.std.plot.torchmetrics.curves import binary_precision_recall_curve, binary_roc
+from kalfa.std.plot.torchview.architecture import architecture as torchview_architecture
+from helpers import batch as make_batch, tiny_model
 
 
 class OneBatchLoader:
@@ -90,7 +87,7 @@ class Two(nn.Module):
 
 def test_myexample_objectives_register_with_facts_and_run():
     import myexample  # noqa: F401
-    from kalfa.std.criterion.kalfa.bce_logits import bce_logits
+    from kalfa.std.criterion.kalfa.classification import bce_logits
 
     facts = registry.facts("/objective/myexample/alad_discriminator")
     assert facts.kind == "objective" and facts.partial and facts.refs == {"criterion": "criterion"}

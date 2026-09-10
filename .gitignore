@@ -8,7 +8,9 @@ build/
 .idea/
 .vscode/
 runs/
-data/
+examples/*/data/
+tests/**/data/
+/data/
 *.parquet
 *.pt
 *.onnx

@@ -5,12 +5,10 @@ import pandas
 import pytest
 
 import kalfa  # noqa: F401
-from kalfa.std.lego.kalfa.apply import apply
-from kalfa.std.lego.kalfa.fit import fit
+from kalfa.std.lego.kalfa.prep import apply, fit
 from kalfa.std.pre.base import read_prep
-from kalfa.std.pre.kalfa.fill import Fill
-from kalfa.std.pre.kalfa.simple_imputer import SimpleImputer
-from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
+from kalfa.std.pre.kalfa.missing import Fill, SimpleImputer
+from kalfa.std.pre.sklearn.scalers import StandardScaler
 
 
 def test_simple_imputer_fills_with_the_train_statistic_and_flags_the_gaps():

@@ -9,21 +9,17 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import frame
-from kalfa.std.lego.kalfa.transform_set import transform_set
-from kalfa.std.transform.kalfa.filter import filter_rows
 from kalfa.std.feed.kalfa.table import table
+from kalfa.std.lego.kalfa.data_steps import transform_set
+from kalfa.std.lego.kalfa.headers import csv_header, parquet_header
+from kalfa.std.lego.kalfa.prep import apply, fit
+from kalfa.std.lego.kalfa.sizes import ratio_sizes
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.pre.base import assign_fields, read_prep, specificity, torch_dtype
-from kalfa.std.lego.kalfa.apply import apply
-from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.sklearn.minmax_scaler import MinMaxScaler
-from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
-from kalfa.std.source.kalfa.csv import csv
-from kalfa.std.lego.kalfa.csv_header import csv_header
-from kalfa.std.lego.kalfa.parquet_header import parquet_header
-from kalfa.std.source.kalfa.parquet import parquet
-from kalfa.std.split.kalfa.random import random_split
-from kalfa.std.lego.kalfa.ratio_sizes import ratio_sizes
+from kalfa.std.pre.sklearn.scalers import MinMaxScaler, StandardScaler
+from kalfa.std.source.kalfa.tables import csv, parquet
+from kalfa.std.split.kalfa.splits import random_split
+from kalfa.std.transform.kalfa.table import filter_rows
 from kalfa.synthetic import housing_frame
 
 
@@ -82,10 +78,7 @@ def test_dtype_table():
 
 
 def test_the_elementwise_scale_transforms_invert_themselves():
-    from kalfa.std.pre.kalfa.asinh import Asinh
-    from kalfa.std.pre.kalfa.atanh import Atanh
-    from kalfa.std.pre.kalfa.sinh import Sinh
-    from kalfa.std.pre.kalfa.tanh import Tanh
+    from kalfa.std.pre.kalfa.scales import Asinh, Atanh, Sinh, Tanh
 
     heavy = numpy.array([-5000.0, -1.0, 0.0, 0.3, 7.5, 1200.0])
     assert numpy.allclose(Asinh(2.0).inverse(Asinh(2.0).apply(heavy)), heavy)
@@ -100,9 +93,7 @@ def test_the_elementwise_scale_transforms_invert_themselves():
 
 
 def test_the_elementwise_scale_transforms_say_where_they_break():
-    from kalfa.std.pre.kalfa.atanh import Atanh
-    from kalfa.std.pre.kalfa.sinh import Sinh
-    from kalfa.std.pre.kalfa.tanh import Tanh
+    from kalfa.std.pre.kalfa.scales import Atanh, Sinh, Tanh
 
     with pytest.raises(ValueError, match="overflows"):
         Sinh(1.0).apply(numpy.array([800.0]))
@@ -116,10 +107,8 @@ def test_the_elementwise_scale_transforms_say_where_they_break():
 
 def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
     import sklearn.preprocessing as sklearn_pre
-    from kalfa.std.pre.sklearn.max_abs_scaler import MaxAbsScaler
-    from kalfa.std.pre.sklearn.power_transformer import PowerTransformer
-    from kalfa.std.pre.sklearn.quantile_transformer import QuantileTransformer
-    from kalfa.std.pre.sklearn.robust_scaler import RobustScaler
+    from kalfa.std.pre.sklearn.scalers import MaxAbsScaler, RobustScaler
+    from kalfa.std.pre.sklearn.transformers import PowerTransformer, QuantileTransformer
 
     values = numpy.random.default_rng(0).normal(size=(200, 3)) * [1.0, 50.0, 0.01] + [0.0, 3.0, -1.0]
     for built, reference in ((MaxAbsScaler(), sklearn_pre.MaxAbsScaler()),
@@ -140,8 +129,7 @@ def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
 
 def test_the_widening_preprocessors_name_the_columns_they_produce():
     import sklearn.preprocessing as sklearn_pre
-    from kalfa.std.pre.sklearn.kbins_discretizer import KBins
-    from kalfa.std.pre.sklearn.spline_transformer import Spline
+    from kalfa.std.pre.sklearn.transformers import KBins, Spline
 
     values = numpy.random.default_rng(0).normal(size=200)
     bins = KBins(bins=4)
@@ -167,7 +155,7 @@ def test_the_widening_preprocessors_name_the_columns_they_produce():
 
 
 def test_a_widening_preprocessor_expands_the_feature_layout(tmp_path):
-    from kalfa.std.pre.sklearn.kbins_discretizer import KBins
+    from kalfa.std.pre.sklearn.transformers import KBins
 
     data = housing_frame(rows=200)
     prep = fit(data, {"x0": {"preprocessors": ["bins"]}, "x*": {"preprocessors": ["s"]},
@@ -200,7 +188,7 @@ def test_a_grouped_preprocessor_is_one_object_over_all_its_columns(tmp_path):
 
 
 def test_a_grouped_preprocessor_waits_for_the_per_column_steps_before_it(tmp_path):
-    from kalfa.std.pre.kalfa.cast import Cast
+    from kalfa.std.pre.kalfa.encoders import Cast
 
     data = housing_frame(rows=50)
     prep = fit(data, {"x*": {"preprocessors": ["c", "s"]}, "price": {"target": True}},
@@ -237,7 +225,7 @@ def test_grouped_preprocessors_written_in_different_orders_are_an_error():
 
 
 def test_a_grouped_preprocessor_needs_one_column_wide_input():
-    from kalfa.std.pre.kalfa.one_hot import OneHot
+    from kalfa.std.pre.kalfa.encoders import OneHot
 
     data = housing_frame(rows=40)
     data["kind"] = ["a", "b"] * 20

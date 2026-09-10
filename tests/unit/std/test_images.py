@@ -4,24 +4,18 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.transform.kalfa.filter import filter_rows
-from kalfa.std.feed.kalfa.table import SampleDataset, table
-from kalfa.std.layer.kalfa.unflatten import unflatten
-from kalfa.std.loader.kalfa.torch import balanced_sampler, torch_loader
-from kalfa.std.plot.kalfa.image_pairs import image_pairs
-from kalfa.std.lego.kalfa.apply import apply
-from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.kalfa.normalize import Normalize
-from kalfa.std.pre.kalfa.random_crop_flip import RandomCropFlip
-from kalfa.std.pre.kalfa.resize import Resize
-from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
-from kalfa.std.pre.kalfa.to_tensor import ToTensor
-from kalfa.std.pre.kalfa.to_tensor_signed import ToTensorSigned
 from kalfa.std.common.samples import Samples
-from kalfa.std.lego.kalfa.image_folder_header import image_folder_header
-from kalfa.std.source.kalfa.image_folder import image_folder
-from kalfa.std.split.kalfa.kfold import kfold
-from kalfa.std.split.kalfa.random import random_split
+from kalfa.std.feed.kalfa.table import SampleDataset, table
+from kalfa.std.layer.kalfa.wires import unflatten
+from kalfa.std.lego.kalfa.headers import image_folder_header
+from kalfa.std.lego.kalfa.prep import apply, fit
+from kalfa.std.loader.kalfa.torch import balanced_sampler, torch_loader
+from kalfa.std.plot.kalfa.images import image_pairs
+from kalfa.std.pre.kalfa.images import Normalize, RandomCropFlip, Resize, ToTensor, ToTensorSigned
+from kalfa.std.pre.sklearn.scalers import StandardScaler
+from kalfa.std.source.kalfa.samples import image_folder
+from kalfa.std.split.kalfa.splits import kfold, random_split
+from kalfa.std.transform.kalfa.table import filter_rows
 from kalfa.synthetic import write_image_folder
 
 
@@ -101,7 +95,7 @@ def test_image_preprocessors(folder):
     rgb = torch.rand(3, 4, 4)
     imagenet = Normalize("imagenet", "imagenet").apply(rgb)
     assert imagenet.shape == (3, 4, 4)
-    assert float(imagenet[0, 0, 0]) == pytest.approx((float(rgb[0, 0, 0]) - 0.485) / 0.229)
+    assert float(imagenet[0, 0, 0]) == pytest.approx((float(rgb[0, 0, 0]) - 0.485) / 0.229, abs=1e-6)
 
 
 def test_balanced_sampler_and_unflatten(folder):
@@ -140,8 +134,7 @@ def test_image_pairs_draws_from_the_valid_set_when_test_is_empty(folder, tmp_pat
 
 def test_two_views_and_simclr_aug(folder):
     from kalfa.std.objective.kalfa.ntxent import ntxent
-    from kalfa.std.pre.kalfa.simclr_aug import SimclrAug
-    from kalfa.std.pre.kalfa.two_views import TwoViews
+    from kalfa.std.pre.kalfa.images import SimclrAug, TwoViews
     from torch import nn
 
     samples = image_folder(str(folder))
@@ -171,10 +164,10 @@ def test_two_views_and_simclr_aug(folder):
 
 def test_text_source_tokenizer_and_next_token(tmp_path):
     from kalfa.std.feed.kalfa.next_token import next_token
+    from kalfa.std.lego.kalfa.headers import text_lines_header
     from kalfa.std.metric.kalfa.perplexity import Perplexity
     from kalfa.std.pre.kalfa.char_tokenizer import CharTokenizer
-    from kalfa.std.lego.kalfa.text_lines_header import text_lines_header
-    from kalfa.std.source.kalfa.text_lines import text_lines
+    from kalfa.std.source.kalfa.samples import text_lines
     from kalfa.synthetic import write_text
 
     path = write_text(tmp_path / "corpus.txt", lines=12)

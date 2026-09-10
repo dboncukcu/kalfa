@@ -12,16 +12,13 @@ import kalfa  # noqa: F401
 from helpers import frame, tiny_model
 from kalfa.api import git_note, weights_of, write_git_note
 from kalfa.std.common.history import History
-from kalfa.std.criterion.kalfa.weighted_mse import weighted_mse
-from kalfa.std.data.kalfa.feature_width import feature_width
-from kalfa.std.data.kalfa.target_weights import target_weights
+from kalfa.std.criterion.kalfa.regression import weighted_mse
+from kalfa.std.data.kalfa.components import feature_width, target_weights
 from kalfa.std.feed.kalfa.table import table
-from kalfa.std.init.torch.kaiming_uniform import kaiming_uniform
-from kalfa.std.layer.torch.batch_norm import batch_norm
-from kalfa.std.layer.torch.group_norm import group_norm
-from kalfa.std.layer.torch.layer_norm import layer_norm
+from kalfa.std.init.torch.initializers import kaiming_uniform
+from kalfa.std.layer.torch.normalization import batch_norm, group_norm, layer_norm
 from kalfa.std.loader.kalfa.torch import torch_loader
-from kalfa.std.optimizer.torch.sgd import Sgd
+from kalfa.std.optimizer.torch.optimizers import Sgd
 from kalfa.std.pre.kalfa.median_std_scaler import MedianStdScaler
 
 

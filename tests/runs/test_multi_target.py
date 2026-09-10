@@ -51,8 +51,8 @@ def test_every_wire_is_cut_into_its_fields(trained):
 
 
 def test_every_target_keeps_its_own_scale(dataset):
-    from kalfa.std.lego.kalfa.fit import fit
-    from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
+    from kalfa.std.lego.kalfa.prep import fit
+    from kalfa.std.pre.sklearn.scalers import StandardScaler
 
     dataset("15_multi_target")
     source = pandas.read_parquet("scores.parquet")

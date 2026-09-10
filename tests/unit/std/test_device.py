@@ -12,10 +12,7 @@ from helpers import minimal, write_config
 from kalfa.api import KalfaError, build_device, check, device_of, predict, run
 from kalfa.cli import main
 from kalfa.config import parse_sets
-from kalfa.std.device.kalfa.auto import auto
-from kalfa.std.device.kalfa.cpu import cpu
-from kalfa.std.device.kalfa.cuda import cuda
-from kalfa.std.device.kalfa.mps import mps
+from kalfa.std.device.kalfa.devices import auto, cpu, cuda, mps
 
 
 def test_std_device_legos_check_availability(monkeypatch):

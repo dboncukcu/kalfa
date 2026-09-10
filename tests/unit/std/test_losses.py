@@ -9,15 +9,11 @@ import kalfa  # noqa: F401
 from helpers import batch, tiny_model
 from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
 from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
-from kalfa.std.criterion.kalfa.bce_logits import bce_logits
-from kalfa.std.criterion.kalfa.cross_entropy import cross_entropy
-from kalfa.std.criterion.kalfa.huber import huber
-from kalfa.std.criterion.kalfa.log_cosh import log_cosh
-from kalfa.std.criterion.kalfa.mae import mae
-from kalfa.std.criterion.kalfa.mse import mse
+from kalfa.std.common.runtime import Context, Pass
+from kalfa.std.criterion.kalfa.classification import bce_logits, cross_entropy
+from kalfa.std.criterion.kalfa.regression import huber, log_cosh, mae, mse
 from kalfa.std.metric.kalfa.recon_error import ReconError
 from kalfa.std.metric.kalfa.rmse import Rmse
-from kalfa.std.common.runtime import Context, Pass
 
 
 def test_criterion_values():
@@ -109,9 +105,8 @@ def test_with_param_rebuilds_the_partial():
 
 def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
     import numpy
-    from kalfa.std.lego.kalfa.apply import apply
-    from kalfa.std.lego.kalfa.fit import fit
-    from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
+    from kalfa.std.lego.kalfa.prep import apply, fit
+    from kalfa.std.pre.sklearn.scalers import StandardScaler
     from kalfa.synthetic import scores_frame
 
     data = scores_frame(rows=40)
@@ -150,9 +145,8 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
 
 def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     import numpy
-    from kalfa.std.lego.kalfa.apply import apply
-    from kalfa.std.lego.kalfa.fit import fit
-    from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
+    from kalfa.std.lego.kalfa.prep import apply, fit
+    from kalfa.std.pre.sklearn.scalers import StandardScaler
     from kalfa.synthetic import housing_frame
 
     data = housing_frame(rows=40)
@@ -196,12 +190,10 @@ def test_vae_objective_and_schedules():
 
     from torch import nn
 
-    from kalfa.std.objective.kalfa.vae import vae
-    from kalfa.std.schedule.kalfa.linear_warmup import linear_warmup
-    from kalfa.std.schedule.kalfa.step_decay import step_decay
-    from kalfa.std.schedule.kalfa.warmup_cosine import warmup_cosine
-    from kalfa.std.layer.kalfa.reparam import Reparam
     from kalfa.std.adapter.kalfa.objective import ObjectiveAdapter
+    from kalfa.std.layer.kalfa.wires import Reparam
+    from kalfa.std.objective.kalfa.vae import vae
+    from kalfa.std.schedule.kalfa.schedules import linear_warmup, step_decay, warmup_cosine
 
     class Encoder(nn.Module):
         inputs = ["image"]
@@ -252,8 +244,7 @@ def test_wgan_objectives_and_fid():
     from torch import nn
 
     from kalfa.std.metric.kalfa.fid import Fid, frechet_distance
-    from kalfa.std.objective.kalfa.wgan_g import wgan_g
-    from kalfa.std.objective.kalfa.wgan_gp_d import wgan_gp_d
+    from kalfa.std.objective.kalfa.adversarial import wgan_g, wgan_gp_d
 
     class Generator(nn.Module):
         inputs = ["z"]
@@ -301,10 +292,10 @@ def test_ddpm_objective_and_sampler():
 
     from torch import nn
 
-    from kalfa.std.generate.kalfa.ddpm_sampler import ddpm_sampler
-    from kalfa.std.objective.kalfa.ddpm import ddpm
     from kalfa.std.common.diffusion import diffusion_steps, noise_schedule
-    from kalfa.std.schedule.kalfa.linear_betas import linear_betas
+    from kalfa.std.generate.kalfa.samplers import ddpm_sampler
+    from kalfa.std.objective.kalfa.ddpm import ddpm
+    from kalfa.std.schedule.kalfa.schedules import linear_betas
 
     class Net(nn.Module):
         inputs = ["image", "t"]

@@ -5,10 +5,8 @@ import pytest
 
 import kalfa  # noqa: F401
 from kalfa.std.frame.base import read_frames
-from kalfa.std.frame.kalfa.group_statistic import GroupStatistic
-from kalfa.std.frame.kalfa.target_encoding import TargetEncoding
-from kalfa.std.lego.kalfa.apply_frames import apply_frames
-from kalfa.std.lego.kalfa.fit_frames import fit_frames
+from kalfa.std.frame.kalfa.statistics import GroupStatistic, TargetEncoding
+from kalfa.std.lego.kalfa.data_steps import apply_frames, fit_frames
 
 
 def test_group_statistic_learns_on_train_and_maps_every_set():

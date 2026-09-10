@@ -8,6 +8,10 @@ def is_deferred(value):
     return isinstance(value, Deferred)
 
 
+class LazyLayer(nn.Module):
+    pass
+
+
 class DeferredLayer(nn.Module):
     def __init__(self, factory, params):
         super().__init__()

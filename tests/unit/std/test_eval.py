@@ -2,7 +2,6 @@
 
 import math
 
-import pandas
 import pytest
 import torch
 
@@ -10,18 +9,16 @@ import kalfa  # noqa: F401
 from helpers import frame, tiny_model
 from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
 from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
-from kalfa.std.criterion.kalfa.mse import mse
+from kalfa.std.common.prediction import prediction_table
+from kalfa.std.criterion.kalfa.regression import mse
+from kalfa.std.feed.kalfa.table import table
 from kalfa.std.lego.kalfa.evaluate import evaluate
 from kalfa.std.lego.kalfa.generate import generate
 from kalfa.std.lego.kalfa.predict import predict
-from kalfa.std.common.prediction import prediction_table
-from kalfa.std.feed.kalfa.table import table
+from kalfa.std.lego.kalfa.prep import apply, fit
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.metric.kalfa.rmse import Rmse
-from kalfa.std.pre.base import Prep
-from kalfa.std.lego.kalfa.apply import apply
-from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
+from kalfa.std.pre.sklearn.scalers import StandardScaler
 from kalfa.synthetic import housing_frame
 
 

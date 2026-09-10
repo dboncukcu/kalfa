@@ -8,25 +8,18 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.lego.kalfa.transform_set import transform_set
-from kalfa.std.transform.kalfa.derive import derive
-from kalfa.std.transform.kalfa.filter import filter_rows
+from kalfa.std.common.stream import positions
 from kalfa.std.feed.kalfa.table import StreamDataset, table
 from kalfa.std.feed.kalfa.window import window
+from kalfa.std.lego.kalfa.data_steps import transform_set
+from kalfa.std.lego.kalfa.headers import csv_header, parquet_header
+from kalfa.std.lego.kalfa.prep import apply, fit
 from kalfa.std.loader.kalfa.torch import torch_loader
-from kalfa.std.lego.kalfa.apply import apply
-from kalfa.std.lego.kalfa.fit import fit
-from kalfa.std.pre.kalfa.one_hot import OneHot
-from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
-from kalfa.std.source.kalfa.csv_stream import csv_stream
-from kalfa.std.lego.kalfa.csv_header import csv_header
-from kalfa.std.lego.kalfa.parquet_header import parquet_header
-from kalfa.std.source.kalfa.parquet_stream import parquet_stream
-from kalfa.std.split.kalfa.given import given
-from kalfa.std.split.kalfa.kfold import kfold
-from kalfa.std.split.kalfa.random import random_split
-from kalfa.std.split.kalfa.sequential import sequential
-from kalfa.std.common.stream import positions
+from kalfa.std.pre.kalfa.encoders import OneHot
+from kalfa.std.pre.sklearn.scalers import StandardScaler
+from kalfa.std.source.kalfa.tables import csv_stream, parquet_stream
+from kalfa.std.split.kalfa.splits import given, kfold, random_split, sequential
+from kalfa.std.transform.kalfa.table import derive, filter_rows
 from kalfa.synthetic import housing_frame
 
 

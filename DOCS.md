@@ -20,7 +20,7 @@ The legos a config writes, by kind.
 | `frame` | data.frame | 2 |
 | `pre` | data.preprocessors | 28 |
 | `feed` | data.feed | 3 |
-| `layer` | model nodes | 21 |
+| `layer` | model nodes | 118 |
 | `init` | model init | 5 |
 | `criterion` | losses, metrics | 7 |
 | `objective` | losses | 7 |
@@ -129,23 +129,120 @@ The legos a config writes, by kind.
 | `/layer/kalfa/l2_normalize` | `l2_normalize` | `(eps=1e-12)` |  | Divide every sample by the L2 norm of its own feature vector (sklearn's Normalizer as a layer: it reads the whole vector, so it belongs to the model, not to a column chain) |
 | `/layer/kalfa/linear` | `linear` | `(out_features, in_features=None)` |  | Linear layer; without in_features the input width is taken from the first batch |
 | `/layer/kalfa/linear_relu` | `linear_relu` | `(out_features, in_features=None)` |  | Linear layer followed by ReLU; lazy without in_features |
+| `/layer/kalfa/mlp` | `mlp` | `(widths, activation='relu', dropout=0.0, out_features=None, in_features=None)` |  | A multilayer perceptron in one node: a linear layer, the activation and dropout for every width, then a plain linear layer of out_features when it is written; lazy without in_features |
 | `/layer/kalfa/polynomial` | `polynomial` | `(degree=2, interaction_only=False, bias=False, keep=True)` |  | Polynomial expansion of the feature vector: the features and every product of degree of them (interaction_only drops the squares, bias adds a constant column, keep: false returns the products alone); the place for feature interactions, computed per batch |
 | `/layer/kalfa/reparam` | `reparam` | `()` |  | Sample z from mu and logvar in train mode, return mu in eval mode |
 | `/layer/kalfa/unflatten` | `unflatten` | `(shape)` |  | Reshape the features of every sample to shape |
+| `/layer/torch/adaptive_avgpool` | `adaptive_avgpool` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool2d to output_size, a number or [height, width] |
+| `/layer/torch/adaptive_avgpool1d` | `adaptive_avgpool1d` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool1d |
+| `/layer/torch/adaptive_avgpool3d` | `adaptive_avgpool3d` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool3d |
+| `/layer/torch/adaptive_maxpool` | `adaptive_maxpool` | `(output_size=1)` |  | torch.nn.AdaptiveMaxPool2d to output_size, a number or [height, width] |
+| `/layer/torch/adaptive_maxpool1d` | `adaptive_maxpool1d` | `(output_size=1)` |  | torch.nn.AdaptiveMaxPool1d |
+| `/layer/torch/adaptive_maxpool3d` | `adaptive_maxpool3d` | `(output_size=1)` |  | torch.nn.AdaptiveMaxPool3d |
+| `/layer/torch/alpha_dropout` | `alpha_dropout` | `(p=0.5)` |  | torch.nn.AlphaDropout, the dropout of selu |
+| `/layer/torch/avgpool` | `avgpool` | `(kernel, stride=None, padding=0)` |  | torch.nn.AvgPool2d |
+| `/layer/torch/avgpool1d` | `avgpool1d` | `(kernel, stride=None, padding=0)` |  | torch.nn.AvgPool1d |
+| `/layer/torch/avgpool3d` | `avgpool3d` | `(kernel, stride=None, padding=0)` |  | torch.nn.AvgPool3d |
 | `/layer/torch/batch_norm` | `batch_norm` | `(dims=1, eps=1e-05, momentum=0.1, affine=True)` |  | torch.nn.BatchNorm over the feature axis, lazy in the number of features: dims 1 for (batch, features) and sequences, 2 for images, 3 for volumes |
+| `/layer/torch/bilinear` | `bilinear` | `(in1_features, in2_features, out_features, bias=True)` |  | torch.nn.Bilinear over two inputs of in1_features and in2_features |
+| `/layer/torch/celu` | `celu` | `(alpha=1.0)` |  | torch.nn.CELU with alpha |
+| `/layer/torch/channel_shuffle` | `channel_shuffle` | `(groups)` |  | torch.nn.ChannelShuffle over groups |
+| `/layer/torch/circular_pad` | `circular_pad` | `(padding)` |  | torch.nn.CircularPad2d |
+| `/layer/torch/circular_pad1d` | `circular_pad1d` | `(padding)` |  | torch.nn.CircularPad1d |
+| `/layer/torch/circular_pad3d` | `circular_pad3d` | `(padding)` |  | torch.nn.CircularPad3d |
 | `/layer/torch/concat` | `concat` | `(dim=1)` |  | Concatenate wires along a dimension |
-| `/layer/torch/conv2d` | `conv2d` | `(out_channels, kernel, stride=1, padding=0, in_channels=None)` |  | 2d convolution; without in_channels the input channels are taken from the first batch |
-| `/layer/torch/dropout` | `dropout` | `(p=0.5)` |  | Dropout |
-| `/layer/torch/embedding` | `embedding` | `(num, dim)` |  | torch.nn.Embedding(num, dim); num may be a kind data component such as vocab_size |
-| `/layer/torch/flatten` | `flatten` | `()` |  | Flatten every dimension but the batch |
+| `/layer/torch/constant_pad` | `constant_pad` | `(padding, value=0.0)` |  | torch.nn.ConstantPad2d with value |
+| `/layer/torch/constant_pad1d` | `constant_pad1d` | `(padding, value=0.0)` |  | torch.nn.ConstantPad1d |
+| `/layer/torch/constant_pad3d` | `constant_pad3d` | `(padding, value=0.0)` |  | torch.nn.ConstantPad3d |
+| `/layer/torch/conv1d` | `conv1d` | `(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.Conv1d; without in_channels the input channels are taken from the first batch |
+| `/layer/torch/conv2d` | `conv2d` | `(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | 2d convolution; without in_channels the input channels are taken from the first batch |
+| `/layer/torch/conv3d` | `conv3d` | `(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.Conv3d; without in_channels the input channels are taken from the first batch |
+| `/layer/torch/conv_transpose1d` | `conv_transpose1d` | `(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.ConvTranspose1d; without in_channels the input channels are taken from the first batch |
+| `/layer/torch/conv_transpose2d` | `conv_transpose2d` | `(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.ConvTranspose2d; without in_channels the input channels are taken from the first batch |
+| `/layer/torch/conv_transpose3d` | `conv_transpose3d` | `(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.ConvTranspose3d; without in_channels the input channels are taken from the first batch |
+| `/layer/torch/cosine_similarity` | `cosine_similarity` | `(dim=1, eps=1e-08)` |  | torch.nn.CosineSimilarity of two inputs along dim |
+| `/layer/torch/dropout` | `dropout` | `(p=0.5)` |  | torch.nn.Dropout |
+| `/layer/torch/dropout1d` | `dropout1d` | `(p=0.5)` |  | torch.nn.Dropout1d, whole channels of a sequence |
+| `/layer/torch/dropout2d` | `dropout2d` | `(p=0.5)` |  | torch.nn.Dropout2d, whole channels of an image |
+| `/layer/torch/dropout3d` | `dropout3d` | `(p=0.5)` |  | torch.nn.Dropout3d, whole channels of a volume |
+| `/layer/torch/elu` | `elu` | `(alpha=1.0)` |  | torch.nn.ELU with alpha |
+| `/layer/torch/embedding` | `embedding` | `(num, dim, padding_idx=None)` |  | torch.nn.Embedding(num, dim); num may be a kind data component such as vocab_size |
+| `/layer/torch/embedding_bag` | `embedding_bag` | `(num, dim, mode='mean')` |  | torch.nn.EmbeddingBag(num, dim), the mean, sum or max of a bag of ids; num may be vocab_size |
+| `/layer/torch/feature_alpha_dropout` | `feature_alpha_dropout` | `(p=0.5)` |  | torch.nn.FeatureAlphaDropout, alpha dropout of whole channels |
+| `/layer/torch/flatten` | `flatten` | `(start_dim=1, end_dim=-1)` |  | torch.nn.Flatten from start_dim to end_dim |
+| `/layer/torch/fold` | `fold` | `(output_size, kernel, dilation=1, padding=0, stride=1)` |  | torch.nn.Fold, sliding blocks back into an image of output_size |
+| `/layer/torch/fractional_maxpool` | `fractional_maxpool` | `(kernel, output_size=None, output_ratio=None)` |  | torch.nn.FractionalMaxPool2d to output_size or output_ratio |
+| `/layer/torch/fractional_maxpool3d` | `fractional_maxpool3d` | `(kernel, output_size=None, output_ratio=None)` |  | torch.nn.FractionalMaxPool3d |
+| `/layer/torch/gelu` | `gelu` | `(approximate='none')` |  | torch.nn.GELU; approximate none or tanh |
+| `/layer/torch/glu` | `glu` | `(dim=-1)` |  | torch.nn.GLU, the gated linear unit over dim |
 | `/layer/torch/group_norm` | `group_norm` | `(num_groups, num_channels, eps=1e-05, affine=True)` |  | torch.nn.GroupNorm: num_groups groups over num_channels channels |
-| `/layer/torch/gru` | `gru` | `(hidden, layers=1)` |  | GRU over (batch, steps, features) returning every step; the input width comes from the first batch |
+| `/layer/torch/gru` | `gru` | `(hidden, layers=1, dropout=0.0, bidirectional=False)` |  | GRU over (batch, steps, features) returning every step; the input width comes from the first batch |
+| `/layer/torch/gru_cell` | `gru_cell` | `(input_size, hidden, bias=True)` |  | torch.nn.GRUCell over one step; two inputs, x and h |
+| `/layer/torch/hardshrink` | `hardshrink` | `(lambd=0.5)` |  | torch.nn.Hardshrink, zero inside [-lambd, lambd] |
+| `/layer/torch/hardsigmoid` | `hardsigmoid` | `()` |  | torch.nn.Hardsigmoid |
+| `/layer/torch/hardswish` | `hardswish` | `()` |  | torch.nn.Hardswish |
+| `/layer/torch/hardtanh` | `hardtanh` | `(min_val=-1.0, max_val=1.0)` |  | torch.nn.Hardtanh clipped to [min_val, max_val] |
+| `/layer/torch/identity` | `identity` | `()` |  | torch.nn.Identity, the input as it is |
+| `/layer/torch/instance_norm` | `instance_norm` | `(dims=2, eps=1e-05, momentum=0.1, affine=False)` |  | torch.nn.InstanceNorm, lazy in the number of features: dims 1 for sequences, 2 for images, 3 for volumes |
 | `/layer/torch/last_step` | `last_step` | `()` |  | The last step of a sequence |
 | `/layer/torch/layer_norm` | `layer_norm` | `(normalized_shape, eps=1e-05, elementwise_affine=True)` |  | torch.nn.LayerNorm over the last axis; normalized_shape is its width, a number or {uri: feature_width} for the width of the feature tensor |
-| `/layer/torch/leaky_relu` | `leaky_relu` | `(negative_slope=0.01)` |  | LeakyReLU activation |
-| `/layer/torch/linear` |  | `(in_features, out_features)` |  | torch.nn.Linear |
-| `/layer/torch/maxpool` | `maxpool` | `(kernel, stride=None)` |  | 2d max pooling |
-| `/layer/torch/relu` | `relu` | `()` |  | ReLU activation |
+| `/layer/torch/leaky_relu` | `leaky_relu` | `(negative_slope=0.01)` |  | torch.nn.LeakyReLU with negative_slope |
+| `/layer/torch/linear` |  | `(in_features, out_features, bias=True)` |  | torch.nn.Linear with in_features written out |
+| `/layer/torch/local_response_norm` | `local_response_norm` | `(size, alpha=0.0001, beta=0.75, k=1.0)` |  | torch.nn.LocalResponseNorm over size neighbouring channels |
+| `/layer/torch/log_sigmoid` | `log_sigmoid` | `()` |  | torch.nn.LogSigmoid |
+| `/layer/torch/log_softmax` | `log_softmax` | `(dim=-1)` |  | torch.nn.LogSoftmax over dim |
+| `/layer/torch/lppool` | `lppool` | `(norm_type, kernel, stride=None)` |  | torch.nn.LPPool2d, the power average pool of norm_type |
+| `/layer/torch/lppool1d` | `lppool1d` | `(norm_type, kernel, stride=None)` |  | torch.nn.LPPool1d |
+| `/layer/torch/lppool3d` | `lppool3d` | `(norm_type, kernel, stride=None)` |  | torch.nn.LPPool3d |
+| `/layer/torch/lstm` | `lstm` | `(hidden, layers=1, dropout=0.0, bidirectional=False)` |  | LSTM over (batch, steps, features) returning every step; the input width comes from the first batch |
+| `/layer/torch/lstm_cell` | `lstm_cell` | `(input_size, hidden, bias=True)` |  | torch.nn.LSTMCell over one step; inputs x and (h, c), outputs (h, c) |
+| `/layer/torch/max_unpool` | `max_unpool` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxUnpool2d, the inverse of a max pool that kept its indices; two inputs |
+| `/layer/torch/max_unpool1d` | `max_unpool1d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxUnpool1d; two inputs |
+| `/layer/torch/max_unpool3d` | `max_unpool3d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxUnpool3d; two inputs |
+| `/layer/torch/maxpool` | `maxpool` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxPool2d |
+| `/layer/torch/maxpool1d` | `maxpool1d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxPool1d |
+| `/layer/torch/maxpool3d` | `maxpool3d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxPool3d |
+| `/layer/torch/mish` | `mish` | `()` |  | torch.nn.Mish |
+| `/layer/torch/multihead_attention` | `multihead_attention` | `(embed_dim, heads, dropout=0.0, bias=True, batch_first=True)` |  | torch.nn.MultiheadAttention over (batch, steps, embed_dim); inputs query, key and value, outputs the attended values and the weights |
+| `/layer/torch/pairwise_distance` | `pairwise_distance` | `(p=2.0, eps=1e-06, keepdim=False)` |  | torch.nn.PairwiseDistance of two inputs, the p norm of their difference |
+| `/layer/torch/pixel_shuffle` | `pixel_shuffle` | `(factor)` |  | torch.nn.PixelShuffle by factor |
+| `/layer/torch/pixel_unshuffle` | `pixel_unshuffle` | `(factor)` |  | torch.nn.PixelUnshuffle by factor |
+| `/layer/torch/prelu` | `prelu` | `(num_parameters=1, init=0.25)` |  | torch.nn.PReLU, a learned slope per channel (num_parameters) starting at init |
+| `/layer/torch/reflection_pad` | `reflection_pad` | `(padding)` |  | torch.nn.ReflectionPad2d |
+| `/layer/torch/reflection_pad1d` | `reflection_pad1d` | `(padding)` |  | torch.nn.ReflectionPad1d |
+| `/layer/torch/reflection_pad3d` | `reflection_pad3d` | `(padding)` |  | torch.nn.ReflectionPad3d |
+| `/layer/torch/relu` | `relu` | `()` |  | torch.nn.ReLU |
+| `/layer/torch/relu6` | `relu6` | `()` |  | torch.nn.ReLU6, ReLU clipped at 6 |
+| `/layer/torch/replication_pad` | `replication_pad` | `(padding)` |  | torch.nn.ReplicationPad2d |
+| `/layer/torch/replication_pad1d` | `replication_pad1d` | `(padding)` |  | torch.nn.ReplicationPad1d |
+| `/layer/torch/replication_pad3d` | `replication_pad3d` | `(padding)` |  | torch.nn.ReplicationPad3d |
+| `/layer/torch/rms_norm` | `rms_norm` | `(normalized_shape, eps=None, elementwise_affine=True)` |  | torch.nn.RMSNorm over the last axis; normalized_shape is its width, a number or {uri: feature_width} |
+| `/layer/torch/rnn` | `rnn` | `(hidden, layers=1, dropout=0.0, bidirectional=False, nonlinearity='tanh')` |  | Elman RNN over (batch, steps, features) returning every step, nonlinearity tanh or relu; the input width comes from the first batch |
+| `/layer/torch/rnn_cell` | `rnn_cell` | `(input_size, hidden, bias=True, nonlinearity='tanh')` |  | torch.nn.RNNCell over one step; two inputs, x and h |
+| `/layer/torch/rrelu` | `rrelu` | `(lower=0.125, upper=0.3333333333333333)` |  | torch.nn.RReLU, a random slope in [lower, upper] in train mode |
+| `/layer/torch/selu` | `selu` | `()` |  | torch.nn.SELU, self normalizing; pairs with alpha_dropout |
+| `/layer/torch/sigmoid` | `sigmoid` | `()` |  | torch.nn.Sigmoid |
+| `/layer/torch/silu` | `silu` | `()` |  | torch.nn.SiLU, x times sigmoid(x) |
+| `/layer/torch/softmax` | `softmax` | `(dim=-1)` |  | torch.nn.Softmax over dim |
+| `/layer/torch/softmax2d` | `softmax2d` | `()` |  | torch.nn.Softmax2d, the softmax over the channels of an image |
+| `/layer/torch/softmin` | `softmin` | `(dim=-1)` |  | torch.nn.Softmin over dim |
+| `/layer/torch/softplus` | `softplus` | `(beta=1.0, threshold=20.0)` |  | torch.nn.Softplus with beta and the linear threshold |
+| `/layer/torch/softshrink` | `softshrink` | `(lambd=0.5)` |  | torch.nn.Softshrink, shrunk toward zero by lambd |
+| `/layer/torch/softsign` | `softsign` | `()` |  | torch.nn.Softsign, x over 1 plus \|x\| |
+| `/layer/torch/tanh` | `tanh_layer` | `()` |  | torch.nn.Tanh; the alias is tanh_layer because tanh names the preprocessor |
+| `/layer/torch/tanhshrink` | `tanhshrink` | `()` |  | torch.nn.Tanhshrink, x minus tanh(x) |
+| `/layer/torch/threshold` | `threshold_layer` | `(threshold, value)` |  | torch.nn.Threshold: value where x is at or below threshold; the alias is threshold_layer because threshold names the calibration |
+| `/layer/torch/transformer` | `transformer` | `(d_model=512, heads=8, encoder_layers=6, decoder_layers=6, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.Transformer, the encoder and the decoder; inputs the source and the target sequences |
+| `/layer/torch/transformer_decoder` | `transformer_decoder` | `(d_model, heads, layers, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerDecoder of layers decoder layers; inputs the target sequence and the memory |
+| `/layer/torch/transformer_decoder_layer` | `transformer_decoder_layer` | `(d_model, heads, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerDecoderLayer; inputs the target sequence and the memory |
+| `/layer/torch/transformer_encoder` | `transformer_encoder` | `(d_model, heads, layers, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerEncoder of layers encoder layers over (batch, steps, d_model) |
+| `/layer/torch/transformer_encoder_layer` | `transformer_encoder_layer` | `(d_model, heads, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerEncoderLayer over (batch, steps, d_model) |
+| `/layer/torch/unflatten` |  | `(dim, size)` |  | torch.nn.Unflatten of dim into size; the alias unflatten names kalfa's per sample reshape |
+| `/layer/torch/unfold` | `unfold` | `(kernel, dilation=1, padding=0, stride=1)` |  | torch.nn.Unfold, an image into sliding blocks |
+| `/layer/torch/upsample` | `upsample` | `(size=None, scale_factor=None, mode='nearest', align_corners=None)` |  | torch.nn.Upsample to size or by scale_factor; mode nearest, linear, bilinear, bicubic or trilinear |
+| `/layer/torch/zero_pad` | `zero_pad` | `(padding)` |  | torch.nn.ZeroPad2d; padding is a number or [left, right, top, bottom] |
+| `/layer/torch/zero_pad1d` | `zero_pad1d` | `(padding)` |  | torch.nn.ZeroPad1d |
+| `/layer/torch/zero_pad3d` | `zero_pad3d` | `(padding)` |  | torch.nn.ZeroPad3d |
 
 ### init
 
@@ -429,6 +526,102 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
+| `softsign` | `/layer/torch/softsign` | layer |
+| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
+| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
+| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
+| `elu` | `/layer/torch/elu` | layer |
+| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
+| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
+| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
+| `lppool1d` | `/layer/torch/lppool1d` | layer |
+| `rrelu` | `/layer/torch/rrelu` | layer |
+| `prelu` | `/layer/torch/prelu` | layer |
+| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
+| `replication_pad` | `/layer/torch/replication_pad` | layer |
+| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
+| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
+| `hardshrink` | `/layer/torch/hardshrink` | layer |
+| `hardswish` | `/layer/torch/hardswish` | layer |
+| `rnn` | `/layer/torch/rnn` | layer |
+| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
+| `dropout2d` | `/layer/torch/dropout2d` | layer |
+| `dropout3d` | `/layer/torch/dropout3d` | layer |
+| `avgpool` | `/layer/torch/avgpool` | layer |
+| `lppool` | `/layer/torch/lppool` | layer |
+| `threshold_layer` | `/layer/torch/threshold` | layer |
+| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
+| `tanh_layer` | `/layer/torch/tanh` | layer |
+| `identity` | `/layer/torch/identity` | layer |
+| `mlp` | `/layer/kalfa/mlp` | layer |
+| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
+| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
+| `softplus` | `/layer/torch/softplus` | layer |
+| `softmax` | `/layer/torch/softmax` | layer |
+| `silu` | `/layer/torch/silu` | layer |
+| `softmin` | `/layer/torch/softmin` | layer |
+| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
+| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
+| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
+| `relu6` | `/layer/torch/relu6` | layer |
+| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
+| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
+| `softshrink` | `/layer/torch/softshrink` | layer |
+| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
+| `conv1d` | `/layer/torch/conv1d` | layer |
+| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
+| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
+| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
+| `conv3d` | `/layer/torch/conv3d` | layer |
+| `lstm` | `/layer/torch/lstm` | layer |
+| `max_unpool` | `/layer/torch/max_unpool` | layer |
+| `constant_pad` | `/layer/torch/constant_pad` | layer |
+| `mish` | `/layer/torch/mish` | layer |
+| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
+| `zero_pad` | `/layer/torch/zero_pad` | layer |
+| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
+| `celu` | `/layer/torch/celu` | layer |
+| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
+| `fold` | `/layer/torch/fold` | layer |
+| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
+| `log_softmax` | `/layer/torch/log_softmax` | layer |
+| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
+| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
+| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
+| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
+| `glu` | `/layer/torch/glu` | layer |
+| `instance_norm` | `/layer/torch/instance_norm` | layer |
+| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
+| `circular_pad` | `/layer/torch/circular_pad` | layer |
+| `upsample` | `/layer/torch/upsample` | layer |
+| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
+| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
+| `selu` | `/layer/torch/selu` | layer |
+| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
+| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
+| `softmax2d` | `/layer/torch/softmax2d` | layer |
+| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
+| `transformer` | `/layer/torch/transformer` | layer |
+| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
+| `rms_norm` | `/layer/torch/rms_norm` | layer |
+| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
+| `sigmoid` | `/layer/torch/sigmoid` | layer |
+| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
+| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
+| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
+| `lppool3d` | `/layer/torch/lppool3d` | layer |
+| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
+| `hardtanh` | `/layer/torch/hardtanh` | layer |
+| `dropout1d` | `/layer/torch/dropout1d` | layer |
+| `bilinear` | `/layer/torch/bilinear` | layer |
+| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
+| `gelu` | `/layer/torch/gelu` | layer |
+| `gru_cell` | `/layer/torch/gru_cell` | layer |
+| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
+| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
+| `unfold` | `/layer/torch/unfold` | layer |
+| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
+| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
@@ -527,6 +720,102 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
+| `softsign` | `/layer/torch/softsign` | layer |
+| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
+| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
+| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
+| `elu` | `/layer/torch/elu` | layer |
+| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
+| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
+| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
+| `lppool1d` | `/layer/torch/lppool1d` | layer |
+| `rrelu` | `/layer/torch/rrelu` | layer |
+| `prelu` | `/layer/torch/prelu` | layer |
+| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
+| `replication_pad` | `/layer/torch/replication_pad` | layer |
+| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
+| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
+| `hardshrink` | `/layer/torch/hardshrink` | layer |
+| `hardswish` | `/layer/torch/hardswish` | layer |
+| `rnn` | `/layer/torch/rnn` | layer |
+| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
+| `dropout2d` | `/layer/torch/dropout2d` | layer |
+| `dropout3d` | `/layer/torch/dropout3d` | layer |
+| `avgpool` | `/layer/torch/avgpool` | layer |
+| `lppool` | `/layer/torch/lppool` | layer |
+| `threshold_layer` | `/layer/torch/threshold` | layer |
+| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
+| `tanh_layer` | `/layer/torch/tanh` | layer |
+| `identity` | `/layer/torch/identity` | layer |
+| `mlp` | `/layer/kalfa/mlp` | layer |
+| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
+| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
+| `softplus` | `/layer/torch/softplus` | layer |
+| `softmax` | `/layer/torch/softmax` | layer |
+| `silu` | `/layer/torch/silu` | layer |
+| `softmin` | `/layer/torch/softmin` | layer |
+| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
+| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
+| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
+| `relu6` | `/layer/torch/relu6` | layer |
+| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
+| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
+| `softshrink` | `/layer/torch/softshrink` | layer |
+| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
+| `conv1d` | `/layer/torch/conv1d` | layer |
+| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
+| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
+| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
+| `conv3d` | `/layer/torch/conv3d` | layer |
+| `lstm` | `/layer/torch/lstm` | layer |
+| `max_unpool` | `/layer/torch/max_unpool` | layer |
+| `constant_pad` | `/layer/torch/constant_pad` | layer |
+| `mish` | `/layer/torch/mish` | layer |
+| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
+| `zero_pad` | `/layer/torch/zero_pad` | layer |
+| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
+| `celu` | `/layer/torch/celu` | layer |
+| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
+| `fold` | `/layer/torch/fold` | layer |
+| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
+| `log_softmax` | `/layer/torch/log_softmax` | layer |
+| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
+| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
+| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
+| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
+| `glu` | `/layer/torch/glu` | layer |
+| `instance_norm` | `/layer/torch/instance_norm` | layer |
+| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
+| `circular_pad` | `/layer/torch/circular_pad` | layer |
+| `upsample` | `/layer/torch/upsample` | layer |
+| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
+| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
+| `selu` | `/layer/torch/selu` | layer |
+| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
+| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
+| `softmax2d` | `/layer/torch/softmax2d` | layer |
+| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
+| `transformer` | `/layer/torch/transformer` | layer |
+| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
+| `rms_norm` | `/layer/torch/rms_norm` | layer |
+| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
+| `sigmoid` | `/layer/torch/sigmoid` | layer |
+| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
+| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
+| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
+| `lppool3d` | `/layer/torch/lppool3d` | layer |
+| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
+| `hardtanh` | `/layer/torch/hardtanh` | layer |
+| `dropout1d` | `/layer/torch/dropout1d` | layer |
+| `bilinear` | `/layer/torch/bilinear` | layer |
+| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
+| `gelu` | `/layer/torch/gelu` | layer |
+| `gru_cell` | `/layer/torch/gru_cell` | layer |
+| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
+| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
+| `unfold` | `/layer/torch/unfold` | layer |
+| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
+| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
@@ -627,6 +916,102 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
+| `softsign` | `/layer/torch/softsign` | layer |
+| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
+| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
+| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
+| `elu` | `/layer/torch/elu` | layer |
+| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
+| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
+| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
+| `lppool1d` | `/layer/torch/lppool1d` | layer |
+| `rrelu` | `/layer/torch/rrelu` | layer |
+| `prelu` | `/layer/torch/prelu` | layer |
+| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
+| `replication_pad` | `/layer/torch/replication_pad` | layer |
+| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
+| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
+| `hardshrink` | `/layer/torch/hardshrink` | layer |
+| `hardswish` | `/layer/torch/hardswish` | layer |
+| `rnn` | `/layer/torch/rnn` | layer |
+| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
+| `dropout2d` | `/layer/torch/dropout2d` | layer |
+| `dropout3d` | `/layer/torch/dropout3d` | layer |
+| `avgpool` | `/layer/torch/avgpool` | layer |
+| `lppool` | `/layer/torch/lppool` | layer |
+| `threshold_layer` | `/layer/torch/threshold` | layer |
+| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
+| `tanh_layer` | `/layer/torch/tanh` | layer |
+| `identity` | `/layer/torch/identity` | layer |
+| `mlp` | `/layer/kalfa/mlp` | layer |
+| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
+| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
+| `softplus` | `/layer/torch/softplus` | layer |
+| `softmax` | `/layer/torch/softmax` | layer |
+| `silu` | `/layer/torch/silu` | layer |
+| `softmin` | `/layer/torch/softmin` | layer |
+| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
+| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
+| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
+| `relu6` | `/layer/torch/relu6` | layer |
+| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
+| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
+| `softshrink` | `/layer/torch/softshrink` | layer |
+| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
+| `conv1d` | `/layer/torch/conv1d` | layer |
+| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
+| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
+| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
+| `conv3d` | `/layer/torch/conv3d` | layer |
+| `lstm` | `/layer/torch/lstm` | layer |
+| `max_unpool` | `/layer/torch/max_unpool` | layer |
+| `constant_pad` | `/layer/torch/constant_pad` | layer |
+| `mish` | `/layer/torch/mish` | layer |
+| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
+| `zero_pad` | `/layer/torch/zero_pad` | layer |
+| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
+| `celu` | `/layer/torch/celu` | layer |
+| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
+| `fold` | `/layer/torch/fold` | layer |
+| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
+| `log_softmax` | `/layer/torch/log_softmax` | layer |
+| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
+| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
+| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
+| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
+| `glu` | `/layer/torch/glu` | layer |
+| `instance_norm` | `/layer/torch/instance_norm` | layer |
+| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
+| `circular_pad` | `/layer/torch/circular_pad` | layer |
+| `upsample` | `/layer/torch/upsample` | layer |
+| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
+| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
+| `selu` | `/layer/torch/selu` | layer |
+| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
+| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
+| `softmax2d` | `/layer/torch/softmax2d` | layer |
+| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
+| `transformer` | `/layer/torch/transformer` | layer |
+| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
+| `rms_norm` | `/layer/torch/rms_norm` | layer |
+| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
+| `sigmoid` | `/layer/torch/sigmoid` | layer |
+| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
+| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
+| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
+| `lppool3d` | `/layer/torch/lppool3d` | layer |
+| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
+| `hardtanh` | `/layer/torch/hardtanh` | layer |
+| `dropout1d` | `/layer/torch/dropout1d` | layer |
+| `bilinear` | `/layer/torch/bilinear` | layer |
+| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
+| `gelu` | `/layer/torch/gelu` | layer |
+| `gru_cell` | `/layer/torch/gru_cell` | layer |
+| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
+| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
+| `unfold` | `/layer/torch/unfold` | layer |
+| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
+| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
@@ -755,6 +1140,102 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
+| `softsign` | `/layer/torch/softsign` | layer |
+| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
+| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
+| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
+| `elu` | `/layer/torch/elu` | layer |
+| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
+| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
+| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
+| `lppool1d` | `/layer/torch/lppool1d` | layer |
+| `rrelu` | `/layer/torch/rrelu` | layer |
+| `prelu` | `/layer/torch/prelu` | layer |
+| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
+| `replication_pad` | `/layer/torch/replication_pad` | layer |
+| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
+| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
+| `hardshrink` | `/layer/torch/hardshrink` | layer |
+| `hardswish` | `/layer/torch/hardswish` | layer |
+| `rnn` | `/layer/torch/rnn` | layer |
+| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
+| `dropout2d` | `/layer/torch/dropout2d` | layer |
+| `dropout3d` | `/layer/torch/dropout3d` | layer |
+| `avgpool` | `/layer/torch/avgpool` | layer |
+| `lppool` | `/layer/torch/lppool` | layer |
+| `threshold_layer` | `/layer/torch/threshold` | layer |
+| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
+| `tanh_layer` | `/layer/torch/tanh` | layer |
+| `identity` | `/layer/torch/identity` | layer |
+| `mlp` | `/layer/kalfa/mlp` | layer |
+| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
+| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
+| `softplus` | `/layer/torch/softplus` | layer |
+| `softmax` | `/layer/torch/softmax` | layer |
+| `silu` | `/layer/torch/silu` | layer |
+| `softmin` | `/layer/torch/softmin` | layer |
+| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
+| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
+| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
+| `relu6` | `/layer/torch/relu6` | layer |
+| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
+| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
+| `softshrink` | `/layer/torch/softshrink` | layer |
+| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
+| `conv1d` | `/layer/torch/conv1d` | layer |
+| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
+| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
+| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
+| `conv3d` | `/layer/torch/conv3d` | layer |
+| `lstm` | `/layer/torch/lstm` | layer |
+| `max_unpool` | `/layer/torch/max_unpool` | layer |
+| `constant_pad` | `/layer/torch/constant_pad` | layer |
+| `mish` | `/layer/torch/mish` | layer |
+| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
+| `zero_pad` | `/layer/torch/zero_pad` | layer |
+| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
+| `celu` | `/layer/torch/celu` | layer |
+| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
+| `fold` | `/layer/torch/fold` | layer |
+| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
+| `log_softmax` | `/layer/torch/log_softmax` | layer |
+| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
+| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
+| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
+| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
+| `glu` | `/layer/torch/glu` | layer |
+| `instance_norm` | `/layer/torch/instance_norm` | layer |
+| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
+| `circular_pad` | `/layer/torch/circular_pad` | layer |
+| `upsample` | `/layer/torch/upsample` | layer |
+| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
+| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
+| `selu` | `/layer/torch/selu` | layer |
+| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
+| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
+| `softmax2d` | `/layer/torch/softmax2d` | layer |
+| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
+| `transformer` | `/layer/torch/transformer` | layer |
+| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
+| `rms_norm` | `/layer/torch/rms_norm` | layer |
+| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
+| `sigmoid` | `/layer/torch/sigmoid` | layer |
+| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
+| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
+| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
+| `lppool3d` | `/layer/torch/lppool3d` | layer |
+| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
+| `hardtanh` | `/layer/torch/hardtanh` | layer |
+| `dropout1d` | `/layer/torch/dropout1d` | layer |
+| `bilinear` | `/layer/torch/bilinear` | layer |
+| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
+| `gelu` | `/layer/torch/gelu` | layer |
+| `gru_cell` | `/layer/torch/gru_cell` | layer |
+| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
+| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
+| `unfold` | `/layer/torch/unfold` | layer |
+| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
+| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |
@@ -877,6 +1358,102 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
+| `softsign` | `/layer/torch/softsign` | layer |
+| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
+| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
+| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
+| `elu` | `/layer/torch/elu` | layer |
+| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
+| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
+| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
+| `lppool1d` | `/layer/torch/lppool1d` | layer |
+| `rrelu` | `/layer/torch/rrelu` | layer |
+| `prelu` | `/layer/torch/prelu` | layer |
+| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
+| `replication_pad` | `/layer/torch/replication_pad` | layer |
+| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
+| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
+| `hardshrink` | `/layer/torch/hardshrink` | layer |
+| `hardswish` | `/layer/torch/hardswish` | layer |
+| `rnn` | `/layer/torch/rnn` | layer |
+| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
+| `dropout2d` | `/layer/torch/dropout2d` | layer |
+| `dropout3d` | `/layer/torch/dropout3d` | layer |
+| `avgpool` | `/layer/torch/avgpool` | layer |
+| `lppool` | `/layer/torch/lppool` | layer |
+| `threshold_layer` | `/layer/torch/threshold` | layer |
+| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
+| `tanh_layer` | `/layer/torch/tanh` | layer |
+| `identity` | `/layer/torch/identity` | layer |
+| `mlp` | `/layer/kalfa/mlp` | layer |
+| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
+| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
+| `softplus` | `/layer/torch/softplus` | layer |
+| `softmax` | `/layer/torch/softmax` | layer |
+| `silu` | `/layer/torch/silu` | layer |
+| `softmin` | `/layer/torch/softmin` | layer |
+| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
+| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
+| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
+| `relu6` | `/layer/torch/relu6` | layer |
+| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
+| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
+| `softshrink` | `/layer/torch/softshrink` | layer |
+| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
+| `conv1d` | `/layer/torch/conv1d` | layer |
+| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
+| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
+| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
+| `conv3d` | `/layer/torch/conv3d` | layer |
+| `lstm` | `/layer/torch/lstm` | layer |
+| `max_unpool` | `/layer/torch/max_unpool` | layer |
+| `constant_pad` | `/layer/torch/constant_pad` | layer |
+| `mish` | `/layer/torch/mish` | layer |
+| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
+| `zero_pad` | `/layer/torch/zero_pad` | layer |
+| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
+| `celu` | `/layer/torch/celu` | layer |
+| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
+| `fold` | `/layer/torch/fold` | layer |
+| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
+| `log_softmax` | `/layer/torch/log_softmax` | layer |
+| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
+| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
+| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
+| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
+| `glu` | `/layer/torch/glu` | layer |
+| `instance_norm` | `/layer/torch/instance_norm` | layer |
+| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
+| `circular_pad` | `/layer/torch/circular_pad` | layer |
+| `upsample` | `/layer/torch/upsample` | layer |
+| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
+| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
+| `selu` | `/layer/torch/selu` | layer |
+| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
+| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
+| `softmax2d` | `/layer/torch/softmax2d` | layer |
+| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
+| `transformer` | `/layer/torch/transformer` | layer |
+| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
+| `rms_norm` | `/layer/torch/rms_norm` | layer |
+| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
+| `sigmoid` | `/layer/torch/sigmoid` | layer |
+| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
+| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
+| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
+| `lppool3d` | `/layer/torch/lppool3d` | layer |
+| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
+| `hardtanh` | `/layer/torch/hardtanh` | layer |
+| `dropout1d` | `/layer/torch/dropout1d` | layer |
+| `bilinear` | `/layer/torch/bilinear` | layer |
+| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
+| `gelu` | `/layer/torch/gelu` | layer |
+| `gru_cell` | `/layer/torch/gru_cell` | layer |
+| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
+| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
+| `unfold` | `/layer/torch/unfold` | layer |
+| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
+| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
 | `normal` | `/init/torch/normal` | init |
 | `xavier` | `/init/torch/xavier` | init |
 | `kaiming` | `/init/torch/kaiming` | init |

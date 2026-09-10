@@ -1,19 +1,16 @@
 """The rng legos, the seeding helpers and the per process draws."""
 
-import importlib
 
 import numpy
 import torch
 
 import kalfa  # noqa: F401
-from kalfa.std.common.rng import (Draws, derived_seed, forked, process_seed, restore_rng, rng_states, seed_all,
-                                  seed_worker)
-from kalfa.std.rng.kalfa.derived import derived
-from kalfa.std.rng.kalfa.indexed import indexed
+from kalfa.std.common.rng import (
+    Draws, derived_seed, forked, process_seed, restore_rng, rng_states, seed_all, seed_worker)
+from kalfa.std.rng.kalfa.seeds import derived, global_stream, indexed
 
 
 def test_the_three_rules():
-    global_stream = importlib.import_module("kalfa.std.rng.kalfa.global").global_stream
     assert derived(7, "net", 0) == derived_seed(7, "net") and derived(7, "net", 0) == derived(7, "net", 5)
     assert derived(7, "net", 0) != derived(7, "other", 0) and derived(None, "net", 0) is None
     assert indexed(7, "net", 1) == derived_seed(7, 1) and indexed(7, "other", 1) == indexed(7, "net", 1)
