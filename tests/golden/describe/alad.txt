@@ -1,0 +1,98 @@
+config.yaml                                                                                                              kalfa 0.2.4
+  layers      config.yaml, /alias/kalfa/tabular
+  params
+    log_base    10        latent_dim  4         lr          0.0002
+    log_norm    1200      epochs      60        seed        42
+  seed        42
+  device      cpu (no device key)
+  record      runs/alad_$datetime$
+
+── DATA ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  source      parquet  anomaly_data.parquet               2 000 rows · 9 columns
+  split       random  0.7 / 0.1 / 0.2  seed=42            train 1 400  ·  valid 200  ·  test 400
+  batch       50                                          feed  table
+  filters     (is_anomaly > -4) & (is_anomaly < 4), query=is_anomaly == 0 sets=[train]
+  drop        xx6, xx7
+
+  field       columns         preprocessors                           role
+  ───────────────────────────────────────────────────────────────────────────
+  x?          x1, x2, x3, x4  abs_scaler ─→ log_scaler ─→ std_scaler  feature
+  xx*         xx1, xx2        abs_scaler ─→ log_scaler ─→ std_scaler  feature
+  is_anomaly  is_anomaly      cast_int                                target
+
+  anomaly_data.parquet ─→ split random
+    ├─ train    1 400  ─→ fit abs_scaler, log_scaler, std_scaler, cast_int ─→ table
+    ├─ valid      200  ─→ apply                                            ─→ table
+    └─ test       400  ─→ apply                                            ─→ table
+
+── MODEL ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  encoder   trained  ·  optimizer g
+    x ─→ mlp(in_features=6 out_features=64 width=64 depth=2) ─→ leaky_relu negative_slope=0.2 ─→ linear 64→4 ─→ z
+
+  generator   trained  ·  optimizer g  ·  init weights=normal std=0.02
+    z ─→ linear 4→64 ─→ relu ─→ linear 64→64 ─→ relu ─→ linear 64→6 ─→ x_hat
+
+  dxz   trained  ·  optimizer d  ·  init weights=normal std=0.02
+    inputs x, z   outputs logit
+    x       ─→  branch(in_features=6 width=32)  ─→  xb
+    z       ─→  branch(in_features=4 width=32)  ─→  zb
+    xb, zb  ─→  concat dim=1                    ─→  j
+    j       ─→  head(in_features=64 width=64)   ─→  feature, logit
+
+  dxx   trained  ·  optimizer d  ·  init weights=normal std=0.02
+    inputs x, x_hat   outputs logit, feature
+    x, x_hat  ─→  concat dim=1                   ─→  j
+    j         ─→  head(in_features=12 width=64)  ─→  feature, logit
+
+  dzz   trained  ·  optimizer d  ·  init weights=normal std=0.02
+    inputs z, z_hat   outputs logit
+    z, z_hat  ─→  concat dim=1                  ─→  j
+    j         ─→  head(in_features=8 width=32)  ─→  feature, logit
+
+  anomaly_score   composite
+    inputs x   outputs score
+    x                         ─→  encoder      ─→  z
+    z                         ─→  generator    ─→  x_hat
+    x, x_hat                  ─→  dxx          ─→  logit_rec, feature_rec
+    x, x                      ─→  dxx          ─→  logit_ref, feature_ref
+    feature_rec, feature_ref  ─→  l1_distance  ─→  score
+
+── TRAINING ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  turn        alternating         60 epochs       predicts anomaly_score
+              order=[d, g] steps={d=1 g=1}
+
+  optimizer  lego                               trains                 loss   schedule
+  ───────────────────────────────────────────────────────────────────────────────────────
+  g          adam lr=0.0002 betas=[0.5, 0.999]  ─→ encoder, generator  adv_g  no schedule
+  d          adam lr=0.0002 betas=[0.5, 0.999]  ─→ dxz, dxx, dzz       adv_d  no schedule
+
+  loss   lego                                                                 reported on
+  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  adv_d  alad_discriminator criterion=bce_logits latent_dim=4                 train, valid, test  active at turn 1
+  adv_g  alad_generator criterion=bce_logits latent_dim=4 feature_matching=0  train, valid, test  active at turn 1
+
+  metric             lego                      reported on
+  ─────────────────────────────────────────────────────────────────
+  auroc              binary_auroc              train, valid, test
+  average_precision  binary_average_precision  train, valid, test
+
+  checkpoint  none                                        report last
+
+── AFTER ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  report      last        predict anomaly_score ─→ predictions.parquet
+  plots       score_histogram (class_histogram), roc (binary_roc), pr_curve (binary_precision_recall_curve), architecture  ─→ plots/
+  record      runs/alad_$datetime$
+
+── COLUMNS ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  column      dtype   field       preprocessors                           role     tensor
+  ───────────────────────────────────────────────────────────────────────────────────────────
+  x1          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  x2          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  x3          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  x4          double  x?          abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  xx1         double  xx*         abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  xx2         double  xx*         abs_scaler ─→ log_scaler ─→ std_scaler  feature  x
+  xx6         double  —           —                                       dropped  —
+  xx7         double  —           —                                       dropped  —
+  is_anomaly  int64   is_anomaly  cast_int                                target   is_anomaly
+  the produced widths and the tensor slots need --load

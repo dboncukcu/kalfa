@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "tezgah>=0.2.0",
-    "cirak>=0.2.2",
+    "cirak>=0.2.3",
     "ruamel.yaml>=0.18",
     "torch>=2.2",
     "pandas>=2.2",
@@ -45,7 +45,11 @@ kalfa = "kalfa"
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "ruff>=0.6",
 ]
+
+[tool.uv.sources]
+cirak = { path = "../cirak", editable = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -56,3 +60,25 @@ packages = ["src/kalfa"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "slow: trains a model",
+    "subprocess: spawns kalfa in a child process (the sweep loop)",
+    "optional: needs seaborn, torchview, cuda or mps and skips itself without them",
+]
+filterwarnings = [
+    "ignore:the test backbone",
+    "ignore:auroc is undefined",
+    "ignore:average_precision is undefined",
+    "ignore::cirak.errors.CirakWarning",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kalfa"]

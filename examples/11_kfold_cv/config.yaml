@@ -9,7 +9,7 @@
 # The same path as an out of process sweep; there is no in process Map in v1.
 
 include:
-  - 01_mlp_regression.yaml
+  - ../01_mlp_regression/config.yaml
 
 params:
   fold: 0

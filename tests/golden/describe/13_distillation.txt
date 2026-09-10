@@ -1,0 +1,63 @@
+config.yaml                                                                                       kalfa 0.2.4
+  layers      config.yaml, /alias/kalfa/vision
+  params
+    epochs       40       temperature  4        seed         7
+    lr           0.001    alpha        0.7
+  seed        7
+  device      cuda
+  record      runs/distill_$datetime$
+
+── DATA ─────────────────────────────────────────────────────────────────────────────────────────────────────
+  source      image_folder  data/cifar10                  240 rows · 2 columns
+  split       random  0.9 / 0.1 / 0  seed=7               train 216  ·  valid 24  ·  test 0
+  batch       128                                         feed  table
+
+  field  columns  preprocessors           role
+  ───────────────────────────────────────────────
+  image  image    to_tensor ─→ normalize  feature
+  label  label    —                       target
+
+  data/cifar10 ─→ split random
+    ├─ train      216  ─→ fit to_tensor, normalize ─→ table
+    ├─ valid       24  ─→ apply                    ─→ table
+    └─ test         0  ─→ apply                    ─→ table
+
+── MODEL ────────────────────────────────────────────────────────────────────────────────────────────────────
+  teacher   frozen (eval mode)  ·  no optimizer  ·  weights run=runs/cifar_resnet50_x model=net which=best
+    image ─→ timm_backbone name=resnet50 pooled=true ─→ linear 10 ─→ logits
+
+  student   trained  ·  optimizer main
+    image ─→ timm_backbone name=resnet18 pooled=true ─→ linear 10 ─→ logits
+
+── TRAINING ─────────────────────────────────────────────────────────────────────────────────────────────────
+  turn        alternating         40 epochs       predicts student
+
+  optimizer  lego            trains      loss  schedule
+  ────────────────────────────────────────────────────────
+  main       adamw lr=0.001  ─→ student  kd    no schedule
+
+  loss  lego                                                             reported on
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+  kd    distill student=student teacher=teacher temperature=4 alpha=0.7  train, valid, test  active at turn 1
+
+  metric    lego      reported on
+  ────────────────────────────────────────
+  accuracy  accuracy  train, valid, test
+
+  checkpoint  best monitor=val/accuracy mode=max          report best
+  stop        val/accuracy plateau 6
+
+  rules (evaluated at the end of a turn, effective in the next)
+    val/accuracy > 0.9  ─→  cool_down  main.lr := 0.0001
+
+── AFTER ────────────────────────────────────────────────────────────────────────────────────────────────────
+  report      best        predict student ─→ predictions.parquet
+  plots       loss_curve, confusion (confusion_matrix)  ─→ plots/
+  record      runs/distill_$datetime$
+
+── COLUMNS ──────────────────────────────────────────────────────────────────────────────────────────────────
+  column  dtype  field  preprocessors           role     tensor
+  ─────────────────────────────────────────────────────────────
+  image   image  image  to_tensor ─→ normalize  feature  x
+  label   int64  label  —                       target   label
+  the produced widths and the tensor slots need --load

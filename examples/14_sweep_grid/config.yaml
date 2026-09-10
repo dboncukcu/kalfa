@@ -11,7 +11,7 @@
 #       --set 'sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}'
 
 include:
-  - 01_mlp_regression.yaml
+  - ../01_mlp_regression/config.yaml
 
 params:
   epochs: 20

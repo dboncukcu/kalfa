@@ -2,31 +2,38 @@ import sys
 from pathlib import Path
 
 import pytest
+from cirak.registry import registry
 
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).parent / "plugins"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples" / "alad"))
+sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "examples" / "alad"))
 
 from kalfa.synthetic import write_housing  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
-CONFIGS = ROOT / "configs"
-CONFIG_01 = CONFIGS / "01_mlp_regression.yaml"
-DUMP_01 = CONFIGS / "dumps" / "01.flow.yaml"
+
+KEPT = (str(ROOT / "src"), str(ROOT / "tests"), str(ROOT / "tools"), sys.prefix, sys.base_prefix)
+
+
+@pytest.fixture(autouse=True)
+def scoped_registry():
+    before = set(registry.uris())
+    with registry.scoped():
+        yield registry
+        added = [uri for uri in registry.uris() if uri not in before]
+        registrars = {getattr(registry.lookup(uri).target, "__module__", None) for uri in added}
+    for name in registrars:
+        module = sys.modules.get(name)
+        file = getattr(module, "__file__", None) or ""
+        if module is not None and file and not file.startswith(KEPT):
+            del sys.modules[name]
 
 
 @pytest.fixture
 def workdir(tmp_path, monkeypatch):
-    """A temporary working directory holding housing.parquet, the way config 01 expects it."""
     monkeypatch.chdir(tmp_path)
     write_housing(tmp_path / "housing.parquet")
     return tmp_path
-
-
-@pytest.fixture
-def config_01():
-    return str(CONFIG_01)
 
 
 @pytest.fixture

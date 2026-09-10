@@ -1,7 +1,6 @@
-"""Small builders shared by the tests: a minimal valid config, tiny models and frames."""
-
 import copy
 from io import StringIO
+from pathlib import Path
 
 import numpy
 import pandas
@@ -13,43 +12,24 @@ from torch import nn
 from kalfa.std.builder import Module
 from kalfa.std.pre import Frame
 
-MINIMAL = {
-    "include": ["/alias/kalfa/tabular"],
-    "seed": 1,
-    "data": {
-        "source": {"uri": "parquet", "params": {"path": "housing.parquet"}},
-        "split": {"ratios": [0.7, 0.15, 0.15], "seed": 1},
-        "batch": 64,
-        "preprocessors": {"scale": {"uri": "standard_scaler"}},
-        "fields": {"x*": {"preprocessors": ["scale"]}, "price": {"target": True}},
-        "feed": "table",
-    },
-    "model": {
-        "optimizer": {"uri": "adam", "params": {"lr": 0.01}},
-        "inputs": ["x"],
-        "outputs": ["y"],
-        "nodes": [{"uri": "linear", "params": {"out_features": 1}}],
-    },
-    "metrics": {"rmse": {"uri": "rmse"}},
-    "losses": {"mse": {"uri": "mse"}},
-    "training": {"turn": "supervised", "loss": "mse", "epochs": 1, "checkpoint": "last", "report": "last"},
-    "plots": {"loss_curve": {"uri": "loss_curve"}},
-    "record": "runs/t_$datetime$",
-}
+ROOT = Path(__file__).resolve().parents[1]
+EXAMPLES = ROOT / "examples"
 
 
-def minimal(**changes):
-    """A deep copy of the minimal config with dotted overrides applied (``training.epochs=2``)."""
-    config = copy.deepcopy(MINIMAL)
-    for path, value in changes.items():
-        parts = path.split("__")
-        target = config
-        for part in parts[:-1]:
-            target = target.setdefault(part, {})
-        if value is None and parts[-1] in target and path.endswith("__DELETE"):
-            continue
-        target[parts[-1]] = value
-    return config
+def example(name):
+    return str(EXAMPLES / name / "config.yaml")
+
+
+def examples():
+    return sorted(path.name for path in EXAMPLES.iterdir() if (path / "config.yaml").is_file())
+
+
+MINIMAL = YAML(typ="safe").load((EXAMPLES / "minimal" / "config.yaml").read_text())
+MINIMAL["params"]["epochs"] = 1
+
+
+def minimal():
+    return copy.deepcopy(MINIMAL)
 
 
 def delete(config, *path):

@@ -1,0 +1,93 @@
+config.yaml                                                                                             kalfa 0.2.4
+  layers      config.yaml, /alias/kalfa/tabular
+  params
+    epochs       30       hidden       64       tail_weight  5
+    lr           0.001    analyses     3        seed         7
+  seed        7
+  device      cpu (no device key)
+  record      runs/scores_$datetime$
+
+── DATA ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+  source      parquet  scores.parquet                     2 000 rows · 13 columns
+  split       random  0.7 / 0.15 / 0.15  seed=7           train 1 400  ·  valid 300  ·  test 300
+  batch       256                                         feed  table
+
+  field   columns        preprocessors  role
+  ─────────────────────────────────────────────
+  y_*     y_a, y_b, y_c  y_scaler       target
+  z       z              y_scaler       target
+  z_tail  z_tail         to_float       target
+  x*      x0 … x7  (8)   x_scaler       feature
+
+  scores.parquet ─→ split random
+    ├─ train    1 400  ─→ fit x_scaler, y_scaler, to_float ─→ table
+    ├─ valid      300  ─→ apply                            ─→ table
+    └─ test       300  ─→ apply                            ─→ table
+
+── MODEL ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+  head   trained  ·  optimizer main
+    x ─→ linear_relu 64 ─→ linear 3 ─→ y_hat
+
+  combine   trained  ·  optimizer main
+    y_hat ─→ linear_relu 32 ─→ linear 1 ─→ z_hat
+
+  tail   trained  ·  optimizer main
+    x ─→ linear_relu 32 ─→ linear 1 ─→ tail_logit
+
+  full   composite
+    inputs x   outputs y_hat, z_hat, tail_logit
+    x      ─→  head     ─→  y_hat
+    y_hat  ─→  combine  ─→  z_hat
+    x      ─→  tail     ─→  tail_logit
+
+── TRAINING ───────────────────────────────────────────────────────────────────────────────────────────────────────
+  turn        alternating         30 epochs       predicts full
+
+  output wire      predicts the target fields
+  ───────────────────────────────────────────
+  y_hat        ─→  y_a, y_b, y_c
+  z_hat        ─→  z
+  tail_logit   ─→  z_tail
+
+  optimizer  lego           trains                  loss   schedule
+  ────────────────────────────────────────────────────────────────────
+  main       adam lr=0.001  ─→ head, combine, tail  total  no schedule
+
+  loss    lego                                         compares              reported on
+  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  l_y     mse                                          y_hat ─→ y_*          train, valid, test  held for the rules
+  l_z     mse                                          z_hat ─→ z            train, valid, test  held for the rules
+  l_tail  bce_logits pos_weight=5                      tail_logit ─→ z_tail  train, valid, test  held for the rules
+  total   weighted_sum terms={l_y=1 l_z=1 l_tail=0.5}                        train, valid, test  active at turn 1
+
+  metric      lego          compares              reported on
+  ────────────────────────────────────────────────────────────────────
+  rmse_y      rmse          y_hat ─→ y_*          train, valid, test
+  rmse_z      rmse          z_hat ─→ z            train, valid, test
+  auroc_tail  binary_auroc  tail_logit ─→ z_tail  train, valid, test
+
+  checkpoint  best monitor=val/rmse_z                     report best
+  stop        val/rmse_z plateau 8
+
+── AFTER ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+  report      best        predict full ─→ predictions.parquet
+  plots       loss_curve, pred_vs_true  ─→ plots/
+  record      runs/scores_$datetime$
+
+── COLUMNS ────────────────────────────────────────────────────────────────────────────────────────────────────────
+  column  dtype   field   preprocessors  role     tensor
+  ─────────────────────────────────────────────────────────────
+  x0      double  x*      x_scaler       feature  x
+  x1      double  x*      x_scaler       feature  x
+  x2      double  x*      x_scaler       feature  x
+  x3      double  x*      x_scaler       feature  x
+  x4      double  x*      x_scaler       feature  x
+  x5      double  x*      x_scaler       feature  x
+  x6      double  x*      x_scaler       feature  x
+  x7      double  x*      x_scaler       feature  x
+  y_a     double  y_*     y_scaler       target   y_hat[0]
+  y_b     double  y_*     y_scaler       target   y_hat[1]
+  y_c     double  y_*     y_scaler       target   y_hat[2]
+  z       double  z       y_scaler       target   z_hat[0]
+  z_tail  float   z_tail  to_float       target   tail_logit[0]
+  the produced widths and the tensor slots need --load

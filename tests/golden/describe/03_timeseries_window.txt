@@ -1,0 +1,62 @@
+config.yaml                                                                                               kalfa 0.2.4
+  layers      config.yaml, /alias/kalfa/tabular
+  params
+    epochs  30
+    lr      0.001
+    seed    7
+  seed        7
+  device      cpu (no device key)
+  record      runs/energy_$datetime$
+
+── DATA ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  source      parquet  energy.parquet                     1 800 rows · 5 columns
+  split       sequential  0.7 / 0.15 / 0.15  group=site_id  train 1 260  ·  valid 270  ·  test 270
+  batch       64                                          feed  window size=168 horizon=24 context=true group=site_id
+
+  field  columns     preprocessors  role
+  ─────────────────────────────────────────
+  x*     x0, x1, x2  std_scaler     feature
+  load   load        target_std     target
+
+  energy.parquet ─→ split sequential
+    ├─ train    1 260  ─→ fit std_scaler, target_std ─→ window
+    ├─ valid      270  ─→ apply                      ─→ window
+    └─ test       270  ─→ apply                      ─→ window
+
+── MODEL ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  model   trained  ·  optimizer model
+    x ─→ gru hidden=64 ─→ last_step ─→ linear 24 ─→ y
+
+── TRAINING ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  turn        alternating         30 epochs       predicts model
+
+  optimizer  lego           trains    loss      schedule
+  ─────────────────────────────────────────────────────────
+  model      adam lr=0.001  ─→ model  loss_mse  no schedule
+
+  loss      lego  reported on
+  ────────────────────────────────────────────────────
+  loss_mse  mse   train, valid, test  active at turn 1
+
+  metric  lego  reported on
+  ──────────────────────────────────
+  rmse    rmse  train, valid, test
+  mae     mae   train, valid, test
+
+  checkpoint  best monitor=val/rmse                       report best
+  stop        val/rmse plateau 5
+
+── AFTER ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  report      best        predict model ─→ predictions.parquet
+  plots       loss_curve, forecast (forecast_samples n=6)  ─→ plots/
+  record      runs/energy_$datetime$
+
+── COLUMNS ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+  column   dtype         field  preprocessors  role          tensor
+  ─────────────────────────────────────────────────────────────────
+  site_id  large_string  —      —              read by feed  —
+  x0       double        x*     std_scaler     feature       x
+  x1       double        x*     std_scaler     feature       x
+  x2       double        x*     std_scaler     feature       x
+  load     double        load   target_std     target        load
+  the produced widths and the tensor slots need --load

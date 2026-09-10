@@ -1,8 +1,9 @@
 # Examples
 
-Every folder is the runnable form of one reference config: `config.yaml` is a byte for byte copy of the one under
-`configs/` (a test catches drift; the plugins are copies of `tests/plugins/`), `make_data.py` writes small synthetic
-data next to it (`kalfa.synthetic`), the commands run from inside the folder (the paths are relative to it). The
+Every folder is one reference config and everything it needs: `config.yaml` (the configs that build on another
+include it by its path, `../01_mlp_regression/config.yaml`), the plugin module the config names, `make_data.py`
+writing small synthetic data next to it (`kalfa.synthetic`); the commands run from inside the folder (the paths
+are relative to it), and the test suite runs every folder the same way on a copy. The
 sizes finish in a minute or two on a laptop CPU; where a config asks for a GPU, `--set device=cpu` and a shortened
 `epochs` are in the command, the config stays untouched (`cpu` is a device lego like `auto`, `cuda` and `mps`; a
 device that is not available is an error, never a silent fallback). The `uv run` prefix uses the project's virtual
@@ -224,7 +225,7 @@ uv run kalfa run config.yaml -p epochs=10 --set record=runs/15
 Adversarial anomaly detection with a plugin: five trained models and a composite score model, two optimizers over
 two objectives from `myexample.py` (the plugin next to the config), filters before and after the split, `one_hot`
 free feature chains (`abs`, `log`, `standard_scaler`), no checkpoint (`checkpoint: null`, `report: last`) and four
-plots. The config is the target surface written by hand; the dumps `configs/dumps/tidy.*` are generated from it.
+plots. The config is the target surface written by hand; the golden dump `tests/golden/dumps/alad.flow.yaml` is generated from it.
 
 ```
 uv run python make_data.py

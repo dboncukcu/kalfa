@@ -8,6 +8,6 @@
 # This file only calls 01 as it is; record is overridden to tell the records apart.
 
 include:
-  - 01_mlp_regression.yaml
+  - ../01_mlp_regression/config.yaml
 
 record: runs/housing_resume_$datetime$

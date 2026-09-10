@@ -3,7 +3,7 @@
 A YAML front end for PyTorch training. You write the data, the model, the losses, the metrics, the rules and the
 report in one config file; kalfa turns the config into a cirak recipe, cirak compiles the recipe into a tezgah
 graph, tezgah runs it. The full definition of the surface is `CONFIG.md`, the class of every key is
-`configs/reference.yaml`, the lego reference is `DOCS.md`, the fourteen reference configs are under `configs/`.
+`reference.yaml`, the lego reference is `DOCS.md`, the reference configs are the examples under `examples/`.
 
 ## Installation
 
@@ -27,7 +27,8 @@ git clone https://github.com/dboncukcu/kalfa.git
 cd kalfa
 uv sync
 uv run kalfa --help
-uv run pytest          # about 260 tests, half a minute
+uv run python -m pytest -m "not slow and not subprocess"   # the unit and contract tests, seconds
+uv run python -m pytest                                     # everything, the run tests included
 ```
 
 ## First run
@@ -49,16 +50,16 @@ and `resolved.yaml` (the config that runs again on its own). Param and path over
 
 ## Examples
 
-Under `examples/` every reference config is runnable: each folder has `config.yaml` (a byte for byte copy of the
-one under `configs/`), `make_data.py`, and its commands are in `examples/README.md`. Highlights:
+Under `examples/` every reference config is runnable: each folder owns its `config.yaml` and a `make_data.py`
+that writes its data, and its commands are in `examples/README.md`. Highlights:
 
 * Tables: `01_mlp_regression` (rules, stopping, checkpoints), `11_kfold_cv` (an `include` layer, `kfold`,
   `kalfa collect`), `12_resume`, `14_sweep_grid` (the `sweep` section, `kalfa sweep`, queue usage).
 * Images: `04_cnn_images` (`image_folder`, a per item chain, a frozen backbone and `unfreeze`), `05_autoencoder`,
   `06_vae_loss_dynamics`, `07_wgan_gp` (EMA, `fid`, `kalfa generate`), `08_ddpm`, `09_simclr`, `13_distillation`.
 * Text: `10_char_lm` (`char_tokenizer`, `vocab_size`, the steps mode, `lm_sampler`).
-* Two examples own their config instead of copying one from `configs/`: `alad` (a plugin, five models, two
-  optimizers) and `minimal` (the smallest table regression).
+* Two hand written ones: `alad` (a plugin, five models, two optimizers) and `minimal` (the smallest table
+  regression).
 
 For large tables `include: [/alias/kalfa/lazy]` binds the same names to sources that read in chunks (the limits are
 in `CONFIG.md` section 3).
@@ -320,8 +321,8 @@ kalfa describe config.yaml --section columns
 `rmse`, `adam`, `supervised`, `plateau`, `best`, `loss_curve` ...). The table is flat, a full URI is valid
 everywhere; `kalfa ls /alias/kalfa/tabular` prints the contents, `kalfa ls tokenizer` searches names and
 descriptions. Your own lego is registered with `@kalfa.lego` in a Python module next to the config and comes in
-with `plugins: [module]`; `examples/alad/myexample.py` (the ALAD objectives of that example) and `tests/plugins/`
-are examples. `kalfa ls alad --plugin myexample` and `kalfa docs --config cfg.yaml` import those modules before the
+with `plugins: [module]`; `examples/alad/myexample.py` (the ALAD objectives of that example) and the plugin
+modules of the other examples show how. `kalfa ls alad --plugin myexample` and `kalfa docs --config cfg.yaml` import those modules before the
 listing, so your own legos come with their signature and facts (`docs` prints them in a separate `Plugin legos`
 section, `DOCS.md` stays the reference of what kalfa ships). Details in the Development section.
 
@@ -399,25 +400,31 @@ computes a value the lego does not already have (guard it with `log.isEnabledFor
 then `plugins: [acme_legos]` works anywhere the package is installed. Aliases declared by plugin legos are usable
 without a pack.
 
-**Adding a config and an example.** Write `configs/<nn>_<name>.yaml` with a comment header (aliases from a pack,
-paths relative to the folder it runs in), add it to `TARGETS` in `tests/fixtures/regenerate_recipes.py` and
-`regenerate_dumps.py`, run both scripts and read the dump (`configs/dumps/<nn>.flow.yaml`) by eye; write the
-missing legos with unit tests; add the folder to `TABLE` in `tests/fixtures/sync_examples.py` (with the included
-configs and the plugins it needs) and run it; write `examples/<nn>_<name>/make_data.py` on top of `kalfa.synthetic`
-and the README entry (data, run, predict or generate); write `tests/test_run_<nn>.py` that runs the config on the
-synthetic data with `--set` overrides that keep it small on a CPU and checks the record directory.
+**Adding an example.** Write `examples/<nn>_<name>/config.yaml` with a comment header (aliases from a pack, paths
+relative to the folder), `make_data.py` on top of `kalfa.synthetic`, the plugin module next to them when the
+config names one, and the README entry (data, run, predict or generate); regenerate the golden files
+(`uv run python tools/regenerate.py --all`) and read the dump by eye; write the missing legos with unit tests under
+`tests/unit/std/`; write `tests/runs/test_<name>.py` with the `dataset` and `trained` fixtures and the small
+overrides of `tests/runs/conftest.py`, so that it runs on a CPU in seconds and checks the record directory.
 
-**Dumps and fixtures.** `configs/dumps/<name>.recipe.yaml` is the driver document (the recipe cirak opens over
-`src/kalfa/templates/kalfa.yaml`), `<name>.flow.yaml` the expanded graph of `kalfa check --dump`; both are
-generated, never edited; `tests/test_dump.py` checks that they are current and structurally equal to a fresh dump,
-`tests/test_examples.py` that the example copies match, `tests/test_docs.py` that `DOCS.md` matches the registry
-(`uv run kalfa docs --write DOCS.md` after touching a lego).
+**Golden files.** Everything generated lives under `tests/golden/` and is written by one tool,
+`tools/regenerate.py`: `dumps` (the expanded graph of `kalfa check --dump` per example), `recipes` (the driver
+document per example), `registry` (every std URI with its kind, aliases, signature, facts and description, the
+packs and the plot bus keys), `describe` (the analysis of every example) and `docs` (`DOCS.md` at the root).
+`--all` writes every one, `--check` writes nothing and reports what would change. The contract tests under
+`tests/contract/` compare the same texts, so the suite fails on a stale golden file and says which tool to run.
 
-**Test rules.** `uv run pytest` must stay green; every lego has a unit test under `tests/test_std_*.py`; every
-reference config has an end to end run test on synthetic data, CPU only, no network; test plugins live under
-`tests/plugins/`; the reinstalled environment (`uv sync --reinstall`) runs the suite before a release.
+**The test tree.** `tests/unit/` holds the unit tests of the core and of the std legos, `tests/contract/` the
+tests that the repository agrees with itself (the golden files, the packs, the examples), `tests/runs/` one end
+to end test per example on its own data, `tests/cli/` the command line. Three markers select what to run:
+`slow` (a test that trains), `subprocess` (the sweep loop) and `optional` (seaborn, torchview, cuda or mps). A
+test that registers a lego does it inside the registry scope every test runs in, so nothing leaks into the next.
+
+**Test rules.** `uv run python -m pytest` must stay green; every lego has a unit test; every example has a run
+test on its own synthetic data, CPU only, no network; the reinstalled environment (`uv sync --reinstall`) runs
+the suite before a release.
 
 **Versions and releases.** kalfa pins `tezgah>=` and `cirak>=` in `pyproject.toml`; bump the version, regenerate
-the dumps (`tests/fixtures/regenerate_recipes.py` and `regenerate_dumps.py`, whose headers carry the version), run
-the suite against the reinstalled environment (`uv sync --reinstall`), then build (`uv build`). kalfa is 0.2.4 and
-needs tezgah 0.2.0 or later and cirak 0.2.2 or later.
+the golden files (`uv run python tools/regenerate.py --all`, the headers carry the version), run the suite
+against the reinstalled environment (`uv sync --reinstall`), then build (`uv build`). kalfa is 0.2.4 and needs
+tezgah 0.2.0 or later and cirak 0.2.3 or later.
