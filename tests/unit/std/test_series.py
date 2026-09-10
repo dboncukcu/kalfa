@@ -10,7 +10,7 @@ from kalfa.std.feed.kalfa.window import WindowDataset, previous_frames, window
 from kalfa.std.layer.torch.gru import Gru
 from kalfa.std.layer.torch.last_step import LastStep
 from kalfa.std.plot.kalfa.forecast_samples import forecast_samples
-from kalfa.std.pre.base import Frame
+from kalfa.std.pre.base import TableFrame
 from kalfa.std.lego.kalfa.apply import apply
 from kalfa.std.lego.kalfa.fit import fit
 from kalfa.std.pre.sklearn.standard_scaler import StandardScaler
@@ -69,7 +69,7 @@ def test_window_dataset_keeps_series_apart_and_takes_context():
 def test_window_never_crosses_a_group_boundary():
     data = pandas.DataFrame({"g": ["a"] * 6 + ["b"] * 6, "x0": numpy.arange(12, dtype="float32"),
                              "load": numpy.arange(12, dtype="float32") * 10})
-    frame = Frame(data[["x0", "load"]], ["x0"], {"load": ["load"]}, "train", data[["g"]])
+    frame = TableFrame(["x0"], {"load": ["load"]}, "train", data=data[["x0", "load"]], extra=data[["g"]])
     dataset = WindowDataset(frame, size=3, horizon=2, group="g")
     assert len(dataset) == 2 * (6 - 3 - 2 + 1)
     for position in range(len(dataset)):

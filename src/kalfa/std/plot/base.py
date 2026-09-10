@@ -1,8 +1,10 @@
-import numpy
-
-from pathlib import Path
 import fnmatch
+from pathlib import Path
+
+import numpy
 import pandas
+
+from kalfa.std.pre.base import TableFrame
 
 
 def true_column(pred, targets):
@@ -69,7 +71,7 @@ def first_set(sets, default="train"):
 def set_frame(loaders, prep, set_name="train"):
     loader = (loaders or {}).get(set_name)
     frame = loader.dataset.frame if loader is not None else None
-    data = frame.data if frame is not None else None
+    data = frame.data if isinstance(frame, TableFrame) else None
     if prep is None or data is None or not len(data):
         return None
     features = [column for column in prep.features]

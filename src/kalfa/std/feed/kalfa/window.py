@@ -3,6 +3,7 @@ import torch
 
 from kalfa.registration import lego
 from kalfa.std.feed.base import Dataset
+from kalfa.std.pre.base import StreamFrame
 
 
 SET_ORDER = ("train", "valid", "test")
@@ -90,6 +91,6 @@ class WindowDataset(Dataset):
       description="Windows of size steps and the next horizon steps of the targets; context takes the tail "
                   "of the previous set at the split boundary, group keeps series apart")
 def window(frame, frames, size, horizon, context=False, group=None):
-    if frame.stream is not None:
+    if isinstance(frame, StreamFrame):
         raise ValueError("window needs a table in memory; the lazy set has the table feed only")
     return WindowDataset(frame, size, horizon, previous_frames(frame, frames) if context else None, group)

@@ -263,30 +263,51 @@ class Prep:
 
 @dataclass
 class Frame:
-    data: object
     features: list
     targets: dict
     set: str
-    extra: object = None
-    dataset: object = None
-    fields: list = None
-    chains: dict = None
-    stream: object = None
 
     @property
     def index(self):
-        if self.stream is not None:
-            return None
-        if self.dataset is not None:
-            return self.dataset.index
+        return None
+
+    def __len__(self) -> int:
+        raise TypeError(f"a {type(self).__name__} has no length")
+
+
+@dataclass
+class TableFrame(Frame):
+    data: object = None
+    extra: object = None
+
+    @property
+    def index(self):
         return self.data.index
 
     def __len__(self):
-        if self.stream is not None:
-            raise TypeError("a stream frame has no length; it is read in chunks")
-        if self.dataset is not None:
-            return len(self.dataset)
         return len(self.data)
+
+
+@dataclass
+class SampleFrame(Frame):
+    dataset: object = None
+    fields: list = field(default_factory=list)
+    chains: dict = field(default_factory=dict)
+
+    @property
+    def index(self):
+        return self.dataset.index
+
+    def __len__(self):
+        return len(self.dataset)
+
+
+@dataclass
+class StreamFrame(Frame):
+    stream: object = None
+
+    def __len__(self):
+        raise TypeError("a stream frame has no length; it is read in chunks")
 
 
 class StreamView:

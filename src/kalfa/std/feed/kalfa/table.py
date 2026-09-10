@@ -3,6 +3,7 @@ import torch
 
 from kalfa.registration import lego
 from kalfa.std.feed.base import Dataset, IterableDataset
+from kalfa.std.pre.base import SampleFrame, StreamFrame
 
 
 class TableDataset(Dataset):
@@ -142,8 +143,8 @@ class SampleDataset(Dataset):
 @lego("/feed/kalfa/table", alias="table",
       description="Feature columns as one tensor x and target fields by name; Dataset fields by name")
 def table(frame, frames=None):
-    if frame.stream is not None:
+    if isinstance(frame, StreamFrame):
         return StreamDataset(frame)
-    if frame.dataset is not None:
+    if isinstance(frame, SampleFrame):
         return SampleDataset(frame)
     return TableDataset(frame)

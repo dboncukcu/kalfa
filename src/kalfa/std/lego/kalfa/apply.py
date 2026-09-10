@@ -5,7 +5,7 @@ from kalfa.registration import lego
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.samples import is_samples
 from kalfa.std.common.stream import is_stream
-from kalfa.std.pre.base import Frame, StreamView, cast_values, run_chain, sets_of, values_of
+from kalfa.std.pre.base import SampleFrame, StreamFrame, StreamView, TableFrame, cast_values, run_chain, sets_of, values_of
 
 
 logger = logger_for("data.prep")
@@ -18,7 +18,7 @@ def sample_frame(df, prep, set, sets):
             raise ValueError(f"the {set} data lacks field {item.name!r}")
         chains[item.name] = [prep.object_of(name, item.name) for name in item.chain
                              if sets.get(name) is None or set in sets[name]]
-    return Frame(None, [], prep.targets, set, None, df, [item.name for item in prep.fields], chains)
+    return SampleFrame([], prep.targets, set, dataset=df, fields=[item.name for item in prep.fields], chains=chains)
 
 
 def table_frame(df, prep, set, sets):
@@ -40,7 +40,7 @@ def table_frame(df, prep, set, sets):
                                 index=df.index)
     named = {item.name for item in prep.fields}
     extra = df[[column for column in df.columns if column not in named and column not in prep.drop]]
-    return Frame(data, prep.features, prep.targets, set, extra)
+    return TableFrame(prep.features, prep.targets, set, data=data, extra=extra)
 
 
 @lego("/lego/kalfa/apply",
@@ -53,7 +53,7 @@ def apply(df, prep, set, keys=None):
         missing = [item.name for item in prep.fields if item.name not in df.columns]
         if missing:
             raise ValueError(f"the {set} data lacks columns {missing}")
-        return Frame(None, prep.features, prep.targets, set, stream=StreamView(df, prep, set, sets))
+        return StreamFrame(prep.features, prep.targets, set, stream=StreamView(df, prep, set, sets))
     if is_samples(df):
         return sample_frame(df, prep, set, sets)
     return table_frame(df, prep, set, sets)

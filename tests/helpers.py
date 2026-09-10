@@ -10,7 +10,7 @@ from ruamel.yaml import YAML
 from torch import nn
 
 from kalfa.std.builder.kalfa.module import Module
-from kalfa.std.pre.base import Frame
+from kalfa.std.pre.base import TableFrame
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
@@ -67,7 +67,7 @@ def frame(rows=16, features=3, seed=0, set_name="train", target="price"):
     values = generator.normal(size=(rows, features)).astype("float32")
     data = pandas.DataFrame(values, columns=[f"x{i}" for i in range(features)])
     data[target] = (values.sum(axis=1) * 2.0).astype("float32")
-    return Frame(data, list(data.columns[:features]), {target: [target]}, set_name)
+    return TableFrame(list(data.columns[:features]), {target: [target]}, set_name, data=data)
 
 
 def batch(rows=8, features=3, seed=0):
