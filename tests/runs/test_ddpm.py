@@ -32,7 +32,7 @@ def test_the_noise_objective_the_schedule_and_the_ema_samples(trained):
     record = Path(result.record)
     history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3]
-    assert set(history[0]) == {"turn", "global_step", "train/ddpm", "lr/main", "seconds", "rules"}
+    assert set(history[0]) == {"turn", "global_step", "train/ddpm", "lr/main", "minimizes/main", "seconds", "rules"}
     assert [line["global_step"] for line in history] == [20, 40, 60]
     assert history[0]["lr/main"] > 0.0 and history[2]["lr/main"] == pytest.approx(0.0, abs=1e-12)
     assert history[0]["lr/main"] > history[1]["lr/main"] > history[2]["lr/main"]

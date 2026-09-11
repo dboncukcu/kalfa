@@ -429,7 +429,41 @@ const app = Vue.createApp({
       });
     },
     rulesFired() {
-      return this.history.lines.filter(line => (line.rules || []).length).map(line => `turn ${line.turn}: ${line.rules.join(", ")}`);
+      return this.history.lines.filter(line => (line.rules || []).length).map(line => `${this.turnLabel} ${line.turn}: ${line.rules.join(", ")}`);
+    },
+    turnLabel() {
+      const lines = this.history.lines;
+      const loaders = this.record && this.record.data && this.record.data.loaders;
+      const batches = loaders && loaders.train && loaders.train.batches;
+      if (!lines.length || !batches) return "turn";
+      const per = lines.length > 1 ? lines[1].global_step - lines[0].global_step : lines[0].global_step;
+      return per === batches ? "epoch" : "turn";
+    },
+    minimized() {
+      const found = {};
+      for (const line of this.history.lines) {
+        for (const [key, value] of Object.entries(line)) {
+          if (!key.startsWith("minimizes/") || typeof value !== "string") continue;
+          (found[key.slice(10)] = found[key.slice(10)] || []).push([line.turn, value]);
+        }
+      }
+      return found;
+    },
+    training() {
+      const names = new Set([...Object.keys(this.minimized), ...Object.keys(this.series).filter(key => key.startsWith("lr/")).map(key => key.slice(3))]);
+      return [...names].map(name => {
+        const path = this.minimized[name] || [];
+        const segments = [];
+        for (const [turn, loss] of path) {
+          const last = segments[segments.length - 1];
+          if (last && last.loss === loss) last.to = turn; else segments.push({ loss, from: turn, to: turn });
+        }
+        const current = path.length ? path[path.length - 1][1] : null;
+        const prefix = current ? `train/${current}/` : null;
+        const parts = prefix ? Object.keys(this.series).filter(key => key.startsWith(prefix)).map(key => key.slice(prefix.length)) : [];
+        const rates = this.series[`lr/${name}`];
+        return { name, current, segments, parts, lr: rates ? rates[rates.length - 1][1] : null };
+      });
     },
     ruleMarks() { return this.history.lines.filter(line => (line.rules || []).length).map(line => line.turn); },
     epochs() {
@@ -466,9 +500,9 @@ const app = Vue.createApp({
         const found = this.stepCharts.find(entry => entry.name === name);
         return found ? { name, lines: found.lines, xlabel: "step", marks: this.turnMarks } : null;
       }
-      if (name === "learning rate") return this.rateLines.length ? { name, lines: this.rateLines, xlabel: "turn", marks: [], logy: true } : null;
+      if (name === "learning rate") return this.rateLines.length ? { name, lines: this.rateLines, xlabel: this.turnLabel, marks: [], logy: true } : null;
       const found = this.metricCharts.find(entry => entry.name === name);
-      return found ? { name, lines: found.lines, xlabel: "turn", marks: this.ruleMarks } : null;
+      return found ? { name, lines: found.lines, xlabel: this.turnLabel, marks: this.ruleMarks } : null;
     },
     gallery() {
       if (!this.record) return [];

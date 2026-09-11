@@ -31,7 +31,7 @@ def test_contrastive_training_and_the_backbone_codes(trained):
     record = Path(result.record)
     history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2]
-    assert set(history[0]) == {"turn", "global_step", "train/ntx", "lr/main", "seconds", "rules"}
+    assert set(history[0]) == {"turn", "global_step", "train/ntx", "lr/main", "minimizes/main", "seconds", "rules"}
     assert [line["global_step"] for line in history] == [32, 64]
     assert (record / "checkpoints" / "last.pt").exists()
     codes = predict(result.record, model="backbone", data="data/stl10/test")

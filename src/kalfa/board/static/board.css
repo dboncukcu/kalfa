@@ -48,6 +48,9 @@ button { font: inherit; color: inherit; }
 .num { text-align: right; }
 .wrap { white-space: normal; }
 .note { color: var(--ink-2); max-width: 900px; margin: 0 0 12px; }
+.training { padding: 4px 0; }
+.training + .training { border-top: 1px solid var(--line); }
+.timeline { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; }
 .empty { color: var(--muted); margin: 8px 0; }
 .error { color: var(--failed); }
 

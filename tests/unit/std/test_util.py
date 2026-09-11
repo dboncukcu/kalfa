@@ -35,10 +35,12 @@ def test_history_line_and_file(tmp_path):
     assert line == {"turn": 2, "global_step": 8, "train/l": 0.5, "lr/m": 0.3, "rules": ["a"]}
     monitor = Monitor()
     history(monitor, {"train/l": 0.5}, 1, {"turn": 2, "global_step": 8}, {"m": optimizer}, {"fired": []},
+            record=str(tmp_path))
+    history(monitor, {"train/l": 0.4}, 2, {"turn": 3, "global_step": 12}, {"m": optimizer}, {}, {"loss": "other"},
             str(tmp_path))
-    history(monitor, {"train/l": 0.4}, 2, {"turn": 3, "global_step": 12}, {"m": optimizer}, {}, str(tmp_path))
     lines = [json.loads(text) for text in (tmp_path / "history.jsonl").read_text().splitlines()]
     assert [line["turn"] for line in lines] == [2, 3] and lines[1]["rules"] == []
+    assert lines[0]["minimizes/m"] == "l" and lines[1]["minimizes/m"] == "other"
     monitor.sink({"kind": "started", "path": "training.epochs", "total": 5})
     assert monitor.total == 5 and monitor.bar.total == 5
     monitor.close()

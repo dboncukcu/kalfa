@@ -21,12 +21,14 @@ class History:
         return cls(read_lines(Path(record) / "history.jsonl"))
 
     @staticmethod
-    def line(metrics, counters, optimizers, rules, seconds=None):
+    def line(metrics, counters, optimizers, rules, seconds=None, minimizes=None):
         found = {"turn": int((counters or {}).get("turn", 0)),
                  "global_step": int((counters or {}).get("global_step", 0))}
         found.update(metrics or {})
         for name, optimizer in (optimizers or {}).items():
             found[f"lr/{name}"] = optimizer.lr()
+        for name, loss in (minimizes or {}).items():
+            found[f"minimizes/{name}"] = loss
         if seconds is not None:
             found["seconds"] = round(float(seconds), 3)
         found["rules"] = list((rules or {}).get("fired") or [])

@@ -1692,10 +1692,11 @@
     },
     "/lego/kalfa/history": {
       "alias": [],
-      "description": "Append the turn's line to history.jsonl, its duration as seconds, and hand it to the monitor",
+      "description": "Append the turn's line to history.jsonl: the metrics, the learning rate and the loss every optimizer minimized this turn (as the rules set it), the duration as seconds, the rules that fired; and hand it to the monitor",
       "facts": {
         "bus": {
           "counters_next": "counters_next",
+          "effects": "effects",
           "metrics": "metrics",
           "monitor": "monitor",
           "optimizers_next": "optimizers_next",
@@ -1706,7 +1707,7 @@
         "returns": null
       },
       "kind": "lego",
-      "signature": "(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, record=None)"
+      "signature": "(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, effects=None, record=None)"
     },
     "/lego/kalfa/identity": {
       "alias": [],

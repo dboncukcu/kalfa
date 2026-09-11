@@ -74,6 +74,8 @@ def test_the_history_line_carries_the_seconds_and_the_git_note_says_which_code(t
     line = History.line({"train/l": 0.5}, {"turn": 2, "global_step": 8}, {"m": optimizer}, {}, 1.23456)
     assert line["seconds"] == 1.235 and list(line)[-2:] == ["seconds", "rules"]
     assert "seconds" not in History.line({}, {}, {}, {})
+    named = History.line({}, {"turn": 1}, {"m": optimizer}, {}, minimizes={"m": "loss_mse"})
+    assert named["minimizes/m"] == "loss_mse" and list(named)[-3:] == ["lr/m", "minimizes/m", "rules"]
     assert git_note(tmp_path) == {"commit": None, "dirty": None}
     note = git_note(".")
     assert note["commit"] is None or len(note["commit"]) == 40

@@ -129,7 +129,7 @@
           <span v-if="record.device">device {{ record.device.device }}</span>
           <span v-if="record.manifest && record.manifest.version">kalfa {{ record.manifest.version }}</span>
           <span v-if="record.host">{{ record.host.hostname }} · pid {{ record.host.pid }}</span>
-          <span v-if="turns">{{ turns }} turns</span>
+          <span v-if="turns">{{ turns }} {{ turnLabel }}s</span>
         </div>
         <div class="chips" v-if="params.length">
           <span class="chip" v-for="[key, value] in params" :key="key">{{ key }} = {{ fmt(value) }}</span>
@@ -160,13 +160,22 @@
                   <td class="num mono">{{ fmt(row.last) }}</td>
                   <td class="num mono">{{ fmt(row.min) }} <span class="muted">@{{ row.minTurn }}</span></td>
                   <td class="num mono">{{ fmt(row.max) }} <span class="muted">@{{ row.maxTurn }}</span></td>
-                  <td class="sparkcell"><spark :points="row.tail" :name="row.key" :color="setColor(row.set)"></spark></td>
+                  <td class="sparkcell"><spark :points="row.tail" :name="row.key" :color="setColor(row.set)" :xlabel="turnLabel"></spark></td>
                 </tr>
               </tbody>
             </table>
             <p class="empty" v-else>no turn recorded yet</p>
           </div>
           <div class="stack">
+            <div class="card" v-if="training.length">
+              <div class="card-label">training</div>
+              <div class="training" v-for="entry in training" :key="entry.name">
+                <div><b>{{ entry.name }}</b> minimizes <b class="mono">{{ entry.current || 'its loss' }}</b><span class="muted" v-if="entry.parts.length"> = {{ entry.parts.join(' + ') }}</span><span class="muted" v-if="entry.lr !== null"> · lr {{ fmt(entry.lr) }}</span></div>
+                <div class="muted timeline" v-if="entry.segments.length > 1">
+                  <span v-for="segment in entry.segments" :key="segment.from"><span class="mono">{{ segment.loss }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
+                </div>
+              </div>
+            </div>
             <div class="card" v-if="rulesFired.length">
               <div class="card-label">rules fired</div>
               <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
@@ -200,15 +209,15 @@
           <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
           <span class="muted">{{ metricCharts.length }} metrics</span>
         </div>
-        <p class="note">One chart per metric, one line per set, drawn from history.jsonl once per turn (an epoch, or the steps of a
-          stream turn). Drag to zoom, click a legend entry to hide a line, the toolbar downloads; expand opens a large view.
-          Dashed lines mark the turns a rule fired.</p>
+        <p class="note">One chart per metric, one line per set, drawn from history.jsonl once per turn; the axis says epoch when a
+          turn is one pass over the train loader and turn when the run trains by steps. Drag to zoom, click a legend entry
+          to hide a line, the toolbar downloads; expand opens a large view. Dashed lines mark the {{ turnLabel }}s a rule fired.</p>
         <div class="grid charts" v-if="metricCharts.length">
           <div class="card" v-for="entry in metricCharts" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name" xlabel="turn" :ylabel="entry.name" :logy="logy" :marks="ruleMarks" :expand="link({chart: entry.name})"></chart>
+            <chart :lines="entry.lines" :title="entry.name" :xlabel="turnLabel" :ylabel="entry.name" :logy="logy" :marks="ruleMarks" :expand="link({chart: entry.name})"></chart>
           </div>
           <div class="card" v-if="rateLines.length">
-            <chart :lines="rateLines" title="learning rate" xlabel="turn" ylabel="learning rate" :logy="true" :expand="link({chart: 'learning rate'})"></chart>
+            <chart :lines="rateLines" title="learning rate" :xlabel="turnLabel" ylabel="learning rate" :logy="true" :expand="link({chart: 'learning rate'})"></chart>
           </div>
         </div>
         <p class="empty" v-else>nothing to draw yet</p>
@@ -334,10 +343,10 @@
               </table>
             </div>
             <div class="card" v-if="epochs.rows.length">
-              <div class="card-label">epochs</div>
-              <p class="muted" v-if="epochs.total">{{ epochs.rows.length }} turns · {{ ms(epochs.total * 1000) }} in total · {{ ms(epochs.mean * 1000) }} per turn</p>
+              <div class="card-label">{{ turnLabel }}s</div>
+              <p class="muted" v-if="epochs.total">{{ epochs.rows.length }} {{ turnLabel }}s · {{ ms(epochs.total * 1000) }} in total · {{ ms(epochs.mean * 1000) }} per {{ turnLabel }}</p>
               <table class="table epochs">
-                <thead><tr><th class="num">turn</th><th class="num">seconds</th><th class="num">global step</th><th></th></tr></thead>
+                <thead><tr><th class="num">{{ turnLabel }}</th><th class="num">seconds</th><th class="num">global step</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="row in epochs.rows" :key="row.turn">
                     <td class="num mono">{{ row.turn }}</td>
