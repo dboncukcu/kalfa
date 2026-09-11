@@ -5,10 +5,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .record import Record
-from .std.common.files import read_lines
-from .std.common.history import History
-from .std.common.log import logger_for
+from kalfa.record import Record
+from kalfa.std.common.files import read_lines
+from kalfa.std.common.history import History
+from kalfa.std.common.log import logger_for
 
 
 logger = logger_for("board")
@@ -16,6 +16,14 @@ logger = logger_for("board")
 
 def relative_to(root, path):
     return str(Path(path).resolve().relative_to(root))
+
+
+def static_path(name):
+    base = Path(__file__).parent / "static"
+    target = (base / (name or "")).resolve()
+    if base not in target.parents or not target.is_file():
+        return None
+    return target
 
 
 class Board:
@@ -65,7 +73,8 @@ class Board:
                 "sweep": record.read_json("sweep.json"), "data": record.read_json("data.json"),
                 "run": record.read_json("run.json"), "plots": plots, "samples": samples,
                 "resolved": resolved.read_text() if resolved.exists() else None,
-                "events": read_lines(path / "events.jsonl")[-60:]}
+                "events": read_lines(path / "events.jsonl")[-60:],
+                "logs": [name for name in ("stdout.txt", "stderr.txt") if (path / name).is_file()]}
 
     def lines(self, relative, name, offset=0):
         path = self.resolve(relative)
@@ -73,6 +82,16 @@ class Board:
             return None
         lines = read_lines(path / name)
         return {"lines": lines[int(offset):], "offset": len(lines)}
+
+    def tail(self, relative, name, count=200):
+        path = self.resolve(relative)
+        if path is None or name not in ("stdout.txt", "stderr.txt"):
+            return None
+        target = path / name
+        if not target.is_file():
+            return {"lines": [], "name": name}
+        lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+        return {"lines": lines[-int(count):], "name": name, "total": len(lines)}
 
     def best_so_far(self, history, objective):
         monitor = (objective or {}).get("monitor")
@@ -118,9 +137,9 @@ class Board:
         return {"diff": list(difflib.unified_diff(texts[0], texts[1], first, second, lineterm=""))}
 
     def describe(self, relative):
-        from .api import check
-        from .describe import report
-        from .style import Style
+        from kalfa.api import check
+        from kalfa.describe import report
+        from kalfa.style import Style
 
         path = self.resolve(relative)
         if path is None or not (path / "resolved.yaml").exists():
@@ -135,10 +154,6 @@ class Board:
         return path
 
 
-def page():
-    return Path(__file__).with_name("board.html").read_text(encoding="utf-8")
-
-
 def handler_for(board):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *arguments):
@@ -149,6 +164,7 @@ def handler_for(board):
             self.send_response(status)
             self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(payload)
 
@@ -158,12 +174,23 @@ def handler_for(board):
                 return
             self.send(200, json.dumps(value, default=str))
 
+        def send_file(self, found):
+            if found is None:
+                self.send(404, "not found", "text/plain")
+                return
+            kind = mimetypes.guess_type(found.name)[0] or "application/octet-stream"
+            if kind.startswith("text/") or kind in ("application/javascript", "text/javascript"):
+                kind += "; charset=utf-8"
+            self.send(200, found.read_bytes(), kind)
+
         def do_GET(self):
             url = urlparse(self.path)
             query = {key: values[0] for key, values in parse_qs(url.query).items()}
             path = query.get("path", "")
             if url.path == "/":
-                self.send(200, page(), "text/html; charset=utf-8")
+                self.send_file(static_path("index.html"))
+            elif url.path.startswith("/static/"):
+                self.send_file(static_path(url.path[len("/static/"):]))
             elif url.path == "/api/tree":
                 self.send_json(board.tree())
             elif url.path == "/api/record":
@@ -172,6 +199,8 @@ def handler_for(board):
                 self.send_json(board.lines(path, "history.jsonl", query.get("offset", 0)))
             elif url.path == "/api/steps":
                 self.send_json(board.lines(path, "steps.jsonl", query.get("offset", 0)))
+            elif url.path == "/api/tail":
+                self.send_json(board.tail(path, query.get("name", "stdout.txt"), query.get("lines", 200)))
             elif url.path == "/api/sweep":
                 self.send_json(board.sweep(path))
             elif url.path == "/api/diff":
@@ -179,12 +208,7 @@ def handler_for(board):
             elif url.path == "/api/describe":
                 self.send_json(board.describe(path))
             elif url.path == "/file":
-                found = board.file(path)
-                if found is None:
-                    self.send(404, "not found", "text/plain")
-                else:
-                    kind = mimetypes.guess_type(found.name)[0] or "application/octet-stream"
-                    self.send(200, found.read_bytes(), kind)
+                self.send_file(board.file(path))
             else:
                 self.send(404, "not found", "text/plain")
 

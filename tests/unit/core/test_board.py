@@ -4,7 +4,7 @@ import json
 import threading
 import urllib.request
 
-from kalfa.board import Board, serve
+from kalfa.board import Board, serve, static_path
 from kalfa.record import Record
 
 
@@ -19,6 +19,7 @@ def records(root):
     run.append("steps.jsonl", {"step": 1, "turn": 1, "loss/m": 1.0, "lr/m": 0.1})
     (run.directory / "plots").mkdir()
     (run.directory / "plots" / "loss_curve.png").write_bytes(b"png")
+    run.write_text("stdout.txt", "line one\nline two\nline three\n")
     sweep = Record(root / "sweeps" / "grid")
     sweep.manifest("sweep", strategy="/strategy/kalfa/grid",
                    objective={"monitor": "val/rmse", "mode": "min", "at": "best"}, total=2)
@@ -49,6 +50,12 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert "-lr: 3.0" in board.diff("sweeps/grid/0000", "sweeps/grid/0001")["diff"]
     assert board.record("../outside") is None and board.file("runs/one/resolved.yaml") is None
     assert board.file("runs/one/plots/loss_curve.png").read_bytes() == b"png" and board.record("nowhere") is None
+    assert run["logs"] == ["stdout.txt"]
+    assert board.tail("runs/one", "stdout.txt", 2) == {"lines": ["line two", "line three"], "name": "stdout.txt", "total": 3}
+    assert board.tail("runs/one", "stderr.txt") == {"lines": [], "name": "stderr.txt"}
+    assert board.tail("runs/one", "resolved.yaml") is None
+    assert static_path("index.html").name == "index.html" and static_path("../__init__.py") is None
+    assert static_path("vendor/vue.global.prod.js") is not None and static_path("nope.js") is None
 
 
 def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
@@ -58,7 +65,11 @@ def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
         page = urllib.request.urlopen(f"{base}/").read().decode()
-        assert "kalfa board" in page and "/api/tree" in page
+        assert "kalfa board" in page and "/static/board.js" in page
+        script = urllib.request.urlopen(f"{base}/static/board.js")
+        assert script.headers["Content-Type"].startswith("text/javascript") and "/api/tree" in script.read().decode()
+        tail = json.loads(urllib.request.urlopen(f"{base}/api/tail?path=runs/one&name=stdout.txt&lines=1").read())
+        assert tail["lines"] == ["line three"]
         tree = json.loads(urllib.request.urlopen(f"{base}/api/tree").read())
         assert "runs" in tree["groups"]
         history = json.loads(urllib.request.urlopen(f"{base}/api/history?path=runs/one&offset=1").read())

@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kalfa board</title>
+<link rel="stylesheet" href="/static/board.css">
+</head>
+<body>
+<div id="app" v-cloak>
+  <aside class="sidebar">
+    <header class="brand">
+      <div class="brand-row">
+        <h1>kalfa board</h1>
+        <span class="pulse" :class="{live: live}" :title="live ? 'following a running record' : 'idle'"></span>
+      </div>
+      <div class="root" :title="tree.root">{{ tree.root }}</div>
+      <input class="filter" v-model.trim="filter" type="search" placeholder="filter records" spellcheck="false">
+    </header>
+    <nav class="tree">
+      <section v-for="group in groups" :key="group.name" class="group">
+        <button class="group-head" @click="toggleGroup(group.name)">
+          <span class="chevron" :class="{open: !collapsed[group.name]}"></span>
+          <span class="group-name">{{ group.name }}</span>
+          <span class="count">{{ group.entries.length }}</span>
+        </button>
+        <ul v-show="!collapsed[group.name]">
+          <li v-for="entry in group.entries" :key="entry.path" :class="{active: entry.path === current.path}"
+              @click="open(entry)">
+            <span class="dot" :class="stateOf(entry)"></span>
+            <span class="name" :title="entry.path">{{ entry.name }}</span>
+            <span class="badge kind">{{ entry.kind }}</span>
+          </li>
+        </ul>
+      </section>
+      <p v-if="!groups.length" class="empty">no record under the root yet</p>
+    </nav>
+    <footer class="sidebar-foot">refreshed {{ refreshed || 'never' }}</footer>
+  </aside>
+
+  <main class="content">
+    <section v-if="!current.path" class="welcome">
+      <h2>Pick a record</h2>
+      <p>Runs, sweep points and sweeps under the root are listed on the left. A running record is followed
+        every few seconds: its curves, plots and logs grow in place.</p>
+    </section>
+
+    <section v-else-if="current.kind === 'sweep'" class="view">
+      <header class="head" v-if="sweep">
+        <div class="title-row">
+          <h2 class="title">{{ current.path }}</h2>
+          <span class="badge kind">sweep</span>
+          <span class="badge" :class="sweepState">{{ sweepState }}</span>
+        </div>
+        <div class="meta-row">
+          <span v-if="sweep.objective.monitor"><b>{{ sweep.objective.monitor }}</b> {{ sweep.objective.mode || 'min' }} at
+            {{ sweep.objective.at || 'best' }}</span>
+          <span>strategy {{ shortUri(sweep.manifest.strategy) }}</span>
+          <span>{{ sweep.points.length }} of {{ sweep.manifest.total || '?' }} points</span>
+          <span v-if="sweep.manifest.started">started {{ ago(sweep.manifest.started) }}</span>
+        </div>
+        <div class="progress"><div class="bar" :style="{width: progress + '%'}"></div></div>
+      </header>
+      <div v-if="sweep && sweep.best" class="card best">
+        <div class="card-label">best so far</div>
+        <div class="best-row">
+          <span class="big">{{ fmt(sweep.best.objective.value) }}</span>
+          <span class="muted">at turn {{ sweep.best.objective.turn }}</span>
+          <span class="chip" v-for="(value, key) in sweep.best.values" :key="key">{{ key }} = {{ fmt(value) }}</span>
+          <a href="#" class="link" @click.prevent="openPath(sweep.best.path, 'point')">open point {{ sweep.best.id }}</a>
+        </div>
+      </div>
+      <div class="card" v-if="sweep">
+        <table class="table points">
+          <thead>
+            <tr>
+              <th class="tick"><span title="tick points to overlay their curves">plot</span></th>
+              <th class="sortable" @click="sortBy('id')">id<span class="sort" v-if="sortKey === 'id'">{{ sortDesc ? '▼' : '▲' }}</span></th>
+              <th v-for="key in pointKeys" :key="key" class="sortable" @click="sortBy(key)">{{ key }}<span class="sort" v-if="sortKey === key">{{ sortDesc ? '▼' : '▲' }}</span></th>
+              <th>status</th>
+              <th class="num sortable" @click="sortBy('turns')">turns<span class="sort" v-if="sortKey === 'turns'">{{ sortDesc ? '▼' : '▲' }}</span></th>
+              <th class="num sortable" @click="sortBy('objective')">{{ sweep.objective.monitor || 'objective' }}<span class="sort" v-if="sortKey === 'objective'">{{ sortDesc ? '▼' : '▲' }}</span></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="point in sortedPoints" :key="point.path" :class="{best: sweep.best && sweep.best.path === point.path}">
+              <td class="tick"><input type="checkbox" :checked="selected.includes(point.path)" @change="toggleSelected(point.path)"></td>
+              <td class="mono">{{ point.id ?? '' }}</td>
+              <td v-for="key in pointKeys" :key="key" class="mono">{{ fmt(point.values[key]) }}</td>
+              <td><span class="badge" :class="stateOf(point)">{{ stateOf(point) }}</span></td>
+              <td class="num mono">{{ point.turns }}</td>
+              <td class="num mono">
+                <template v-if="point.objective">{{ fmt(point.objective.value) }} <span class="muted">@{{ point.objective.turn }}</span></template>
+              </td>
+              <td><a href="#" class="link" @click.prevent="openPath(point.path, 'point')">open</a></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="empty" v-if="!sweep.points.length">no point has started yet</p>
+      </div>
+      <div class="card" v-if="overlayLines.length">
+        <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of the ticked points</div>
+        <chart :lines="overlayLines" xlabel="turn" :logy="logy"></chart>
+        <label class="toggle"><input type="checkbox" v-model="logy"> log scale</label>
+      </div>
+      <div class="card" v-if="selected.length >= 2">
+        <div class="card-label">difference between {{ selected[0] }} and {{ selected[1] }}</div>
+        <pre class="diff" v-if="diff"><span v-for="(line, index) in diff" :key="index" :class="diffClass(line)">{{ line }}
+</span></pre>
+        <p class="muted" v-else>reading resolved.yaml of both</p>
+      </div>
+    </section>
+
+    <section v-else class="view" :key="current.path">
+      <header class="head" v-if="record">
+        <div class="title-row">
+          <h2 class="title">{{ record.manifest && record.manifest.name || current.path }}</h2>
+          <span class="badge kind">{{ current.kind }}</span>
+          <span class="badge" :class="state">{{ state }}</span>
+          <span class="path muted" v-if="record.manifest && record.manifest.name">{{ current.path }}</span>
+        </div>
+        <div class="meta-row">
+          <span v-if="record.manifest && record.manifest.started">started {{ ago(record.manifest.started) }}</span>
+          <span v-if="record.status && record.status.last_seen">last seen {{ ago(record.status.last_seen) }}</span>
+          <span v-if="elapsed">{{ elapsed }}</span>
+          <span v-if="record.device">device {{ record.device.device }}</span>
+          <span v-if="record.manifest && record.manifest.version">kalfa {{ record.manifest.version }}</span>
+          <span v-if="record.host">{{ record.host.hostname }} · pid {{ record.host.pid }}</span>
+          <span v-if="turns">{{ turns }} turns</span>
+        </div>
+        <div class="chips" v-if="params.length">
+          <span class="chip" v-for="[key, value] in params" :key="key">{{ key }} = {{ fmt(value) }}</span>
+        </div>
+        <div class="card objective" v-if="record.sweep || pointObjective">
+          <span class="card-label">objective</span>
+          <span class="big" v-if="record.sweep">{{ fmt(record.sweep.objective.value) }}</span>
+          <span class="muted" v-if="record.sweep">at turn {{ record.sweep.objective.turn }} · point {{ record.sweep.id }}</span>
+          <span v-else-if="pointObjective" class="muted">{{ pointObjective }}</span>
+        </div>
+      </header>
+
+      <nav class="tabs" v-if="record">
+        <button v-for="name in tabNames" :key="name" :class="{active: tab === name}" @click="switchTab(name)">
+          {{ name }}<span class="tab-count" v-if="tabCount(name)">{{ tabCount(name) }}</span>
+        </button>
+      </nav>
+
+      <div class="panel" v-if="record && tab === 'overview'">
+        <div class="grid two">
+          <div class="card">
+            <div class="card-label">latest turn</div>
+            <table class="table" v-if="latest.length">
+              <thead><tr><th>metric</th><th class="num">last</th><th class="num">min</th><th class="num">max</th><th>trend</th></tr></thead>
+              <tbody>
+                <tr v-for="row in latest" :key="row.key">
+                  <td><span class="set" :style="{color: setColor(row.set)}">{{ row.set }}</span>/{{ row.name }}</td>
+                  <td class="num mono">{{ fmt(row.last) }}</td>
+                  <td class="num mono">{{ fmt(row.min) }} <span class="muted">@{{ row.minTurn }}</span></td>
+                  <td class="num mono">{{ fmt(row.max) }} <span class="muted">@{{ row.maxTurn }}</span></td>
+                  <td class="spark"><svg viewBox="0 0 120 24" preserveAspectRatio="none"><polyline :points="row.spark" fill="none" :stroke="setColor(row.set)" stroke-width="1.5"></polyline></svg></td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="empty" v-else>no turn recorded yet</p>
+          </div>
+          <div class="stack">
+            <div class="card" v-if="rulesFired.length">
+              <div class="card-label">rules fired</div>
+              <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
+            </div>
+            <div class="card" v-if="rateRows.length">
+              <div class="card-label">learning rates</div>
+              <table class="table"><tbody>
+                <tr v-for="row in rateRows" :key="row.key"><td>{{ row.key }}</td><td class="num mono">{{ fmt(row.last) }}</td></tr>
+              </tbody></table>
+            </div>
+            <div class="card" v-if="record.run">
+              <div class="card-label">run</div>
+              <table class="table"><tbody>
+                <tr><td>status</td><td><span class="badge" :class="record.run.status === 'ok' ? 'finished' : 'failed'">{{ record.run.status }}</span></td></tr>
+                <tr><td>wall time</td><td class="mono">{{ ms(record.run.ms) }}</td></tr>
+                <tr v-if="record.run.error"><td>error</td><td class="mono error">{{ record.run.error }}</td></tr>
+              </tbody></table>
+            </div>
+            <div class="card" v-if="record.resume">
+              <div class="card-label">resumed from</div>
+              <div class="mono">{{ record.resume.resume_from }}</div>
+              <div class="muted mono">{{ record.resume.checkpoint }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'curves'">
+        <div class="toolbar">
+          <input class="filter" v-model.trim="metricFilter" type="search" placeholder="filter metrics" spellcheck="false">
+          <label class="toggle"><input type="checkbox" v-model="logy"> log scale</label>
+          <span class="muted">{{ metricCharts.length }} metrics · one line per set</span>
+        </div>
+        <div class="grid charts" v-if="metricCharts.length">
+          <div class="card" v-for="item in metricCharts" :key="item.name">
+            <chart :lines="item.lines" :title="item.name" xlabel="turn" :logy="logy" :marks="ruleMarks"></chart>
+          </div>
+          <div class="card" v-if="rateLines.length">
+            <chart :lines="rateLines" title="learning rate" xlabel="turn" :logy="true"></chart>
+          </div>
+        </div>
+        <p class="empty" v-else>nothing to draw yet</p>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'steps'">
+        <div class="toolbar">
+          <label class="toggle"><input type="checkbox" v-model="logy"> log scale</label>
+          <span class="muted">{{ steps.lines.length }} updates · {{ stepCharts.length ? 'drawn at most 2000 points per line' : '' }}</span>
+        </div>
+        <div class="grid charts" v-if="stepCharts.length">
+          <div class="card" v-for="item in stepCharts" :key="item.name">
+            <chart :lines="item.lines" :title="item.name" xlabel="step" :logy="logy" :marks="turnMarks"></chart>
+          </div>
+        </div>
+        <p class="empty" v-else>no step written yet</p>
+      </div>
+
+      <div class="panel" v-if="record && (tab === 'plots' || tab === 'samples')">
+        <div class="gallery" v-if="gallery.length">
+          <figure v-for="name in gallery" :key="name" @click="lightbox = name">
+            <img :src="fileUrl(tab, name)" :alt="name" loading="lazy">
+            <figcaption>{{ name }}</figcaption>
+          </figure>
+        </div>
+        <p class="empty" v-else>nothing written yet</p>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'config'">
+        <div class="card">
+          <div class="toolbar"><span class="card-label">resolved.yaml</span><button class="small" @click="copy(record.resolved)">copy</button></div>
+          <pre class="code">{{ record.resolved || 'no resolved.yaml' }}</pre>
+        </div>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'notes'">
+        <div class="grid two">
+          <div class="card" v-if="record.manifest">
+            <div class="card-label">manifest</div>
+            <table class="table kv"><tbody>
+              <tr v-for="[key, value] in entries(record.manifest, ['params'])" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr>
+            </tbody></table>
+          </div>
+          <div class="stack">
+            <div class="card" v-if="record.host">
+              <div class="card-label">host</div>
+              <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.host)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
+            </div>
+            <div class="card" v-if="record.device">
+              <div class="card-label">device</div>
+              <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.device)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
+            </div>
+            <div class="card" v-if="record.git">
+              <div class="card-label">git</div>
+              <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.git)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
+            </div>
+          </div>
+        </div>
+        <div class="card" v-if="dataStages.length">
+          <div class="card-label">data block</div>
+          <table class="table">
+            <thead><tr><th>stage</th><th class="num">rows</th><th class="num">columns</th><th>added</th><th>removed</th></tr></thead>
+            <tbody>
+              <tr v-for="stage in dataStages" :key="stage.stage">
+                <td class="mono">{{ stage.stage }}</td><td class="num mono">{{ count(stage.rows) }}</td><td class="num mono">{{ stage.columns }}</td>
+                <td class="wrap muted">{{ (stage.added || []).join(', ') }}</td><td class="wrap muted">{{ (stage.removed || []).join(', ') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card" v-if="runNodes.length">
+          <div class="card-label">nodes of the run</div>
+          <table class="table nodes">
+            <tbody>
+              <tr v-for="node in runNodes" :key="node.path" :class="{failed: node.status !== 'ok'}">
+                <td class="mono" :style="{paddingLeft: (10 + node.depth * 16) + 'px'}">{{ node.node }}</td>
+                <td class="num mono">{{ ms(node.ms) }}</td>
+                <td class="barcell"><div class="bar" :style="{width: node.share + '%'}"></div></td>
+                <td><span class="badge" :class="node.status === 'ok' ? 'finished' : 'failed'">{{ node.status }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'events'">
+        <div class="card">
+          <table class="table" v-if="record.events.length">
+            <thead><tr><th>time</th><th>kind</th><th>node</th><th class="num">ms</th><th>note</th></tr></thead>
+            <tbody>
+              <tr v-for="(event, index) in record.events" :key="index" :class="{failed: event.status && event.status !== 'ok'}">
+                <td class="mono muted">{{ clock(event.t) }}</td><td>{{ event.kind }}</td><td class="mono">{{ event.path }}</td>
+                <td class="num mono">{{ event.ms !== undefined ? ms(event.ms) : '' }}</td><td class="wrap">{{ event.error || event.status || '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="empty" v-else>no event yet</p>
+        </div>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'logs'">
+        <div class="toolbar">
+          <button v-for="name in record.logs" :key="name" class="small" :class="{active: logs.name === name}" @click="loadLogs(name)">{{ name }}</button>
+          <span class="muted" v-if="logs.total">last {{ logs.lines.length }} of {{ logs.total }} lines</span>
+        </div>
+        <pre class="code log" v-if="logs.lines.length">{{ logs.lines.join('\n') }}</pre>
+        <p class="empty" v-else>{{ record.logs.length ? 'empty so far' : 'no log file in the record' }}</p>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'describe'">
+        <div class="card">
+          <pre class="code" v-if="describeText">{{ describeText }}</pre>
+          <p class="muted" v-else>reading the config under the record's contract</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="lightbox" v-if="lightbox" @click="lightbox = null">
+    <figure @click.stop>
+      <img :src="fileUrl(tab, lightbox)" :alt="lightbox">
+      <figcaption>{{ lightbox }} <button class="small" @click="stepLightbox(-1)">previous</button> <button class="small" @click="stepLightbox(1)">next</button> <button class="small" @click="lightbox = null">close</button></figcaption>
+    </figure>
+  </div>
+</div>
+
+<script type="text/x-template" id="chart-template">
+  <div class="chart">
+    <div class="chart-head" v-if="title || lines.length > 1">
+      <span class="chart-title">{{ title }}</span>
+      <span class="legend">
+        <button v-for="line in lines" :key="line.name" class="legend-item" :class="{off: hidden[line.name]}" @click="toggle(line.name)">
+          <span class="swatch" :style="{background: line.color}"></span>{{ line.name }}
+        </button>
+      </span>
+    </div>
+    <svg :viewBox="'0 0 ' + width + ' ' + height" @mousemove="onMove" @mouseleave="hover = null">
+      <g class="grid">
+        <line v-for="tick in yticks" :key="'y' + tick.pos" :x1="pad.left" :x2="width - pad.right" :y1="tick.pos" :y2="tick.pos"></line>
+      </g>
+      <g class="marks">
+        <line v-for="mark in placedMarks" :key="'m' + mark.x" :x1="mark.x" :x2="mark.x" :y1="pad.top" :y2="height - pad.bottom"></line>
+      </g>
+      <g class="axis">
+        <text v-for="tick in yticks" :key="'yl' + tick.pos" :x="pad.left - 6" :y="tick.pos + 3.5" text-anchor="end">{{ tick.label }}</text>
+        <text v-for="tick in xticks" :key="'xl' + tick.pos" :x="tick.pos" :y="height - 8" text-anchor="middle">{{ tick.label }}</text>
+        <text v-if="xlabel" :x="width - pad.right" :y="height - 8" text-anchor="end" class="xlabel">{{ xlabel }}</text>
+      </g>
+      <path v-for="line in scaled" :key="line.name" :d="line.path" fill="none" :stroke="line.color" stroke-width="1.6" stroke-linejoin="round"></path>
+      <g v-if="tooltip">
+        <line class="cursor" :x1="tooltip.x" :x2="tooltip.x" :y1="pad.top" :y2="height - pad.bottom"></line>
+        <circle v-for="dot in tooltip.dots" :key="dot.name" :cx="tooltip.x" :cy="dot.y" r="3" :fill="dot.color"></circle>
+      </g>
+    </svg>
+    <div class="tooltip" v-if="tooltip" :style="{left: tooltipLeft + '%'}">
+      <div class="tooltip-x">{{ xlabel || 'x' }} {{ tooltip.label }}</div>
+      <div v-for="dot in tooltip.dots" :key="dot.name"><span class="swatch" :style="{background: dot.color}"></span>{{ dot.name }} <b>{{ dot.text }}</b></div>
+    </div>
+    <p class="empty" v-if="!scaled.length">nothing to draw yet</p>
+  </div>
+</script>
+<script src="/static/vendor/vue.global.prod.js"></script>
+<script src="/static/board.js"></script>
+</body>
+</html>
