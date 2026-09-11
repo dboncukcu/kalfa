@@ -1,3 +1,4 @@
+import inspect
 from pathlib import Path
 
 import torch
@@ -16,6 +17,19 @@ def traced_inputs(model, batch, rows=2):
     return tuple(inputs)
 
 
+def dynamic_batch(model, inputs):
+    batch = torch.export.Dim("batch")
+    specs = [{0: batch} if isinstance(value, torch.Tensor) else None for value in inputs]
+    shapes = {}
+    for parameter in inspect.signature(model.forward).parameters.values():
+        if parameter.kind is inspect.Parameter.VAR_POSITIONAL:
+            shapes[parameter.name] = tuple(specs)
+            specs = []
+        elif specs and parameter.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+            shapes[parameter.name] = specs.pop(0)
+    return shapes
+
+
 def target_path(directory, stem, suffix):
     folder = Path(directory)
     folder.mkdir(parents=True, exist_ok=True)
@@ -30,14 +44,14 @@ def state_dict(model, inputs, directory, stem):
     return path
 
 
-@lego("/export/kalfa/torchscript", alias="torchscript",
-      description="The model traced with one batch and saved as <stem>.pt with torch.jit")
-def torchscript(model, inputs, directory, stem):
-    path = target_path(directory, stem, "pt")
+@lego("/export/kalfa/pt2", alias="pt2",
+      description="The model exported with torch.export from one traced batch, the batch dimension left dynamic, "
+                  "and saved as <stem>.pt2, the archive torch.export.load reads back")
+def pt2(model, inputs, directory, stem):
+    path = target_path(directory, stem, "pt2")
     model.eval()
-    with torch.no_grad():
-        traced = torch.jit.trace(model, inputs)
-    traced.save(str(path))
+    exported = torch.export.export(model, inputs, dynamic_shapes=dynamic_batch(model, inputs))
+    torch.export.save(exported, str(path))
     return path
 
 

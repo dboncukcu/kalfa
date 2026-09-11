@@ -410,8 +410,8 @@ The legos a config writes, by kind.
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/export/kalfa/onnx` | `onnx` | `(model, inputs, directory, stem, opset=17)` | requires: onnx | The model exported to <stem>.onnx from one traced batch, the wires as the input and output names, at the opset given |
+| `/export/kalfa/pt2` | `pt2` | `(model, inputs, directory, stem)` |  | The model exported with torch.export from one traced batch, the batch dimension left dynamic, and saved as <stem>.pt2, the archive torch.export.load reads back |
 | `/export/kalfa/state_dict` | `state_dict` | `(model, inputs, directory, stem)` |  | The model's state_dict as <stem>.pt, the plain torch weights |
-| `/export/kalfa/torchscript` | `torchscript` | `(model, inputs, directory, stem)` |  | The model traced with one batch and saved as <stem>.pt with torch.jit |
 
 ### calibrate
 
@@ -678,7 +678,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `mps` | `/device/kalfa/mps` | device |
 | `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
-| `torchscript` | `/export/kalfa/torchscript` | export |
+| `pt2` | `/export/kalfa/pt2` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
@@ -874,7 +874,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `mps` | `/device/kalfa/mps` | device |
 | `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
-| `torchscript` | `/export/kalfa/torchscript` | export |
+| `pt2` | `/export/kalfa/pt2` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
@@ -1072,7 +1072,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `mps` | `/device/kalfa/mps` | device |
 | `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
-| `torchscript` | `/export/kalfa/torchscript` | export |
+| `pt2` | `/export/kalfa/pt2` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
@@ -1298,7 +1298,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `mps` | `/device/kalfa/mps` | device |
 | `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
-| `torchscript` | `/export/kalfa/torchscript` | export |
+| `pt2` | `/export/kalfa/pt2` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |
@@ -1518,7 +1518,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `mps` | `/device/kalfa/mps` | device |
 | `threshold` | `/calibrate/kalfa/threshold` | calibrate |
 | `onnx` | `/export/kalfa/onnx` | export |
-| `torchscript` | `/export/kalfa/torchscript` | export |
+| `pt2` | `/export/kalfa/pt2` | export |
 | `state_dict` | `/export/kalfa/state_dict` | export |
 | `derived` | `/rng/kalfa/derived` | rng |
 | `indexed` | `/rng/kalfa/indexed` | rng |

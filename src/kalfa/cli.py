@@ -111,7 +111,7 @@ def build_parser():
     prepare_cmd.set_defaults(handler=cmd_prepare)
 
     export_cmd = commands.add_parser("export", help="write a model of a recorded run in another format: onnx, "
-                                                    "torchscript or state_dict, or an export lego of your own")
+                                                    "pt2 or state_dict, or an export lego of your own")
     export_cmd.add_argument("run")
     export_cmd.add_argument("--format", default="state_dict", metavar="NAME",
                             help="an export lego by alias or URI (default state_dict)")

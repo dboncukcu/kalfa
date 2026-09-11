@@ -206,7 +206,7 @@ alias:
   threshold: /calibrate/kalfa/threshold
   # export
   onnx: /export/kalfa/onnx
-  torchscript: /export/kalfa/torchscript
+  pt2: /export/kalfa/pt2
   state_dict: /export/kalfa/state_dict
   # rng
   derived: /rng/kalfa/derived

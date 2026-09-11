@@ -633,8 +633,7 @@ def export(run_dir, format="state_dict", model=None, which=None, out=None, sets=
     opened = open_record(run_dir, which, sets, contract)
     uri = format if format.startswith("/") else registry.aliases().get(format)
     if uri is None or registry.lookup(uri) is None:
-        raise KalfaError(f"export format {format!r} is no export lego; the std ones are onnx, torchscript and "
-                         f"state_dict")
+        raise KalfaError(f"export format {format!r} is no export lego; the std ones are onnx, pt2 and state_dict")
     if kalfa_kind(uri) != "export":
         raise KalfaError(f"{uri} is a {kalfa_kind(uri)} lego, not an export")
     models, composites = opened.rebuild()

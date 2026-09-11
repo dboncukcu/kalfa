@@ -6,6 +6,7 @@ import pytest
 
 import kalfa
 from helpers import minimal, write_config
+from tezgah.errors import UnusedOutputWarning
 from kalfa.api import check, predict, run
 from kalfa.config import parse_sets
 from kalfa.std.common.history import History
@@ -29,11 +30,13 @@ def test_a_split_with_four_sets_reaches_the_history_the_predictions_and_the_cali
     config["calibrate"] = {"cut": {"uri": "threshold", "params": {"set": "calib", "quantile": 0.5}}}
     config["record"] = "runs/four"
     path = write_config(workdir / "cfg.yaml", config)
-    prepared = check([str(path)], parse_sets([]), measure=True)
+    with pytest.warns(UnusedOutputWarning, match="calib_predictions"):
+        prepared = check([str(path)], parse_sets([]), measure=True)
     assert prepared.errors == [] and prepared.sets == ["train", "valid", "test", "calib"]
     assert prepared.measured["calib"] == 200 and prepared.document["flow"]["training"]["params"]["sets"] == \
         ["valid", "test", "calib"]
-    result = run([str(path)], parse_sets([]))
+    with pytest.warns(UnusedOutputWarning, match="calib_predictions"):
+        result = run([str(path)], parse_sets([]))
     record = Path(result.record)
     history = History.read(record)
     assert "calib/rmse" in history[0] and "val/rmse" in history[0] and "test/rmse" not in history[0]

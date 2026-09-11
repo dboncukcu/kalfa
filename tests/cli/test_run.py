@@ -111,10 +111,10 @@ def test_progress_steps_log_every_and_export(workdir, capsys):
     assert "training.step   step 5 " in err and "step 1 " not in err and "turn 1" in err
     assert (workdir / "runs" / "stepped" / "steps.jsonl").exists()
     assert (workdir / "runs" / "stepped" / "git.json").exists()
-    assert main(["export", "runs/stepped", "--format", "torchscript", "--which", "final"]) == 0
+    assert main(["export", "runs/stepped", "--format", "pt2", "--which", "final"]) == 0
     out = capsys.readouterr().out
-    assert "exported net as /export/kalfa/torchscript" in out
-    assert (workdir / "runs" / "stepped" / "export" / "net.pt").exists()
+    assert "exported net as /export/kalfa/pt2" in out
+    assert (workdir / "runs" / "stepped" / "export" / "net.pt2").exists()
     assert main(["export", "runs/stepped", "--format", "adam"]) == 1
 
 

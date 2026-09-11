@@ -77,7 +77,7 @@ kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--meas
 kalfa describe cfg.yaml [--measure] [--section data|model|...] [--wiring] [--save report.txt]
                                                                   # the config as an analysis, after the same checks
 kalfa predict runs/x [--model name] [--which best|last|final] [--data new.parquet] [--device cuda] [--plots [a,b]]
-kalfa export runs/x [--format onnx|torchscript|state_dict] [--model name] [--out DIR]   # a model in another format
+kalfa export runs/x [--format onnx|pt2|state_dict] [--model name] [--out DIR]   # a model in another format
 kalfa generate runs/x [--which best|last] [--device cuda]         # writes samples/ with the sampler of the generate section
 kalfa plots runs/x [--only a,b] [--set figures.format=pdf]        # redraw the plots section from the record; nothing trains
 kalfa resume runs/x [--set training.epochs=N]                     # continues from last.pt or final/ into a new directory
