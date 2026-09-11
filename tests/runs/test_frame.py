@@ -24,7 +24,7 @@ def framed():
 
 def test_frame_transforms_fit_on_train_and_replay_for_new_data(workdir):
     path = write_config(workdir / "cfg.yaml", framed())
-    prepared = check([str(path)], parse_sets([]), load=True)
+    prepared = check([str(path)], parse_sets([]), measure=True)
     assert prepared.errors == []
     result = run([str(path)], parse_sets([]))
     record = Path(result.record)

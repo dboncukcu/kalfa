@@ -32,7 +32,7 @@ def columns_section(prepared, style, width, probe=None):
         if probe is not None and probe.prep is not None:
             return plan_columns(prepared, style, width, probe)
         return [style.dim("  the data header could not be read (a source lego of your own reads it), "
-                          "no column table; --load builds it from the fitted plan")]
+                          "no column table; --measure builds it from the fitted plan")]
     fields, drop, _ = field_plan(prepared)
     owners, _ = owners_of(prepared)
     refs = column_refs(prepared)
@@ -73,7 +73,7 @@ def columns_section(prepared, style, width, probe=None):
     rows.extend(extra_rows(probe, owners))
     lines = table(["column", "dtype", "field", "preprocessors", "role", "tensor"], rows, style, width=width)
     if probe is None:
-        lines.append("  " + style.dim("the produced widths and the tensor slots need --load"))
+        lines.append("  " + style.dim("the produced widths and the tensor slots need --measure"))
     return lines
 
 

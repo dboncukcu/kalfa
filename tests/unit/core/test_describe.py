@@ -36,22 +36,22 @@ def test_describe_01(workdir, capsys):
     assert "train/loss_huber < 0.01" in out and "after to_huber" in out
     assert "val/rmse plateau 6" in out and "best monitor=val/rmse" in out
     assert "predict model ─→ predictions.parquet" in out
-    assert "the produced widths and the tensor slots need --load" in out
+    assert "the produced widths and the tensor slots need --measure" in out
 
 
 def test_describe_load_counts_parameters_and_slots(workdir, capsys):
-    assert main(["describe", str(CONFIG_01), "--load"]) == 0
+    assert main(["describe", str(CONFIG_01), "--measure"]) == 0
     out = capsys.readouterr().out
     assert "17 793 parameters" in out
     assert "─→ table ─→ x [128, 8]" in out
     assert "price   double  price  target_std     target   price" in out
     assert "x0      double  x*     std_scaler     feature  x[0]" in out
-    assert "the produced widths and the tensor slots need --load" not in out
+    assert "the produced widths and the tensor slots need --measure" not in out
 
 
 def test_describe_load_shows_one_hot_widths(workdir, capsys):
     write_churn(workdir / "churn.parquet")
-    assert main(["describe", example("02_mlp_classification"), "--load", "--section", "columns"]) == 0
+    assert main(["describe", example("02_mlp_classification"), "--measure", "--section", "columns"]) == 0
     out = capsys.readouterr().out
     assert "onehot  (3 columns)" in out and "x[4 … 6]" in out
     assert "onehot  (2 columns)" in out and "x[7 … 8]" in out
@@ -88,7 +88,7 @@ def test_describe_load_falls_back_to_the_plan_without_a_header(tmp_path, monkeyp
     path.write_text(config)
     assert main(["describe", str(path), "--section", "columns"]) == 0
     assert "the data header could not be read" in capsys.readouterr().out
-    assert main(["describe", str(path), "--load", "--section", "columns", "--section", "training"]) == 0
+    assert main(["describe", str(path), "--measure", "--section", "columns", "--section", "training"]) == 0
     out = capsys.readouterr().out
     assert "y_a" in out and "target   y_hat[0]" in out and "y_c" in out
     assert "y_a, y_b, y_c" in out

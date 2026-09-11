@@ -216,7 +216,7 @@ the target from that table.
 
 ```
 uv run python make_data.py
-uv run kalfa describe config.yaml --load
+uv run kalfa describe config.yaml --measure
 uv run kalfa run config.yaml -p epochs=10 --set record=runs/15
 ```
 

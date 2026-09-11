@@ -94,6 +94,9 @@ def model_section(prepared, style, width, probe=None):
         lines.append(f"  {style.bold(name)}   {style.dim(f'  {DOT}  '.join(facts))}")
         lines.extend(block_lines(blocks, name, style, width=width))
         lines.append("")
+    if probe is None and params.get("trained_items"):
+        lines.append("  " + style.dim("the parameter counts need --measure"))
+        lines.append("")
     for item in params.get("composite_items") or []:
         name = item["name"]
         lines.append(f"  {style.bold(name)}   {style.dim('composite')}")

@@ -34,8 +34,8 @@ def test_a_run_from_prepared_data_matches_a_plain_run(workdir):
     plain = run([str(path)], parse_sets([]))
     config["record"] = "runs/from_prepared"
     again = write_config(workdir / "again.yaml", config)
-    checked = check([str(again)], parse_sets([]), load=True, prepared=str(folder))
-    assert checked.errors == [] and checked.loaded == data.sizes
+    checked = check([str(again)], parse_sets([]), measure=True, prepared=str(folder))
+    assert checked.errors == [] and checked.measured == data.sizes
     started = run([str(again)], parse_sets([]), prepared=str(folder))
     record = Path(started.record)
     assert history_values(plain.record) == history_values(record)

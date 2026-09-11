@@ -29,6 +29,8 @@ config.yaml                                                                     
     inputs image, t   outputs noise
     image, t  ─→  unet channels=64  ─→  noise
 
+  the parameter counts need --measure
+
 ── TRAINING ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   turn        alternating         200 epochs      predicts unet
               amp=true grad_clip=1
@@ -58,4 +60,4 @@ config.yaml                                                                     
   ────────────────────────────────────────────────────────
   image   image  image  to_signed      feature      x
   label   int64  —      —              not a field  —
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

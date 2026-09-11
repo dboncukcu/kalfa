@@ -72,9 +72,9 @@ kalfa run cfg.yaml [--set path=value ...] [-p name=value ...]     # check, compi
                     [--executor thread --workers N]               # serial by default; under thread an aliasing warning is an error
                     [--log info|debug] [--no-progress]            # print what the run is doing; drop the progress bar
                     [--progress steps] [--log-every N] [--tensorboard]   # an inner bar over the steps; a line every N steps; event files
-kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--load]
-                                                                  # only the problems; --load runs the data block
-kalfa describe cfg.yaml [--load] [--section data|model|...] [--wiring] [--save report.txt]
+kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--measure]
+                                                                  # only the problems; --measure runs the data block
+kalfa describe cfg.yaml [--measure] [--section data|model|...] [--wiring] [--save report.txt]
                                                                   # the config as an analysis, after the same checks
 kalfa predict runs/x [--model name] [--which best|last|final] [--data new.parquet] [--device cuda] [--plots [a,b]]
 kalfa export runs/x [--format onnx|torchscript|state_dict] [--model name] [--out DIR]   # a model in another format
@@ -181,7 +181,7 @@ figures lego the contract names (`/lego/kalfa/figures`), so `check` validates it
 
 `check --dump` prints the graph that will run (`flow.yaml`), `--recipe` the document the driver hands to cirak;
 `--layers` shows the layer tree and the overridden leaves. The set table is from the file header, before the
-transforms; `--load` runs the data block and prints the real sizes.
+transforms; `--measure` runs the data block and prints the real sizes.
 
 ## Python API
 
@@ -194,7 +194,7 @@ is `--set` written as `(dotted path, value)` pairs, and `-p lr=1e-4` is `("param
 ```python
 from kalfa.api import check, generate, predict, resume, run
 
-prepared = check(["config.yaml"], load=True)              # nothing trains; load=True measures the real set sizes
+prepared = check(["config.yaml"], measure=True)           # nothing trains; measure=True counts the sets after the transforms
 result = run(["config.yaml"], sets=[("training.epochs", 3), ("record", "runs/nb_$datetime$")])
 longer = resume(result.record, sets=[("training.epochs", 10)])
 prediction = predict(result.record, data="new.parquet")
@@ -344,7 +344,7 @@ So `parquet  housing.parquet` reads as the source lego and its file, `grouped_ta
 lego and its parameters, and `random  0.8 / 0.1 / 0.1  seed=7` as the split lego, its ratios and its seed.
 
 Statically it reads the file header and the compiled recipe, so it needs no data beyond the source header.
-`--load` runs the data and model blocks for real (nothing is written): the set sizes after the transforms, the widths
+`--measure` runs the data and model blocks for real (nothing is written): the set sizes after the transforms, the widths
 a fitted `one_hot` produces, the tensor slots of every column, and the parameter counts of models whose layers are
 lazy until the first batch. `--section data|model|training|after|columns|wiring` narrows the output, `--wiring`
 adds the implicit bindings of the compiled pipeline to the default sections. Tables are fitted to the width the
@@ -354,7 +354,7 @@ rules are cut to the longest line instead.
 
 ```
 kalfa describe config.yaml
-kalfa describe config.yaml --load
+kalfa describe config.yaml --measure
 kalfa describe config.yaml --section columns
 ```
 

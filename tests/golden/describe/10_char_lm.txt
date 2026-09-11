@@ -26,6 +26,8 @@ config.yaml                                                                     
   gpt   trained  ·  optimizer main
     input_ids ─→ embedding num=vocab_size dim=256 ─→ gpt d_model=256 layers=4 heads=4 seq_len=128 ─→ linear vocab_size ─→ logits
 
+  the parameter counts need --measure
+
 ── TRAINING ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   turn        alternating         20000 steps of 200  predicts gpt
               accumulate=2 amp=true grad_clip=1
@@ -55,4 +57,4 @@ config.yaml                                                                     
   column  dtype   field  preprocessors  role     tensor
   ─────────────────────────────────────────────────────
   text    string  text   tokenizer      feature  x
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

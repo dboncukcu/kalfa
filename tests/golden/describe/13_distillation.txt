@@ -30,6 +30,8 @@ config.yaml                                                                     
   student   trained  ·  optimizer main
     image ─→ timm_backbone name=resnet18 pooled=true ─→ linear 10 ─→ logits
 
+  the parameter counts need --measure
+
 ── TRAINING ─────────────────────────────────────────────────────────────────────────────────────────────────
   turn        alternating         40 epochs       predicts student
 
@@ -61,4 +63,4 @@ config.yaml                                                                     
   ─────────────────────────────────────────────────────────────
   image   image  image  to_tensor ─→ normalize  feature  x
   label   int64  label  —                       target   label
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

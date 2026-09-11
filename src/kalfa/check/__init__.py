@@ -131,8 +131,8 @@ class Checker(SectionRules, DataRules, RefRules):
         return set(signature.parameters)
 
 
-def sets_text(sizes, loaded=False, sets=("train", "valid", "test")):
-    label = "sets (loaded)" if loaded else "sets (before filters, from the file header)"
+def sets_text(sizes, measured=False, sets=("train", "valid", "test")):
+    label = "sets (measured)" if measured else "sets (before filters, from the file header)"
     if sizes is None:
         return f"{label}: unknown (the data header could not be read)"
     parts = []

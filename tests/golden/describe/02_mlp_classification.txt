@@ -29,6 +29,8 @@ config.yaml                                                                     
   net   trained  ·  optimizer net
     x ─→ linear_relu 64 ─→ linear_relu 64 ─→ linear 2 ─→ logits
 
+  the parameter counts need --measure
+
 ── TRAINING ────────────────────────────────────────────────────────────────────────────────────
   turn        alternating         30 epochs       predicts net
 
@@ -63,4 +65,4 @@ config.yaml                                                                     
   cat_a    large_string  cat_*    onehot         feature  x
   cat_b    large_string  cat_*    onehot         feature  x
   churned  large_string  churned  label          target   churned
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

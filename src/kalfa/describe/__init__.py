@@ -1,6 +1,6 @@
 from .after import after_section
 from .columns import columns_section
-from .data import data_section, load_text
+from .data import data_section, measure_text
 from .model import model_section
 from .summary import summary_section
 from .text import Plain, head, visible, wide, width_of
@@ -44,4 +44,4 @@ def render(prepared, style, sections=None, probe=None, width=None):
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-__all__ = ["ALL_SECTIONS", "DEFAULT_SECTIONS", "Plain", "load_text", "render", "report", "visible"]
+__all__ = ["ALL_SECTIONS", "DEFAULT_SECTIONS", "Plain", "measure_text", "render", "report", "visible"]

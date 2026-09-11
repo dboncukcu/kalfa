@@ -31,6 +31,8 @@ config.yaml                                                                    k
   head   trained  ·  optimizer main
     h ─→ linear_relu 512 ─→ linear 128 ─→ z
 
+  the parameter counts need --measure
+
   simclr   composite
     inputs image   outputs z
     image  ─→  backbone  ─→  h
@@ -60,4 +62,4 @@ config.yaml                                                                    k
   ─────────────────────────────────────────────────────────────────
   image   image  image  two_views ─→ to_tensor  feature      x
   label   int64  —      —                       not a field  —
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

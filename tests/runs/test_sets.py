@@ -29,9 +29,9 @@ def test_a_split_with_four_sets_reaches_the_history_the_predictions_and_the_cali
     config["calibrate"] = {"cut": {"uri": "threshold", "params": {"set": "calib", "quantile": 0.5}}}
     config["record"] = "runs/four"
     path = write_config(workdir / "cfg.yaml", config)
-    prepared = check([str(path)], parse_sets([]), load=True)
+    prepared = check([str(path)], parse_sets([]), measure=True)
     assert prepared.errors == [] and prepared.sets == ["train", "valid", "test", "calib"]
-    assert prepared.loaded["calib"] == 200 and prepared.document["flow"]["training"]["params"]["sets"] == \
+    assert prepared.measured["calib"] == 200 and prepared.document["flow"]["training"]["params"]["sets"] == \
         ["valid", "test", "calib"]
     result = run([str(path)], parse_sets([]))
     record = Path(result.record)

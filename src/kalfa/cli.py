@@ -53,8 +53,8 @@ def build_parser():
     check_cmd.add_argument("--layers", action="store_true", help="print the layer tree and the overridden leaves")
     check_cmd.add_argument("--dump", action="store_true", help="print the expanded flow the way flow.yaml records it")
     check_cmd.add_argument("--recipe", action="store_true", help="print the driver document the templates open")
-    check_cmd.add_argument("--load", action="store_true",
-                           help="run the data block and report the real set sizes (after filters)")
+    check_cmd.add_argument("--measure", action="store_true",
+                           help="run the data block and count the set sizes after the transforms")
     check_cmd.add_argument("--prepared", metavar="DIR", help="check against the data kalfa prepare wrote into DIR")
     check_cmd.set_defaults(handler=cmd_check)
 
@@ -63,9 +63,9 @@ def build_parser():
     describe_cmd.add_argument("config", nargs="+")
     set_option(describe_cmd)
     contract_option(describe_cmd)
-    describe_cmd.add_argument("--load", action="store_true",
-                              help="run the data and model blocks: the real set sizes, the fitted column widths and "
-                                   "the parameter counts")
+    describe_cmd.add_argument("--measure", action="store_true",
+                              help="run the data and model blocks: the set sizes after the transforms, the fitted "
+                                   "column widths, the tensor slots and the parameter counts")
     describe_cmd.add_argument("--prepared", metavar="DIR",
                               help="describe against the data kalfa prepare wrote into DIR")
     describe_cmd.add_argument("--section", action="append", default=[], choices=list(describe.ALL_SECTIONS),
@@ -303,7 +303,7 @@ def print_problems(problems, stream):
 def cmd_check(args) -> int:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        prepared = api.check(args.config, layer_of(args), load=args.load, contract=contract_of(args),
+        prepared = api.check(args.config, layer_of(args), measure=args.measure, contract=contract_of(args),
                              prepared=args.prepared)
     style = style_for(sys.stdout)
     if args.layers:
@@ -312,8 +312,8 @@ def cmd_check(args) -> int:
         print_problems(prepared.problems, sys.stdout)
     else:
         print(style.green("no problems found"))
-    if prepared.loaded is not None:
-        print(describe.load_text(prepared, style))
+    if prepared.measured is not None:
+        print(describe.measure_text(prepared, style))
     if args.recipe:
         if prepared.document is None:
             print(style.red("the config could not be shaped, no recipe"), file=sys.stderr)
@@ -366,9 +366,9 @@ def cmd_describe(args) -> int:
     else:
         print(style.green("no problems found"))
     found = None
-    if args.load:
+    if args.measure:
         if prepared.document is None or prepared.errors:
-            print(style.yellow("--load needs a config without errors; describing the config as written"),
+            print(style.yellow("--measure needs a config without errors; describing the config as written"),
                   file=sys.stderr)
         else:
             with warnings.catch_warnings():

@@ -35,6 +35,8 @@ config.yaml                                                                     
     label     ─→  cond_embed(n_classes=10)        ─→  y
     image, y  ─→  critic channels=64 cond_dim=64  ─→  score
 
+  the parameter counts need --measure
+
 ── TRAINING ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   turn        alternating         100 epochs      predicts —
               order=[d, g] steps={d=5 g=1} fresh_batch=true
@@ -67,4 +69,4 @@ config.yaml                                                                     
   ────────────────────────────────────────────────────
   image   image  image  to_signed      feature  x
   label   int64  label  —              target   label
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

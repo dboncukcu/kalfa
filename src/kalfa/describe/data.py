@@ -60,6 +60,8 @@ def data_section(prepared, style, width, probe=None):
         text = ", ".join(before) or style.dim("none before the split")
         if after:
             text += f"  {DOT}  after the split: " + ", ".join(after)
+        if probe is None:
+            text += "  " + style.dim("the sizes above are from the header, before these; --measure counts them")
         lines.append(field_line("transforms", text, style))
     frames = ((params.get("frames") or {}).get("params") or {}).get("frames") or []
     if frames:
@@ -120,9 +122,9 @@ def data_tree(prepared, params, sizes, style, probe, sets):
     return lines
 
 
-def load_text(prepared, style, sizes=None):
+def measure_text(prepared, style, sizes=None):
     params = data_params(prepared) or {}
-    sizes = sizes if sizes is not None else prepared.loaded
+    sizes = sizes if sizes is not None else prepared.measured
     source = (((params.get("source") or {}).get("params") or {}).get("path")
               or call_text(params.get("source"), style=style))
     rows = f" {count(prepared.header['rows'])} rows" if prepared.header is not None else ""
@@ -137,13 +139,13 @@ def load_text(prepared, style, sizes=None):
     steps.append(f"fitted {names} on train" if names else "no preprocessors")
     steps.append(f"{short((params.get('feed') or {}).get('uri')) or 'feed'} feed")
     steps.append(f"3 loaders, batch {number(size, style)}")
-    lines = ["loaded the data block:"]
+    lines = ["measured the data block:"]
     limit = width_of()
     for step in steps:
-        piece = f"{ARROW} {step}" if lines[-1] != "loaded the data block:" else step
+        piece = f"{ARROW} {step}" if lines[-1] != "measured the data block:" else step
         if len(lines[-1]) + len(piece) + 3 > limit:
             lines.append(f"  {ARROW} {step}")
         else:
-            lines[-1] += f"  {piece}" if lines[-1] == "loaded the data block:" else f" {piece}"
+            lines[-1] += f"  {piece}" if lines[-1] == "measured the data block:" else f" {piece}"
     lines.append(f"sets after filters: {sizes_line(sizes, style, prepared.sets)}")
     return "\n".join(lines)

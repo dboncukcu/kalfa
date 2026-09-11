@@ -24,9 +24,9 @@ def lazy_config(epochs=2):
 
 def test_check_refuses_what_the_lazy_set_cannot_do(workdir):
     path = write_config(workdir / "cfg.yaml", lazy_config())
-    prepared = check([str(path)], parse_sets([]), load=True)
+    prepared = check([str(path)], parse_sets([]), measure=True)
     assert prepared.problems == [] and prepared.sizes == {"train": 1400, "valid": 300, "test": 300}
-    assert prepared.loaded == {"train": 1400, "valid": 300, "test": 300}
+    assert prepared.measured == {"train": 1400, "valid": 300, "test": 300}
     shuffled = lazy_config()
     shuffled["data"]["split"] = {"ratios": [0.7, 0.15, 0.15], "seed": 1}
     shuffled["data"]["batch"] = {"size": 64, "balanced": True}

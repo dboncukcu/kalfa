@@ -28,12 +28,12 @@ def test_check_layers_prints_the_tree(workdir, capsys):
     assert "overrides training.epochs" in out
 
 
-def test_check_load_reports_the_real_sizes(workdir, capsys):
+def test_check_measure_counts_the_sets(workdir, capsys):
     path = write_config(workdir / "cfg.yaml", minimal())
-    assert main(["check", path, "--load"]) == 0
+    assert main(["check", path, "--measure"]) == 0
     printed = capsys.readouterr().out
-    assert "loaded the data block:" in printed and "housing.parquet 2 000 rows" in printed
-    assert "fitted std_scaler, target_std on train ─→ table feed ─→ 3 loaders, batch 128" in printed
+    assert "measured the data block:" in printed and "housing.parquet 2 000 rows" in printed
+    assert "fitted std_scaler, target_std on train" in printed and "table feed ─→ 3 loaders, batch 128" in printed
     assert "sets after filters: train 1 400" in printed
 
 

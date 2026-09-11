@@ -30,6 +30,8 @@ config.yaml                                                                     
   decoder   trained  ·  optimizer main
     z ─→ linear_relu 256 ─→ linear 784 ─→ unflatten shape=[1, 28, 28] ─→ x_hat
 
+  the parameter counts need --measure
+
   ae   composite
     inputs image   outputs x_hat
     image  ─→  encoder  ─→  z
@@ -63,4 +65,4 @@ config.yaml                                                                     
   ────────────────────────────────────────────────────────
   image   image  image  to_tensor      feature      x
   label   int64  —      —              not a field  —
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

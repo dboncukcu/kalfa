@@ -28,6 +28,8 @@ config.yaml                                                                     
   model   trained  ·  optimizer model
     x ─→ gru hidden=64 ─→ last_step ─→ linear 24 ─→ y
 
+  the parameter counts need --measure
+
 ── TRAINING ─────────────────────────────────────────────────────────────────────────────────────────────────────────
   turn        alternating         30 epochs       predicts model
 
@@ -60,4 +62,4 @@ config.yaml                                                                     
   x1       double        x*     std_scaler     feature       x
   x2       double        x*     std_scaler     feature       x
   load     double        load   target_std     target        load
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

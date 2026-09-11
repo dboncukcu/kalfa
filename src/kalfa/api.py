@@ -58,7 +58,7 @@ class Prepared:
     analysis: Analysis | None = None
     pipeline: tezgah.Pipeline | None = None
     implicit: list = field(default_factory=list)
-    loaded: dict | None = None
+    measured: dict | None = None
     aliasing: list = field(default_factory=list)
     sets: list = field(default_factory=list)
 
@@ -165,11 +165,11 @@ def gate(problems):
         raise ConfigError(failures)
 
 
-def check(paths, sets=None, load=False, contract=None, prepared=None) -> Prepared:
+def check(paths, sets=None, measure=False, contract=None, prepared=None) -> Prepared:
     found = prepare(paths, sets, dry=True, contract=contract, prepared=prepared)
-    if load and found.document is not None and not found.errors:
-        found.loaded = (dict(prepared_manifest(prepared)["sizes"]) if prepared is not None
-                        else loaded_sizes(found.document, found.contract))
+    if measure and found.document is not None and not found.errors:
+        found.measured = (dict(prepared_manifest(prepared)["sizes"]) if prepared is not None
+                          else measured_sizes(found.document, found.contract))
     return found
 
 
@@ -217,7 +217,7 @@ def document_sets(document):
     return list(document["flow"]["data"]["params"]["sets"])
 
 
-def loaded_sizes(document, contract=None):
+def measured_sizes(document, contract=None):
     sets = document_sets(document)
     outputs = data_outputs(document, [f"{name}_loader" for name in sets], contract)
     return {name: outputs[f"{name}_loader"].dataset.count() for name in sets}

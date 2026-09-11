@@ -21,7 +21,7 @@ def test_check_the_plugin_config(dataset):
 
     kept = int((anomaly_frame()["is_anomaly"] != 5).sum())
     expected = ratio_sizes(kept, [0.7, 0.1, 0.2])
-    loaded = check(["config.yaml"], parse_sets([]), load=True).loaded
+    loaded = check(["config.yaml"], parse_sets([]), measure=True).measured
     assert loaded["valid"] == expected["valid"] and loaded["test"] == expected["test"]
     assert 0 < loaded["train"] < expected["train"]
     document = prepared.document

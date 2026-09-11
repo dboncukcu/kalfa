@@ -29,6 +29,8 @@ config.yaml                                                                     
   model   trained  ·  optimizer model
     x ─→ linear_relu 128 ─→ linear_relu 128 ─→ linear 1 ─→ y
 
+  the parameter counts need --measure
+
 ── TRAINING ────────────────────────────────────────────────────────────────────────────────────
   turn        alternating         100 epochs      predicts model
 
@@ -73,4 +75,4 @@ config.yaml                                                                     
   x6      double  x*     std_scaler     feature  x
   x7      double  x*     std_scaler     feature  x
   price   double  price  target_std     target   price
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

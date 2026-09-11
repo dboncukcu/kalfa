@@ -30,6 +30,8 @@ config.yaml                                                                     
   head   trained  ·  optimizer main
     feature ─→ linear 37 ─→ logits
 
+  the parameter counts need --measure
+
   classifier   composite
     inputs image   outputs logits
     image    ─→  backbone  ─→  feature
@@ -66,4 +68,4 @@ config.yaml                                                                     
   ──────────────────────────────────────────────────────────────────────────────────
   image   image  image  resize ─→ augment ─→ to_tensor ─→ normalize  feature  x
   label   int64  label  —                                            target   label
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

@@ -35,6 +35,8 @@ config.yaml                                                                     
   tail   trained  ·  optimizer main
     x ─→ linear_relu 32 ─→ linear 1 ─→ tail_logit
 
+  the parameter counts need --measure
+
   full   composite
     inputs x   outputs y_hat, z_hat, tail_logit
     x      ─→  head     ─→  y_hat
@@ -91,4 +93,4 @@ config.yaml                                                                     
   y_c     double  y_*     y_scaler       target   y_hat[2]
   z       double  z       y_scaler       target   z_hat[0]
   z_tail  float   z_tail  to_float       target   tail_logit[0]
-  the produced widths and the tensor slots need --load
+  the produced widths and the tensor slots need --measure

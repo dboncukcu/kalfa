@@ -2,7 +2,7 @@
 # combination z out of a second wire and a tail label out of a third. training.targets says which wire predicts
 # which target fields; the losses and the metrics name only their wire and inherit the target from that table.
 # Every target column keeps its own scaler, so the report inverts each one with its own scale.
-# kalfa run 15_multi_target.yaml ; kalfa describe 15_multi_target.yaml --load
+# kalfa run 15_multi_target.yaml ; kalfa describe 15_multi_target.yaml --measure
 
 include:
   - /alias/kalfa/tabular
