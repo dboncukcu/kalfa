@@ -61,6 +61,7 @@
             <span class="dot" :class="stateOf(entry)"></span>
             <b>{{ entry.name }}</b>
             <span class="badge kind">{{ entry.kind }}</span>
+            <span class="badge stop" v-if="stopText(entry)">{{ stopText(entry) }}</span>
             <span class="path muted">{{ entry.path }}</span>
           </div>
           <template v-if="entry.kind === 'sweep'">
@@ -92,6 +93,7 @@
       <p class="empty" v-else>nothing is running under the root right now</p>
       <div class="card" v-if="liveBoard.recent.length">
         <div class="card-label">recent</div>
+        <div class="table-scroll">
         <table class="table">
           <thead><tr><th>record</th><th>kind</th><th>state</th><th>last seen</th><th></th></tr></thead>
           <tbody>
@@ -104,9 +106,10 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
       <p class="note">The address bar carries the record, the tab and the open plot, so a link shares exactly one view and a reload
-        keeps it. A running record opens on its monitor tab and is followed every few seconds. <a class="link" href="#/table">Every run
+        keeps it. A running record opens on its monitor tab and is followed as it changes. <a class="link" href="#/table">Every run
         as a table</a>, with its params and its best value.</p>
     </section>
 
@@ -188,6 +191,8 @@
           <h2 class="title">{{ path }}</h2>
           <span class="badge kind">sweep</span>
           <span class="badge" :class="sweepState">{{ sweepState }}</span>
+          <span class="badge stop" v-if="stopText(record)">{{ stopText(record) }}</span>
+          <button class="small stop" v-if="canStop(record)" @click="requestStop(path)" title="write stop.json into the root and its running points: no new point starts, the running ones end after their turn">stop</button>
         </div>
         <div class="meta-row">
           <span v-if="sweep.objective.monitor"><b>{{ sweep.objective.monitor }}</b> {{ sweep.objective.mode || 'min' }} at
@@ -209,6 +214,7 @@
         </div>
       </div>
       <div class="card" v-if="sweep">
+        <div class="table-scroll">
         <table class="table points">
           <thead>
             <tr>
@@ -226,7 +232,7 @@
               <td class="tick"><input type="checkbox" :checked="selected.includes(point.path)" @change="togglePick(point.path)"></td>
               <td class="mono">{{ point.id ?? '' }}</td>
               <td v-for="key in pointKeys" :key="key" class="mono">{{ fmt(point.values[key]) }}</td>
-              <td><span class="badge" :class="stateOf(point)">{{ stateOf(point) }}</span></td>
+              <td><span class="badge" :class="stateOf(point)">{{ stateOf(point) }}</span> <span class="badge stop" v-if="point.status && point.status.stop">stop</span></td>
               <td class="num mono">{{ point.turns }}</td>
               <td class="num mono">
                 <template v-if="point.objective">{{ fmt(point.objective.value) }} <span class="muted">@{{ point.objective.turn }}</span></template>
@@ -235,11 +241,12 @@
             </tr>
           </tbody>
         </table>
+        </div>
         <p class="empty" v-if="!sweep.points.length">no point has started yet</p>
       </div>
       <div class="grid charts" v-if="sweepParamCharts.length">
         <div class="card" v-for="entry in sweepParamCharts" :key="entry.name">
-          <chart :lines="entry.lines" :title="entry.name + ' against the objective'" :xlabel="entry.name" :ylabel="sweep.objective.monitor || 'objective'" kind="scatter"></chart>
+          <chart :lines="entry.lines" :title="entry.name + ' against the objective'" :xlabel="entry.name" :ylabel="sweep.objective.monitor || 'objective'" kind="scatter" :xlog="entry.xlog"></chart>
         </div>
       </div>
       <div class="card" v-if="overlayLines.length">
@@ -261,6 +268,8 @@
           <h2 class="title">{{ record.manifest && record.manifest.name || path }}</h2>
           <span class="badge kind">{{ kind }}</span>
           <span class="badge" :class="state">{{ state }}</span>
+          <span class="badge stop" v-if="stopText(record)">{{ stopText(record) }}</span>
+          <button class="small stop" v-if="canStop(record)" @click="requestStop(path)" title="write stop.json into the record: the run ends after its current turn">stop</button>
           <span class="path muted" v-if="record.manifest && record.manifest.name">{{ path }}</span>
         </div>
         <div class="meta-row">
@@ -290,7 +299,7 @@
       </nav>
 
       <div class="panel" v-if="tab === 'monitor'">
-        <p class="note">The record as it runs: the {{ turnLabel }} and batch bars, the checkpoint monitor across the sets, the loss every optimizer minimizes, the batch loss per step, the latest evaluation values and the tail of stdout, refreshed every three seconds while the record runs; a finished record shows its last state.</p>
+        <p class="note">The record as it runs: the {{ turnLabel }} and batch bars, the checkpoint monitor across the sets, the loss every optimizer minimizes, the batch loss per step, the latest evaluation values and the tail of stdout, refreshed as the record changes or on the footer's schedule; a finished record shows its last state. The stop button in the header asks the record to end after its current turn.</p>
         <div class="card">
           <div class="title-row">
             <span class="card-label">progress</span>
@@ -317,9 +326,9 @@
           </div>
         </div>
         <p class="empty" v-if="!monitorChart && !activeLossChart && !stepCharts.length">nothing recorded yet, the first {{ turnLabel }} is running</p>
-        <div class="grid two">
           <div class="card" v-if="latest.length">
             <div class="card-label">latest {{ turnLabel }}</div>
+            <div class="table-scroll">
             <table class="table">
               <thead><tr><th>series</th><th class="num">last</th><th class="num">best</th></tr></thead>
               <tbody>
@@ -330,8 +339,8 @@
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
-          <div class="stack">
             <div class="card" v-if="rulesFired.length">
               <div class="card-label">rules fired</div>
               <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
@@ -340,16 +349,73 @@
               <div class="toolbar"><span class="card-label">{{ logs.name }}</span><a class="small" :href="link({tab: 'logs'})">all</a></div>
               <pre class="code log small">{{ logs.lines.slice(-14).join('\n') }}</pre>
             </div>
-          </div>
-        </div>
       </div>
 
       <div class="panel" v-if="tab === 'overview'">
         <p class="note">The last {{ turnLabel }} of history.jsonl per series with its kind and the lego behind it (from resolved.yaml), the loss every optimizer minimized and the switches the rules made, the learning rates, the best {{ turnLabel }} by the checkpoint monitor, the checkpoints and the calibrations of the record.</p>
-        <div class="grid two">
+        <div class="cards compact">
+            <div class="card" v-if="record.best">
+              <div class="card-label">best {{ turnLabel }}</div>
+              <div><span class="big">{{ fmt(record.best.value) }}</span> <span class="muted">{{ record.best.monitor }} ({{ record.best.mode }}) at {{ turnLabel }} {{ record.best.turn }}</span></div>
+            </div>
+            <div class="card" v-if="record.run">
+              <div class="card-label">run</div>
+              <div class="table-scroll">
+              <table class="table"><tbody>
+                <tr><td>status</td><td><span class="badge" :class="record.run.status === 'ok' ? 'finished' : 'failed'">{{ record.run.status }}</span></td></tr>
+                <tr><td>wall time</td><td class="mono">{{ ms(record.run.ms) }}</td></tr>
+                <tr v-if="record.run.error"><td>error</td><td class="mono error">{{ record.run.error }}</td></tr>
+              </tbody></table>
+              </div>
+            </div>
+            <div class="card" v-if="training.length">
+              <div class="card-label">training</div>
+              <div class="training" v-for="entry in training" :key="entry.name">
+                <div><b>{{ entry.name }}</b> minimizes <b class="mono">{{ entry.current || 'its loss' }}</b><span class="muted mono" v-if="entry.uri" :title="entry.uri"> ({{ shortUri(entry.uri) }})</span><span class="muted" v-if="entry.parts.length"> = {{ entry.parts.join(' + ') }}</span></div>
+                <div class="muted" v-if="entry.lr !== null">learning rate {{ fmt(entry.lr) }} at the last {{ turnLabel }}</div>
+                <div class="muted timeline" v-if="entry.segments.length > 1">
+                  <span v-for="segment in entry.segments" :key="segment.from"><span class="mono">{{ segment.loss }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="card" v-if="rateRows.length">
+              <div class="card-label">learning rates</div>
+              <div class="table-scroll">
+              <table class="table"><tbody>
+                <tr v-for="row in rateRows" :key="row.key"><td>{{ row.key }}</td><td class="num mono">{{ fmt(row.last) }}</td></tr>
+              </tbody></table>
+              </div>
+            </div>
+            <div class="card" v-if="rulesFired.length">
+              <div class="card-label">rules fired</div>
+              <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
+            </div>
+            <div class="card" v-if="record.resume">
+              <div class="card-label">resumed from</div>
+              <div class="mono">{{ record.resume.resume_from }}</div>
+              <div class="muted mono">{{ record.resume.checkpoint }}</div>
+            </div>
+            <div class="card" v-if="record.checkpoints && record.checkpoints.length">
+              <div class="card-label">checkpoints and exports</div>
+              <div class="table-scroll">
+              <table class="table kv"><tbody>
+                <tr v-for="item in record.checkpoints" :key="item.name"><td class="mono">{{ item.name }}</td><td class="mono">{{ fmtBytes(item.size) }} <span class="muted">{{ ago(item.modified) }}</span></td></tr>
+              </tbody></table>
+              </div>
+            </div>
+            <div class="card" v-if="record.calibrations">
+              <div class="card-label">calibrations</div>
+              <div class="table-scroll">
+              <table class="table kv"><tbody>
+                <tr v-for="[name, note] in entries(record.calibrations)" :key="name"><td class="mono">{{ name }}</td><td class="mono wrap">{{ text(note) }}</td></tr>
+              </tbody></table>
+              </div>
+            </div>
+        </div>
           <div class="card">
             <div class="card-label">latest turn</div>
-            <table class="table" v-if="latest.length">
+            <div class="table-scroll" v-if="latest.length">
+            <table class="table">
               <thead><tr><th>series</th><th>kind</th><th>lego</th><th class="num">last</th><th class="num">min</th><th class="num">max</th><th>trend</th></tr></thead>
               <tbody>
                 <tr v-for="row in latest" :key="row.key">
@@ -363,60 +429,9 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <p class="empty" v-else>no turn recorded yet</p>
           </div>
-          <div class="stack">
-            <div class="card" v-if="training.length">
-              <div class="card-label">training</div>
-              <div class="training" v-for="entry in training" :key="entry.name">
-                <div><b>{{ entry.name }}</b> minimizes <b class="mono">{{ entry.current || 'its loss' }}</b><span class="muted mono" v-if="entry.uri" :title="entry.uri"> ({{ shortUri(entry.uri) }})</span><span class="muted" v-if="entry.parts.length"> = {{ entry.parts.join(' + ') }}</span></div>
-                <div class="muted" v-if="entry.lr !== null">learning rate {{ fmt(entry.lr) }} at the last {{ turnLabel }}</div>
-                <div class="muted timeline" v-if="entry.segments.length > 1">
-                  <span v-for="segment in entry.segments" :key="segment.from"><span class="mono">{{ segment.loss }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
-                </div>
-              </div>
-            </div>
-            <div class="card" v-if="rulesFired.length">
-              <div class="card-label">rules fired</div>
-              <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
-            </div>
-            <div class="card" v-if="rateRows.length">
-              <div class="card-label">learning rates</div>
-              <table class="table"><tbody>
-                <tr v-for="row in rateRows" :key="row.key"><td>{{ row.key }}</td><td class="num mono">{{ fmt(row.last) }}</td></tr>
-              </tbody></table>
-            </div>
-            <div class="card" v-if="record.run">
-              <div class="card-label">run</div>
-              <table class="table"><tbody>
-                <tr><td>status</td><td><span class="badge" :class="record.run.status === 'ok' ? 'finished' : 'failed'">{{ record.run.status }}</span></td></tr>
-                <tr><td>wall time</td><td class="mono">{{ ms(record.run.ms) }}</td></tr>
-                <tr v-if="record.run.error"><td>error</td><td class="mono error">{{ record.run.error }}</td></tr>
-              </tbody></table>
-            </div>
-            <div class="card" v-if="record.resume">
-              <div class="card-label">resumed from</div>
-              <div class="mono">{{ record.resume.resume_from }}</div>
-              <div class="muted mono">{{ record.resume.checkpoint }}</div>
-            </div>
-            <div class="card" v-if="record.best">
-              <div class="card-label">best {{ turnLabel }}</div>
-              <div><span class="big">{{ fmt(record.best.value) }}</span> <span class="muted">{{ record.best.monitor }} ({{ record.best.mode }}) at {{ turnLabel }} {{ record.best.turn }}</span></div>
-            </div>
-            <div class="card" v-if="record.checkpoints && record.checkpoints.length">
-              <div class="card-label">checkpoints and exports</div>
-              <table class="table kv"><tbody>
-                <tr v-for="item in record.checkpoints" :key="item.name"><td class="mono">{{ item.name }}</td><td class="mono">{{ fmtBytes(item.size) }} <span class="muted">{{ ago(item.modified) }}</span></td></tr>
-              </tbody></table>
-            </div>
-            <div class="card" v-if="record.calibrations">
-              <div class="card-label">calibrations</div>
-              <table class="table kv"><tbody>
-                <tr v-for="[name, note] in entries(record.calibrations)" :key="name"><td class="mono">{{ name }}</td><td class="mono wrap">{{ text(note) }}</td></tr>
-              </tbody></table>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div class="panel" v-if="tab === 'predictions'">
@@ -445,12 +460,14 @@
           </div>
           <div class="card">
             <div class="card-label">largest errors</div>
+            <div class="table-scroll">
             <table class="table">
               <thead><tr><th class="num">row</th><th class="num">{{ pairInfo.target }}</th><th class="num">{{ pairInfo.pred }}</th><th class="num">error</th></tr></thead>
               <tbody>
                 <tr v-for="item in pairInfo.worst" :key="item.row"><td class="num mono">{{ item.row }}</td><td class="num mono">{{ fmt(item.target) }}</td><td class="num mono">{{ fmt(item.pred) }}</td><td class="num mono">{{ fmt(item.pred - item.target) }}</td></tr>
               </tbody>
             </table>
+            </div>
           </div>
         </template>
         <p class="empty" v-else>the predictions have no target and prediction pair to draw</p>
@@ -463,6 +480,7 @@
         <template v-else>
           <div class="card">
             <div class="card-label">fields</div>
+            <div class="table-scroll">
             <table class="table">
               <thead><tr><th>field</th><th>role</th><th>dtype</th><th>chain</th><th>columns produced</th><th>extras</th></tr></thead>
               <tbody>
@@ -473,24 +491,31 @@
                 </tr>
               </tbody>
             </table>
+            </div>
           </div>
           <div class="card" v-for="entry in prepPreprocessors" :key="entry.name">
             <div class="card-label">{{ entry.name }} <span class="muted">{{ entry.class }}{{ entry.grouped ? ', fitted once over ' + entry.columns.length + ' columns' : ', one object per column' }}</span></div>
-            <table class="table" v-if="entry.grouped && entry.perColumn.length">
+            <div class="table-scroll" v-if="entry.grouped && entry.perColumn.length">
+            <table class="table">
               <thead><tr><th>column</th><th class="num" v-for="[key] in entry.perColumn" :key="key">{{ key }}</th></tr></thead>
               <tbody>
                 <tr v-for="(column, index) in entry.columns" :key="column"><td class="mono">{{ column }}</td><td class="num mono" v-for="[key, values] in entry.perColumn" :key="key">{{ fmt(values[index]) }}</td></tr>
               </tbody>
             </table>
-            <table class="table kv" v-if="entry.grouped && entry.scalars.length"><tbody>
+            </div>
+            <div class="table-scroll" v-if="entry.grouped && entry.scalars.length">
+            <table class="table kv"><tbody>
               <tr v-for="[key, value] in entry.scalars" :key="key"><td class="mono">{{ key }}</td><td class="mono wrap">{{ text(value) }}</td></tr>
             </tbody></table>
-            <table class="table" v-if="!entry.grouped">
+            </div>
+            <div class="table-scroll" v-if="!entry.grouped">
+            <table class="table">
               <thead><tr><th>column</th><th>state</th></tr></thead>
               <tbody>
                 <tr v-for="[column, state] in entries(entry.columns)" :key="column"><td class="mono">{{ column }}</td><td class="mono wrap">{{ text(state) }}</td></tr>
               </tbody>
             </table>
+            </div>
           </div>
           <div class="card" v-if="prepData.drop && prepData.drop.length">
             <div class="card-label">dropped columns</div>
@@ -501,10 +526,11 @@
 
       <div class="panel" v-if="tab === 'files'">
         <p class="note">Every file of the record with its size and time; text files open here (the first 400 KB), weights and tables are listed only.</p>
-        <div class="grid two">
+        <div class="grid" :class="{two: fileView}">
           <div class="card">
             <div class="card-label">files <span class="muted" v-if="filesData">· {{ filesData.files.length }} files, {{ fmtBytes(filesData.total) }}</span></div>
-            <table class="table" v-if="filesData">
+            <div class="table-scroll" v-if="filesData">
+            <table class="table">
               <thead><tr><th>name</th><th class="num">size</th><th>modified</th></tr></thead>
               <tbody>
                 <tr v-for="item in filesData.files" :key="item.name" :class="{active: fileView && fileView.name === item.name}">
@@ -513,6 +539,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <p class="empty" v-else>reading the files</p>
           </div>
           <div class="card" v-if="fileView">
@@ -605,6 +632,7 @@
         </div>
         <div class="card" v-if="dataStages.length">
           <div class="card-label">stages before the split</div>
+          <div class="table-scroll">
           <table class="table stages">
             <colgroup><col class="c-stage"><col class="c-rows"><col class="c-columns"><col class="c-call"><col class="c-names"><col class="c-names"></colgroup>
             <thead><tr><th>stage</th><th class="num">rows</th><th class="num">columns</th><th>transform</th><th>added</th><th>removed</th></tr></thead>
@@ -616,9 +644,11 @@
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
         <div class="card" v-if="setTransforms.length">
           <div class="card-label">transforms after the split</div>
+          <div class="table-scroll">
           <table class="table stages">
             <thead><tr><th>set</th><th>transforms</th></tr></thead>
             <tbody>
@@ -628,6 +658,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
         <p class="empty" v-if="!pipeline">no data.json in the record</p>
       </div>
@@ -674,12 +705,15 @@
           <div class="stack">
             <div class="card" v-if="record.manifest">
               <div class="card-label">manifest</div>
+              <div class="table-scroll">
               <table class="table kv"><tbody>
                 <tr v-for="[key, value] in entries(record.manifest, ['params'])" :key="key"><td>{{ key }}</td><td class="mono wrap">{{ text(value) }}</td></tr>
               </tbody></table>
+              </div>
             </div>
             <div class="card" v-if="runNodes.length">
               <div class="card-label">nodes of the run</div>
+              <div class="table-scroll">
               <table class="table nodes">
                 <tbody>
                   <tr v-for="node in runNodes" :key="node.path" :class="{failed: node.status !== 'ok'}">
@@ -690,10 +724,12 @@
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
             <div class="card" v-if="epochs.rows.length">
               <div class="card-label">{{ turnLabel }}s</div>
               <p class="muted" v-if="epochs.total">{{ epochs.rows.length }} {{ turnLabel }}s · {{ ms(epochs.total * 1000) }} in total · {{ ms(epochs.mean * 1000) }} per {{ turnLabel }}</p>
+              <div class="table-scroll">
               <table class="table epochs">
                 <thead><tr><th class="num">{{ turnLabel }}</th><th class="num">seconds</th><th class="num">global step</th><th></th></tr></thead>
                 <tbody>
@@ -705,20 +741,27 @@
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
           <div class="stack">
             <div class="card" v-if="record.host">
               <div class="card-label">host</div>
+              <div class="table-scroll">
               <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.host)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
+              </div>
             </div>
             <div class="card" v-if="record.device">
               <div class="card-label">device</div>
+              <div class="table-scroll">
               <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.device)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
+              </div>
             </div>
             <div class="card" v-if="record.git">
               <div class="card-label">git</div>
+              <div class="table-scroll">
               <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.git)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
+              </div>
             </div>
           </div>
         </div>
@@ -727,7 +770,8 @@
       <div class="panel" v-if="tab === 'events'">
         <p class="note">The last 60 events of events.jsonl, what tezgah started and finished and how long each node took; the timeline tab draws them all.</p>
         <div class="card">
-          <table class="table" v-if="record.events.length">
+          <div class="table-scroll" v-if="record.events.length">
+          <table class="table">
             <thead><tr><th>time</th><th>kind</th><th>node</th><th class="num">ms</th><th>note</th></tr></thead>
             <tbody>
               <tr v-for="(event, index) in record.events" :key="index" :class="{failed: event.status && event.status !== 'ok'}">
@@ -736,6 +780,7 @@
               </tr>
             </tbody>
           </table>
+          </div>
           <p class="empty" v-else>no event yet</p>
         </div>
       </div>

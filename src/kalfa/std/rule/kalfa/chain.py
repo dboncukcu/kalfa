@@ -1,7 +1,9 @@
 import copy
 import logging
+from pathlib import Path
 
 from kalfa.registration import lego
+from kalfa.std.common.files import read_note
 from kalfa.std.common.log import logger_for
 
 
@@ -69,9 +71,21 @@ def effects(rules):
     return dict((rules or {}).get("effects") or {})
 
 
-@lego("/rule/kalfa/stop", returns=["rules", "stop"], bus=["metrics"],
-      description="Close the chain: the stop triggers are or'ed, their states kept under rules.stop")
-def stop(rules, triggers, metrics=None):
+def stop_asked(record):
+    note = read_note(Path(record) / "stop.json") if record is not None else None
+    if note is None:
+        return False
+    if note.get("by"):
+        logger.info(f"stopping after this turn: stop requested by {note['by']} at {note.get('at') or '?'}")
+    else:
+        logger.info("stopping after this turn: stop.json found in the record")
+    return True
+
+
+@lego("/rule/kalfa/stop", returns=["rules", "stop"], bus=["metrics", "record"],
+      description="Close the chain: the stop triggers are or'ed, their states kept under rules.stop; a stop.json in "
+                  "the record (kalfa stop, the board, ctrl-c) ends the loop after this turn as well")
+def stop(rules, triggers, metrics=None, record=None):
     out = copy.deepcopy(rules)
     states = list(out.get("stop") or [])
     fired = []
@@ -90,4 +104,4 @@ def stop(rules, triggers, metrics=None):
                     + ", ".join(str(position) for position in out["stop_fired"]) + " fired")
     out["effects"] = dict(out.pop("pending", {}))
     out.pop("ready", None)
-    return {"rules": out, "stop": any(fired)}
+    return {"rules": out, "stop": any(fired) or stop_asked(record)}

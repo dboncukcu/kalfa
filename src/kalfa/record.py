@@ -10,7 +10,7 @@ from ruamel.yaml import YAML
 
 from . import __version__
 from .config import written_config
-from .std.common.files import append_line, read_json, write_json, write_text
+from .std.common.files import append_line, read_json, read_note, write_json, write_text
 
 DATETIME_TOKEN = "$datetime$"
 
@@ -56,16 +56,27 @@ class Record:
         stamps = [path.stat().st_mtime for path in self.directory.iterdir() if path.is_file()]
         return datetime.fromtimestamp(max(stamps)).isoformat(timespec="seconds") if stamps else None
 
+    def state(self):
+        ended = self.read_json("run.json")
+        if ended is not None:
+            return "failed" if (ended.get("status") or "finished") in ("failed", "error") else "finished"
+        if self.path("history.jsonl").exists() or self.path("steps.jsonl").exists():
+            return "running"
+        return "pending"
+
     def status(self):
         if not self.is_record:
             return None
-        ended = self.read_json("run.json")
-        if ended is not None:
-            state = ended.get("status") or "finished"
-            return {"state": "failed" if state in ("failed", "error") else "finished", "last_seen": self.last_seen()}
-        if self.path("history.jsonl").exists() or self.path("steps.jsonl").exists():
-            return {"state": "running", "last_seen": self.last_seen()}
-        return {"state": "pending", "last_seen": self.last_seen()}
+        return {"state": self.state(), "last_seen": self.last_seen(), "stop": self.stop_note()}
+
+    def request_stop(self, by):
+        self.write_json("stop.json", {"by": by, "at": datetime.now().isoformat(timespec="seconds")})
+
+    def stop_requested(self):
+        return self.path("stop.json").exists()
+
+    def stop_note(self):
+        return read_note(self.path("stop.json"))
 
 
 def stamp():

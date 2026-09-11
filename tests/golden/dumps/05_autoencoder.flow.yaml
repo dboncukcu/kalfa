@@ -112,7 +112,7 @@ flow:
           metrics: {uri: /lego/kalfa/merge, params: {prefixes: {train: train, valid: val, test: test}}, inputs: {parts: '*_metrics'}, outputs: [metrics]} # parts *_metrics: test_metrics, train_metrics, valid_metrics
           rules_0: {uri: /rule/kalfa/open, inputs: {rules: rules}, outputs: [rules_0]}
           rules_ruled: {uri: /lego/kalfa/identity, inputs: {value: rules_0}, outputs: [rules_ruled]}
-          stop: {uri: /rule/kalfa/stop, params: {triggers: ['@triggers.stop_0']}, inputs: {rules: rules_ruled}, outputs: {rules: rules_next, stop: stop}}  # implicit: metrics
+          stop: {uri: /rule/kalfa/stop, params: {triggers: ['@triggers.stop_0']}, inputs: {rules: rules_ruled}, outputs: {rules: rules_next, stop: stop}}  # implicit: metrics, record
           checkpoint: {uri: /lego/kalfa/checkpoint, params: {policy: '@checkpoint'}, inputs: {state: '*_next'}, outputs: []} # state *_next: counters_next, emas_next, models_next, optimizers_next, rules_next, stream_next; implicit: metrics, record
           log: {uri: /lego/kalfa/history, outputs: []} # implicit: monitor, metrics, turn_index, counters_next, optimizers_next, rules_next, effects, record
   after: # reads: models_final, optimizers_final, emas_final, counters_final, rules_final, record, composites, prep, train_loader, valid_loader, test_loader, device, history, data_report, train_df, train_frame; exports: predictions

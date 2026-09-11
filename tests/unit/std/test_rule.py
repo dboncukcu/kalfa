@@ -3,6 +3,7 @@
 import functools
 
 import kalfa  # noqa: F401
+from kalfa.record import Record
 from kalfa.std.rule.kalfa.chain import effects, open_rules, rule, stop
 from kalfa.std.trigger.kalfa.clock import after_turn, time_budget
 from kalfa.std.trigger.kalfa.metrics import metric_above, metric_below, plateau
@@ -127,3 +128,12 @@ def test_stop_is_an_or_and_keeps_trigger_states():
     assert out["stop"] is False and out["rules"]["stop"][1] == {"seen": 2}
     assert stop(open_rules({}), [], {})["stop"] is False
     assert effects({}) == {}
+
+
+def test_a_stop_file_in_the_record_ends_the_loop(tmp_path):
+    assert stop(open_rules({}), [], {}, record=str(tmp_path))["stop"] is False
+    Record(tmp_path).request_stop("test")
+    out = stop(open_rules({}), [], {}, record=str(tmp_path))
+    assert out["stop"] is True and out["rules"]["stop_fired"] == []
+    (tmp_path / "stop.json").write_text("")
+    assert stop(open_rules({}), [], {}, record=str(tmp_path))["stop"] is True

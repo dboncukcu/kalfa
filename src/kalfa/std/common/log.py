@@ -122,6 +122,8 @@ class Monitor:
         self.total = None
         self.turn_started = None
         self.writer = None
+        self.record = None
+        self.training = False
         self.flow = logger_for("flow")
         self.turns = logger_for("training.turn")
         self.steps = logger_for("training.step")
@@ -153,6 +155,7 @@ class Monitor:
         root.propagate = True
 
     def open(self, record):
+        self.record = Path(record)
         if not self.tensorboard:
             return
         from kalfa.std.common.optional import load
@@ -179,9 +182,20 @@ class Monitor:
         self.bar = None
         self.total = None
         self.turn_started = None
+        self.record = None
+        self.training = False
         if self.writer is not None:
             self.writer.close()
             self.writer = None
+
+    def say(self, text):
+        line = style_for(sys.stderr).yellow(text)
+        if self.bar is None and self.inner is None:
+            print(line, file=sys.stderr)
+            return
+        from tqdm.auto import tqdm
+
+        tqdm.write(line, file=sys.stderr)
 
     def close(self):
         self.finish()
@@ -256,6 +270,8 @@ class Monitor:
     def sink(self, event):
         kind = event.get("kind")
         path = event.get("path") or ""
+        if path.endswith("training.epochs") and kind in ("started", "finished", "failed", "skipped"):
+            self.training = kind == "started"
         if kind == "started" and path.endswith("training.epochs") and "total" in event:
             self.expect(event["total"])
         elif kind == "iter_started" and "epochs" in path:

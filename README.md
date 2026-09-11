@@ -85,7 +85,8 @@ kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep 
 kalfa sweep cfg.yaml --plan [--prepare-data] [--record root]      # write the root once: the manifest, sweep.plan, sweep.sub, sweep.sh
 kalfa prepare cfg.yaml --out DIR                                  # the data block once; kalfa run cfg.yaml --prepared DIR starts from it
 kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
-kalfa board <root> [--port 8080]                                  # a page over the records under a root, following the growing files
+kalfa stop runs/x | kalfa stop <sweep root>                       # writes stop.json: the record ends after its current turn
+kalfa board <root> [--port 8080]                                  # a page over the records under a root: follows them as they change, stops one
 kalfa ls [/alias/kalfa/tabular | /criterion | ... | word]         # packs and legos with their kinds and facts; a word searches
 kalfa docs [--write DOCS.md]                                      # the lego reference generated from the registry
 kalfa contract [--write contract.yaml]                            # the wiring and the flow blocks kalfa runs a config by
@@ -153,8 +154,9 @@ and what finished lately, that lists the runs, points and sweeps by their manife
 its params and best value, compares two records (curves overlaid, config diff), follows a running record on
 a monitor tab (progress, the monitored metric, the minimized loss, the step loss, the log tail; by default the
 page refreshes only when a file of the record changes, through a server sent event stream that stats the
-record's files once a second, or every 3, 5 or 10 seconds when the footer says so), explores the
-test predictions, the fitted preprocessors, the files of the record and the timeline of its nodes, and
+record's files once a second, or every 3, 5 or 10 seconds when the footer says so; a stop button asks the
+record to end after its current turn), explores the test predictions, the fitted preprocessors, the files
+of the record and the timeline of its nodes, and
 shows per record the latest metrics, one chart per metric with the sets as lines, the step curves, the plots and
 the samples, the config, the notes, the node timings, the events and the log tails; per sweep the live table of
 points with the best one, the curves of ticked points overlaid and the difference between two of them; on a
@@ -201,7 +203,7 @@ layer without line provenance) or a record directory (its `resolved.yaml` under 
 is `--set` written as `(dotted path, value)` pairs, and `-p lr=1e-4` is `("params.lr", 1e-4)`.
 
 ```python
-from kalfa.api import check, generate, predict, resume, run
+from kalfa.api import check, generate, predict, resume, run, stop
 
 prepared = check(["config.yaml"], measure=True)           # nothing trains; measure=True counts the sets after the transforms
 result = run(["config.yaml"], sets=[("training.epochs", 3), ("record", "runs/nb_$datetime$")])
@@ -216,6 +218,7 @@ samples = generate(result.record, which="best")
 | `probe(document)` | `Probe` | the data and model blocks run on their own: `sizes`, `prep` (the fitted plan), `features` (the width of the feature tensor), `parameters` per model, `shapes` of one batch, `notes`; `kalfa.describe.render(prepared, style, sections, probe)` turns the two into the text `kalfa describe` prints |
 | `run(paths, sets=None, executor="serial", workers=None, contract=None, monitor=None)` | `RunResult` | `record` (the directory it opened), `report` (tezgah's, `report.outputs["history"]` is the per turn table), `device`; `monitor` is a `kalfa.std.common.log.Monitor` (`Monitor(logging.INFO, progress=False)` prints the turn lines instead of the bar), the default one draws the bar |
 | `resume(run_dir, sets=None, executor="serial", workers=None, contract=None, monitor=None)` | `RunResult` | the same, in a new record directory |
+| `stop(record, by="cli")` | list | the directories it wrote `stop.json` into (a sweep root and its running points); the run ends after the turn that sees the file, a record that has ended is a `KalfaError` |
 | `predict(run_dir, model=None, which=None, data=None, device=None, contract=None, plots=None)` | `Prediction` | `path`, `table` (a DataFrame), `model`, `plots` (the definitions drawn); `data` is a file or a DataFrame (`predictions_frame.parquet`); `plots="all"` or a list of definitions draws them on the table |
 | `generate(run_dir, which=None, device=None, contract=None)` | `Generated` | `path`, `samples` |
 | `plots(run_dir, only=None, device=None, contract=None)` | `Plots` | `record`, `names`; the plots section redrawn from the record |
@@ -273,9 +276,10 @@ for uri in ("/criterion/acme/asymmetric",):
     registry._resolved.pop(uri, None)
 ```
 
-Interrupting a cell stops the run where it is; `resume(record)` continues from the last checkpoint into a new
-directory. On a GPU box `sets=[("device", "cuda")]` picks the device, and `predict` and `generate` take `device`
-the same way.
+Interrupting a cell stops the run where it is; `stop(record)` from another cell or shell asks it to end after
+the current turn instead (it writes `stop.json`, the run finishes as an early stop would), and `resume(record)`
+continues from the last checkpoint into a new directory. On a GPU box `sets=[("device", "cuda")]` picks the
+device, and `predict` and `generate` take `device` the same way.
 
 ## The record directory
 
@@ -286,6 +290,7 @@ never written into (an error).
 |---|---|
 | `manifest.json` | the identity, written once at the start: `kind` (`run`, `point`, `sweep`, `data`), the name, the config paths, the params, the kalfa version, a hash of the contract, `turn` (`epoch` when a turn is one pass over the train loader, `steps` when `training.steps` cuts the turns), for a point its values and its root, for a prepared run the directory it started from |
 | `host.json` | the hostname, the pid and the working directory of the process that wrote the record |
+| `stop.json` | a stop request (who asked and when): `kalfa stop <record>`, the board's stop button or ctrl-c during training writes it, `touch` does too; the loop ends after the turn that sees it and the run finishes as an early stop would |
 | `resolved.yaml` | the config with its aliases and `$param$`s resolved; the source of every overridden value in a comment; runs again on its own |
 | `contract.yaml` | the contract the run was compiled by (the wiring and the flow blocks); `predict`, `generate` and `resume` read it back |
 | `flow.yaml` | the tezgah graph that ran: the component tables, the model blocks, the expanded flow and tezgah's resolution comments |

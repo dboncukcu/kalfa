@@ -114,6 +114,10 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     after = board.watched("runs/one")
     assert [name for name in after if after[name] != before[name]] == ["history.jsonl"]
     assert "0000/history.jsonl" in board.watched("sweeps/grid") and "runs/one/steps.jsonl" in board.watched("")
+    assert board.stop("nowhere") is None
+    assert board.stop("sweeps/grid") == {"stopped": ["sweeps/grid", "sweeps/grid/0000"]}
+    assert board.record("sweeps/grid/0000")["status"]["stop"]["by"] == "board"
+    assert "stop.json" in board.watched("runs/one")
 
 
 def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
@@ -150,6 +154,25 @@ def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
             assert False
         except urllib.error.HTTPError as error:
             assert error.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_the_server_stops_a_record_through_a_post(tmp_path):
+    server = serve(records(tmp_path), port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        answer = urllib.request.urlopen(urllib.request.Request(f"{base}/api/stop?path=runs/one", method="POST"))
+        assert json.loads(answer.read()) == {"stopped": ["runs/one"]}
+        assert Record(tmp_path / "runs" / "one").stop_note()["by"] == "board"
+        try:
+            urllib.request.urlopen(urllib.request.Request(f"{base}/api/stop?path=sweeps/grid/0001", method="POST"))
+            assert False
+        except urllib.error.HTTPError as error:
+            assert error.code == 409 and "ended already" in error.read().decode()
     finally:
         server.shutdown()
         server.server_close()

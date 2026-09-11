@@ -8,6 +8,7 @@ from cirak.registry import registry
 
 from .api import gate, prepare_data, run
 from .config import load_surface, parse_sets, resolve_alias
+from .errors import KalfaError
 from .kinds import kalfa_kind
 from .record import Record
 from .schema import Schema
@@ -210,12 +211,15 @@ def read_point(record):
     return json.loads(path.read_text()) if path.exists() else None
 
 
-def run_point(paths, sets, params, plan, index, point=None, when=None):
+def run_point(paths, sets, params, plan, index, point=None, when=None, monitor=None):
+    if Record(plan.root).stop_requested():
+        raise KalfaError(f"{plan.root}: the sweep is stopped (stop.json in the root); remove the file to run more "
+                         "points")
     if point is None:
         point = point_of(plan, index)
     record = point_dir(plan.root, index)
     layer = parse_sets([*(sets or []), f"record={record}"], [*(params or []), *point_params(point)])
-    run(paths, layer, when=when, prepared=prepared_dir(plan),
+    run(paths, layer, when=when, prepared=prepared_dir(plan), monitor=monitor,
         identity={"kind": "point", "id": int(index), "values": dict(point), "root": str(plan.root)})
     value, turn = objective_of(record, plan.objective)
     return write_point(record, plan, index, point, value, turn)
@@ -232,10 +236,29 @@ def child_command(paths, sets, params, root, index, point=None):
     return command
 
 
+def wait_for(child, root, record, log):
+    while True:
+        try:
+            return child.wait()
+        except KeyboardInterrupt:
+            if Record(root).stop_requested():
+                child.kill()
+                raise
+            Record(root).request_stop("ctrl-c")
+            if record.exists():
+                Record(record).request_stop("ctrl-c")
+            log(f"{root}: stop requested; the running point ends after its turn and no new point starts; "
+                "ctrl-c again aborts it")
+
+
 def local_loop(paths, sets, params, plan, log=print):
     write_plan(plan, sets, params, log=log)
     entries = []
     for index in range(plan.total):
+        if Record(plan.root).stop_requested():
+            log(f"{plan.root}: stop requested (stop.json in the root), {index} of {plan.total} points started; "
+                "remove the file to go on")
+            break
         record = point_dir(plan.root, index)
         done = read_point(record)
         if done is not None:
@@ -249,10 +272,11 @@ def local_loop(paths, sets, params, plan, log=print):
         trial = point = None
         if not plan.deterministic:
             trial, point = plan.strategy.ask(plan.space, plan.objective.get("mode", "min"))
-        completed = subprocess.run(child_command(paths, sets, params, plan.root, index, point))
-        entry = read_point(record) if completed.returncode == 0 else None
+        with subprocess.Popen(child_command(paths, sets, params, plan.root, index, point)) as child:
+            code = wait_for(child, plan.root, record, log)
+        entry = read_point(record) if code == 0 else None
         if entry is None:
-            log(f"{record}: failed (exit {completed.returncode})")
+            log(f"{record}: failed (exit {code})")
         else:
             log(f"{record}: {entry['point']} -> {entry['objective']['monitor']}={entry['objective']['value']:.6g}")
         if trial is not None:

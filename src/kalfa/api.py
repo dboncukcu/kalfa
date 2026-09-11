@@ -380,6 +380,22 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
     return RunResult(record, report, device)
 
 
+def stop(record, by="cli"):
+    note = Record(record)
+    if not note.is_record:
+        raise KalfaError(f"{record} is no record directory; a record holds manifest.json or resolved.yaml")
+    state = note.state()
+    if state in ("finished", "failed"):
+        raise KalfaError(f"{record} has ended already ({state}); there is nothing to stop")
+    targets = [note]
+    if (note.read_json("manifest.json") or {}).get("kind") == "sweep":
+        targets += [Record(child) for child in sorted(note.directory.iterdir())
+                    if child.is_dir() and Record(child).is_record and Record(child).state() == "running"]
+    for target in targets:
+        target.request_stop(by)
+    return [str(target.directory) for target in targets]
+
+
 def copy_plugins(names, record):
     for name in names or []:
         module = sys.modules.get(name)
@@ -706,4 +722,4 @@ def flow_outputs(document, blocks, names, contract=None):
 
 __all__ = ["Exported", "Generated", "KalfaError", "Opened", "Plots", "Prepared", "PreparedData", "Prediction",
            "Probe", "RunResult", "check", "export", "generate", "open_record", "plots", "predict", "prepare",
-           "prepare_data", "probe", "read_resolved", "resume", "run", "seed_all"]
+           "prepare_data", "probe", "read_resolved", "resume", "run", "seed_all", "stop"]

@@ -116,3 +116,17 @@ def test_monitor_at_debug_shows_every_node():
     text = stream.getvalue()
     assert "DEBUG  training.epochs[0].turn  started" in text
     assert "finished (1.50s)" in text and "ERROR" in text and "failed: no file" in text
+
+
+def test_the_monitor_knows_the_record_and_whether_the_loop_runs(tmp_path, capsys):
+    monitor = Monitor()
+    assert monitor.record is None and monitor.training is False
+    monitor.open(tmp_path)
+    monitor.sink({"kind": "started", "path": "training.epochs", "total": 2})
+    assert monitor.record == tmp_path and monitor.training is True
+    monitor.say("hello there")
+    assert "hello there" in capsys.readouterr().err
+    monitor.sink({"kind": "finished", "path": "training.epochs", "ms": 1.0})
+    assert monitor.training is False
+    monitor.close()
+    assert monitor.record is None

@@ -1,5 +1,6 @@
 import argparse
 import json
+import signal
 import sys
 import warnings
 from pathlib import Path
@@ -13,6 +14,7 @@ from . import api, board, collect, describe, docs, sweep
 from .config import import_plugins, pack_tables, parse_sets
 from .contract import Contract
 from .kinds import kalfa_kind
+from .record import Record
 from .recipe import recipe_text
 from .std.common.log import Monitor, level_of
 from .style import Style, style_for
@@ -183,13 +185,21 @@ def build_parser():
     ls_cmd.set_defaults(handler=cmd_ls)
 
     board_cmd = commands.add_parser("board", help="a reader of records: serve the runs, points and sweeps under a "
-                                                  "root as a page that follows the growing files; no dependency, "
-                                                  "reach it through an ssh tunnel on a batch system")
+                                                  "root as a page that follows the growing files and can stop a "
+                                                  "running record; no dependency, reach it through an ssh tunnel "
+                                                  "on a batch system")
     board_cmd.add_argument("root")
     board_cmd.add_argument("--host", default="127.0.0.1")
     board_cmd.add_argument("--port", type=int, default=8080)
     log_option(board_cmd)
     board_cmd.set_defaults(handler=cmd_board)
+
+    stop_cmd = commands.add_parser("stop", help="ask a running record to stop after its current turn: writes "
+                                                "stop.json into it (into a sweep root and its running points); "
+                                                "the run ends like an early stop, with its final state, "
+                                                "predictions and plots")
+    stop_cmd.add_argument("record", nargs="+")
+    stop_cmd.set_defaults(handler=cmd_stop)
 
     contract_cmd = commands.add_parser("contract", help="print the contract kalfa runs configs by (the wiring and "
                                                         "the flow blocks), or write it with --write for editing")
@@ -266,6 +276,28 @@ def monitor_of(args):
     return Monitor(level_of(args.log), progress=progress, log_every=args.log_every, tensorboard=args.tensorboard)
 
 
+class Interrupt:
+    def __init__(self, monitor):
+        self.monitor = monitor
+        self.previous = None
+        self.asked = False
+
+    def __enter__(self):
+        self.previous = signal.signal(signal.SIGINT, self.handle)
+        return self
+
+    def __exit__(self, *error):
+        signal.signal(signal.SIGINT, self.previous)
+
+    def handle(self, number, frame):
+        if not self.monitor.training or self.asked:
+            raise KeyboardInterrupt
+        self.asked = True
+        Record(self.monitor.record).request_stop("ctrl-c")
+        self.monitor.say("stop requested: the run ends after this turn with its final state, predictions and "
+                         "plots; ctrl-c again aborts it now")
+
+
 def set_option(command):
     command.add_argument("--set", action="append", default=[], metavar="PATH=VALUE",
                          help="override a value at a dotted path from the document root (--set training.epochs=5, "
@@ -332,7 +364,7 @@ def cmd_check(args) -> int:
 
 def cmd_run(args) -> int:
     style = style_for(sys.stdout)
-    with monitor_of(args) as monitor, warnings.catch_warnings(record=True) as caught:
+    with monitor_of(args) as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         monitor.echo_warnings(caught)
         result = api.run(args.config, layer_of(args), executor=args.executor, workers=args.workers,
@@ -345,7 +377,7 @@ def cmd_run(args) -> int:
 
 def cmd_resume(args) -> int:
     style = style_for(sys.stdout)
-    with monitor_of(args) as monitor, warnings.catch_warnings(record=True) as caught:
+    with monitor_of(args) as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         monitor.echo_warnings(caught)
         result = api.resume(args.run, layer_of(args), executor=args.executor, workers=args.workers,
@@ -470,9 +502,9 @@ def cmd_sweep(args) -> int:
         return 0
     if args.point_id is not None:
         point = json.loads(args.point) if args.point else None
-        with warnings.catch_warnings(record=True) as caught:
+        with Monitor() as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            entry = sweep.run_point(args.config, args.set, args.param, plan, args.point_id, point)
+            entry = sweep.run_point(args.config, args.set, args.param, plan, args.point_id, point, monitor=monitor)
         print_warnings(caught)
         objective = entry["objective"]
         print(f"point {entry['id']} {entry['point']}: {objective['monitor']}={objective['value']:.6g} at turn "
@@ -510,6 +542,16 @@ def cmd_board(args) -> int:
             pass
         finally:
             server.server_close()
+    return 0
+
+
+def cmd_stop(args) -> int:
+    style = style_for(sys.stdout)
+    for record in args.record:
+        written = api.stop(record)
+        count = len(written) - 1
+        points = f" and {count} running point{'s' if count > 1 else ''}" if count else ""
+        print(f"stop requested for {style.cyan(record)}{points}; the run ends after its current turn")
     return 0
 
 

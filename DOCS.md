@@ -485,7 +485,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/rule/kalfa/effects` |  | `(rules)` | returns: effects | The effects the fired rules left for this turn |
 | `/rule/kalfa/open` |  | `(rules)` |  | Open the rule chain of a turn |
 | `/rule/kalfa/rule` |  | `(rules, name, when, set, after=None, metrics=None, turn_index=None, sticky=True)` | returns: rules; bus: metrics=metrics, turn_index=turn_index | Evaluate one rule: skipped until its after rule fired in an earlier turn; a sticky rule keeps its effects once fired and is not asked again; with sticky false it is asked every turn, its relative effects (times, plus) apply once per firing and its trigger starts over; later rules win the same key |
-| `/rule/kalfa/stop` |  | `(rules, triggers, metrics=None)` | returns: rules, stop; bus: metrics=metrics | Close the chain: the stop triggers are or'ed, their states kept under rules.stop |
+| `/rule/kalfa/stop` |  | `(rules, triggers, metrics=None, record=None)` | returns: rules, stop; bus: metrics=metrics, record=record | Close the chain: the stop triggers are or'ed, their states kept under rules.stop; a stop.json in the record (kalfa stop, the board, ctrl-c) ends the loop after this turn as well |
 
 ## Alias packs
 

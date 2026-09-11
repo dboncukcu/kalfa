@@ -20,6 +20,13 @@ async function api(route, params) {
   return response.json();
 }
 
+async function post(route, params) {
+  const query = new URLSearchParams(params || {}).toString();
+  const response = await fetch(route + (query ? "?" + query : ""), { method: "POST" });
+  const body = await response.json().catch(() => ({}));
+  return { ok: response.ok, ...body };
+}
+
 function fmt(value) {
   if (value === null || value === undefined || value === "") return "";
   if (typeof value !== "number") return String(value);
@@ -28,6 +35,20 @@ function fmt(value) {
   const size = Math.abs(value);
   if (size !== 0 && (size >= 1e5 || size < 1e-3)) return value.toExponential(3);
   return String(Number(value.toPrecision(5)));
+}
+
+function tick(value) {
+  if (!Number.isFinite(value)) return "";
+  const size = Math.abs(value);
+  if (size < 1e-12) return "0";
+  if (size >= 1e5 || size < 1e-3) return value.toExponential(1);
+  return String(Number(value.toPrecision(3)));
+}
+
+function extent(values) {
+  let low = Infinity, high = -Infinity;
+  for (const value of values) { if (value < low) low = value; if (value > high) high = value; }
+  return [low, high];
 }
 
 function count(value) {
@@ -185,8 +206,14 @@ function chartOptions(view) {
   const kind = view.kind || "line";
   const series = view.lines.map(line => ({
     name: line.name,
-    data: kind === "bar" ? line.points.map(point => ({ x: String(point[0]), y: point[1] }))
-      : line.points.filter(point => Number.isFinite(point[1]) && (!view.logy || point[1] > 0)).map(point => [point[0], point[1]]) }));
+    data: line.points.filter(point => Number.isFinite(point[1]) && (!view.logy || point[1] > 0)).map(point => [Number(point[0]), point[1]]) }));
+  const back = value => (view.xlog ? Math.pow(10, Number(value)) : Number(value));
+  const xs = series.flatMap(entry => entry.data.map(point => point[0]));
+  const [low, high] = extent(xs);
+  const [bottom, top] = extent(series.flatMap(entry => entry.data.map(point => point[1])));
+  const integral = high > low && high - low < 8 && xs.every(Number.isInteger);
+  const ticks = view.xlog && Number.isFinite(high - low) ? Math.max(1, Math.round(high - low)) : (integral ? high - low : 8);
+  const pad = bottom === top && Number.isFinite(top) ? (Math.abs(top) * 0.1 || 1) : 0;
   return {
     chart: { type: kind, height: view.height, background: "transparent", fontFamily: "inherit", foreColor: dark ? "#b7bcc4" : "#4a4f57",
              animations: { enabled: false }, zoom: { enabled: kind !== "bar", type: kind === "scatter" ? "xy" : "x", autoScaleYaxis: kind !== "scatter" },
@@ -199,11 +226,12 @@ function chartOptions(view) {
     dataLabels: { enabled: false },
     legend: { position: "top", horizontalAlign: "left", showForSingleSeries: true, onItemClick: { toggleDataSeries: true } },
     grid: { borderColor: dark ? "#2d3238" : "#e3e6ea" },
-    xaxis: kind === "bar" ? { type: "category", title: { text: view.xlabel || "" }, tickAmount: 10, labels: { rotate: 0 } }
-      : { type: "numeric", title: { text: view.xlabel || "" }, tickAmount: 8, labels: { formatter: value => fmt(Number(value)) }, tooltip: { enabled: false } },
-    yaxis: { logarithmic: !!view.logy, title: { text: view.ylabel || "" }, labels: { formatter: value => fmt(Number(value)) } },
+    xaxis: { type: "numeric", title: { text: view.xlabel || "" }, tickAmount: ticks,
+             labels: { formatter: value => tick(back(value)), rotate: 0, hideOverlappingLabels: true }, tooltip: { enabled: false } },
+    yaxis: { logarithmic: !!view.logy, title: { text: view.ylabel || "" }, labels: { formatter: value => tick(Number(value)) },
+             ...(pad ? { min: bottom - pad, max: top + pad } : {}) },
     tooltip: { shared: kind !== "scatter", intersect: kind === "scatter", theme: dark ? "dark" : "light",
-               x: { formatter: value => `${view.xlabel || "x"} ${fmt(Number(value))}` }, y: { formatter: value => fmt(Number(value)) } },
+               x: { formatter: value => `${view.xlabel || "x"} ${fmt(back(value))}` }, y: { formatter: value => fmt(Number(value)) } },
     annotations: { xaxis: (view.marks || []).map(mark => ({ x: mark, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3 })) },
     theme: { mode: dark ? "dark" : "light" },
   };
@@ -211,7 +239,8 @@ function chartOptions(view) {
 
 const Chart = {
   props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, ylabel: String, logy: Boolean,
-           marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String, kind: { type: String, default: "line" } },
+           marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String, kind: { type: String, default: "line" },
+           xlog: Boolean },
   data() { return { chart: null }; },
   computed: { options() { return chartOptions(this); } },
   watch: {
@@ -405,7 +434,7 @@ const app = Vue.createApp({
     histogramLines() {
       if (!this.pairInfo) return [];
       const { edges, counts } = this.pairInfo.histogram;
-      return [{ name: "residual", color: PALETTE[1], points: counts.map((value, index) => [fmt((edges[index] + edges[index + 1]) / 2), value]) }];
+      return [{ name: "residual", color: PALETTE[1], points: counts.map((value, index) => [(edges[index] + edges[index + 1]) / 2, value]) }];
     },
     prepPreprocessors() {
       const table = (this.prepData && this.prepData.preprocessors) || {};
@@ -480,8 +509,12 @@ const app = Vue.createApp({
       const scored = this.sweep.points.filter(point => point.objective);
       return this.pointKeys.map(key => {
         const points = scored.filter(point => typeof point.values[key] === "number").map(point => [point.values[key], point.objective.value]);
-        if (new Set(points.map(point => point[0])).size < 2) return null;
-        return { name: key, lines: [{ name: this.sweep.objective.monitor || "objective", color: PALETTE[0], points }] };
+        const xs = points.map(point => point[0]);
+        if (new Set(xs).size < 2) return null;
+        const [low, high] = extent(xs);
+        const xlog = low > 0 && high / low >= 100;
+        const shown = xlog ? points.map(point => [Math.log10(point[0]), point[1]]) : points;
+        return { name: key, xlog, lines: [{ name: this.sweep.objective.monitor || "objective", color: PALETTE[0], points: shown }] };
       }).filter(Boolean);
     },
     compareCharts() {
@@ -1109,6 +1142,26 @@ const app = Vue.createApp({
       if (this.tab === "steps" || this.tab === "monitor") await this.loadSteps();
       if (this.tab === "logs" || this.tab === "monitor") await this.loadLogs();
       if (this.tab === "timeline") await this.loadEvents();
+    },
+    stopText(entry) {
+      const stop = entry && entry.status && entry.status.stop;
+      if (!stop) return "";
+      const asked = ["running", "pending"].includes(this.stateOf(entry)) ? "stop requested" : "stopped on request";
+      return asked + (stop.by ? ` by ${stop.by}` : "") + (stop.at ? ` at ${new Date(stop.at).toLocaleTimeString()}` : "");
+    },
+    canStop(entry) {
+      if (!entry || (entry.status && entry.status.stop)) return false;
+      if (entry.kind === "sweep" || (entry.manifest && entry.manifest.kind === "sweep")) return this.live;
+      return ["running", "pending"].includes(this.stateOf(entry));
+    },
+    async requestStop(path) {
+      const asked = window.confirm(`Stop ${path} after its current turn? The run ends like an early stop, with its final state, predictions and plots.`);
+      if (!asked) return;
+      const result = await post("/api/stop", { path });
+      if (!result.ok) { window.alert(result.error || "the board could not write the stop file"); return; }
+      if (this.page === "home") { await this.loadLive(); return; }
+      if (this.isSweep) { await this.loadSweep(); await this.loadRecord(); return; }
+      await this.loadRecord();
     },
     fmtBytes: human,
     applyRefresh() {

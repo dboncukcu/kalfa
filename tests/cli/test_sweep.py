@@ -10,6 +10,7 @@ from kalfa.api import check
 from kalfa.cli import main
 from kalfa.collect import collect
 from kalfa.config import parse_sets
+from kalfa.record import Record
 
 CONFIG = example("14_sweep_grid")
 OPTUNA = ["sweep.strategy={uri: optuna, params: {trials: 2, seed: 1}}",
@@ -118,3 +119,14 @@ def test_optuna_loop_feeds_the_objective_back(housing):
     assert all(point["strategy"] == "/strategy/kalfa/optuna" and point["total"] == 2 for point in points)
     kind, text, target = collect(["runs/opt"])
     assert kind == "sweep" and "best: point" in text
+
+
+def test_a_stopped_root_starts_no_point(housing, capsys):
+    assert main(["sweep", CONFIG, "--plan", "--record", "runs/halted"]) == 0
+    Record(Path("runs/halted")).request_stop("test")
+    capsys.readouterr()
+    assert main(["sweep", CONFIG, "-p", "epochs=1", "--record", "runs/halted"]) == 1
+    out = capsys.readouterr().out
+    assert "stop requested" in out and "0/" in out and not list(Path("runs/halted").glob("0*"))
+    assert main(["sweep", CONFIG, "--id", "0", "--record", "runs/halted"]) == 1
+    assert "the sweep is stopped" in capsys.readouterr().err

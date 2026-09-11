@@ -43,3 +43,15 @@ def test_the_manifest_is_written_once_and_the_status_is_derived(tmp_path):
     record.write_json("run.json", {"status": "failed"})
     assert record.status()["state"] == "failed"
     assert record.host()["pid"] > 0 and record.read_json("host.json")["hostname"]
+
+
+def test_a_stop_request_is_a_file_in_the_record(tmp_path):
+    record = Record(tmp_path / "run")
+    record.manifest("run")
+    assert record.stop_note() is None and record.status()["stop"] is None and not record.stop_requested()
+    record.request_stop("cli")
+    note = record.stop_note()
+    assert record.stop_requested() and note["by"] == "cli" and note["at"]
+    assert record.status()["stop"] == note
+    (tmp_path / "run" / "stop.json").write_text("")
+    assert record.stop_note() == {}

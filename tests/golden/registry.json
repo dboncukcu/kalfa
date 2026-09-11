@@ -2850,10 +2850,11 @@
     },
     "/rule/kalfa/stop": {
       "alias": [],
-      "description": "Close the chain: the stop triggers are or'ed, their states kept under rules.stop",
+      "description": "Close the chain: the stop triggers are or'ed, their states kept under rules.stop; a stop.json in the record (kalfa stop, the board, ctrl-c) ends the loop after this turn as well",
       "facts": {
         "bus": {
-          "metrics": "metrics"
+          "metrics": "metrics",
+          "record": "record"
         },
         "returns": [
           "rules",
@@ -2861,7 +2862,7 @@
         ]
       },
       "kind": "rule",
-      "signature": "(rules, triggers, metrics=None)"
+      "signature": "(rules, triggers, metrics=None, record=None)"
     },
     "/schedule/kalfa/linear_betas": {
       "alias": [

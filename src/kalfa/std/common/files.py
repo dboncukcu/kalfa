@@ -34,6 +34,16 @@ def read_json(path):
     return json.loads(target.read_text(encoding="utf-8"))
 
 
+def read_note(path):
+    target = Path(path)
+    if not target.exists():
+        return None
+    try:
+        return json.loads(target.read_text(encoding="utf-8")) or {}
+    except json.JSONDecodeError:
+        return {}
+
+
 def append_line(path, mapping):
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

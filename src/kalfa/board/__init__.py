@@ -11,6 +11,8 @@ from urllib.parse import parse_qs, urlparse
 import numpy
 import pandas
 
+from kalfa import api
+from kalfa.errors import KalfaError
 from kalfa.record import Record, read_resolved
 from kalfa.std.common.files import read_json, read_lines
 from kalfa.std.common.history import History
@@ -360,7 +362,7 @@ class Board:
 
     def record_stamp(self, path, files=("manifest.json", "history.jsonl", "steps.jsonl", "events.jsonl", "run.json",
                                         "stdout.txt", "stderr.txt", "resolved.yaml", "data.json", "architecture.json",
-                                        "sweep.json", "fitted/calibrate/calibrate.json")):
+                                        "sweep.json", "stop.json", "fitted/calibrate/calibrate.json")):
         snapshot = {name: stamp(path / name) for name in files}
         for folder in ("plots", "samples", "checkpoints", "final", "export"):
             snapshot[folder] = stamp_dir(path / folder)
@@ -386,6 +388,12 @@ class Board:
                 for name in ("manifest.json", "history.jsonl", "sweep.json", "run.json"):
                     snapshot[f"{child.name}/{name}"] = stamp(child / name)
         return snapshot
+
+    def stop(self, relative):
+        path = self.resolve(relative)
+        if path is None or not Record(path).is_record:
+            return None
+        return {"stopped": [relative_to(self.root, Path(item)) for item in api.stop(path, by="board")]}
 
     def lines(self, relative, name, offset=0):
         path = self.resolve(relative)
@@ -565,6 +573,17 @@ def handler_for(board):
                 self.send_file(board.file(path))
             else:
                 self.send(404, "not found", "text/plain")
+
+        def do_POST(self):
+            url = urlparse(self.path)
+            query = {key: values[0] for key, values in parse_qs(url.query).items()}
+            if url.path != "/api/stop":
+                self.send(404, "not found", "text/plain")
+                return
+            try:
+                self.send_json(board.stop(query.get("path", "")))
+            except KalfaError as error:
+                self.send(409, json.dumps({"error": str(error)}))
 
     return Handler
 

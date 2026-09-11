@@ -1,9 +1,12 @@
 import json
+import threading
+import time
 
 import pytest
 
 from helpers import minimal, write_config
 from kalfa.cli import main
+from kalfa.record import Record
 
 pytestmark = pytest.mark.slow
 
@@ -129,3 +132,26 @@ def test_plots_command_and_predict_plots(workdir, capsys):
     assert (workdir / "runs" / "drawn" / "plots" / "loss_curve.png").exists()
     assert main(["predict", "runs/drawn", "--plots", "pred_vs_true"]) == 0
     assert "plots pred_vs_true" in capsys.readouterr().out
+
+
+def test_a_stop_file_ends_the_run_after_the_turn_it_is_seen_in(workdir, capsys):
+    config = minimal()
+    config["params"]["epochs"] = 8
+    config["record"] = "runs/stopped"
+    path = write_config(workdir / "cfg.yaml", config)
+    record = workdir / "runs" / "stopped"
+
+    def ask():
+        while not (record / "history.jsonl").exists():
+            time.sleep(0.02)
+        Record(record).request_stop("test")
+
+    thread = threading.Thread(target=ask, daemon=True)
+    thread.start()
+    assert main(["run", path, "--log", "--no-progress"]) == 0
+    thread.join()
+    capsys.readouterr()
+    turns = len((record / "history.jsonl").read_text().splitlines())
+    assert 1 <= turns < 8 and (record / "final" / "state.pt").exists() and (record / "predictions.parquet").exists()
+    assert json.loads((record / "run.json").read_text())["status"] == "ok"
+    assert "stop requested by test" in (record / "stderr.txt").read_text()
