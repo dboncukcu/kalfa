@@ -8,7 +8,8 @@ const KIND_NAMES = { input: "input wire", torch: "torch layer", lego: "kalfa lay
                      loss: "loss", optimizer: "optimizer", source: "source", transform: "transform", split: "split",
                      frames: "frame transforms", fit: "fit on train", feed: "feed", loaders: "loaders" };
 const SET_ORDER = ["train", "valid", "test"];
-const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "plots", "samples", "config", "notes", "events", "logs", "describe"];
+const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "predictions", "prep", "plots", "samples", "config", "notes", "files", "timeline", "events", "logs", "describe"];
+const PAGES = ["table", "compare"];
 const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
 const TEXT = /\.(txt|md|json|csv|yaml|yml)$/i;
 
@@ -110,6 +111,14 @@ function downsample(points, limit) {
   return kept;
 }
 
+function human(size) {
+  if (typeof size !== "number") return "";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  if (size < 1024 * 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  return `${(size / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
 function darkMode() {
   return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
@@ -173,23 +182,27 @@ function buildHash(path, params) {
 
 function chartOptions(view) {
   const dark = darkMode();
+  const kind = view.kind || "line";
   const series = view.lines.map(line => ({
     name: line.name,
-    data: line.points.filter(point => Number.isFinite(point[1]) && (!view.logy || point[1] > 0)).map(point => [point[0], point[1]]) }));
+    data: kind === "bar" ? line.points.map(point => ({ x: String(point[0]), y: point[1] }))
+      : line.points.filter(point => Number.isFinite(point[1]) && (!view.logy || point[1] > 0)).map(point => [point[0], point[1]]) }));
   return {
-    chart: { type: "line", height: view.height, background: "transparent", fontFamily: "inherit", foreColor: dark ? "#b7bcc4" : "#4a4f57",
-             animations: { enabled: false }, zoom: { enabled: true, type: "x", autoScaleYaxis: true },
+    chart: { type: kind, height: view.height, background: "transparent", fontFamily: "inherit", foreColor: dark ? "#b7bcc4" : "#4a4f57",
+             animations: { enabled: false }, zoom: { enabled: kind !== "bar", type: kind === "scatter" ? "xy" : "x", autoScaleYaxis: kind !== "scatter" },
              toolbar: { show: true, offsetY: -4, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } } },
     series,
     colors: view.lines.map(line => line.color),
-    stroke: { width: 1.6, curve: "straight" },
-    markers: { size: 0, hover: { size: 4 } },
+    stroke: { width: kind === "scatter" ? 0 : 1.6, curve: "straight", dashArray: view.lines.map(line => line.dashed ? 5 : 0) },
+    markers: { size: kind === "scatter" ? 3 : 0, hover: { size: 4 } },
+    plotOptions: { bar: { columnWidth: "90%" } },
     dataLabels: { enabled: false },
     legend: { position: "top", horizontalAlign: "left", showForSingleSeries: true, onItemClick: { toggleDataSeries: true } },
     grid: { borderColor: dark ? "#2d3238" : "#e3e6ea" },
-    xaxis: { type: "numeric", title: { text: view.xlabel || "" }, tickAmount: 8, labels: { formatter: value => fmt(Number(value)) }, tooltip: { enabled: false } },
+    xaxis: kind === "bar" ? { type: "category", title: { text: view.xlabel || "" }, tickAmount: 10, labels: { rotate: 0 } }
+      : { type: "numeric", title: { text: view.xlabel || "" }, tickAmount: 8, labels: { formatter: value => fmt(Number(value)) }, tooltip: { enabled: false } },
     yaxis: { logarithmic: !!view.logy, title: { text: view.ylabel || "" }, labels: { formatter: value => fmt(Number(value)) } },
-    tooltip: { shared: true, intersect: false, theme: dark ? "dark" : "light",
+    tooltip: { shared: kind !== "scatter", intersect: kind === "scatter", theme: dark ? "dark" : "light",
                x: { formatter: value => `${view.xlabel || "x"} ${fmt(Number(value))}` }, y: { formatter: value => fmt(Number(value)) } },
     annotations: { xaxis: (view.marks || []).map(mark => ({ x: mark, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3 })) },
     theme: { mode: dark ? "dark" : "light" },
@@ -198,7 +211,7 @@ function chartOptions(view) {
 
 const Chart = {
   props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, ylabel: String, logy: Boolean,
-           marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String },
+           marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String, kind: { type: String, default: "line" } },
   data() { return { chart: null }; },
   computed: { options() { return chartOptions(this); } },
   watch: {
@@ -360,15 +373,133 @@ const app = Vue.createApp({
       record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
       logs: { name: "", lines: [], total: 0 }, texts: {}, describeText: null, showModuleText: false,
       sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] },
+      tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
+      filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
     };
   },
   computed: {
     path() { return this.route.path; },
+    page() { return PAGES.includes(this.route.path) ? this.route.path : (this.route.path ? "record" : "home"); },
     isSweep() { return !!(this.record && this.record.manifest && this.record.manifest.kind === "sweep"); },
     kind() { return (this.record && this.record.manifest && this.record.manifest.kind) || "run"; },
     tab() {
       if (TABS.includes(this.route.params.tab)) return this.route.params.tab;
       return this.record && ["running", "pending"].includes(this.state) ? "monitor" : "overview";
+    },
+    predictionFile() {
+      const names = (this.record && this.record.predictions) || [];
+      return names.includes(this.route.params.set) ? this.route.params.set : (names[0] || "");
+    },
+    pairInfo() {
+      const pairs = (this.predictionsData && this.predictionsData.pairs) || [];
+      return pairs.find(pair => pair.pred === this.route.params.pair) || pairs[0] || null;
+    },
+    scatterLines() {
+      if (!this.pairInfo || !this.predictionsData) return [];
+      const pair = this.pairInfo;
+      return [{ name: `${pair.pred} against ${pair.target}`, color: PALETTE[0],
+                points: this.predictionsData.sample.map(row => [row[pair.target], row[pair.pred]]).filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1])) }];
+    },
+    histogramLines() {
+      if (!this.pairInfo) return [];
+      const { edges, counts } = this.pairInfo.histogram;
+      return [{ name: "residual", color: PALETTE[1], points: counts.map((value, index) => [fmt((edges[index] + edges[index + 1]) / 2), value]) }];
+    },
+    prepPreprocessors() {
+      const table = (this.prepData && this.prepData.preprocessors) || {};
+      return Object.entries(table).map(([name, entry]) => {
+        const state = entry.state || {};
+        const inner = state.scaler && typeof state.scaler === "object" ? state.scaler : state;
+        const perColumn = entry.grouped ? Object.entries(inner).filter(([, value]) => Array.isArray(value) && value.length === entry.columns.length && value.every(item => typeof item === "number")) : [];
+        const scalars = Object.entries(inner).filter(([key]) => !perColumn.some(([name]) => name === key));
+        return { name, ...entry, perColumn, scalars };
+      });
+    },
+    timeline() {
+      const events = (this.eventsData && this.eventsData.events) || [];
+      const rows = [];
+      const open = {};
+      for (const event of events) {
+        const when = Date.parse(event.t);
+        if (!Number.isFinite(when)) continue;
+        const key = event.kind.startsWith("iter") ? `${event.path} #${event.index ?? event.iteration ?? ""}` : event.path;
+        if (event.kind === "started" || event.kind === "iter_started") {
+          const row = { key, node: event.kind === "started" ? event.node : `${event.node} iteration`, path: event.path, start: when, end: null, status: "", depth: (event.path || "").split(".").length - 1 };
+          rows.push(row);
+          open[key] = row;
+        } else if (open[key]) {
+          open[key].end = when;
+          open[key].status = event.status || "";
+          open[key].ms = event.ms;
+          delete open[key];
+        }
+      }
+      if (!rows.length) return { rows: [], total: 0 };
+      const first = Math.min(...rows.map(row => row.start));
+      const last = Math.max(...rows.map(row => row.end || row.start));
+      const total = Math.max(1, last - first);
+      return { rows: rows.map(row => ({ ...row, left: 100 * (row.start - first) / total, width: Math.max(0.3, 100 * ((row.end || last) - row.start) / total) })), total };
+    },
+    tableColumns() {
+      const params = new Set(), metrics = new Set();
+      for (const row of this.tableRows) {
+        Object.keys(row.params || {}).forEach(key => params.add(key));
+        Object.keys(row.last || {}).forEach(key => metrics.add(key));
+      }
+      return { params: [...params], metrics: [...metrics].slice(0, 8) };
+    },
+    tableSorted() {
+      const needle = this.tableFilter.toLowerCase();
+      let rows = this.tableRows.filter(row => !needle || row.name.toLowerCase().includes(needle) || row.path.toLowerCase().includes(needle)
+        || Object.entries(row.params || {}).some(([key, value]) => `${key}=${value}`.toLowerCase().includes(needle)));
+      const key = this.sortKey;
+      if (!key) return rows;
+      const value = row => {
+        if (key === "name") return row.name;
+        if (key === "state") return this.stateOf(row);
+        if (key === "turns") return row.turns;
+        if (key === "seconds") return row.seconds;
+        if (key === "best") return row.best ? row.best.value : null;
+        if (key.startsWith("param:")) return (row.params || {})[key.slice(6)];
+        if (key.startsWith("last:")) return (row.last || {})[key.slice(5)];
+        return null;
+      };
+      rows = [...rows].sort((first, second) => {
+        const a = value(first), b = value(second);
+        if (a === b) return 0;
+        if (a === undefined || a === null) return 1;
+        if (b === undefined || b === null) return -1;
+        return (a < b ? -1 : 1) * (this.sortDesc ? -1 : 1);
+      });
+      return rows;
+    },
+    sweepParamCharts() {
+      if (!this.sweep) return [];
+      const scored = this.sweep.points.filter(point => point.objective);
+      return this.pointKeys.map(key => {
+        const points = scored.filter(point => typeof point.values[key] === "number").map(point => [point.values[key], point.objective.value]);
+        if (new Set(points.map(point => point[0])).size < 2) return null;
+        return { name: key, lines: [{ name: this.sweep.objective.monitor || "objective", color: PALETTE[0], points }] };
+      }).filter(Boolean);
+    },
+    compareCharts() {
+      if (!this.compareData) return [];
+      const byName = {};
+      const label = which => (this.compareData[which].record.manifest && this.compareData[which].record.manifest.name) || this.compareData[which].path;
+      for (const which of ["a", "b"]) {
+        const series = {};
+        for (const line of this.compareData[which].history) {
+          for (const [key, value] of Object.entries(line)) {
+            if (SKIP_KEYS.has(key) || typeof value !== "number" || key.startsWith("lr/") || key.startsWith("minimizes/")) continue;
+            (series[key] = series[key] || []).push([line.turn, value]);
+          }
+        }
+        for (const [key, points] of Object.entries(series)) {
+          const { set, name } = splitKey(key);
+          (byName[name] = byName[name] || []).push({ name: `${label(which)} ${set}`, color: setColor(set), dashed: which === "b", points });
+        }
+      }
+      return Object.entries(byName).map(([name, lines]) => ({ name, lines }));
     },
     item() { return this.route.params.item || null; },
     logy() { return this.route.params.log === "1"; },
@@ -704,6 +835,9 @@ const app = Vue.createApp({
   },
   watch: {
     path: { immediate: true, handler() { this.enterRecord(); } },
+    predictionFile() { if (this.tab === "predictions") this.loadPredictions(); },
+    "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
+    "route.params.b"() { if (this.page === "compare") this.loadCompare(); },
     tab: { immediate: true, handler() { this.enterTab(); } },
     item() { this.enterItem(); },
     overlayPaths() { this.loadOverlay(); },
@@ -784,6 +918,10 @@ const app = Vue.createApp({
       this.record = null; this.sweep = null; this.history = { lines: [], offset: 0 }; this.steps = { lines: [], offset: 0 };
       this.overlay = {}; this.diff = null; this.describeText = null; this.showModuleText = false;
       this.logs = { name: "", lines: [], total: 0 };
+      this.predictionsData = null; this.prepData = null; this.filesData = null; this.fileView = null; this.eventsData = null;
+      this.stopPlaying();
+      if (this.page === "table") { await this.loadTable(); return; }
+      if (this.page === "compare") { await this.loadCompare(); return; }
       if (!this.path) return;
       await this.loadRecord();
       if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
@@ -832,8 +970,67 @@ const app = Vue.createApp({
       const found = await api("/api/describe", { path });
       if (path === this.path) this.describeText = found ? found.text : "the record cannot be described";
     },
+    async loadTable() {
+      const found = await api("/api/table");
+      if (found) { this.tableRows = found.rows; this.tableLoaded = true; }
+    },
+    async loadCompare() {
+      const { a, b } = this.route.params;
+      if (!a || !b) { this.compareData = null; return; }
+      const [recordA, recordB, historyA, historyB, diff] = await Promise.all([
+        api("/api/record", { path: a }), api("/api/record", { path: b }), api("/api/history", { path: a }), api("/api/history", { path: b }),
+        api("/api/diff", { a, b })]);
+      if (!recordA || !recordB) { this.compareData = { missing: true }; return; }
+      this.compareData = { a: { path: a, record: recordA, history: historyA ? historyA.lines : [] },
+                           b: { path: b, record: recordB, history: historyB ? historyB.lines : [] },
+                           diff: diff ? (diff.diff.length ? diff.diff : ["no difference"]) : ["no resolved.yaml to compare"] };
+    },
+    async loadPredictions() {
+      if (!this.record || !this.predictionFile) { this.predictionsData = null; return; }
+      const path = this.path;
+      const found = await api("/api/predictions", { path, name: this.predictionFile, sample: 2000 });
+      if (path === this.path) this.predictionsData = found;
+    },
+    async loadPrep() {
+      if (this.prepData !== null) return;
+      const path = this.path;
+      const found = await api("/api/prep", { path });
+      if (path === this.path) this.prepData = found || { fields: [], preprocessors: {}, missing: true };
+    },
+    async loadFiles() {
+      const path = this.path;
+      const found = await api("/api/files", { path });
+      if (path === this.path) this.filesData = found;
+    },
+    async openFile(name) {
+      const path = this.path;
+      const found = await api("/api/text", { path, name });
+      if (path === this.path) this.fileView = found || { name, text: "this file is not shown as text", truncated: false, size: 0 };
+    },
+    async loadEvents() {
+      const path = this.path;
+      const found = await api("/api/events", { path });
+      if (path === this.path) this.eventsData = found;
+    },
+    isText(name) { return /\.(yaml|yml|json|jsonl|txt|md|csv|py|sh|sub|plan|log)$/i.test(name); },
+    togglePlaying() {
+      if (this.playing) { this.stopPlaying(); return; }
+      if (!this.record || !this.record.samples.length) return;
+      this.playing = true;
+      this.player = setInterval(() => { this.frame = (this.frame + 1) % this.record.samples.length; }, 400);
+    },
+    stopPlaying() {
+      if (this.player) clearInterval(this.player);
+      this.player = null;
+      this.playing = false;
+    },
     async enterTab() {
       if (!this.record || this.isSweep) return;
+      if (this.tab === "predictions") await this.loadPredictions();
+      if (this.tab === "prep") await this.loadPrep();
+      if (this.tab === "files") await this.loadFiles();
+      if (this.tab === "timeline") await this.loadEvents();
+      if (this.tab !== "samples") this.stopPlaying();
       if ((this.tab === "steps" || this.tab === "monitor") && !this.steps.lines.length) await this.loadSteps();
       if (this.tab === "logs" || this.tab === "monitor") await this.loadLogs();
       if (this.tab === "plots" || this.tab === "samples" || this.tab === "model") await this.loadTexts();
@@ -897,13 +1094,16 @@ const app = Vue.createApp({
     },
     async tick() {
       if (!this.path) { await this.loadLive(); return; }
-      if (!this.record) return;
+      if (this.page === "table") { await this.loadTable(); return; }
+      if (this.page === "compare" || !this.record) return;
       if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
       if (!["running", "pending"].includes(this.state)) return;
       await this.loadRecord();
       if (this.tab === "steps" || this.tab === "monitor") await this.loadSteps();
       if (this.tab === "logs" || this.tab === "monitor") await this.loadLogs();
+      if (this.tab === "timeline") await this.loadEvents();
     },
+    fmtBytes: human,
   },
   mounted() {
     this.modalHeight = Math.max(360, Math.round(window.innerHeight * 0.72));

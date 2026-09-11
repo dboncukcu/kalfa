@@ -4,14 +4,28 @@ import json
 import threading
 import urllib.request
 
+import pandas
+
+from helpers import housing_frame
 from kalfa.board import Board, serve, static_path
 from kalfa.record import Record
+from kalfa.std.lego.kalfa.prep import fit
+from kalfa.std.pre.sklearn.scalers import StandardScaler
 
 
 def records(root):
     run = Record(root / "runs" / "one")
     run.manifest("run", name="one", params={"lr": 0.1})
-    run.write_text("resolved.yaml", "seed: 7\n")
+    run.write_text("resolved.yaml",
+                   "seed: 7\ntraining: {checkpoint: {uri: best, params: {monitor: val/rmse, mode: min}}}\n")
+    pandas.DataFrame({"row": [0, 1, 2, 3], "price": [1.0, 2.0, 3.0, 4.0], "raw_y": [1.1, 2.2, 2.7, 4.4],
+                      "pred_y": [1.1, 2.2, 2.7, 4.4], "flag_y": [False, False, False, True]}).to_parquet(
+        run.directory / "predictions.parquet", index=False)
+    (run.directory / "checkpoints").mkdir()
+    (run.directory / "checkpoints" / "best.pt").write_bytes(b"pt")
+    Record(run.directory / "fitted" / "calibrate").write_json("calibrate.json", {"cut": {"threshold": 0.5}})
+    fit(housing_frame(rows=12, columns=3), {"x*": {"preprocessors": ["s"]}, "price": {"target": True}},
+        {"s": StandardScaler()}, [], record=str(run.directory))
     run.append("history.jsonl", {"turn": 1, "global_step": 3, "train/l": 1.0, "val/rmse": 2.0, "lr/m": 0.1,
                                  "rules": []})
     run.append("history.jsonl", {"turn": 2, "global_step": 6, "train/l": 0.5, "val/rmse": 1.5, "lr/m": 0.1,
@@ -42,7 +56,8 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert sorted(tree["groups"]) == ["runs", "sweeps", "sweeps/grid"]
     assert [entry["kind"] for entry in tree["groups"]["sweeps/grid"]] == ["point", "point"]
     run = board.record("runs/one")
-    assert run["status"]["state"] == "running" and run["plots"] == ["loss_curve.png"] and run["resolved"] == "seed: 7\n"
+    assert run["status"]["state"] == "running" and run["plots"] == ["loss_curve.png"]
+    assert run["resolved"].startswith("seed: 7\n")
     assert board.lines("runs/one", "history.jsonl", 1)["lines"][0]["turn"] == 2
     assert board.lines("runs/one", "steps.jsonl")["offset"] == 1
     sweep = board.sweep("sweeps/grid")
@@ -52,7 +67,33 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert board.record("../outside") is None and board.file("runs/one/resolved.yaml") is None
     assert board.file("runs/one/plots/loss_curve.png").read_bytes() == b"png" and board.record("nowhere") is None
     assert run["logs"] == ["stdout.txt"] and list(run["architecture"]["models"]) == ["m"]
-    assert run["config"] == {"seed": 7}
+    assert run["config"]["seed"] == 7
+    assert run["best"] == {"monitor": "val/rmse", "mode": "min", "value": 1.5, "turn": 2}
+    assert [item["name"] for item in run["checkpoints"]] == ["checkpoints/best.pt"]
+    assert run["checkpoints"][0]["size"] == 2
+    assert run["calibrations"] == {"cut": {"threshold": 0.5}} and run["predictions"] == ["predictions.parquet"]
+    table = board.table()["rows"]
+    assert [row["path"] for row in table] == ["runs/one", "sweeps/grid/0000", "sweeps/grid/0001"]
+    assert table[0]["params"] == {"lr": 0.1} and table[0]["turns"] == 2 and table[0]["best"]["value"] == 1.5
+    assert table[0]["last"] == {"val/rmse": 1.5} and table[1]["best"] is None
+    predictions = board.predictions("runs/one")
+    pair = predictions["pairs"][0]
+    assert predictions["rows"] == 4 and (pair["pred"], pair["target"], pair["points"]) == ("pred_y", "price", 4)
+    assert pair["rmse"] > 0 and len(pair["histogram"]["counts"]) == 40 and pair["worst"][0]["row"] == 3
+    assert predictions["flags"] == ["flag_y"] and len(predictions["sample"]) == 4
+    assert board.predictions("nowhere") is None
+    files = board.files("runs/one")
+    assert "history.jsonl" in [item["name"] for item in files["files"]] and files["total"] > 0
+    assert board.text("runs/one", "resolved.yaml")["text"].startswith("seed: 7")
+    assert board.text("runs/one", "checkpoints/best.pt") is None
+    assert board.text("runs/one", "../../resolved.yaml") is None
+    prep = board.prep("runs/one")
+    assert [item["name"] for item in prep["fields"]] == ["x0", "x1", "x2", "price"]
+    assert prep["fields"][0]["columns"] == ["x0"] and prep["fields"][3]["target"] is True
+    assert prep["preprocessors"]["s"]["grouped"] is True
+    assert prep["preprocessors"]["s"]["columns"] == ["x0", "x1", "x2"]
+    assert len(prep["preprocessors"]["s"]["state"]["scaler"]["mean_"]) == 3
+    assert board.events("runs/one") == {"events": [], "total": 0} and board.prep("sweeps/grid/0000") is None
     assert board.tail("runs/one", "stdout.txt", 2) == {"lines": ["line two", "line three"], "name": "stdout.txt",
                                                         "total": 3}
     live = board.live()

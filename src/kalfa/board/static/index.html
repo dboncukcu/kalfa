@@ -95,7 +95,78 @@
         </table>
       </div>
       <p class="note">The address bar carries the record, the tab and the open plot, so a link shares exactly one view and a reload
-        keeps it. A running record opens on its monitor tab and is followed every few seconds.</p>
+        keeps it. A running record opens on its monitor tab and is followed every few seconds. <a class="link" href="#/table">Every run
+        as a table</a>, with its params and its best value.</p>
+    </section>
+
+    <section v-else-if="page === 'table'" class="view">
+      <header class="head">
+        <div class="title-row"><h2 class="title">Runs</h2><span class="muted">{{ tableSorted.length }} of {{ tableRows.length }} records</span></div>
+        <div class="toolbar">
+          <input class="filter" v-model.trim="tableFilter" type="search" placeholder="filter by name, path or param=value" spellcheck="false">
+          <a class="small" v-if="selected.length === 2" :href="'#/compare?a=' + encodeURIComponent(selected[0]) + '&b=' + encodeURIComponent(selected[1])">compare the two ticked</a>
+          <span class="muted" v-else>tick two rows to compare them</span>
+        </div>
+      </header>
+      <div class="card">
+        <div class="table-scroll">
+          <table class="table runs" v-if="tableRows.length">
+            <thead>
+              <tr>
+                <th class="tick"></th>
+                <th class="sortable" @click="sortBy('name')">record<span class="sort" v-if="sortKey === 'name'">{{ sortDesc ? '▼' : '▲' }}</span></th>
+                <th class="sortable" @click="sortBy('state')">state</th>
+                <th v-for="key in tableColumns.params" :key="'p' + key" class="sortable num" @click="sortBy('param:' + key)">{{ key }}<span class="sort" v-if="sortKey === 'param:' + key">{{ sortDesc ? '▼' : '▲' }}</span></th>
+                <th class="sortable num" @click="sortBy('best')">best<span class="sort" v-if="sortKey === 'best'">{{ sortDesc ? '▼' : '▲' }}</span></th>
+                <th v-for="key in tableColumns.metrics" :key="'m' + key" class="sortable num" @click="sortBy('last:' + key)">{{ key }}<span class="sort" v-if="sortKey === 'last:' + key">{{ sortDesc ? '▼' : '▲' }}</span></th>
+                <th class="sortable num" @click="sortBy('turns')">turns</th>
+                <th class="sortable num" @click="sortBy('seconds')">time</th>
+                <th>device</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in tableSorted" :key="row.path">
+                <td class="tick"><input type="checkbox" :checked="selected.includes(row.path)" @change="togglePick(row.path)"></td>
+                <td><a class="link" :href="recordLink(row.path)">{{ row.name }}</a> <span class="muted mono">{{ row.path }}</span></td>
+                <td><span class="badge" :class="stateOf(row)">{{ stateOf(row) }}</span></td>
+                <td v-for="key in tableColumns.params" :key="'p' + key" class="num mono">{{ fmt((row.params || {})[key]) }}</td>
+                <td class="num mono" :title="row.best ? row.best.monitor + ' ' + row.best.mode : ''"><template v-if="row.best">{{ fmt(row.best.value) }} <span class="muted">@{{ row.best.turn }}</span></template></td>
+                <td v-for="key in tableColumns.metrics" :key="'m' + key" class="num mono">{{ fmt((row.last || {})[key]) }}</td>
+                <td class="num mono">{{ row.turns }}</td>
+                <td class="num mono">{{ row.seconds ? ms(row.seconds * 1000) : '' }}</td>
+                <td class="mono">{{ row.device || '' }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="empty" v-else>{{ tableLoaded ? 'no run under the root' : 'reading the records' }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section v-else-if="page === 'compare'" class="view">
+      <header class="head">
+        <div class="title-row"><h2 class="title">Compare</h2></div>
+        <div class="meta-row" v-if="compareData && !compareData.missing">
+          <span><span class="swatch" :style="{background: '#2f6fdd'}"></span> <a class="link" :href="recordLink(compareData.a.path)">{{ compareData.a.path }}</a> solid</span>
+          <span><span class="swatch" :style="{background: '#2f6fdd'}"></span> <a class="link" :href="recordLink(compareData.b.path)">{{ compareData.b.path }}</a> dashed</span>
+        </div>
+      </header>
+      <p class="empty" v-if="!route.params.a || !route.params.b">open this page from the runs table with two rows ticked, or write ?a=path&b=path</p>
+      <p class="empty" v-else-if="!compareData">reading both records</p>
+      <p class="empty" v-else-if="compareData.missing">one of the records does not exist</p>
+      <template v-else>
+        <div class="toolbar"><label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label></div>
+        <div class="grid charts" v-if="compareCharts.length">
+          <div class="card" v-for="entry in compareCharts" :key="entry.name">
+            <chart :lines="entry.lines" :title="entry.name" xlabel="turn" :ylabel="entry.name" :logy="logy"></chart>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label">resolved.yaml, {{ compareData.a.path }} to {{ compareData.b.path }}</div>
+          <pre class="diff"><span v-for="(line, index) in compareData.diff" :key="index" :class="diffClass(line)">{{ line }}
+</span></pre>
+        </div>
+      </template>
     </section>
 
     <section v-else-if="record && isSweep" class="view">
@@ -151,6 +222,11 @@
           </tbody>
         </table>
         <p class="empty" v-if="!sweep.points.length">no point has started yet</p>
+      </div>
+      <div class="grid charts" v-if="sweepParamCharts.length">
+        <div class="card" v-for="entry in sweepParamCharts" :key="entry.name">
+          <chart :lines="entry.lines" :title="entry.name + ' against the objective'" :xlabel="entry.name" :ylabel="sweep.objective.monitor || 'objective'" kind="scatter"></chart>
+        </div>
       </div>
       <div class="card" v-if="overlayLines.length">
         <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of {{ selected.length ? 'the ticked points' : 'the running points' }}</div>
@@ -307,6 +383,137 @@
               <div class="mono">{{ record.resume.resume_from }}</div>
               <div class="muted mono">{{ record.resume.checkpoint }}</div>
             </div>
+            <div class="card" v-if="record.best">
+              <div class="card-label">best {{ turnLabel }}</div>
+              <div><span class="big">{{ fmt(record.best.value) }}</span> <span class="muted">{{ record.best.monitor }} ({{ record.best.mode }}) at {{ turnLabel }} {{ record.best.turn }}</span></div>
+            </div>
+            <div class="card" v-if="record.checkpoints && record.checkpoints.length">
+              <div class="card-label">checkpoints and exports</div>
+              <table class="table kv"><tbody>
+                <tr v-for="item in record.checkpoints" :key="item.name"><td class="mono">{{ item.name }}</td><td class="mono">{{ fmtBytes(item.size) }} <span class="muted">{{ ago(item.modified) }}</span></td></tr>
+              </tbody></table>
+            </div>
+            <div class="card" v-if="record.calibrations">
+              <div class="card-label">calibrations</div>
+              <table class="table kv"><tbody>
+                <tr v-for="[name, note] in entries(record.calibrations)" :key="name"><td class="mono">{{ name }}</td><td class="mono wrap">{{ text(note) }}</td></tr>
+              </tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" v-if="tab === 'predictions'">
+        <div class="toolbar" v-if="record.predictions.length">
+          <a v-for="name in record.predictions" :key="name" class="small" :class="{active: predictionFile === name}" :href="link({set: name, pair: null})">{{ name }}</a>
+          <template v-if="predictionsData && predictionsData.pairs.length > 1">
+            <span class="muted">·</span>
+            <a v-for="pair in predictionsData.pairs" :key="pair.pred" class="small" :class="{active: pairInfo && pairInfo.pred === pair.pred}" :href="link({pair: pair.pred})">{{ pair.target }}</a>
+          </template>
+          <span class="muted" v-if="predictionsData">{{ count(predictionsData.rows) }} rows · {{ predictionsData.sample.length }} drawn</span>
+        </div>
+        <p class="empty" v-if="!record.predictions.length">no predictions file in the record yet</p>
+        <p class="empty" v-else-if="!predictionsData">reading the predictions</p>
+        <template v-else-if="pairInfo">
+          <div class="chips">
+            <span class="chip">R² = {{ fmt(pairInfo.r2) }}</span>
+            <span class="chip">rmse = {{ fmt(pairInfo.rmse) }}</span>
+            <span class="chip">mae = {{ fmt(pairInfo.mae) }}</span>
+            <span class="chip">{{ count(pairInfo.points) }} points</span>
+            <span class="chip" v-for="flag in predictionsData.flags" :key="flag">{{ flag }}: {{ predictionsData.sample.filter(row => row[flag]).length }} of {{ predictionsData.sample.length }} drawn</span>
+          </div>
+          <div class="grid charts">
+            <div class="card"><chart :lines="scatterLines" :title="pairInfo.pred + ' against ' + pairInfo.target" :xlabel="pairInfo.target" :ylabel="pairInfo.pred" kind="scatter" :height="360"></chart></div>
+            <div class="card"><chart :lines="histogramLines" title="residual (prediction minus target)" xlabel="residual" ylabel="points" kind="bar" :height="360"></chart></div>
+          </div>
+          <div class="card">
+            <div class="card-label">largest errors</div>
+            <table class="table">
+              <thead><tr><th class="num">row</th><th class="num">{{ pairInfo.target }}</th><th class="num">{{ pairInfo.pred }}</th><th class="num">error</th></tr></thead>
+              <tbody>
+                <tr v-for="item in pairInfo.worst" :key="item.row"><td class="num mono">{{ item.row }}</td><td class="num mono">{{ fmt(item.target) }}</td><td class="num mono">{{ fmt(item.pred) }}</td><td class="num mono">{{ fmt(item.pred - item.target) }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+        <p class="empty" v-else>the predictions have no target and prediction pair to draw</p>
+      </div>
+
+      <div class="panel" v-if="tab === 'prep'">
+        <p class="empty" v-if="!prepData">reading the fitted preprocessors</p>
+        <p class="empty" v-else-if="prepData.missing">no fitted preprocessors in the record</p>
+        <template v-else>
+          <div class="card">
+            <div class="card-label">fields</div>
+            <table class="table">
+              <thead><tr><th>field</th><th>role</th><th>dtype</th><th>chain</th><th>columns produced</th><th>extras</th></tr></thead>
+              <tbody>
+                <tr v-for="item in prepData.fields" :key="item.name">
+                  <td class="mono">{{ item.name }}</td><td><span class="badge" :class="item.target ? 'loss' : 'metric'">{{ item.target ? 'target' : 'feature' }}</span></td>
+                  <td class="mono">{{ item.dtype || '' }}</td><td class="mono">{{ item.chain.join(' → ') }}</td>
+                  <td class="wrap mono">{{ item.columns.join(', ') }}</td><td class="wrap mono">{{ item.extras.join(', ') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card" v-for="entry in prepPreprocessors" :key="entry.name">
+            <div class="card-label">{{ entry.name }} <span class="muted">{{ entry.class }}{{ entry.grouped ? ', fitted once over ' + entry.columns.length + ' columns' : ', one object per column' }}</span></div>
+            <table class="table" v-if="entry.grouped && entry.perColumn.length">
+              <thead><tr><th>column</th><th class="num" v-for="[key] in entry.perColumn" :key="key">{{ key }}</th></tr></thead>
+              <tbody>
+                <tr v-for="(column, index) in entry.columns" :key="column"><td class="mono">{{ column }}</td><td class="num mono" v-for="[key, values] in entry.perColumn" :key="key">{{ fmt(values[index]) }}</td></tr>
+              </tbody>
+            </table>
+            <table class="table kv" v-if="entry.grouped && entry.scalars.length"><tbody>
+              <tr v-for="[key, value] in entry.scalars" :key="key"><td class="mono">{{ key }}</td><td class="mono wrap">{{ text(value) }}</td></tr>
+            </tbody></table>
+            <table class="table" v-if="!entry.grouped">
+              <thead><tr><th>column</th><th>state</th></tr></thead>
+              <tbody>
+                <tr v-for="[column, state] in entries(entry.columns)" :key="column"><td class="mono">{{ column }}</td><td class="mono wrap">{{ text(state) }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card" v-if="prepData.drop && prepData.drop.length">
+            <div class="card-label">dropped columns</div>
+            <div class="mono wrap">{{ prepData.drop.join(', ') }}</div>
+          </div>
+        </template>
+      </div>
+
+      <div class="panel" v-if="tab === 'files'">
+        <div class="grid two">
+          <div class="card">
+            <div class="card-label">files <span class="muted" v-if="filesData">· {{ filesData.files.length }} files, {{ fmtBytes(filesData.total) }}</span></div>
+            <table class="table" v-if="filesData">
+              <thead><tr><th>name</th><th class="num">size</th><th>modified</th></tr></thead>
+              <tbody>
+                <tr v-for="item in filesData.files" :key="item.name" :class="{active: fileView && fileView.name === item.name}">
+                  <td class="mono"><a class="link" v-if="isText(item.name)" href="#" @click.prevent="openFile(item.name)">{{ item.name }}</a><template v-else>{{ item.name }}</template></td>
+                  <td class="num mono">{{ fmtBytes(item.size) }}</td><td class="muted">{{ ago(item.modified) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="empty" v-else>reading the files</p>
+          </div>
+          <div class="card" v-if="fileView">
+            <div class="toolbar"><span class="card-label">{{ fileView.name }}</span><span class="muted" v-if="fileView.truncated">first {{ fmtBytes(400000) }} of {{ fmtBytes(fileView.size) }}</span><button class="small" @click="fileView = null">close</button></div>
+            <pre class="code">{{ fileView.text }}</pre>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" v-if="tab === 'timeline'">
+        <p class="empty" v-if="!eventsData">reading the events</p>
+        <p class="empty" v-else-if="!timeline.rows.length">no node event yet</p>
+        <div class="card" v-else>
+          <div class="card-label">nodes over time <span class="muted">· {{ eventsData.total }} events, {{ ms(timeline.total) }} from the first start to the last end</span></div>
+          <div class="timeline">
+            <div class="timeline-row" v-for="row in timeline.rows" :key="row.key + row.start" :title="row.key + (row.ms !== undefined ? ' · ' + ms(row.ms) : '')">
+              <div class="timeline-label mono" :style="{paddingLeft: (4 + row.depth * 14) + 'px'}">{{ row.node }}</div>
+              <div class="timeline-track"><div class="timeline-bar" :class="{failed: row.status && row.status !== 'ok', open: row.end === null}" :style="{left: row.left + '%', width: row.width + '%'}"></div></div>
+              <div class="timeline-ms mono muted">{{ row.ms !== undefined ? ms(row.ms) : '' }}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -404,6 +611,14 @@
       </div>
 
       <div class="panel" v-if="tab === 'plots' || tab === 'samples'">
+        <div class="card player" v-if="tab === 'samples' && record.samples.length > 1">
+          <div class="toolbar">
+            <button class="small" @click="togglePlaying">{{ playing ? 'pause' : 'play' }}</button>
+            <input type="range" min="0" :max="record.samples.length - 1" :value="frame" @input="frame = Number($event.target.value)">
+            <span class="mono">{{ record.samples[frame] }}</span>
+          </div>
+          <img :src="fileUrl('samples', record.samples[frame])" :alt="record.samples[frame]">
+        </div>
         <div class="gallery" v-if="images.length">
           <figure v-for="name in images" :key="name">
             <a :href="link({item: name})"><img :src="fileUrl(tab, name)" :alt="name" loading="lazy"></a>

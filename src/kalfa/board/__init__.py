@@ -2,17 +2,25 @@ import difflib
 import json
 import math
 import mimetypes
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+import numpy
+import pandas
 
 from kalfa.record import Record, read_resolved
 from kalfa.std.common.files import read_json, read_lines
 from kalfa.std.common.history import History
 from kalfa.std.common.log import logger_for
+from kalfa.std.plot.base import prediction_pairs, r2_of
+from kalfa.std.pre.base import Grouped, read_prep
 
 
 logger = logger_for("board")
+
+TEXT_SUFFIXES = (".yaml", ".yml", ".json", ".jsonl", ".txt", ".md", ".csv", ".py", ".sh", ".sub", ".plan", ".log")
 
 
 def relative_to(root, path):
@@ -51,6 +59,62 @@ def monitor_key(training):
     if isinstance(checkpoint, dict):
         return (checkpoint.get("params") or {}).get("monitor")
     return None
+
+
+def is_number(value):
+    return isinstance(value, (int, float, numpy.integer, numpy.floating)) and not isinstance(value, bool)
+
+
+def clean(value):
+    if isinstance(value, numpy.generic):
+        value = value.item()
+    if isinstance(value, float):
+        return None if math.isnan(value) or math.isinf(value) else value
+    if isinstance(value, dict):
+        return {str(key): clean(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [clean(item) for item in value]
+    return value
+
+
+def small_value(value, depth=0):
+    if isinstance(value, numpy.generic):
+        value = value.item()
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return None if math.isnan(value) else round(value, 6)
+    if isinstance(value, numpy.ndarray):
+        value = value.tolist()
+    if isinstance(value, (list, tuple)):
+        items = [small_value(item, depth + 1) for item in value[:512]]
+        if any(item is None for item in items) and not all(item is None for item in items):
+            return None
+        return items if len(value) <= 512 else [*items, f"and {len(value) - 512} more"]
+    if isinstance(value, dict):
+        if len(value) > 64:
+            return f"{len(value)} entries"
+        return {str(key): small_value(item, depth + 1) for key, item in value.items()}
+    if depth < 2 and hasattr(value, "__dict__"):
+        return small_state(value, depth + 1)
+    return type(value).__name__
+
+
+def small_state(obj, depth=0):
+    state = {}
+    for name, value in vars(obj).items():
+        if name.startswith("_"):
+            continue
+        kept = small_value(value, depth)
+        if kept is not None:
+            state[name] = kept
+    return state
+
+
+def file_note(root, path):
+    stat = path.stat()
+    return {"name": str(path.relative_to(root)), "size": stat.st_size,
+            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds")}
 
 
 def static_path(name):
@@ -95,6 +159,19 @@ class Board:
             groups.setdefault(parent, []).append(entry)
         return {"root": str(self.root), "groups": groups}
 
+    def best_of(self, config, history):
+        training = (config or {}).get("training") or {}
+        monitor = monitor_key(training)
+        checkpoint = training.get("checkpoint")
+        mode = ((checkpoint.get("params") or {}).get("mode") or "min") if isinstance(checkpoint, dict) else "min"
+        if not monitor or not len(history):
+            return None
+        try:
+            value, turn = history.best(monitor, mode)
+        except ValueError:
+            return None
+        return {"monitor": monitor, "mode": mode, "value": value, "turn": turn}
+
     def record(self, relative):
         path = self.resolve(relative)
         if path is None or not Record(path).is_record:
@@ -103,14 +180,20 @@ class Board:
         plots = sorted(item.name for item in (path / "plots").glob("*") if item.is_file())
         samples = sorted(item.name for item in (path / "samples").glob("turn_*.png"))
         resolved = path / "resolved.yaml"
+        config = read_resolved(path) if resolved.exists() else None
+        checkpoints = [file_note(path, item) for folder in ("checkpoints", "final", "export")
+                       for item in sorted((path / folder).glob("*")) if item.is_file()]
         return {"path": relative, "status": record.status(), "manifest": record.read_json("manifest.json"),
+                "best": self.best_of(config, History.read(path)), "checkpoints": checkpoints,
+                "calibrations": read_json(path / "fitted" / "calibrate" / "calibrate.json"),
+                "predictions": sorted(item.name for item in path.glob("predictions*.parquet")),
                 "host": record.read_json("host.json"), "device": record.read_json("device.json"),
                 "git": record.read_json("git.json"), "resume": record.read_json("resume.json"),
                 "sweep": record.read_json("sweep.json"), "data": record.read_json("data.json"),
                 "run": record.read_json("run.json"), "architecture": record.read_json("architecture.json"),
                 "plots": plots, "samples": samples,
                 "resolved": resolved.read_text() if resolved.exists() else None,
-                "config": read_resolved(path) if resolved.exists() else None,
+                "config": config,
                 "events": read_lines(path / "events.jsonl")[-60:],
                 "logs": [name for name in ("stdout.txt", "stderr.txt") if (path / name).is_file()]}
 
@@ -158,6 +241,98 @@ class Board:
                 recent.append(entry)
         recent.sort(key=lambda item: item["status"].get("last_seen") or "", reverse=True)
         return {"live": live, "recent": recent[:12]}
+
+    def table(self):
+        rows = []
+        for entry in self.records():
+            if entry["kind"] == "sweep":
+                continue
+            path = self.resolve(entry["path"])
+            record = Record(path)
+            config = read_resolved(path) if (path / "resolved.yaml").exists() else None
+            history = History.read(path)
+            last = history[-1] if len(history) else {}
+            manifest = record.read_json("manifest.json") or {}
+            rows.append({**entry, "params": manifest.get("params") or {}, "turns": len(history),
+                         "seconds": sum(line["seconds"] for line in history if is_number(line.get("seconds"))),
+                         "best": self.best_of(config, history),
+                         "device": (record.read_json("device.json") or {}).get("device"),
+                         "last": {key: value for key, value in last.items()
+                                  if key.startswith(("val/", "test/")) and is_number(value) and "/total" not in key}})
+        return {"rows": rows}
+
+    def predictions(self, relative, sample=2000, name="predictions.parquet"):
+        path = self.resolve(relative)
+        if path is None or not name.startswith("predictions") or not name.endswith(".parquet"):
+            return None
+        target = path / name
+        if not target.is_file():
+            return None
+        table = pandas.read_parquet(target)
+        pairs = prediction_pairs(table)
+        found = []
+        for pred, truth in pairs:
+            actual = table[truth].to_numpy(dtype="float64")
+            guess = table[pred].to_numpy(dtype="float64")
+            mask = numpy.isfinite(actual) & numpy.isfinite(guess)
+            error = guess[mask] - actual[mask]
+            counts, edges = numpy.histogram(error, bins=40) if len(error) else ([], [])
+            order = numpy.argsort(-numpy.abs(error))[:15]
+            rows = table.loc[table.index[mask][order]]
+            found.append({"pred": pred, "target": truth, "points": int(mask.sum()),
+                          "r2": r2_of(actual[mask], guess[mask]) if len(error) else None,
+                          "rmse": float(numpy.sqrt(numpy.mean(error ** 2))) if len(error) else None,
+                          "mae": float(numpy.mean(numpy.abs(error))) if len(error) else None,
+                          "histogram": {"edges": list(edges), "counts": list(counts)},
+                          "worst": [{"row": row["row"], "target": row[truth], "pred": row[pred]}
+                                    for _, row in rows[["row", truth, pred]].iterrows()]})
+        flags = [column for column in table.columns if column.startswith("flag_")]
+        keep = list(dict.fromkeys(["row", *[column for pair in pairs for column in pair], *flags]))
+        picked = table if len(table) <= int(sample) else table.sample(int(sample), random_state=0).sort_values("row")
+        return clean({"file": name, "rows": len(table), "columns": list(table.columns), "pairs": found, "flags": flags,
+                      "sample": picked[keep].to_dict("records")})
+
+    def files(self, relative):
+        path = self.resolve(relative)
+        if path is None or not path.is_dir():
+            return None
+        found = [file_note(path, item) for item in sorted(path.rglob("*"))
+                 if item.is_file() and "__pycache__" not in item.parts]
+        return {"files": found, "total": sum(item["size"] for item in found)}
+
+    def text(self, relative, name, limit=400000):
+        path = self.resolve(relative)
+        target = (path / name).resolve() if path is not None else None
+        if target is None or path not in target.parents or not target.is_file() or target.suffix not in TEXT_SUFFIXES:
+            return None
+        raw = target.read_bytes()
+        return {"name": name, "text": raw[:limit].decode("utf-8", errors="replace"), "truncated": len(raw) > limit,
+                "size": len(raw)}
+
+    def prep(self, relative):
+        path = self.resolve(relative)
+        if path is None or not (path / "fitted" / "preprocessors" / "plan.json").is_file():
+            return None
+        prep = read_prep(path)
+        preprocessors = {}
+        for name, entry in prep.fitted.items():
+            if isinstance(entry, Grouped):
+                preprocessors[name] = {"class": type(entry.preprocessor).__name__, "grouped": True,
+                                       "columns": list(entry.columns), "state": small_state(entry.preprocessor)}
+            else:
+                preprocessors[name] = {"class": next((type(item).__name__ for item in entry.values()), ""),
+                                       "grouped": False,
+                                       "columns": {column: small_state(item) for column, item in entry.items()}}
+        fields = [{"name": item.name, "target": item.target, "chain": list(item.chain), "columns": list(item.columns),
+                   "extras": list(item.extras), "dtype": prep.dtypes.get(item.name)} for item in prep.fields]
+        return clean({"fields": fields, "preprocessors": preprocessors, "sets": prep.sets, "drop": prep.drop})
+
+    def events(self, relative, limit=20000):
+        path = self.resolve(relative)
+        if path is None:
+            return None
+        lines = read_lines(path / "events.jsonl")
+        return {"events": lines[-int(limit):], "total": len(lines)}
 
     def lines(self, relative, name, offset=0):
         path = self.resolve(relative)
@@ -278,6 +453,19 @@ def handler_for(board):
                 self.send_json(board.tree())
             elif url.path == "/api/live":
                 self.send_json(board.live())
+            elif url.path == "/api/table":
+                self.send_json(board.table())
+            elif url.path == "/api/predictions":
+                self.send_json(board.predictions(path, query.get("sample", 2000),
+                                                 query.get("name", "predictions.parquet")))
+            elif url.path == "/api/files":
+                self.send_json(board.files(path))
+            elif url.path == "/api/text":
+                self.send_json(board.text(path, query.get("name", "")))
+            elif url.path == "/api/prep":
+                self.send_json(board.prep(path))
+            elif url.path == "/api/events":
+                self.send_json(board.events(path))
             elif url.path == "/api/record":
                 self.send_json(board.record(path))
             elif url.path == "/api/history":
