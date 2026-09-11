@@ -8,6 +8,7 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
+from helpers import housing_frame
 from kalfa.std.common.stream import positions
 from kalfa.std.feed.kalfa.table import StreamDataset, table
 from kalfa.std.feed.kalfa.window import window
@@ -20,7 +21,6 @@ from kalfa.std.pre.sklearn.scalers import StandardScaler
 from kalfa.std.source.kalfa.tables import csv_stream, parquet_stream
 from kalfa.std.split.kalfa.splits import given, kfold, random_split, sequential
 from kalfa.std.transform.kalfa.table import derive, filter_rows
-from kalfa.synthetic import housing_frame
 
 
 @pytest.fixture

@@ -4,6 +4,7 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
+from helpers import write_image_folder
 from kalfa.std.common.samples import Samples
 from kalfa.std.feed.kalfa.table import SampleDataset, table
 from kalfa.std.layer.kalfa.wires import unflatten
@@ -16,7 +17,6 @@ from kalfa.std.pre.sklearn.scalers import StandardScaler
 from kalfa.std.source.kalfa.samples import image_folder
 from kalfa.std.split.kalfa.splits import kfold, random_split
 from kalfa.std.transform.kalfa.table import filter_rows
-from kalfa.synthetic import write_image_folder
 
 
 @pytest.fixture
@@ -163,12 +163,12 @@ def test_two_views_and_simclr_aug(folder):
 
 
 def test_text_source_tokenizer_and_next_token(tmp_path):
+    from helpers import write_text
     from kalfa.std.feed.kalfa.next_token import next_token
     from kalfa.std.lego.kalfa.headers import text_lines_header
     from kalfa.std.metric.kalfa.perplexity import Perplexity
     from kalfa.std.pre.kalfa.char_tokenizer import CharTokenizer
     from kalfa.std.source.kalfa.samples import text_lines
-    from kalfa.synthetic import write_text
 
     path = write_text(tmp_path / "corpus.txt", lines=12)
     samples = text_lines(str(path))

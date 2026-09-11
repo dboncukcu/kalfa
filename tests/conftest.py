@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "examples" / "alad"))
 
-from kalfa.synthetic import write_housing  # noqa: E402
+from helpers import write_housing  # noqa: E402
 
 
 KEPT = (str(ROOT / "src"), str(ROOT / "tests"), str(ROOT / "tools"), sys.prefix, sys.base_prefix)

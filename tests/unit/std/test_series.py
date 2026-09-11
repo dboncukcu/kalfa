@@ -6,6 +6,7 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
+from helpers import energy_frame
 from kalfa.std.feed.kalfa.window import WindowDataset, previous_frames, window
 from kalfa.std.layer.torch.recurrent import Gru
 from kalfa.std.layer.torch.shape import LastStep
@@ -15,7 +16,6 @@ from kalfa.std.plot.kalfa.predictions import forecast_samples
 from kalfa.std.pre.base import TableFrame
 from kalfa.std.pre.sklearn.scalers import StandardScaler
 from kalfa.std.split.kalfa.splits import kfold, sequential
-from kalfa.synthetic import energy_frame
 
 
 def test_sequential_split_cuts_every_group_in_order():

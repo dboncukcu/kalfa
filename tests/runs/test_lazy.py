@@ -3,11 +3,10 @@ from pathlib import Path
 import pandas
 import pytest
 
-from helpers import minimal, write_config
+from helpers import minimal, write_config, write_housing
 from kalfa.api import check, predict, run
 from kalfa.config import parse_sets
 from kalfa.std.common.history import History
-from kalfa.synthetic import write_housing
 
 pytestmark = pytest.mark.slow
 

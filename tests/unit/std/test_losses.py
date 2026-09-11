@@ -105,9 +105,9 @@ def test_with_param_rebuilds_the_partial():
 
 def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
     import numpy
+    from helpers import scores_frame
     from kalfa.std.lego.kalfa.prep import apply, fit
     from kalfa.std.pre.sklearn.scalers import StandardScaler
-    from kalfa.synthetic import scores_frame
 
     data = scores_frame(rows=40)
     prep = fit(data, {"y_*": {"target": True, "preprocessors": ["t"]}, "z": {"target": True, "preprocessors": ["t"]},
@@ -145,9 +145,9 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
 
 def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     import numpy
+    from helpers import housing_frame
     from kalfa.std.lego.kalfa.prep import apply, fit
     from kalfa.std.pre.sklearn.scalers import StandardScaler
-    from kalfa.synthetic import housing_frame
 
     data = housing_frame(rows=40)
     prep = fit(data, {"x*": {"preprocessors": ["s"]}, "price": {"target": True, "preprocessors": ["t"]}},

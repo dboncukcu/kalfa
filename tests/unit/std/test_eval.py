@@ -6,7 +6,7 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
-from helpers import frame, tiny_model
+from helpers import frame, housing_frame, tiny_model
 from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
 from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
 from kalfa.std.common.prediction import prediction_table
@@ -19,7 +19,6 @@ from kalfa.std.lego.kalfa.prep import apply, fit
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.metric.kalfa.rmse import Rmse
 from kalfa.std.pre.sklearn.scalers import StandardScaler
-from kalfa.synthetic import housing_frame
 
 
 def test_evaluate_empty_set_gives_an_empty_mapping():

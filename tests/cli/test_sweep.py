@@ -4,13 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from helpers import example
+from helpers import example, write_housing
 from kalfa import sweep as sweeper
 from kalfa.api import check
 from kalfa.cli import main
 from kalfa.collect import collect
 from kalfa.config import parse_sets
-from kalfa.synthetic import write_housing
 
 CONFIG = example("14_sweep_grid")
 OPTUNA = ["sweep.strategy={uri: optuna, params: {trials: 2, seed: 1}}",

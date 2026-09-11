@@ -1,4 +1,5 @@
 import copy
+import importlib.util
 from io import StringIO
 from pathlib import Path
 
@@ -22,6 +23,24 @@ def example(name):
 
 def examples():
     return sorted(path.name for path in EXAMPLES.iterdir() if (path / "config.yaml").is_file())
+
+
+def make_data(name):
+    spec = importlib.util.spec_from_file_location(f"make_data_{name}", EXAMPLES / name / "make_data.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+housing_frame = make_data("01_mlp_regression").housing_frame
+write_housing = make_data("01_mlp_regression").write_housing
+write_churn = make_data("02_mlp_classification").write_churn
+energy_frame = make_data("03_timeseries_window").energy_frame
+write_image_folder = make_data("04_cnn_images").write_image_folder
+write_text = make_data("10_char_lm").write_text
+scores_frame = make_data("15_multi_target").scores_frame
+write_scores = make_data("15_multi_target").write_scores
+anomaly_frame = make_data("alad").anomaly_frame
 
 
 MINIMAL = YAML(typ="safe").load((EXAMPLES / "minimal" / "config.yaml").read_text())

@@ -2,9 +2,21 @@
 
 from pathlib import Path
 
-from kalfa.synthetic import write_text
+import numpy
 
 HERE = Path(__file__).parent
+
+
+def write_text(path, lines=200, seed=0):
+    generator = numpy.random.default_rng(seed)
+    words = ["love", "night", "sun", "moon", "sword", "fair", "verona", "friend", "death", "light"]
+    rows = []
+    for position in range(lines):
+        count = int(generator.integers(3, 8))
+        text = " ".join(generator.choice(words, size=count))
+        rows.append(f"ROMEO: {text}" if position % 5 == 0 else text)
+    Path(path).write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return path
 
 
 def main():

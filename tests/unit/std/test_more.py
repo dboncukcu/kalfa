@@ -8,7 +8,7 @@ import torch
 from torch import nn
 
 import kalfa  # noqa: F401
-from helpers import batch, frame, tiny_model
+from helpers import batch, frame, housing_frame, tiny_model, write_image_folder
 from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
 from kalfa.std.adapter.kalfa.objective import ObjectiveAdapter
 from kalfa.std.common.device import Device
@@ -21,7 +21,6 @@ from kalfa.std.metric.kalfa.recon_error import ReconError
 from kalfa.std.objective.kalfa.weighted_sum import weighted_sum
 from kalfa.std.plot.kalfa.images import image_grid
 from kalfa.std.split.kalfa.splits import given
-from kalfa.synthetic import housing_frame, write_image_folder
 
 
 def test_given_split_reads_the_other_sets_like_the_source(tmp_path):

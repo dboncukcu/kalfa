@@ -497,7 +497,7 @@ classes the legos build on are `Preprocessor` (`pre/base.py`), `Metric` (`metric
 `Calibration` (`calibrate/base.py`); a plugin subclasses them.
 
 **Adding an example.** Write `examples/<nn>_<name>/config.yaml` with a comment header (aliases from a pack, paths
-relative to the folder), `make_data.py` on top of `kalfa.synthetic`, the plugin module next to them when the
+relative to the folder), `make_data.py` with the generator of its data inside it (an example folder stands on its own; the tests borrow the generators through `tests/helpers.py`), the plugin module next to them when the
 config names one, and the README entry (data, run, predict or generate); regenerate the golden files
 (`uv run python tools/regenerate.py --all`) and read the dump by eye; write the missing legos with unit tests under
 `tests/unit/std/`; write `tests/runs/test_<name>.py` with the `dataset` and `trained` fixtures and the small

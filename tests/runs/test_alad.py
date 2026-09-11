@@ -3,10 +3,10 @@ from pathlib import Path
 import pandas
 import pytest
 
+from helpers import anomaly_frame
 from kalfa.api import check, predict
 from kalfa.config import parse_sets
 from kalfa.std.common.history import History
-from kalfa.synthetic import anomaly_frame
 
 pytestmark = pytest.mark.slow
 

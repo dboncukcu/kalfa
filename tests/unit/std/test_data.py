@@ -8,7 +8,7 @@ import pytest
 import torch
 
 import kalfa  # noqa: F401
-from helpers import frame
+from helpers import frame, housing_frame
 from kalfa.std.feed.kalfa.table import table
 from kalfa.std.lego.kalfa.data_steps import transform_set
 from kalfa.std.lego.kalfa.headers import csv_header, parquet_header
@@ -20,7 +20,6 @@ from kalfa.std.pre.sklearn.scalers import MinMaxScaler, StandardScaler
 from kalfa.std.source.kalfa.tables import csv, parquet
 from kalfa.std.split.kalfa.splits import random_split
 from kalfa.std.transform.kalfa.table import filter_rows
-from kalfa.synthetic import housing_frame
 
 
 def test_sources_and_headers(tmp_path):

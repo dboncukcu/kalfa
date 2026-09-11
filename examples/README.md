@@ -2,7 +2,7 @@
 
 Every folder is one reference config and everything it needs: `config.yaml` (the configs that build on another
 include it by its path, `../01_mlp_regression/config.yaml`), the plugin module the config names, `make_data.py`
-writing small synthetic data next to it (`kalfa.synthetic`); the commands run from inside the folder (the paths
+writing small synthetic data next to it (the generator lives in that file); the commands run from inside the folder (the paths
 are relative to it), and the test suite runs every folder the same way on a copy. The
 sizes finish in a minute or two on a laptop CPU; where a config asks for a GPU, `--set device=cpu` and a shortened
 `epochs` are in the command, the config stays untouched (`cpu` is a device lego like `auto`, `cuda` and `mps`; a

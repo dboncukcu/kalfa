@@ -7,7 +7,7 @@ import pandas
 import pytest
 
 import kalfa  # noqa: F401
-from helpers import tiny_model
+from helpers import housing_frame, tiny_model
 from kalfa.std.calibrate.base import read_calibrations
 from kalfa.std.calibrate.kalfa.threshold import Threshold
 from kalfa.std.common.device import Device
@@ -17,7 +17,6 @@ from kalfa.std.lego.kalfa.predict import predict
 from kalfa.std.lego.kalfa.prep import apply, fit
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.plot.base import set_frame
-from kalfa.synthetic import housing_frame
 
 
 def fitted(rows=40):

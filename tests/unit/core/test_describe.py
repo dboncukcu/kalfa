@@ -3,11 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from helpers import example, examples
+from helpers import example, examples, write_churn
 from kalfa.api import check, probe
 from kalfa.cli import main
 from kalfa.describe import Plain, render
-from kalfa.synthetic import write_churn
 
 CONFIG_01 = Path(example("01_mlp_regression"))
 
@@ -61,7 +60,7 @@ def test_describe_load_shows_one_hot_widths(workdir, capsys):
 
 
 def test_describe_shows_the_target_table_and_the_slots(tmp_path, monkeypatch, capsys):
-    from kalfa.synthetic import write_scores
+    from helpers import write_scores
 
     monkeypatch.chdir(tmp_path)
     write_scores(tmp_path / "scores.parquet")
@@ -75,7 +74,7 @@ def test_describe_shows_the_target_table_and_the_slots(tmp_path, monkeypatch, ca
 
 def test_describe_load_falls_back_to_the_plan_without_a_header(tmp_path, monkeypatch, capsys):
     import kalfa
-    from kalfa.synthetic import scores_frame
+    from helpers import scores_frame
 
     @kalfa.lego("/source/test/scores", returns="df", alias="test_scores",
                 description="the scores table built in memory, with no file to read a header from")
