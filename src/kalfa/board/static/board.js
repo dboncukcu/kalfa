@@ -488,10 +488,13 @@ const app = Vue.createApp({
           if (last && last.loss === loss) last.to = turn; else segments.push({ loss, from: turn, to: turn });
         }
         const current = path.length ? path[path.length - 1][1] : null;
+        const definition = current ? this.definitionOf(current) : null;
+        const terms = definition && definition.params && typeof definition.params.terms === "object" ? definition.params.terms : null;
         const prefix = current ? `train/${current}/` : null;
-        const parts = prefix ? Object.keys(this.series).filter(key => key.startsWith(prefix)).map(key => key.slice(prefix.length)) : [];
+        const parts = terms ? Object.entries(terms).map(([term, weight]) => `${fmt(weight)} × ${term}`)
+          : (prefix ? Object.keys(this.series).filter(key => key.startsWith(prefix)).map(key => key.slice(prefix.length)) : []);
         const rates = this.series[`lr/${name}`];
-        return { name, current, segments, parts, lr: rates ? rates[rates.length - 1][1] : null };
+        return { name, current, uri: definition ? definition.uri : "", segments, parts, lr: rates ? rates[rates.length - 1][1] : null };
       });
     },
     ruleMarks() { return this.history.lines.filter(line => (line.rules || []).length).map(line => line.turn); },

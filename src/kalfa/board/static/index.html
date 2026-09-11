@@ -172,7 +172,8 @@
             <div class="card" v-if="training.length">
               <div class="card-label">training</div>
               <div class="training" v-for="entry in training" :key="entry.name">
-                <div><b>{{ entry.name }}</b> minimizes <b class="mono">{{ entry.current || 'its loss' }}</b><span class="muted" v-if="entry.parts.length"> = {{ entry.parts.join(' + ') }}</span><span class="muted" v-if="entry.lr !== null"> · lr {{ fmt(entry.lr) }}</span></div>
+                <div><b>{{ entry.name }}</b> minimizes <b class="mono">{{ entry.current || 'its loss' }}</b><span class="muted mono" v-if="entry.uri" :title="entry.uri"> ({{ shortUri(entry.uri) }})</span><span class="muted" v-if="entry.parts.length"> = {{ entry.parts.join(' + ') }}</span></div>
+                <div class="muted" v-if="entry.lr !== null">learning rate {{ fmt(entry.lr) }} at the last {{ turnLabel }}</div>
                 <div class="muted timeline" v-if="entry.segments.length > 1">
                   <span v-for="segment in entry.segments" :key="segment.from"><span class="mono">{{ segment.loss }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
                 </div>
