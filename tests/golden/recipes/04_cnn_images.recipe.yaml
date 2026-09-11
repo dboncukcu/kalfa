@@ -35,19 +35,19 @@ flow:
   outputs: [history, predictions]
   data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/pets}}, sets: [train, valid,
         test], transform_pre: [], set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []},
-        test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.9, 0.1, 0.0], seed: 7}},
-      split_outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0}, frame_refs: {train: train_frame, valid: 
-          valid_frame, test: test_frame}, loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, 
-              size: 64, eval_size: 256, balanced: true}}, valid: {uri: /loader/kalfa/torch, set: valid, params: {set: 
-              valid, size: 64, eval_size: 256, balanced: true}}, test: {uri: /loader/kalfa/torch, set: test, params: {
-              set: test, size: 64, eval_size: 256, balanced: true}}}, mask: null, frames: {uri: /lego/kalfa/fit_frames, 
-          params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {image: {
-                preprocessors: [resize, augment, to_tensor, normalize]}, label: {target: true}}, preprocessors: {resize: {
-              uri: /pre/kalfa/resize, params: {size: 224}}, to_tensor: {uri: /pre/kalfa/to_tensor}, augment: {uri: 
-                /pre/kalfa/random_crop_flip, params: {size: 224}}, normalize: {uri: /pre/kalfa/normalize, params: {mean: 
-                  imagenet, std: imagenet}}}, drop: [], keys: {resize: {}, to_tensor: {}, augment: {sets: [train]}, 
-              normalize: {}}}, inputs: {df: train_df}}, preprocessors_keys: {resize: {}, to_tensor: {}, augment: {sets: [
-            train]}, normalize: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
+        test: {set: test, transforms: []}}, transform_notes: [], set_transform_notes: {}, split: {uri: 
+          /split/kalfa/random, params: {ratios: [0.9, 0.1, 0.0], seed: 7}}, split_outputs: {train: train_df_0, valid: 
+          valid_df_0, test: test_df_0}, frame_refs: {train: train_frame, valid: valid_frame, test: test_frame}, loaders: {
+        train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64, eval_size: 256, balanced: true}}, 
+          valid: {uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 64, eval_size: 256, balanced: true}}, 
+          test: {uri: /loader/kalfa/torch, set: test, params: {set: test, size: 64, eval_size: 256, balanced: true}}}, 
+        mask: null, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: 
+          /lego/kalfa/fit, params: {fields: {image: {preprocessors: [resize, augment, to_tensor, normalize]}, label: {
+                target: true}}, preprocessors: {resize: {uri: /pre/kalfa/resize, params: {size: 224}}, to_tensor: {uri: 
+                /pre/kalfa/to_tensor}, augment: {uri: /pre/kalfa/random_crop_flip, params: {size: 224}}, normalize: {uri: 
+                /pre/kalfa/normalize, params: {mean: imagenet, std: imagenet}}}, drop: [], keys: {resize: {}, to_tensor: {},
+            augment: {sets: [train]}, normalize: {}}}, inputs: {df: train_df}}, preprocessors_keys: {resize: {}, 
+          to_tensor: {}, augment: {sets: [train]}, normalize: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: backbone, index: 0, init: null, trainable: false, weights: 
             null}, {name: head, index: 1, init: null, trainable: true, weights: null}], composite_items: [name: 
             classifier], ema_items: [], trained_refs: {backbone: backbone, head: head}, composite_refs: {classifier: 

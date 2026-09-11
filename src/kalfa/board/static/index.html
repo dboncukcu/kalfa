@@ -103,7 +103,7 @@
       </div>
       <div class="card" v-if="overlayLines.length">
         <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of the ticked points</div>
-        <chart :lines="overlayLines" xlabel="turn" :logy="logy"></chart>
+        <chart :lines="overlayLines" xlabel="turn" :ylabel="sweep.objective.monitor" :logy="logy" :expand="link({chart: 'overlay'})"></chart>
         <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
       </div>
       <div class="card" v-if="selected.length >= 2">
@@ -160,7 +160,7 @@
                   <td class="num mono">{{ fmt(row.last) }}</td>
                   <td class="num mono">{{ fmt(row.min) }} <span class="muted">@{{ row.minTurn }}</span></td>
                   <td class="num mono">{{ fmt(row.max) }} <span class="muted">@{{ row.maxTurn }}</span></td>
-                  <td class="spark"><svg viewBox="0 0 120 24" preserveAspectRatio="none"><polyline :points="row.spark" fill="none" :stroke="setColor(row.set)" stroke-width="1.5"></polyline></svg></td>
+                  <td class="sparkcell"><spark :points="row.tail" :name="row.key" :color="setColor(row.set)"></spark></td>
                 </tr>
               </tbody>
             </table>
@@ -198,14 +198,17 @@
         <div class="toolbar">
           <input class="filter" :value="metricFilter" @input="setFilter($event.target.value.trim())" type="search" placeholder="filter metrics" spellcheck="false">
           <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
-          <span class="muted">{{ metricCharts.length }} metrics · one line per set</span>
+          <span class="muted">{{ metricCharts.length }} metrics</span>
         </div>
+        <p class="note">One chart per metric, one line per set, drawn from history.jsonl once per turn (an epoch, or the steps of a
+          stream turn). Drag to zoom, click a legend entry to hide a line, the toolbar downloads; expand opens a large view.
+          Dashed lines mark the turns a rule fired.</p>
         <div class="grid charts" v-if="metricCharts.length">
           <div class="card" v-for="entry in metricCharts" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name" xlabel="turn" :logy="logy" :marks="ruleMarks"></chart>
+            <chart :lines="entry.lines" :title="entry.name" xlabel="turn" :ylabel="entry.name" :logy="logy" :marks="ruleMarks" :expand="link({chart: entry.name})"></chart>
           </div>
           <div class="card" v-if="rateLines.length">
-            <chart :lines="rateLines" title="learning rate" xlabel="turn" :logy="true"></chart>
+            <chart :lines="rateLines" title="learning rate" xlabel="turn" ylabel="learning rate" :logy="true" :expand="link({chart: 'learning rate'})"></chart>
           </div>
         </div>
         <p class="empty" v-else>nothing to draw yet</p>
@@ -214,11 +217,15 @@
       <div class="panel" v-if="tab === 'steps'">
         <div class="toolbar">
           <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
-          <span class="muted">{{ steps.lines.length }} updates<template v-if="stepCharts.length"> · at most 2000 points per line</template></span>
+          <span class="muted">{{ steps.lines.length }} updates</span>
         </div>
+        <p class="note">One line of steps.jsonl per optimizer update: loss/&lt;optimizer&gt; is the batch loss that update stepped
+          on (not the running mean of the turn), lr/&lt;optimizer&gt; its learning rate at that step, grad_norm/&lt;optimizer&gt;
+          the gradient norm before clipping under grad_clip. Dashed lines mark the turns; a long run is drawn with at most
+          2000 points per line, the extremes of every bucket kept, so spikes stay visible.</p>
         <div class="grid charts" v-if="stepCharts.length">
           <div class="card" v-for="entry in stepCharts" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name" xlabel="step" :logy="logy" :marks="turnMarks"></chart>
+            <chart :lines="entry.lines" :title="entry.name" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :expand="link({chart: entry.name})"></chart>
           </div>
         </div>
         <p class="empty" v-else>no step written yet</p>
@@ -251,13 +258,27 @@
           <diagram :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline"></diagram>
         </div>
         <div class="card" v-if="dataStages.length">
-          <div class="card-label">stages</div>
-          <table class="table">
-            <thead><tr><th>stage</th><th class="num">rows</th><th class="num">columns</th><th>added</th><th>removed</th></tr></thead>
+          <div class="card-label">stages before the split</div>
+          <table class="table stages">
+            <colgroup><col class="c-stage"><col class="c-rows"><col class="c-columns"><col class="c-call"><col class="c-names"><col class="c-names"></colgroup>
+            <thead><tr><th>stage</th><th class="num">rows</th><th class="num">columns</th><th>transform</th><th>added</th><th>removed</th></tr></thead>
             <tbody>
               <tr v-for="stage in dataStages" :key="stage.stage">
                 <td class="mono">{{ stage.stage }}</td><td class="num mono">{{ count(stage.rows) }}</td><td class="num mono">{{ stage.columns }}</td>
+                <td class="wrap mono"><template v-if="stage.call"><b>{{ shortUri(stage.call.uri) }}</b> {{ paramsText(stage.call.params) }}</template></td>
                 <td class="wrap muted">{{ (stage.added || []).join(', ') }}</td><td class="wrap muted">{{ (stage.removed || []).join(', ') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card" v-if="setTransforms.length">
+          <div class="card-label">transforms after the split</div>
+          <table class="table stages">
+            <thead><tr><th>set</th><th>transforms</th></tr></thead>
+            <tbody>
+              <tr v-for="entry in setTransforms" :key="entry.set">
+                <td class="mono">{{ entry.set }}</td>
+                <td class="wrap mono"><div v-for="(call, index) in entry.calls" :key="index"><b>{{ shortUri(call.uri) }}</b> {{ paramsText(call.params) }}</div></td>
               </tr>
             </tbody>
           </table>
@@ -292,11 +313,41 @@
 
       <div class="panel" v-if="tab === 'notes'">
         <div class="grid two">
-          <div class="card" v-if="record.manifest">
-            <div class="card-label">manifest</div>
-            <table class="table kv"><tbody>
-              <tr v-for="[key, value] in entries(record.manifest, ['params'])" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr>
-            </tbody></table>
+          <div class="stack">
+            <div class="card" v-if="record.manifest">
+              <div class="card-label">manifest</div>
+              <table class="table kv"><tbody>
+                <tr v-for="[key, value] in entries(record.manifest, ['params'])" :key="key"><td>{{ key }}</td><td class="mono wrap">{{ text(value) }}</td></tr>
+              </tbody></table>
+            </div>
+            <div class="card" v-if="runNodes.length">
+              <div class="card-label">nodes of the run</div>
+              <table class="table nodes">
+                <tbody>
+                  <tr v-for="node in runNodes" :key="node.path" :class="{failed: node.status !== 'ok'}">
+                    <td class="mono" :style="{paddingLeft: (10 + node.depth * 16) + 'px'}">{{ node.node }}</td>
+                    <td class="num mono">{{ ms(node.ms) }}</td>
+                    <td class="barcell"><div class="bar" :style="{width: node.share + '%'}"></div></td>
+                    <td><span class="badge" :class="node.status === 'ok' ? 'finished' : 'failed'">{{ node.status }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card" v-if="epochs.rows.length">
+              <div class="card-label">epochs</div>
+              <p class="muted" v-if="epochs.total">{{ epochs.rows.length }} turns · {{ ms(epochs.total * 1000) }} in total · {{ ms(epochs.mean * 1000) }} per turn</p>
+              <table class="table epochs">
+                <thead><tr><th class="num">turn</th><th class="num">seconds</th><th class="num">global step</th><th></th></tr></thead>
+                <tbody>
+                  <tr v-for="row in epochs.rows" :key="row.turn">
+                    <td class="num mono">{{ row.turn }}</td>
+                    <td class="num mono">{{ row.seconds === null ? '' : fmt(row.seconds) }}</td>
+                    <td class="num mono">{{ row.step ?? '' }}</td>
+                    <td class="barcell"><div class="bar" :style="{width: row.share + '%'}"></div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <div class="stack">
             <div class="card" v-if="record.host">
@@ -312,19 +363,6 @@
               <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.git)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
             </div>
           </div>
-        </div>
-        <div class="card" v-if="runNodes.length">
-          <div class="card-label">nodes of the run</div>
-          <table class="table nodes">
-            <tbody>
-              <tr v-for="node in runNodes" :key="node.path" :class="{failed: node.status !== 'ok'}">
-                <td class="mono" :style="{paddingLeft: (10 + node.depth * 16) + 'px'}">{{ node.node }}</td>
-                <td class="num mono">{{ ms(node.ms) }}</td>
-                <td class="barcell"><div class="bar" :style="{width: node.share + '%'}"></div></td>
-                <td><span class="badge" :class="node.status === 'ok' ? 'finished' : 'failed'">{{ node.status }}</span></td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
 
@@ -366,7 +404,17 @@
     </section>
   </main>
 
-  <div class="lightbox" v-if="item && record && !isSweep" @click="closeItem">
+  <div class="lightbox" v-if="expanded" @click="closeChart">
+    <div class="chart-modal card" @click.stop>
+      <div class="toolbar">
+        <span class="card-label">{{ expanded.name }}</span>
+        <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
+        <button class="small" @click="closeChart">close</button>
+      </div>
+      <chart :lines="expanded.lines" :xlabel="expanded.xlabel" :ylabel="expanded.name" :logy="expanded.logy || logy" :marks="expanded.marks" :height="modalHeight"></chart>
+    </div>
+  </div>
+  <div class="lightbox" v-if="item && record && !isSweep && !expanded" @click="closeItem">
     <figure @click.stop>
       <pre class="code viewer" v-if="itemIsText">{{ itemText === undefined ? 'reading' : itemText }}</pre>
       <img v-else :src="fileUrl(tab, item)" :alt="item">
@@ -417,43 +465,8 @@
     <p class="empty" v-if="!layout.boxes.length">nothing to draw</p>
   </div>
 </script>
-<script type="text/x-template" id="chart-template">
-  <div class="chart">
-    <div class="chart-head">
-      <span class="chart-title">{{ title }}</span>
-      <span class="legend">
-        <button v-for="line in lines" :key="line.name" class="legend-item" :class="{off: hidden[line.name]}" @click="toggle(line.name)">
-          <span class="swatch" :style="{background: line.color}"></span>{{ line.name }}
-        </button>
-      </span>
-      <button class="small chart-save" @click="save" title="download this chart as a png">save</button>
-    </div>
-    <svg :viewBox="'0 0 ' + width + ' ' + height" @mousemove="onMove" @mouseleave="hover = null">
-      <g class="grid">
-        <line v-for="tick in yticks" :key="'y' + tick.pos" :x1="pad.left" :x2="width - pad.right" :y1="tick.pos" :y2="tick.pos"></line>
-      </g>
-      <g class="marks">
-        <line v-for="mark in placedMarks" :key="'m' + mark.x" :x1="mark.x" :x2="mark.x" :y1="pad.top" :y2="height - pad.bottom"></line>
-      </g>
-      <g class="axis">
-        <text v-for="tick in yticks" :key="'yl' + tick.pos" :x="pad.left - 6" :y="tick.pos + 3.5" text-anchor="end">{{ tick.label }}</text>
-        <text v-for="tick in xticks" :key="'xl' + tick.pos" :x="tick.pos" :y="height - 8" text-anchor="middle">{{ tick.label }}</text>
-        <text v-if="xlabel" :x="width - pad.right" :y="height - 8" text-anchor="end" class="xlabel">{{ xlabel }}</text>
-      </g>
-      <path v-for="line in scaled" :key="line.name" :d="line.path" fill="none" :stroke="line.color" stroke-width="1.6" stroke-linejoin="round"></path>
-      <g v-if="tooltip">
-        <line class="cursor" :x1="tooltip.x" :x2="tooltip.x" :y1="pad.top" :y2="height - pad.bottom"></line>
-        <circle v-for="dot in tooltip.dots" :key="dot.name" :cx="tooltip.x" :cy="dot.y" r="3" :fill="dot.color"></circle>
-      </g>
-    </svg>
-    <div class="tooltip" v-if="tooltip" :style="{left: tooltipLeft + '%'}">
-      <div class="tooltip-x">{{ xlabel || 'x' }} {{ tooltip.label }}</div>
-      <div v-for="dot in tooltip.dots" :key="dot.name"><span class="swatch" :style="{background: dot.color}"></span>{{ dot.name }} <b>{{ dot.text }}</b></div>
-    </div>
-    <p class="empty" v-if="!scaled.length">nothing to draw yet</p>
-  </div>
-</script>
 <script src="/static/vendor/vue.global.prod.js"></script>
+<script src="/static/vendor/apexcharts.min.js"></script>
 <script src="/static/board.js"></script>
 </body>
 </html>

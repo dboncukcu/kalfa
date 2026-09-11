@@ -32,8 +32,15 @@ def pieces(tmp_path):
 
 def test_the_report_reads_every_stage_and_writes_data_json(tmp_path):
     stages, split, after, prep, frames, loaders, train = pieces(tmp_path)
-    report = data_report(stages, split, after, [], prep, frames, loaders, record=str(tmp_path))
+    notes = [{"lego": "/transform/kalfa/derive", "with": {"column": "bucket", "expr": "x0 > 0"}},
+             {"lego": "/transform/kalfa/filter", "with": {"query": "x0 > -9"}}]
+    report = data_report(stages, split, after, [], prep, frames, loaders, transforms=notes,
+                         set_transforms={"test": notes[1:]}, record=str(tmp_path))
     assert [entry["stage"] for entry in report["stages"]] == ["df_0", "df_1", "df_2"]
+    assert "call" not in report["stages"][0]
+    assert report["stages"][1]["call"] == {"uri": "/transform/kalfa/derive",
+                                           "params": {"column": "bucket", "expr": "x0 > 0"}}
+    assert report["set_transforms"] == {"test": [{"uri": "/transform/kalfa/filter", "params": {"query": "x0 > -9"}}]}
     assert report["stages"][1]["added"] == ["bucket"] and report["stages"][2]["rows"] == len(train) + 12
     assert report["split"] == {"test": 6, "train": 28, "valid": 6} and report["frames"] == []
     assert report["fit"]["features"] == 8 and report["fit"]["targets"] == ["price"]

@@ -41,14 +41,24 @@ def fitted_counts(prep):
     return counts
 
 
+def calls_of(items):
+    return [{"uri": item.get("lego"), "params": item.get("with") or {}} for item in items or []]
+
+
 @lego("/lego/kalfa/data_report", returns="data_report", bus=["record"],
       description="The shape of the data at every stage of the data block, read from the bus keys the stages "
-                  "wrote: the rows and columns of the source and after every transform, the sets after the "
-                  "split and after their transforms, the fitted frame transforms and preprocessors, the features "
-                  "and targets, the loaders; written to the record as data.json")
-def data_report(stages, split, after, fitted, prep, frames, loaders, record=None):
+                  "wrote: the rows and columns of the source and after every transform with the transform's call, "
+                  "the sets after the split and after their transforms, the fitted frame transforms and "
+                  "preprocessors, the features and targets, the loaders; written to the record as data.json")
+def data_report(stages, split, after, fitted, prep, frames, loaders, transforms=None, set_transforms=None,
+                record=None):
+    entries = stage_entries(stages)
+    for position, call in enumerate(calls_of(transforms)):
+        if position + 1 < len(entries):
+            entries[position + 1]["call"] = call
     report = {
-        "stages": stage_entries(stages),
+        "stages": entries,
+        "set_transforms": {name: calls_of(items) for name, items in (set_transforms or {}).items() if items},
         "split": {name: rows_of(value) for name, value in by_set(split, "_df_0").items()},
         "after_set_transforms": {name: rows_of(value) for name, value in by_set(after, "_df_1").items()},
         "frames": [type(item).__name__ for item in fitted or []],

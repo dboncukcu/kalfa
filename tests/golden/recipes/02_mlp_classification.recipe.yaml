@@ -27,17 +27,18 @@ flow:
   outputs: [history, predictions]
   data: {block: data, params: {source: {uri: /source/kalfa/parquet, params: {path: churn.parquet}}, sets: [train, valid, 
           test], transform_pre: [], set_transforms: {train: {set: train, transforms: []}, valid: {set: valid, transforms: []},
-        test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {ratios: [0.7, 0.15, 0.15], seed: 
-            7}}, split_outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0}, frame_refs: {train: train_frame,
-        valid: valid_frame, test: test_frame}, loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: 
-              train, size: 256}}, valid: {uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 256}}, test: {
-          uri: /loader/kalfa/torch, set: test, params: {set: test, size: 256}}}, mask: null, frames: {uri: 
-          /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
-          fields: {num_*: {preprocessors: [std_scaler]}, cat_*: {preprocessors: [onehot]}, churned: {target: true, 
-                preprocessors: [label]}}, preprocessors: {std_scaler: {uri: /pre/sklearn/standard_scaler}, onehot: {uri: 
-                /pre/kalfa/one_hot}, label: {uri: /pre/kalfa/label_encoder}}, drop: [], keys: {std_scaler: {}, onehot: {},
-            label: {}}}, inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, onehot: {}, label: {}}, feed: {
-          uri: /feed/kalfa/table, params: {}}}}
+        test: {set: test, transforms: []}}, transform_notes: [], set_transform_notes: {}, split: {uri: 
+          /split/kalfa/random, params: {ratios: [0.7, 0.15, 0.15], seed: 7}}, split_outputs: {train: train_df_0, valid: 
+          valid_df_0, test: test_df_0}, frame_refs: {train: train_frame, valid: valid_frame, test: test_frame}, loaders: {
+        train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256}}, valid: {uri: /loader/kalfa/torch,
+          set: valid, params: {set: valid, size: 256}}, test: {uri: /loader/kalfa/torch, set: test, params: {set: test, 
+              size: 256}}}, mask: null, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: 
+            train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {num_*: {preprocessors: [std_scaler]}, cat_*: {
+                preprocessors: [onehot]}, churned: {target: true, preprocessors: [label]}}, preprocessors: {std_scaler: {
+              uri: /pre/sklearn/standard_scaler}, onehot: {uri: /pre/kalfa/one_hot}, label: {uri: 
+                /pre/kalfa/label_encoder}}, drop: [], keys: {std_scaler: {}, onehot: {}, label: {}}}, inputs: {df: 
+            train_df}}, preprocessors_keys: {std_scaler: {}, onehot: {}, label: {}}, feed: {uri: /feed/kalfa/table, 
+          params: {}}}}
   models: {block: models, params: {trained_items: [{name: net, index: 0, init: null, trainable: true, weights: null}], 
         composite_items: [], ema_items: [], trained_refs: {net: net}, composite_refs: {}, ema_refs: {}, seed: 7, rng: {
           uri: /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}

@@ -50,6 +50,8 @@ blocks:
       source: {required: true}          # {uri, params}
       transform_pre: {default: []}      # [{uri, params}] before the split, in the order written
       set_transforms: {required: true}  # {set: {set, transforms: [{uri, params}]}} after the split, per set
+      transform_notes: {default: []}    # [{lego, with}], the same calls as plain notes for data.json (uri would resolve)
+      set_transform_notes: {default: {}} # {set: [{lego, with}]}
       frames: {required: true}          # {uri, params, inputs}: fit_frames with the frame list for a run, read_frames with the record for a command over one
       split: {required: true}           # {uri, params}
       loaders: {required: true}         # {set: {uri, params, set}}; the loader of wiring with the batch section as its params
@@ -90,7 +92,7 @@ blocks:
                   node: {uri: $loader.uri$, params: $loader.params$,
                          inputs: {data: $loader.set$_data}, outputs: [$loader.set$_loader]}}
       # the report reads what every stage wrote with pattern inputs; a pattern cannot live inside a group input
-      report: {uri: /lego/kalfa/data_report,
+      report: {uri: /lego/kalfa/data_report, params: {transforms: $transform_notes$, set_transforms: $set_transform_notes$},
                inputs: {stages: "df_*", split: "*_df_0", after: "*_df_1", fitted: frames, prep: prep,
                         frames: "*_frame", loaders: "*_loader"},
                outputs: [data_report]}

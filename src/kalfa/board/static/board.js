@@ -68,6 +68,14 @@ function setColor(set, position) {
   return SET_COLORS[set] || PALETTE[(position || 0) % PALETTE.length];
 }
 
+function shortUri(uri) {
+  return typeof uri === "string" ? uri.split("/").filter(Boolean).pop() || uri : "";
+}
+
+function paramsText(params) {
+  return Object.entries(params || {}).map(([key, value]) => `${key}=${typeof value === "object" && value !== null ? JSON.stringify(value) : value}`).join(" ");
+}
+
 function orderedSets(names) {
   return [...names].sort((a, b) => (SET_ORDER.indexOf(a) + 1 || 99) - (SET_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
 }
@@ -102,21 +110,8 @@ function downsample(points, limit) {
   return kept;
 }
 
-function niceStep(span, target) {
-  const rough = span / Math.max(target, 1);
-  const power = Math.pow(10, Math.floor(Math.log10(rough)));
-  for (const factor of [1, 2, 2.5, 5, 10]) {
-    if (rough <= factor * power) return factor * power;
-  }
-  return 10 * power;
-}
-
-function ticksOf(min, max, target) {
-  if (!(max > min)) return [min];
-  const step = niceStep(max - min, target);
-  const found = [];
-  for (let value = Math.ceil(min / step) * step; value <= max + step / 1e6; value += step) found.push(Number(value.toFixed(10)));
-  return found;
+function darkMode() {
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 function downloadSvg(svg, title, width, height, background) {
@@ -176,85 +171,95 @@ function buildHash(path, params) {
   return `#/${path.split("/").map(encodeURIComponent).join("/")}${text ? "?" + text : ""}`;
 }
 
+function chartOptions(view) {
+  const dark = darkMode();
+  const series = view.lines.map(line => ({
+    name: line.name,
+    data: line.points.filter(point => Number.isFinite(point[1]) && (!view.logy || point[1] > 0)).map(point => [point[0], point[1]]) }));
+  return {
+    chart: { type: "line", height: view.height, background: "transparent", fontFamily: "inherit", foreColor: dark ? "#b7bcc4" : "#4a4f57",
+             animations: { enabled: false }, zoom: { enabled: true, type: "x", autoScaleYaxis: true },
+             toolbar: { show: true, offsetY: -4, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } } },
+    series,
+    colors: view.lines.map(line => line.color),
+    stroke: { width: 1.6, curve: "straight" },
+    markers: { size: 0, hover: { size: 4 } },
+    dataLabels: { enabled: false },
+    legend: { position: "top", horizontalAlign: "left", showForSingleSeries: true, onItemClick: { toggleDataSeries: true } },
+    grid: { borderColor: dark ? "#2d3238" : "#e3e6ea" },
+    xaxis: { type: "numeric", title: { text: view.xlabel || "" }, tickAmount: 8, labels: { formatter: value => fmt(Number(value)) }, tooltip: { enabled: false } },
+    yaxis: { logarithmic: !!view.logy, title: { text: view.ylabel || "" }, labels: { formatter: value => fmt(Number(value)) } },
+    tooltip: { shared: true, intersect: false, theme: dark ? "dark" : "light",
+               x: { formatter: value => `${view.xlabel || "x"} ${fmt(Number(value))}` }, y: { formatter: value => fmt(Number(value)) } },
+    annotations: { xaxis: (view.marks || []).map(mark => ({ x: mark, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3 })) },
+    theme: { mode: dark ? "dark" : "light" },
+  };
+}
+
 const Chart = {
-  props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, logy: Boolean, marks: { type: Array, default: () => [] } },
-  data() { return { hover: null, hidden: {}, width: 720, height: 240, pad: { left: 58, right: 16, top: 12, bottom: 30 } }; },
+  props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, ylabel: String, logy: Boolean,
+           marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String },
+  data() { return { chart: null }; },
+  computed: { options() { return chartOptions(this); } },
+  watch: {
+    options() { if (this.chart) this.chart.updateOptions(this.options, false, false); },
+  },
+  mounted() {
+    this.chart = new ApexCharts(this.$refs.host, this.options);
+    this.chart.render();
+  },
+  beforeUnmount() {
+    if (this.chart) this.chart.destroy();
+    this.chart = null;
+  },
+  template: `
+    <div class="chart">
+      <div class="chart-head" v-if="title || expand">
+        <span class="chart-title">{{ title }}</span>
+        <a v-if="expand" class="small chart-save" :href="expand" title="open this chart in a large view">expand</a>
+      </div>
+      <div ref="host"></div>
+    </div>`,
+};
+
+const Spark = {
+  props: { points: { type: Array, default: () => [] }, name: String, color: String, xlabel: { type: String, default: "turn" } },
+  data() { return { hover: null }; },
   computed: {
-    visible() {
-      return this.lines.filter(line => !this.hidden[line.name]).map(line => ({
-        ...line, points: line.points.filter(point => Number.isFinite(point[1]) && (!this.logy || point[1] > 0)) })).filter(line => line.points.length);
+    geometry() {
+      const values = this.points.map(point => point[1]);
+      if (!values.length) return { polyline: "", scaled: [] };
+      const min = Math.min(...values), max = Math.max(...values);
+      const scaled = this.points.map((point, index) => ({
+        x: index / Math.max(this.points.length - 1, 1) * 118 + 1,
+        y: 23 - (max > min ? (point[1] - min) / (max - min) * 20 : 10),
+        point }));
+      return { polyline: scaled.map(item => `${item.x.toFixed(1)},${item.y.toFixed(1)}`).join(" "), scaled };
     },
-    domain() {
-      const xs = this.visible.flatMap(line => line.points.map(point => point[0]));
-      const ys = this.visible.flatMap(line => line.points.map(point => this.logy ? Math.log10(point[1]) : point[1]));
-      if (!xs.length) return null;
-      let xmin = Math.min(...xs), xmax = Math.max(...xs), ymin = Math.min(...ys), ymax = Math.max(...ys);
-      if (xmin === xmax) { xmin -= 0.5; xmax += 0.5; }
-      if (ymin === ymax) { ymin -= Math.abs(ymin) * 0.05 || 0.5; ymax += Math.abs(ymax) * 0.05 || 0.5; }
-      const margin = (ymax - ymin) * 0.06;
-      return { xmin, xmax, ymin: ymin - margin, ymax: ymax + margin };
-    },
-    scaled() {
-      if (!this.domain) return [];
-      return this.visible.map(line => ({
-        name: line.name, color: line.color,
-        path: line.points.map((point, index) => `${index ? "L" : "M"}${this.sx(point[0]).toFixed(1)} ${this.sy(point[1]).toFixed(1)}`).join(" ") }));
-    },
-    yticks() {
-      if (!this.domain) return [];
-      const { ymin, ymax } = this.domain;
-      if (this.logy) {
-        const found = [];
-        for (let power = Math.ceil(ymin); power <= Math.floor(ymax); power++) found.push({ pos: this.sy(Math.pow(10, power)), label: fmt(Math.pow(10, power)) });
-        if (found.length >= 2) return found;
-      }
-      return ticksOf(ymin, ymax, 5).map(value => ({ pos: this.sy(this.logy ? Math.pow(10, value) : value), label: fmt(this.logy ? Math.pow(10, value) : value) }));
-    },
-    xticks() {
-      if (!this.domain) return [];
-      return ticksOf(this.domain.xmin, this.domain.xmax, 6).map(value => ({ pos: this.sx(value), label: fmt(value) }));
-    },
-    placedMarks() {
-      if (!this.domain) return [];
-      return this.marks.filter(mark => mark >= this.domain.xmin && mark <= this.domain.xmax).map(mark => ({ x: this.sx(mark) }));
-    },
-    tooltip() {
-      if (this.hover === null || !this.domain) return null;
-      const dots = [];
-      let anchor = null;
-      for (const line of this.visible) {
-        let best = null;
-        for (const point of line.points) {
-          if (best === null || Math.abs(point[0] - this.hover) < Math.abs(best[0] - this.hover)) best = point;
-        }
-        if (best === null) continue;
-        if (anchor === null || Math.abs(best[0] - this.hover) < Math.abs(anchor - this.hover)) anchor = best[0];
-        dots.push({ name: line.name, color: line.color, y: this.sy(best[1]), text: fmt(best[1]), x: best[0] });
-      }
-      if (anchor === null) return null;
-      return { x: this.sx(anchor), label: fmt(anchor), dots: dots.filter(dot => dot.x === anchor) };
-    },
-    tooltipLeft() { return this.tooltip ? this.tooltip.x / this.width * 100 : 0; },
   },
   methods: {
-    sx(x) { return this.pad.left + (x - this.domain.xmin) / (this.domain.xmax - this.domain.xmin) * (this.width - this.pad.left - this.pad.right); },
-    sy(y) {
-      const value = this.logy ? Math.log10(y) : y;
-      return this.height - this.pad.bottom - (value - this.domain.ymin) / (this.domain.ymax - this.domain.ymin) * (this.height - this.pad.top - this.pad.bottom);
-    },
+    fmt,
     onMove(event) {
-      if (!this.domain) return;
       const box = event.currentTarget.getBoundingClientRect();
-      const x = (event.clientX - box.left) / box.width * this.width;
-      this.hover = this.domain.xmin + (x - this.pad.left) / (this.width - this.pad.left - this.pad.right) * (this.domain.xmax - this.domain.xmin);
-    },
-    toggle(name) { this.hidden = { ...this.hidden, [name]: !this.hidden[name] }; },
-    save(event) {
-      const svg = event.currentTarget.closest(".chart").querySelector("svg");
-      downloadSvg(svg, this.title, this.width, this.height, getComputedStyle(svg.closest(".card") || svg).backgroundColor);
+      const x = (event.clientX - box.left) / box.width * 120;
+      let best = null;
+      for (const item of this.geometry.scaled) {
+        if (best === null || Math.abs(item.x - x) < Math.abs(best.x - x)) best = item;
+      }
+      this.hover = best;
     },
   },
-  template: "#chart-template",
+  template: `
+    <div class="spark" @mousemove="onMove" @mouseleave="hover = null">
+      <svg viewBox="0 0 120 24" preserveAspectRatio="none">
+        <polyline :points="geometry.polyline" fill="none" :stroke="color" stroke-width="1.5"></polyline>
+        <circle v-if="hover" :cx="hover.x" :cy="hover.y" r="2.2" :fill="color"></circle>
+      </svg>
+      <div class="tooltip" v-if="hover">
+        <div class="tooltip-x">{{ xlabel }} {{ hover.point[0] }}</div>
+        <div>{{ name }} <b>{{ fmt(hover.point[1]) }}</b></div>
+      </div>
+    </div>`,
 };
 
 const Diagram = {
@@ -322,14 +327,14 @@ const Diagram = {
 };
 
 const app = Vue.createApp({
-  components: { chart: Chart, diagram: Diagram },
+  components: { chart: Chart, spark: Spark, diagram: Diagram },
   data() {
     return {
       route: parseHash(location.hash),
       tree: { root: "", groups: {} }, filter: "", collapsed: {}, refreshed: "",
       record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
       logs: { name: "", lines: [], total: 0 }, texts: {}, describeText: null, showModuleText: false,
-      sweep: null, overlay: {}, diff: null,
+      sweep: null, overlay: {}, diff: null, modalHeight: 520,
     };
   },
   computed: {
@@ -420,16 +425,20 @@ const app = Vue.createApp({
         const { set, name } = splitKey(key);
         let low = points[0], high = points[0];
         for (const point of points) { if (point[1] < low[1]) low = point; if (point[1] > high[1]) high = point; }
-        const tail = points.slice(-40);
-        const min = Math.min(...tail.map(point => point[1])), max = Math.max(...tail.map(point => point[1]));
-        const spark = tail.map((point, index) => `${(index / Math.max(tail.length - 1, 1) * 118 + 1).toFixed(1)},${(22 - (max > min ? (point[1] - min) / (max - min) * 20 : 10) + 1).toFixed(1)}`).join(" ");
-        return { key, set, name, last: points[points.length - 1][1], min: low[1], minTurn: low[0], max: high[1], maxTurn: high[0], spark };
+        return { key, set, name, last: points[points.length - 1][1], min: low[1], minTurn: low[0], max: high[1], maxTurn: high[0], tail: points.slice(-60) };
       });
     },
     rulesFired() {
       return this.history.lines.filter(line => (line.rules || []).length).map(line => `turn ${line.turn}: ${line.rules.join(", ")}`);
     },
     ruleMarks() { return this.history.lines.filter(line => (line.rules || []).length).map(line => line.turn); },
+    epochs() {
+      const rows = this.history.lines.map(line => ({ turn: line.turn, seconds: typeof line.seconds === "number" ? line.seconds : null, step: line.global_step }));
+      const timed = rows.filter(row => row.seconds !== null);
+      const max = timed.length ? Math.max(...timed.map(row => row.seconds)) : 0;
+      const total = timed.reduce((sum, row) => sum + row.seconds, 0);
+      return { rows: rows.map(row => ({ ...row, share: row.seconds !== null && max > 0 ? 100 * row.seconds / max : 0 })), total, mean: timed.length ? total / timed.length : 0 };
+    },
     stepCharts() {
       const found = {};
       for (const line of this.steps.lines) {
@@ -448,6 +457,18 @@ const app = Vue.createApp({
         previous = line.turn;
       }
       return marks.length <= 60 ? marks : [];
+    },
+    expanded() {
+      const name = this.route.params.chart;
+      if (!name || !this.record) return null;
+      if (this.isSweep) return name === "overlay" && this.overlayLines.length ? { name: this.sweep.objective.monitor || "objective", lines: this.overlayLines, xlabel: "turn", marks: [] } : null;
+      if (this.tab === "steps") {
+        const found = this.stepCharts.find(entry => entry.name === name);
+        return found ? { name, lines: found.lines, xlabel: "step", marks: this.turnMarks } : null;
+      }
+      if (name === "learning rate") return this.rateLines.length ? { name, lines: this.rateLines, xlabel: "turn", marks: [], logy: true } : null;
+      const found = this.metricCharts.find(entry => entry.name === name);
+      return found ? { name, lines: found.lines, xlabel: "turn", marks: this.ruleMarks } : null;
     },
     gallery() {
       if (!this.record) return [];
@@ -478,8 +499,11 @@ const app = Vue.createApp({
         column += 1;
         const added = stage.added || [], removed = stage.removed || [];
         const change = [added.length ? `+${added.length}` : "", removed.length ? `−${removed.length}` : ""].filter(Boolean).join(" ");
-        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note: [...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)],
-                     lines: [stage.stage, `${count(stage.rows)} rows`, `${stage.columns} columns${change ? "  " + change : ""}`] });
+        const call = stage.call ? `${shortUri(stage.call.uri)} ${paramsText(stage.call.params)}`.trim() : "";
+        const note = [...(stage.call ? [`uri ${stage.call.uri}`, ...Object.entries(stage.call.params || {}).map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`), ""] : []),
+                      ...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)];
+        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note,
+                     lines: [stage.stage, ...(call ? [call] : []), `${count(stage.rows)} rows`, `${stage.columns} columns${change ? "  " + change : ""}`] });
         arrows.push([previous, stage.stage, "", false]);
         previous = stage.stage;
       }
@@ -489,9 +513,15 @@ const app = Vue.createApp({
       sets.forEach((set, row) => { boxes.push({ name: `split:${set}`, kind: "split", column, row, lines: [set, `${count(data.split[set])} rows`] }); arrows.push([previous, `split:${set}`, "", false]); });
       let last = set => `split:${set}`;
       const after = data.after_set_transforms || {};
-      if (sets.some(set => after[set] !== undefined && after[set] !== data.split[set])) {
+      const perSet = data.set_transforms || {};
+      if (sets.some(set => (perSet[set] || []).length || (after[set] !== undefined && after[set] !== data.split[set]))) {
         column += 1;
-        sets.forEach((set, row) => { boxes.push({ name: `after:${set}`, kind: "transform", column, row, lines: [`${set} transforms`, `${count(after[set])} rows`] }); arrows.push([`split:${set}`, `after:${set}`, "", false]); });
+        sets.forEach((set, row) => {
+          const calls = (perSet[set] || []).map(call => `${shortUri(call.uri)} ${paramsText(call.params)}`.trim());
+          boxes.push({ name: `after:${set}`, kind: "transform", column, row, note: (perSet[set] || []).map(call => `uri ${call.uri} ${paramsText(call.params)}`),
+                       lines: [`${set} transforms`, ...(calls.length ? calls : ["none"]), `${count(after[set] !== undefined ? after[set] : data.split[set])} rows`] });
+          arrows.push([`split:${set}`, `after:${set}`, "", false]);
+        });
         last = set => `after:${set}`;
       }
       const fit = data.fit || {};
@@ -508,6 +538,10 @@ const app = Vue.createApp({
       return { boxes, arrows };
     },
     dataStages() { return (this.record && this.record.data && this.record.data.stages) || []; },
+    setTransforms() {
+      const perSet = (this.record && this.record.data && this.record.data.set_transforms) || {};
+      return orderedSets(Object.keys(perSet)).map(set => ({ set, calls: perSet[set] }));
+    },
     runNodes() {
       const tree = this.record && this.record.run && this.record.run.tree;
       if (!tree) return [];
@@ -558,9 +592,8 @@ const app = Vue.createApp({
     logName() { if (this.tab === "logs") this.loadLogs(); },
   },
   methods: {
-    fmt, count, ms, ago, clock, setColor,
+    fmt, count, ms, ago, clock, setColor, shortUri, paramsText,
     stateOf(entry) { return (entry.status && entry.status.state) || "pending"; },
-    shortUri(uri) { return typeof uri === "string" ? uri.split("/").pop() : ""; },
     text(value) { return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value); },
     entries(mapping, skip) { return Object.entries(mapping || {}).filter(([key]) => !(skip || []).includes(key)); },
     fileUrl(kind, name) { return `/file?path=${encodeURIComponent(`${this.path}/${kind}/${name}`)}`; },
@@ -585,7 +618,7 @@ const app = Vue.createApp({
       if (JSON.stringify(parsed) !== JSON.stringify(this.route)) this.route = parsed;
     },
     tabLink(name) {
-      const kept = { tab: name, item: null, model: null, file: null, q: null, log: null };
+      const kept = { tab: name, item: null, model: null, file: null, q: null, log: null, chart: null };
       if (name === "curves" || name === "steps") kept.log = this.route.params.log;
       return this.link(kept);
     },
@@ -698,7 +731,7 @@ const app = Vue.createApp({
       this.diff = found ? (found.diff.length ? found.diff : ["no difference"]) : ["no resolved.yaml to compare"];
     },
     togglePick(path) {
-      const picks = this.selected.includes(path) ? this.selected.filter(item => item !== path) : [...this.selected, path];
+      const picks = this.selected.includes(path) ? this.selected.filter(entry => entry !== path) : [...this.selected, path];
       this.go({ pick: picks.join(",") }, true);
     },
     sortBy(key) {
@@ -708,6 +741,11 @@ const app = Vue.createApp({
     setLog(value) { this.go({ log: value ? "1" : null }, true); },
     setFilter(value) { this.go({ q: value }, true); },
     closeItem() { this.go({ item: null }, true); },
+    closeChart() { this.go({ chart: null }, true); },
+    openChart(name) {
+      this.modalHeight = Math.max(360, Math.round(window.innerHeight * 0.72));
+      this.go({ chart: name });
+    },
     stepItem(direction) {
       const names = this.gallery;
       const index = names.indexOf(this.item);
@@ -732,13 +770,18 @@ const app = Vue.createApp({
     },
   },
   mounted() {
+    this.modalHeight = Math.max(360, Math.round(window.innerHeight * 0.72));
     this.loadTree();
     window.addEventListener("hashchange", () => this.onHash());
     setInterval(() => this.tick(), 3000);
     setInterval(() => this.loadTree(), 10000);
     window.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        if (this.route.params.chart) this.closeChart();
+        else if (this.item) this.closeItem();
+        return;
+      }
       if (!this.item) return;
-      if (event.key === "Escape") this.closeItem();
       if (event.key === "ArrowRight") this.stepItem(1);
       if (event.key === "ArrowLeft") this.stepItem(-1);
     });

@@ -63,8 +63,8 @@ flow:
     loader_train: {uri: /loader/kalfa/torch, params: {set: train, size: 64, eval_size: 256, balanced: true}, inputs: {data: train_data}, outputs: [train_loader]}
     loader_valid: {uri: /loader/kalfa/torch, params: {set: valid, size: 64, eval_size: 256, balanced: true}, inputs: {data: valid_data}, outputs: [valid_loader]}
     loader_test: {uri: /loader/kalfa/torch, params: {set: test, size: 64, eval_size: 256, balanced: true}, inputs: {data: test_data}, outputs: [test_loader]}
-    report: {uri: /lego/kalfa/data_report, inputs: {stages: df_*, split: '*_df_0', after: '*_df_1', fitted: frames, prep: prep, frames: '*_frame', loaders: '*_loader'},
-      outputs: [data_report]}  # stages df_*: df_0; split *_df_0: test_df_0, train_df_0, valid_df_0; after *_df_1: test_df_1, train_df_1, valid_df_1; frames *_frame: test_frame, train_frame, valid_frame; loaders *_loader: test_loader, train_loader, valid_loader; implicit: record
+    report: {uri: /lego/kalfa/data_report, params: {transforms: [], set_transforms: {}}, inputs: {stages: df_*, split: '*_df_0', after: '*_df_1', fitted: frames,
+        prep: prep, frames: '*_frame', loaders: '*_loader'}, outputs: [data_report]}  # stages df_*: df_0; split *_df_0: test_df_0, train_df_0, valid_df_0; after *_df_1: test_df_1, train_df_1, valid_df_1; frames *_frame: test_frame, train_frame, valid_frame; loaders *_loader: test_loader, train_loader, valid_loader; implicit: record
   models: # reads: prep, train_loader; exports: backbone, head, models, emas, composites
     build_backbone: {block: backbone, builder: /builder/kalfa/module, params: {rng: {uri: /rng/kalfa/derived, params: {}}, seed: 7, name: backbone, index: 0, 
           init: null, trainable: false, weights: null}, outputs: [backbone]}  # implicit: prep, train_loader

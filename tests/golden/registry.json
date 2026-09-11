@@ -1614,7 +1614,7 @@
     },
     "/lego/kalfa/data_report": {
       "alias": [],
-      "description": "The shape of the data at every stage of the data block, read from the bus keys the stages wrote: the rows and columns of the source and after every transform, the sets after the split and after their transforms, the fitted frame transforms and preprocessors, the features and targets, the loaders; written to the record as data.json",
+      "description": "The shape of the data at every stage of the data block, read from the bus keys the stages wrote: the rows and columns of the source and after every transform with the transform's call, the sets after the split and after their transforms, the fitted frame transforms and preprocessors, the features and targets, the loaders; written to the record as data.json",
       "facts": {
         "bus": {
           "record": "record"
@@ -1622,7 +1622,7 @@
         "returns": "data_report"
       },
       "kind": "lego",
-      "signature": "(stages, split, after, fitted, prep, frames, loaders, record=None)"
+      "signature": "(stages, split, after, fitted, prep, frames, loaders, transforms=None, set_transforms=None, record=None)"
     },
     "/lego/kalfa/evaluate": {
       "alias": [],

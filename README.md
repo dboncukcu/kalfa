@@ -146,8 +146,8 @@ root, regenerated on every plan) and the two site files it never overwrites, `sw
 sweep.plan`, `queue $(N)`) and `sweep.sh` (the environment of the site, then `kalfa sweep cfg.yaml --id $1`);
 `--prepare-data` runs the data block once into `<root>/data/` and every point starts from it. `kalfa board <root>`
 watches all of it: a reader of the records under a root, served on `127.0.0.1:8080` with no dependency beyond
-Python (the page is `src/kalfa/board/static/`, a Vue application shipped with its own copy of Vue, so it works
-without a network, and the address bar carries the record, the tab, the open plot and the view options, so a
+Python (the page is `src/kalfa/board/static/`, a Vue application shipped with its own copies of Vue and
+ApexCharts, so it works without a network, and the address bar carries the record, the tab, the open plot and the view options, so a
 link shares exactly one view and a reload keeps it), that lists the runs, points and sweeps by their manifests, follows a running record, and
 shows per record the latest metrics, one chart per metric with the sets as lines, the step curves, the plots and
 the samples, the config, the notes, the node timings, the events and the log tails; per sweep the live table of
@@ -286,7 +286,7 @@ never written into (an error).
 | `history.jsonl` | per turn the `train/`, `val/`, `test/` values, `global_step`, `lr/<optimizer>`, `seconds`, the rules that fired |
 | `architecture.json` | the graph of every report model: the boxes of the architecture drawing with their column and row, the traced shapes and the wires; the board draws it |
 | `steps.jsonl` | per update `step`, `turn`, `loss/<optimizer>`, `lr/<optimizer>` and, under `grad_clip`, `grad_norm/<optimizer>`; `loss_curve` with `x: step` draws it, `rates: true` adds the learning rates below either curve |
-| `data.json` | the shape of the data at every stage of the data block: rows and columns per transform, the sets, the fitted objects, the features and targets, the loaders; `data_pipeline` draws it |
+| `data.json` | the shape of the data at every stage of the data block: rows and columns per transform with the transform's call, the sets, the fitted objects, the features and targets, the loaders; `data_pipeline` draws it |
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |
 | `checkpoints/` | `best.pt`, `last.pt` (by policy); models, optimizers, EMAs, counters, rule states, RNG |
 | `final/state.pt` | always, once the run ends, with the same scope |

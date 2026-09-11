@@ -33,11 +33,11 @@ flow:
   outputs: [history, predictions]
   data: {block: data, params: {source: {uri: /source/kalfa/image_folder, params: {path: data/stl10/unlabeled}}, sets: [
           train, valid, test], transform_pre: [], set_transforms: {train: {set: train, transforms: []}, valid: {set: 
-            valid, transforms: []}, test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {
-            ratios: [1.0, 0.0, 0.0], seed: 7}}, split_outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0}, 
-        frame_refs: {train: train_frame, valid: valid_frame, test: test_frame}, loaders: {train: {uri: 
-            /loader/kalfa/torch, set: train, params: {set: train, size: 256, drop_last: true}}, valid: {uri: 
-            /loader/kalfa/torch, set: valid, params: {set: valid, size: 256, drop_last: true}}, test: {uri: 
+            valid, transforms: []}, test: {set: test, transforms: []}}, transform_notes: [], set_transform_notes: {}, 
+        split: {uri: /split/kalfa/random, params: {ratios: [1.0, 0.0, 0.0], seed: 7}}, split_outputs: {train: train_df_0,
+        valid: valid_df_0, test: test_df_0}, frame_refs: {train: train_frame, valid: valid_frame, test: test_frame}, 
+        loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 256, drop_last: true}}, valid: {
+          uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 256, drop_last: true}}, test: {uri: 
             /loader/kalfa/torch, set: test, params: {set: test, size: 256, drop_last: true}}}, mask: null, frames: {uri: 
           /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
           fields: {image: {preprocessors: [two_views, to_tensor]}}, preprocessors: {simclr_aug: {uri: 

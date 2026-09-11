@@ -24,15 +24,15 @@ flow:
   outputs: [history, predictions]
   data: {block: data, params: {source: {uri: /source/kalfa/text_lines, params: {path: data/shakespeare.txt}}, sets: [
           train, valid, test], transform_pre: [], set_transforms: {train: {set: train, transforms: []}, valid: {set: 
-            valid, transforms: []}, test: {set: test, transforms: []}}, split: {uri: /split/kalfa/random, params: {
-            ratios: [0.98, 0.02, 0.0], seed: 7}}, split_outputs: {train: train_df_0, valid: valid_df_0, test: test_df_0},
-      frame_refs: {train: train_frame, valid: valid_frame, test: test_frame}, loaders: {train: {uri: /loader/kalfa/torch,
-          set: train, params: {set: train, size: 64}}, valid: {uri: /loader/kalfa/torch, set: valid, params: {set: valid,
-            size: 64}}, test: {uri: /loader/kalfa/torch, set: test, params: {set: test, size: 64}}}, mask: null, frames: {
-        uri: /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, 
-          params: {fields: {text: {preprocessors: [tokenizer]}}, preprocessors: {tokenizer: {uri: 
-                /pre/kalfa/char_tokenizer}}, drop: [], keys: {tokenizer: {}}}, inputs: {df: train_df}}, 
-        preprocessors_keys: {tokenizer: {}}, feed: {uri: /feed/kalfa/next_token, params: {seq_len: 128}}}}
+            valid, transforms: []}, test: {set: test, transforms: []}}, transform_notes: [], set_transform_notes: {}, 
+        split: {uri: /split/kalfa/random, params: {ratios: [0.98, 0.02, 0.0], seed: 7}}, split_outputs: {train: 
+          train_df_0, valid: valid_df_0, test: test_df_0}, frame_refs: {train: train_frame, valid: valid_frame, test: 
+          test_frame}, loaders: {train: {uri: /loader/kalfa/torch, set: train, params: {set: train, size: 64}}, valid: {
+            uri: /loader/kalfa/torch, set: valid, params: {set: valid, size: 64}}, test: {uri: /loader/kalfa/torch, set: 
+            test, params: {set: test, size: 64}}}, mask: null, frames: {uri: /lego/kalfa/fit_frames, params: {frames: []},
+        inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {text: {preprocessors: [tokenizer]}}, 
+            preprocessors: {tokenizer: {uri: /pre/kalfa/char_tokenizer}}, drop: [], keys: {tokenizer: {}}}, inputs: {df: 
+            train_df}}, preprocessors_keys: {tokenizer: {}}, feed: {uri: /feed/kalfa/next_token, params: {seq_len: 128}}}}
   models: {block: models, params: {trained_items: [{name: gpt, index: 0, init: null, trainable: true, weights: null}], 
         composite_items: [], ema_items: [], trained_refs: {gpt: gpt}, composite_refs: {}, ema_refs: {}, seed: 7, rng: {
           uri: /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}

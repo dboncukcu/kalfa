@@ -257,6 +257,10 @@ def transforms_of(data, contract, sets):
     return pre, per_set
 
 
+def transform_notes(calls):
+    return [{"lego": call.get("uri"), "with": dict(call.get("params") or {})} for call in calls or []]
+
+
 def rng_of(config, contract):
     if config.get("rng") is not None:
         return call_with_params(config["rng"])
@@ -312,6 +316,8 @@ def prepared_params(directory, contract, sets):
     return {"source": {"uri": contract.wiring["prepared_source"], "params": {"path": path}},
             "transform_pre": [],
             "set_transforms": {name: {"set": name, "transforms": []} for name in sets},
+            "transform_notes": [],
+            "set_transform_notes": {},
             "split": {"uri": contract.wiring["prepared_split"], "params": {"path": path}},
             "frames": {"uri": "/lego/kalfa/const", "params": {"value": []}, "inputs": {}},
             "prep": {"uri": contract.wiring["read_prep"], "params": {"record": path}, "inputs": {}}}
@@ -335,6 +341,9 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None, pr
             "sets": sets,
             "transform_pre": transform_pre,
             "set_transforms": set_transforms,
+            "transform_notes": transform_notes(transform_pre),
+            "set_transform_notes": {name: transform_notes(entry["transforms"]) for name, entry in set_transforms.items()
+                                    if entry["transforms"]},
             "split": split,
             "split_outputs": {name: f"{name}_df_0" for name in sets},
             "frame_refs": {name: f"{name}_frame" for name in sets},

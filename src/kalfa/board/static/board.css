@@ -46,7 +46,8 @@ button { font: inherit; color: inherit; }
 .muted { color: var(--muted); }
 .mono { font-family: var(--mono); font-size: 12px; }
 .num { text-align: right; }
-.wrap { white-space: normal; max-width: 420px; }
+.wrap { white-space: normal; }
+.note { color: var(--ink-2); max-width: 900px; margin: 0 0 12px; }
 .empty { color: var(--muted); margin: 8px 0; }
 .error { color: var(--failed); }
 
@@ -140,6 +141,11 @@ a.small.active { border-color: var(--accent); color: var(--accent); background: 
 
 .table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
 .table th, .table td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; vertical-align: top; }
+.table td.wrap { white-space: normal; overflow-wrap: anywhere; }
+.table.stages { table-layout: fixed; }
+.table.stages col.c-stage { width: 8%; } .table.stages col.c-rows { width: 9%; } .table.stages col.c-columns { width: 8%; }
+.table.stages col.c-call { width: 25%; } .table.stages col.c-names { width: 25%; }
+.table.epochs .barcell { width: 40%; }
 .table th { font-weight: 600; color: var(--ink-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; background: var(--surface-2); }
 .table th.num, .table td.num { text-align: right; }
 .table tbody tr:hover { background: var(--surface-2); }
@@ -152,7 +158,10 @@ a.small.active { border-color: var(--accent); color: var(--accent); background: 
 .table th.sortable:hover { color: var(--accent); }
 .sort { margin-left: 4px; font-size: 9px; }
 .set { font-weight: 600; }
+.sparkcell { width: 140px; }
+.spark { position: relative; width: 120px; }
 .spark svg { width: 120px; height: 24px; display: block; }
+.spark .tooltip { top: 26px; left: 50%; }
 .barcell { width: 240px; }
 .barcell .bar { height: 8px; background: var(--accent); border-radius: 2px; min-width: 2px; opacity: 0.8; }
 ul.plain { margin: 0; padding-left: 18px; }
@@ -165,6 +174,8 @@ ul.plain { margin: 0; padding-left: 18px; }
 .gallery figcaption { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 6px; text-align: center; }
 .lightbox { position: fixed; inset: 0; background: rgba(10, 12, 16, 0.78); display: flex; align-items: center; justify-content: center; z-index: 10; cursor: zoom-out; }
 .lightbox figure { margin: 0; max-width: 92vw; max-height: 92vh; cursor: default; text-align: center; }
+.chart-modal { width: min(94vw, 1400px); cursor: default; margin: 0; }
+.chart-modal .toolbar { margin-bottom: 4px; }
 .lightbox img { max-width: 92vw; max-height: 84vh; background: white; border-radius: 6px; }
 .lightbox pre.viewer { width: min(92vw, 1100px); max-height: 80vh; background: var(--surface); padding: 16px 18px; border-radius: 6px; text-align: left; margin: 0 auto; }
 .lightbox figcaption { color: #e8eaed; margin-top: 10px; font-family: var(--mono); font-size: 12px; display: flex; gap: 8px; justify-content: center; align-items: center; }
@@ -177,6 +188,9 @@ pre.diff .del { color: var(--failed); }
 pre.diff .hunk { color: var(--accent); }
 
 .chart { position: relative; }
+.chart .apexcharts-toolbar { z-index: 3; }
+.chart .apexcharts-menu { background: var(--surface); border-color: var(--line-2); color: var(--ink); }
+.chart .apexcharts-menu-item:hover { background: var(--surface-2); }
 .chart-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
 .chart-title { font-weight: 600; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; }
