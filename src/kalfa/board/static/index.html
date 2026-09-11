@@ -233,6 +233,14 @@
           </div>
         </template>
         <p class="empty" v-else>no architecture.json in the record; runs write it since this version</p>
+        <div class="card" v-if="moduleText">
+          <div class="toolbar">
+            <span class="card-label">module text (plots/architecture_text.txt)</span>
+            <button class="small" @click="showModuleText = !showModuleText">{{ showModuleText ? 'hide' : 'show' }}</button>
+            <a class="small" :href="fileUrl('plots', 'architecture_text.txt')" download="architecture_text.txt">save</a>
+          </div>
+          <pre class="code" v-if="showModuleText">{{ moduleText }}</pre>
+        </div>
       </div>
 
       <div class="panel" v-if="record && tab === 'data'">

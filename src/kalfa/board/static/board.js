@@ -304,7 +304,7 @@ const app = Vue.createApp({
       tree: { root: "", groups: {} }, filter: "", collapsed: {}, refreshed: "",
       current: { path: null, kind: null }, record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
       tab: "overview", logy: false, metricFilter: "", logs: { name: "stdout.txt", lines: [], total: 0 }, describeText: null,
-      texts: {}, modelPick: null,
+      texts: {}, modelPick: null, showModuleText: false,
       sweep: null, selected: [], overlay: {}, diff: null, sortKey: null, sortDesc: false, lightbox: null,
     };
   },
@@ -350,6 +350,7 @@ const app = Vue.createApp({
     },
     tabNames() { return ["overview", "curves", "steps", "model", "data", "plots", "samples", "config", "notes", "events", "logs", "describe"]; },
     architectureModels() { return Object.keys((this.record && this.record.architecture && this.record.architecture.models) || {}); },
+    moduleText() { return this.record && this.record.plots.includes("architecture_text.txt") ? this.texts["architecture_text.txt"] || "reading" : null; },
     currentArchitecture() {
       const models = (this.record && this.record.architecture && this.record.architecture.models) || {};
       const label = this.modelPick && models[this.modelPick] ? this.modelPick : this.architectureModels[0];
@@ -541,7 +542,8 @@ const app = Vue.createApp({
     },
     async loadTexts() {
       const found = {};
-      for (const name of this.textFiles) {
+      const names = this.record ? this.record.plots.filter(name => /\.(txt|md|json|csv)$/i.test(name)) : [];
+      for (const name of names) {
         const response = await fetch(this.fileUrl("plots", name));
         found[name] = response.ok ? await response.text() : "unreadable";
       }
@@ -564,7 +566,7 @@ const app = Vue.createApp({
       await this.loadHistory();
       if (this.tab === "steps") await this.loadSteps();
       if (this.tab === "logs") await this.loadLogs(this.logs.name);
-      if (this.tab === "plots") await this.loadTexts();
+      if (this.tab === "plots" || this.tab === "model") await this.loadTexts();
     },
     async loadHistory() {
       const found = await api("/api/history", { path: this.current.path, offset: this.history.offset });
@@ -581,7 +583,7 @@ const app = Vue.createApp({
     async switchTab(name) {
       this.tab = name;
       if (name === "steps" && !this.steps.lines.length) await this.loadSteps();
-      if (name === "plots") await this.loadTexts();
+      if (name === "plots" || name === "model") await this.loadTexts();
       if (name === "logs") await this.loadLogs(this.record.logs.includes(this.logs.name) ? this.logs.name : (this.record.logs[0] || "stdout.txt"));
       if (name === "describe" && !this.describeText) {
         const found = await api("/api/describe", { path: this.current.path });
