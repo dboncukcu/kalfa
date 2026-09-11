@@ -73,7 +73,7 @@
             <div class="chips">
               <span class="chip" v-if="entry.monitor && entry.monitor_value !== null">{{ entry.monitor }} = {{ fmt(entry.monitor_value) }}</span>
               <span class="chip" v-for="(value, key) in entry.losses" :key="key">{{ key }} = {{ fmt(value) }}</span>
-              <span class="chip muted" v-for="(value, key) in entry.last" :key="'l' + key" v-if="key !== entry.monitor">{{ key }} = {{ fmt(value) }}</span>
+              <span class="chip muted" v-for="[key, value] in Object.entries(entry.last || {}).filter(([name]) => name !== entry.monitor)" :key="'l' + key">{{ key }} = {{ fmt(value) }}</span>
             </div>
           </template>
         </a>
@@ -287,7 +287,7 @@
           <div class="chips">
             <span class="chip" v-if="monitorKey">{{ monitorKey }} = {{ fmt(progressInfo.monitorValue) }}</span>
             <span class="chip" v-for="[key, value] in progressInfo.losses" :key="key">{{ key }} = {{ fmt(value) }} at step {{ progressInfo.step }}</span>
-            <span class="chip" v-for="entry in training" :key="entry.name" v-if="entry.current">{{ entry.name }} minimizes {{ entry.current }}</span>
+            <span class="chip" v-for="entry in training.filter(item => item.current)" :key="entry.name">{{ entry.name }} minimizes {{ entry.current }}</span>
           </div>
         </div>
         <div class="grid charts">
