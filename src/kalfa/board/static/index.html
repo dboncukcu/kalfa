@@ -108,6 +108,7 @@
           <span class="muted" v-else>tick two rows to compare them</span>
         </div>
       </header>
+      <p class="note">Every run and sweep point under the root: the params of its manifest, the best value of the checkpoint monitor with its turn, the last evaluation values, the turns, the time and the device. Sort by a column, filter by name, path or param=value, tick two rows to compare them.</p>
       <div class="card">
         <div class="table-scroll">
           <table class="table runs" v-if="tableRows.length">
@@ -151,6 +152,7 @@
           <span><span class="swatch" :style="{background: '#2f6fdd'}"></span> <a class="link" :href="recordLink(compareData.b.path)">{{ compareData.b.path }}</a> dashed</span>
         </div>
       </header>
+      <p class="note">The history series of both records overlaid, the first solid and the second dashed, one chart per metric with the sets as lines; below, the difference between their resolved.yaml files.</p>
       <p class="empty" v-if="!route.params.a || !route.params.b">open this page from the runs table with two rows ticked, or write ?a=path&b=path</p>
       <p class="empty" v-else-if="!compareData">reading both records</p>
       <p class="empty" v-else-if="compareData.missing">one of the records does not exist</p>
@@ -185,6 +187,7 @@
         </div>
         <div class="progress"><div class="bar" :style="{width: progress + '%'}"></div></div>
       </header>
+      <p class="note" v-if="sweep">The points of the sweep from their manifests and sweep.json: finished ones scored, running ones with the best value so far from their history; every param against the objective, the objective curves of the running or ticked points, and the diff of two ticked points.</p>
       <div v-if="sweep && sweep.best" class="card best">
         <div class="card-label">best so far</div>
         <div class="best-row">
@@ -276,6 +279,7 @@
       </nav>
 
       <div class="panel" v-if="tab === 'monitor'">
+        <p class="note">The record as it runs: the {{ turnLabel }} and batch bars, the checkpoint monitor across the sets, the loss every optimizer minimizes, the batch loss per step, the latest evaluation values and the tail of stdout, refreshed every three seconds while the record runs; a finished record shows its last state.</p>
         <div class="card">
           <div class="title-row">
             <span class="card-label">progress</span>
@@ -330,6 +334,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'overview'">
+        <p class="note">The last {{ turnLabel }} of history.jsonl per series with its kind and the lego behind it (from resolved.yaml), the loss every optimizer minimized and the switches the rules made, the learning rates, the best {{ turnLabel }} by the checkpoint monitor, the checkpoints and the calibrations of the record.</p>
         <div class="grid two">
           <div class="card">
             <div class="card-label">latest turn</div>
@@ -404,6 +409,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'predictions'">
+        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth on a sample of 2,000 rows, the residual histogram and the largest errors over every row, in the original units; the calibration flags are counted on the sample.</p>
         <div class="toolbar" v-if="record.predictions.length">
           <a v-for="name in record.predictions" :key="name" class="small" :class="{active: predictionFile === name}" :href="link({set: name, pair: null})">{{ name }}</a>
           <template v-if="predictionsData && predictionsData.pairs.length > 1">
@@ -440,6 +446,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'prep'">
+        <p class="note">The fitted plan under fitted/preprocessors: every field with its chain and the columns it produces, and what each preprocessor learned on the train set (a scaler's mean and scale per column, an encoder's categories, an imputer's statistic), read from the pickles.</p>
         <p class="empty" v-if="!prepData">reading the fitted preprocessors</p>
         <p class="empty" v-else-if="prepData.missing">no fitted preprocessors in the record</p>
         <template v-else>
@@ -482,6 +489,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'files'">
+        <p class="note">Every file of the record with its size and time; text files open here (the first 400 KB), weights and tables are listed only.</p>
         <div class="grid two">
           <div class="card">
             <div class="card-label">files <span class="muted" v-if="filesData">· {{ filesData.files.length }} files, {{ fmtBytes(filesData.total) }}</span></div>
@@ -504,6 +512,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'timeline'">
+        <p class="note">The event stream of tezgah (events.jsonl): every node from its start to its end on one time axis, indented by block; a node still running is orange, a failed one red.</p>
         <p class="empty" v-if="!eventsData">reading the events</p>
         <p class="empty" v-else-if="!timeline.rows.length">no node event yet</p>
         <div class="card" v-else>
@@ -556,6 +565,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'model'">
+        <p class="note">The graph of every report model from architecture.json, written at the end of the run: one box per node with the layers inside it and the shapes one batch traced, every wire with its width, the input with its feature columns. A box of another model opens that model; hover lists everything a box holds; the module text is the torch repr.</p>
         <template v-if="currentArchitecture">
           <div class="toolbar" v-if="architectureModels.length > 1">
             <a v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" :href="link({model: label})">{{ label }}</a>
@@ -578,6 +588,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'data'">
+        <p class="note">The data block from data.json: the source, every transform with its call and the columns it added or removed (hover), the split, the fit on train (dashed arrows from valid and test: applied, never fitted), the feeds and the loaders; the tables below list the calls and the columns in full.</p>
         <div class="card" v-if="pipeline">
           <diagram :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline"></diagram>
         </div>
@@ -611,6 +622,8 @@
       </div>
 
       <div class="panel" v-if="tab === 'plots' || tab === 'samples'">
+        <p class="note" v-if="tab === 'plots'">The files under plots/, written when training ended or by kalfa plots: click an image for the large view, a text plot opens in a viewer, save downloads the file as it is.</p>
+        <p class="note" v-else>The per {{ turnLabel }} sample images under samples/ written by sample_writer; play walks through the {{ turnLabel }}s, the gallery lists them all.</p>
         <div class="card player" v-if="tab === 'samples' && record.samples.length > 1">
           <div class="toolbar">
             <button class="small" @click="togglePlaying">{{ playing ? 'pause' : 'play' }}</button>
@@ -637,6 +650,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'config'">
+        <p class="note">resolved.yaml, the config as the run read it: includes expanded, aliases resolved to URIs, the command line overrides annotated.</p>
         <div class="card">
           <div class="toolbar"><span class="card-label">resolved.yaml</span><button class="small" @click="copy(record.resolved)">copy</button></div>
           <pre class="code">{{ record.resolved || 'no resolved.yaml' }}</pre>
@@ -644,6 +658,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'notes'">
+        <p class="note">The identity of the record (manifest.json, host.json, device.json, git.json), every node of the run with its time from run.json and the seconds of every {{ turnLabel }} from history.jsonl.</p>
         <div class="grid two">
           <div class="stack">
             <div class="card" v-if="record.manifest">
@@ -699,6 +714,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'events'">
+        <p class="note">The last 60 events of events.jsonl, what tezgah started and finished and how long each node took; the timeline tab draws them all.</p>
         <div class="card">
           <table class="table" v-if="record.events.length">
             <thead><tr><th>time</th><th>kind</th><th>node</th><th class="num">ms</th><th>note</th></tr></thead>
@@ -714,6 +730,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'logs'">
+        <p class="note">The tail of stdout.txt and stderr.txt as the run wrote them (tezgah tees both into the record): the last 300 lines, refreshed while the record runs.</p>
         <div class="toolbar">
           <a v-for="name in record.logs" :key="name" class="small" :class="{active: logName === name}" :href="link({file: name})">{{ name }}</a>
           <span class="muted" v-if="logs.total">last {{ logs.lines.length }} of {{ logs.total }} lines</span>
@@ -723,6 +740,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'describe'">
+        <p class="note">kalfa describe over the record: the same analysis the command prints, read from resolved.yaml under the contract the run was compiled by, computed when the tab opens.</p>
         <div class="card">
           <pre class="code" v-if="describeText">{{ describeText }}</pre>
           <p class="muted" v-else>reading the config under the record's contract</p>
