@@ -52,7 +52,9 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert board.record("../outside") is None and board.file("runs/one/resolved.yaml") is None
     assert board.file("runs/one/plots/loss_curve.png").read_bytes() == b"png" and board.record("nowhere") is None
     assert run["logs"] == ["stdout.txt"] and list(run["architecture"]["models"]) == ["m"]
-    assert board.tail("runs/one", "stdout.txt", 2) == {"lines": ["line two", "line three"], "name": "stdout.txt", "total": 3}
+    assert run["config"] == {"seed": 7}
+    assert board.tail("runs/one", "stdout.txt", 2) == {"lines": ["line two", "line three"], "name": "stdout.txt",
+                                                        "total": 3}
     assert board.tail("runs/one", "stderr.txt") == {"lines": [], "name": "stderr.txt"}
     assert board.tail("runs/one", "resolved.yaml") is None
     assert static_path("index.html").name == "index.html" and static_path("../__init__.py") is None

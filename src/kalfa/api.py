@@ -346,6 +346,7 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
     note.manifest(**{"kind": "run", "name": target.name, "config": [str(path) for path in paths
                                                                     if not isinstance(path, dict)],
                      "params": dict(config.get("params") or {}), "contract": contract.digest(),
+                     "turn": "steps" if (config.get("training") or {}).get("steps") is not None else "epoch",
                      "prepared": str(prepared) if prepared is not None else None, **(identity or {})})
     note.host()
     write_resolved(record, found.surface)

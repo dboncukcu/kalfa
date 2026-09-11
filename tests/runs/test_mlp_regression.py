@@ -41,6 +41,7 @@ def test_record_directory_contents(trained):
     assert config["training"]["turn"] == "/turn/kalfa/alternating"
     history = History.read(record)
     assert [line["turn"] for line in history] == [1, 2, 3]
+    assert json.loads((record / "manifest.json").read_text())["turn"] == "epoch"
     keys = set(history[0])
     assert {"train/loss_mse", "train/loss_huber", "train/loss_mae", "train/loss_logcosh", "train/rmse", "train/mae",
             "val/rmse", "val/mae", "val/loss_mse", "test/rmse", "test/loss_mse", "lr/model", "global_step",

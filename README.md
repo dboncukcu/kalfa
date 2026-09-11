@@ -278,7 +278,7 @@ never written into (an error).
 
 | File | Contents |
 |---|---|
-| `manifest.json` | the identity, written once at the start: `kind` (`run`, `point`, `sweep`, `data`), the name, the config paths, the params, the kalfa version, a hash of the contract, for a point its values and its root, for a prepared run the directory it started from |
+| `manifest.json` | the identity, written once at the start: `kind` (`run`, `point`, `sweep`, `data`), the name, the config paths, the params, the kalfa version, a hash of the contract, `turn` (`epoch` when a turn is one pass over the train loader, `steps` when `training.steps` cuts the turns), for a point its values and its root, for a prepared run the directory it started from |
 | `host.json` | the hostname, the pid and the working directory of the process that wrote the record |
 | `resolved.yaml` | the config with its aliases and `$param$`s resolved; the source of every overridden value in a comment; runs again on its own |
 | `contract.yaml` | the contract the run was compiled by (the wiring and the flow blocks); `predict`, `generate` and `resume` read it back |

@@ -101,6 +101,8 @@ button { font: inherit; color: inherit; }
 .badge.finished { color: #0d6b4a; background: #e1f5ec; border-color: #a9e2c8; }
 .badge.failed { color: #9a2a25; background: #fce6e4; border-color: #f2b5b1; }
 .badge.pending { color: var(--muted); }
+.badge.loss { color: #9a2a25; background: #fce6e4; border-color: #f2b5b1; }
+.badge.metric { color: #1f4f9c; background: #e8f0fd; border-color: #b9cff5; }
 @media (prefers-color-scheme: dark) {
   .badge.running { color: #f2c66d; background: #3a2e12; border-color: #5c4816; }
   .badge.finished { color: #7fdcb5; background: #12362a; border-color: #1f5b45; }

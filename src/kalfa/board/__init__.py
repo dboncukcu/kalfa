@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from kalfa.record import Record
+from kalfa.record import Record, read_resolved
 from kalfa.std.common.files import read_lines
 from kalfa.std.common.history import History
 from kalfa.std.common.log import logger_for
@@ -74,6 +74,7 @@ class Board:
                 "run": record.read_json("run.json"), "architecture": record.read_json("architecture.json"),
                 "plots": plots, "samples": samples,
                 "resolved": resolved.read_text() if resolved.exists() else None,
+                "config": read_resolved(path) if resolved.exists() else None,
                 "events": read_lines(path / "events.jsonl")[-60:],
                 "logs": [name for name in ("stdout.txt", "stderr.txt") if (path / name).is_file()]}
 

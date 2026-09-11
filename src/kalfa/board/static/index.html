@@ -153,10 +153,12 @@
           <div class="card">
             <div class="card-label">latest turn</div>
             <table class="table" v-if="latest.length">
-              <thead><tr><th>metric</th><th class="num">last</th><th class="num">min</th><th class="num">max</th><th>trend</th></tr></thead>
+              <thead><tr><th>series</th><th>kind</th><th>lego</th><th class="num">last</th><th class="num">min</th><th class="num">max</th><th>trend</th></tr></thead>
               <tbody>
                 <tr v-for="row in latest" :key="row.key">
                   <td><span class="set" :style="{color: setColor(row.set)}">{{ row.set }}</span>/{{ row.name }}</td>
+                  <td><span class="badge" :class="row.kind" v-if="row.kind">{{ row.kind }}</span></td>
+                  <td class="mono" :title="row.uri ? row.uri + (Object.keys(row.params).length ? '  ' + paramsText(row.params) : '') + (row.output ? '  output ' + row.output : '') : ''">{{ shortUri(row.uri) }}<span class="muted" v-if="row.output"> → {{ row.output }}</span></td>
                   <td class="num mono">{{ fmt(row.last) }}</td>
                   <td class="num mono">{{ fmt(row.min) }} <span class="muted">@{{ row.minTurn }}</span></td>
                   <td class="num mono">{{ fmt(row.max) }} <span class="muted">@{{ row.maxTurn }}</span></td>

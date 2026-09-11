@@ -4,7 +4,13 @@ from pathlib import Path
 import numpy
 import pandas
 
+from kalfa.std.common.files import read_json
 from kalfa.std.pre.base import TableFrame
+
+
+def turn_word(record):
+    manifest = read_json(Path(record) / "manifest.json") if record is not None else None
+    return "epoch" if (manifest or {}).get("turn") == "epoch" else "turn"
 
 
 def true_column(pred, targets):

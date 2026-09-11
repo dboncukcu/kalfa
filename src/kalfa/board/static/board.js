@@ -425,13 +425,17 @@ const app = Vue.createApp({
         const { set, name } = splitKey(key);
         let low = points[0], high = points[0];
         for (const point of points) { if (point[1] < low[1]) low = point; if (point[1] > high[1]) high = point; }
-        return { key, set, name, last: points[points.length - 1][1], min: low[1], minTurn: low[0], max: high[1], maxTurn: high[0], tail: points.slice(-60) };
+        const definition = this.definitionOf(name);
+        return { key, set, name, ...definition, last: points[points.length - 1][1], min: low[1], minTurn: low[0], max: high[1], maxTurn: high[0], tail: points.slice(-60) };
       });
     },
     rulesFired() {
       return this.history.lines.filter(line => (line.rules || []).length).map(line => `${this.turnLabel} ${line.turn}: ${line.rules.join(", ")}`);
     },
     turnLabel() {
+      const noted = this.record && this.record.manifest && this.record.manifest.turn;
+      if (noted === "epoch") return "epoch";
+      if (noted === "steps") return "turn";
       const lines = this.history.lines;
       const loaders = this.record && this.record.data && this.record.data.loaders;
       const batches = loaders && loaders.train && loaders.train.batches;
@@ -528,16 +532,19 @@ const app = Vue.createApp({
       const boxes = [], arrows = [];
       const stages = data.stages;
       let column = 0, previous = "source";
-      boxes.push({ name: "source", kind: "source", column, row: 0, lines: ["source", `${count(stages[0].rows)} rows`, `${stages[0].columns} columns`] });
+      const source = (this.record.config && this.record.config.data && this.record.config.data.source) || {};
+      const sourceParams = typeof source === "object" ? source.params || {} : {};
+      boxes.push({ name: "source", kind: "source", column, row: 0, note: source.uri ? [`uri ${source.uri}`, ...Object.entries(sourceParams).map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`)] : [],
+                   lines: [source.uri ? shortUri(source.uri) : "source", ...(sourceParams.path ? [String(sourceParams.path).split("/").pop()] : []), `${count(stages[0].rows)} rows · ${stages[0].columns} columns`] });
       for (const stage of stages.slice(1)) {
         column += 1;
         const added = stage.added || [], removed = stage.removed || [];
         const change = [added.length ? `+${added.length}` : "", removed.length ? `−${removed.length}` : ""].filter(Boolean).join(" ");
-        const call = stage.call ? `${shortUri(stage.call.uri)} ${paramsText(stage.call.params)}`.trim() : "";
-        const note = [...(stage.call ? [`uri ${stage.call.uri}`, ...Object.entries(stage.call.params || {}).map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`), ""] : []),
+        const params = stage.call ? paramsText(stage.call.params) : "";
+        const note = [`stage ${stage.stage}`, ...(stage.call ? [`uri ${stage.call.uri}`, ...Object.entries(stage.call.params || {}).map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`)] : []), "",
                       ...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)];
         boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note,
-                     lines: [stage.stage, ...(call ? [call] : []), `${count(stage.rows)} rows`, `${stage.columns} columns${change ? "  " + change : ""}`] });
+                     lines: [stage.call ? shortUri(stage.call.uri) : stage.stage, ...(params ? [params] : []), `${count(stage.rows)} rows · ${stage.columns} columns${change ? "  " + change : ""}`] });
         arrows.push([previous, stage.stage, "", false]);
         previous = stage.stage;
       }
@@ -628,6 +635,17 @@ const app = Vue.createApp({
   methods: {
     fmt, count, ms, ago, clock, setColor, shortUri, paramsText,
     stateOf(entry) { return (entry.status && entry.status.state) || "pending"; },
+    definitionOf(name) {
+      const config = (this.record && this.record.config) || {};
+      const head = name.split("/")[0];
+      for (const kind of ["loss", "metric"]) {
+        const table = config[kind === "loss" ? "losses" : "metrics"] || {};
+        const entry = table[head];
+        if (entry && typeof entry === "object") return { kind, uri: entry.uri || "", params: entry.params || {}, output: entry.output || "", target: entry.target || "" };
+      }
+      if (config.training && config.training.loss === head) return { kind: "loss", uri: "", params: {}, output: "", target: "" };
+      return { kind: "", uri: "", params: {}, output: "", target: "" };
+    },
     text(value) { return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value); },
     entries(mapping, skip) { return Object.entries(mapping || {}).filter(([key]) => !(skip || []).includes(key)); },
     fileUrl(kind, name) { return `/file?path=${encodeURIComponent(`${this.path}/${kind}/${name}`)}`; },
