@@ -40,11 +40,61 @@
   </aside>
 
   <main class="content">
-    <section v-if="!path" class="welcome">
-      <h2>Pick a record</h2>
-      <p>Runs, sweep points and sweeps under the root are listed on the left. The address bar carries the record,
-        the tab and the open plot, so a link shares exactly this view and a reload keeps it. A running record is
-        followed every few seconds.</p>
+    <section v-if="!path" class="view home">
+      <header class="head">
+        <div class="title-row"><h2 class="title">Live</h2><span class="muted">{{ liveBoard.live.length }} running · refreshed {{ refreshed || 'never' }}</span></div>
+      </header>
+      <div class="cards" v-if="liveBoard.live.length">
+        <a class="card live" v-for="entry in liveBoard.live" :key="entry.path" :href="monitorLink(entry.path)">
+          <div class="title-row">
+            <span class="dot" :class="stateOf(entry)"></span>
+            <b>{{ entry.name }}</b>
+            <span class="badge kind">{{ entry.kind }}</span>
+            <span class="path muted">{{ entry.path }}</span>
+          </div>
+          <template v-if="entry.kind === 'sweep'">
+            <div class="progress"><div class="bar" :style="{width: (100 * entry.finished / (entry.total || 1)) + '%'}"></div></div>
+            <div class="meta-row">
+              <span>{{ entry.finished }} of {{ entry.total }} points finished</span>
+              <span>{{ entry.running }} running</span>
+              <span v-if="entry.best">best {{ entry.objective.monitor }} {{ fmt(entry.best.objective.value) }} (point {{ entry.best.id }})</span>
+            </div>
+          </template>
+          <template v-else>
+            <div class="progress"><div class="bar" :style="{width: (entry.turns_total ? Math.min(100, 100 * entry.turn / entry.turns_total) : 0) + '%'}"></div></div>
+            <div class="meta-row">
+              <span>{{ entry.turn }}<template v-if="entry.turns_total"> of {{ entry.turns_total }}</template> turns</span>
+              <span v-if="entry.step_in_turn !== null && entry.steps_per_turn">step {{ Math.max(0, entry.step_in_turn) }} of {{ entry.steps_per_turn }}</span>
+              <span v-if="entry.eta">about {{ ms(entry.eta * 1000) }} left</span>
+              <span v-if="entry.started">started {{ ago(entry.started) }}</span>
+              <span v-if="entry.status.last_seen">seen {{ ago(entry.status.last_seen) }}</span>
+            </div>
+            <div class="chips">
+              <span class="chip" v-if="entry.monitor && entry.monitor_value !== null">{{ entry.monitor }} = {{ fmt(entry.monitor_value) }}</span>
+              <span class="chip" v-for="(value, key) in entry.losses" :key="key">{{ key }} = {{ fmt(value) }}</span>
+              <span class="chip muted" v-for="(value, key) in entry.last" :key="'l' + key" v-if="key !== entry.monitor">{{ key }} = {{ fmt(value) }}</span>
+            </div>
+          </template>
+        </a>
+      </div>
+      <p class="empty" v-else>nothing is running under the root right now</p>
+      <div class="card" v-if="liveBoard.recent.length">
+        <div class="card-label">recent</div>
+        <table class="table">
+          <thead><tr><th>record</th><th>kind</th><th>state</th><th>last seen</th><th></th></tr></thead>
+          <tbody>
+            <tr v-for="entry in liveBoard.recent" :key="entry.path">
+              <td><a class="link" :href="recordLink(entry.path)">{{ entry.name }}</a> <span class="muted mono">{{ entry.path }}</span></td>
+              <td><span class="badge kind">{{ entry.kind }}</span></td>
+              <td><span class="badge" :class="stateOf(entry)">{{ stateOf(entry) }}</span></td>
+              <td class="muted">{{ entry.status.last_seen ? ago(entry.status.last_seen) : '' }}</td>
+              <td><template v-if="entry.kind === 'sweep'">{{ entry.finished }} of {{ entry.total }} points<template v-if="entry.best"> · best {{ fmt(entry.best.objective.value) }}</template></template></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">The address bar carries the record, the tab and the open plot, so a link shares exactly one view and a reload
+        keeps it. A running record opens on its monitor tab and is followed every few seconds.</p>
     </section>
 
     <section v-else-if="record && isSweep" class="view">
@@ -102,7 +152,7 @@
         <p class="empty" v-if="!sweep.points.length">no point has started yet</p>
       </div>
       <div class="card" v-if="overlayLines.length">
-        <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of the ticked points</div>
+        <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of {{ selected.length ? 'the ticked points' : 'the running points' }}</div>
         <chart :lines="overlayLines" xlabel="turn" :ylabel="sweep.objective.monitor" :logy="logy" :expand="link({chart: 'overlay'})"></chart>
         <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
       </div>
@@ -147,6 +197,59 @@
           {{ name }}<span class="tab-count" v-if="tabCount(name)">{{ tabCount(name) }}</span>
         </a>
       </nav>
+
+      <div class="panel" v-if="tab === 'monitor'">
+        <div class="card">
+          <div class="title-row">
+            <span class="card-label">progress</span>
+            <span class="badge" :class="state">{{ state }}</span>
+            <span class="muted">{{ progressInfo.done }}<template v-if="progressInfo.plan"> of {{ progressInfo.plan }}</template> {{ turnLabel }}s<template v-if="progressInfo.inTurn !== null && progressInfo.perTurn"> · step {{ Math.max(0, progressInfo.inTurn) }} of {{ progressInfo.perTurn }} in this {{ turnLabel }}</template><template v-if="progressInfo.eta"> · about {{ ms(progressInfo.eta * 1000) }} left</template><template v-if="progressInfo.mean"> · {{ ms(progressInfo.mean * 1000) }} per {{ turnLabel }}</template><template v-if="elapsed"> · {{ elapsed }}</template></span>
+          </div>
+          <div class="progress wide"><div class="bar" :style="{width: progressInfo.share + '%'}"></div></div>
+          <div class="chips">
+            <span class="chip" v-if="monitorKey">{{ monitorKey }} = {{ fmt(progressInfo.monitorValue) }}</span>
+            <span class="chip" v-for="[key, value] in progressInfo.losses" :key="key">{{ key }} = {{ fmt(value) }} at step {{ progressInfo.step }}</span>
+            <span class="chip" v-for="entry in training" :key="entry.name" v-if="entry.current">{{ entry.name }} minimizes {{ entry.current }}</span>
+          </div>
+        </div>
+        <div class="grid charts">
+          <div class="card" v-if="monitorChart">
+            <chart :lines="monitorChart.lines" :title="monitorChart.name + ' (checkpoint monitor)'" :xlabel="turnLabel" :ylabel="monitorChart.name" :logy="logy" :marks="ruleMarks" :expand="link({tab: 'curves', chart: monitorChart.name})"></chart>
+          </div>
+          <div class="card" v-if="activeLossChart && (!monitorChart || activeLossChart.name !== monitorChart.name)">
+            <chart :lines="activeLossChart.lines" :title="activeLossChart.name + ' (minimized)'" :xlabel="turnLabel" :ylabel="activeLossChart.name" :logy="logy" :marks="ruleMarks" :expand="link({tab: 'curves', chart: activeLossChart.name})"></chart>
+          </div>
+          <div class="card" v-for="entry in stepCharts.filter(item => item.name.startsWith('loss/'))" :key="entry.name">
+            <chart :lines="entry.lines" :title="entry.name + ' per step'" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :expand="link({tab: 'steps', chart: entry.name})"></chart>
+          </div>
+        </div>
+        <p class="empty" v-if="!monitorChart && !activeLossChart && !stepCharts.length">nothing recorded yet, the first {{ turnLabel }} is running</p>
+        <div class="grid two">
+          <div class="card" v-if="latest.length">
+            <div class="card-label">latest {{ turnLabel }}</div>
+            <table class="table">
+              <thead><tr><th>series</th><th class="num">last</th><th class="num">best</th></tr></thead>
+              <tbody>
+                <tr v-for="row in latest.filter(item => item.set !== 'train')" :key="row.key">
+                  <td><span class="set" :style="{color: setColor(row.set)}">{{ row.set }}</span>/{{ row.name }} <span class="badge" :class="row.kind" v-if="row.kind">{{ row.kind }}</span></td>
+                  <td class="num mono">{{ fmt(row.last) }}</td>
+                  <td class="num mono">{{ fmt(row.min) }} <span class="muted">@{{ row.minTurn }}</span> / {{ fmt(row.max) }} <span class="muted">@{{ row.maxTurn }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="stack">
+            <div class="card" v-if="rulesFired.length">
+              <div class="card-label">rules fired</div>
+              <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
+            </div>
+            <div class="card" v-if="logs.lines.length">
+              <div class="toolbar"><span class="card-label">{{ logs.name }}</span><a class="small" :href="link({tab: 'logs'})">all</a></div>
+              <pre class="code log small">{{ logs.lines.slice(-14).join('\n') }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="panel" v-if="tab === 'overview'">
         <div class="grid two">

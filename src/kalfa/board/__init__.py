@@ -1,12 +1,13 @@
 import difflib
 import json
+import math
 import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from kalfa.record import Record, read_resolved
-from kalfa.std.common.files import read_lines
+from kalfa.std.common.files import read_json, read_lines
 from kalfa.std.common.history import History
 from kalfa.std.common.log import logger_for
 
@@ -16,6 +17,40 @@ logger = logger_for("board")
 
 def relative_to(root, path):
     return str(Path(path).resolve().relative_to(root))
+
+
+def last_line(path):
+    if not path.is_file():
+        return None
+    with open(path, "rb") as stream:
+        stream.seek(0, 2)
+        size = stream.tell()
+        stream.seek(max(0, size - 8192))
+        tail = stream.read().decode("utf-8", errors="replace")
+    for text in reversed(tail.splitlines()):
+        if text.strip():
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                continue
+    return None
+
+
+def turns_planned(training):
+    if training.get("steps") is not None:
+        steps = training.get("steps") or {}
+        total, turn = steps.get("total"), steps.get("turn")
+        counted = isinstance(total, (int, float)) and isinstance(turn, (int, float)) and turn
+        return math.ceil(total / turn) if counted else None
+    epochs = training.get("epochs")
+    return int(epochs) if isinstance(epochs, (int, float)) else None
+
+
+def monitor_key(training):
+    checkpoint = training.get("checkpoint")
+    if isinstance(checkpoint, dict):
+        return (checkpoint.get("params") or {}).get("monitor")
+    return None
 
 
 def static_path(name):
@@ -77,6 +112,51 @@ class Board:
                 "config": read_resolved(path) if resolved.exists() else None,
                 "events": read_lines(path / "events.jsonl")[-60:],
                 "logs": [name for name in ("stdout.txt", "stderr.txt") if (path / name).is_file()]}
+
+    def progress(self, path):
+        config = read_resolved(path) if (path / "resolved.yaml").exists() else {}
+        training = (config or {}).get("training") or {}
+        history = History.read(path)
+        last = history[-1] if len(history) else {}
+        seconds = [line["seconds"] for line in history if isinstance(line.get("seconds"), (int, float))]
+        planned = turns_planned(training)
+        remaining = planned - len(history) if planned is not None else None
+        eta = sum(seconds) / len(seconds) * remaining if seconds and remaining is not None and remaining > 0 else None
+        step = last_line(path / "steps.jsonl") or {}
+        report = read_json(path / "data.json") or {}
+        batches = ((report.get("loaders") or {}).get("train") or {}).get("batches")
+        monitor = monitor_key(training)
+        shown = {key: value for key, value in last.items()
+                 if key.startswith(("val/", "test/")) and isinstance(value, (int, float)) and "/total" not in key}
+        current = step.get("step")
+        return {"turn": len(history), "turns_total": planned, "eta": eta, "monitor": monitor,
+                "monitor_value": last.get(monitor) if monitor else None, "step": current,
+                "step_in_turn": current - last.get("global_step", 0) if current is not None else None,
+                "steps_per_turn": batches,
+                "losses": {key: value for key, value in step.items() if key.startswith("loss/")},
+                "last": dict(list(shown.items())[:8])}
+
+    def live(self):
+        live, recent = [], []
+        for entry in self.records():
+            path = self.resolve(entry["path"])
+            if entry["kind"] == "sweep":
+                sweep = self.sweep(entry["path"])
+                states = [point["status"]["state"] for point in sweep["points"]]
+                active = any(state in ("running", "pending") for state in states)
+                total = sweep["manifest"].get("total") or len(states)
+                note = {**entry, "status": {"state": "running" if active else entry["status"]["state"],
+                                            "last_seen": entry["status"]["last_seen"]},
+                        "finished": states.count("finished"), "running": states.count("running"), "total": total,
+                        "objective": sweep["objective"], "best": sweep["best"]}
+                (live if active else recent).append(note)
+                continue
+            if entry["status"]["state"] in ("running", "pending"):
+                live.append({**entry, **self.progress(path)})
+            else:
+                recent.append(entry)
+        recent.sort(key=lambda item: item["status"].get("last_seen") or "", reverse=True)
+        return {"live": live, "recent": recent[:12]}
 
     def lines(self, relative, name, offset=0):
         path = self.resolve(relative)
@@ -195,6 +275,8 @@ def handler_for(board):
                 self.send_file(static_path(url.path[len("/static/"):]))
             elif url.path == "/api/tree":
                 self.send_json(board.tree())
+            elif url.path == "/api/live":
+                self.send_json(board.live())
             elif url.path == "/api/record":
                 self.send_json(board.record(path))
             elif url.path == "/api/history":

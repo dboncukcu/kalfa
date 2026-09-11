@@ -55,6 +55,13 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert run["config"] == {"seed": 7}
     assert board.tail("runs/one", "stdout.txt", 2) == {"lines": ["line two", "line three"], "name": "stdout.txt",
                                                         "total": 3}
+    live = board.live()
+    assert [entry["path"] for entry in live["live"]] == ["runs/one", "sweeps/grid", "sweeps/grid/0000"]
+    one = live["live"][0]
+    assert one["turn"] == 2 and one["step"] == 1 and one["step_in_turn"] == 1 - 6 and one["last"] == {"val/rmse": 1.5}
+    grid = live["live"][1]
+    assert grid["finished"] == 1 and grid["running"] == 1 and grid["total"] == 2 and grid["best"]["id"] == 1
+    assert [entry["path"] for entry in live["recent"]] == ["sweeps/grid/0001"]
     assert board.tail("runs/one", "stderr.txt") == {"lines": [], "name": "stderr.txt"}
     assert board.tail("runs/one", "resolved.yaml") is None
     assert static_path("index.html").name == "index.html" and static_path("../__init__.py") is None
@@ -75,6 +82,8 @@ def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
         assert tail["lines"] == ["line three"]
         tree = json.loads(urllib.request.urlopen(f"{base}/api/tree").read())
         assert "runs" in tree["groups"]
+        live = json.loads(urllib.request.urlopen(f"{base}/api/live").read())
+        assert live["live"][0]["path"] == "runs/one"
         history = json.loads(urllib.request.urlopen(f"{base}/api/history?path=runs/one&offset=1").read())
         assert history["offset"] == 2 and len(history["lines"]) == 1
         image = urllib.request.urlopen(f"{base}/file?path=runs/one/plots/loss_curve.png")

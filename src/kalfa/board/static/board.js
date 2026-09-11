@@ -8,7 +8,7 @@ const KIND_NAMES = { input: "input wire", torch: "torch layer", lego: "kalfa lay
                      loss: "loss", optimizer: "optimizer", source: "source", transform: "transform", split: "split",
                      frames: "frame transforms", fit: "fit on train", feed: "feed", loaders: "loaders" };
 const SET_ORDER = ["train", "valid", "test"];
-const TABS = ["overview", "curves", "steps", "model", "data", "plots", "samples", "config", "notes", "events", "logs", "describe"];
+const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "plots", "samples", "config", "notes", "events", "logs", "describe"];
 const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
 const TEXT = /\.(txt|md|json|csv|yaml|yml)$/i;
 
@@ -359,14 +359,17 @@ const app = Vue.createApp({
       tree: { root: "", groups: {} }, filter: "", collapsed: {}, refreshed: "",
       record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
       logs: { name: "", lines: [], total: 0 }, texts: {}, describeText: null, showModuleText: false,
-      sweep: null, overlay: {}, diff: null, modalHeight: 520,
+      sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] },
     };
   },
   computed: {
     path() { return this.route.path; },
     isSweep() { return !!(this.record && this.record.manifest && this.record.manifest.kind === "sweep"); },
     kind() { return (this.record && this.record.manifest && this.record.manifest.kind) || "run"; },
-    tab() { return TABS.includes(this.route.params.tab) ? this.route.params.tab : "overview"; },
+    tab() {
+      if (TABS.includes(this.route.params.tab)) return this.route.params.tab;
+      return this.record && ["running", "pending"].includes(this.state) ? "monitor" : "overview";
+    },
     item() { return this.route.params.item || null; },
     logy() { return this.route.params.log === "1"; },
     metricFilter() { return this.route.params.q || ""; },
@@ -375,6 +378,11 @@ const app = Vue.createApp({
       return names.includes(this.route.params.file) ? this.route.params.file : (names[0] || "");
     },
     selected() { return this.route.params.pick ? this.route.params.pick.split(",").filter(Boolean) : []; },
+    overlayPaths() {
+      if (this.selected.length) return this.selected;
+      if (!this.sweep) return [];
+      return this.sweep.points.filter(point => this.stateOf(point) === "running").slice(0, 8).map(point => point.path);
+    },
     sortKey() { return this.route.params.sort || null; },
     sortDesc() { return this.route.params.desc === "1"; },
     groups() {
@@ -498,6 +506,47 @@ const app = Vue.createApp({
       });
     },
     ruleMarks() { return this.history.lines.filter(line => (line.rules || []).length).map(line => line.turn); },
+    plan() {
+      const training = (this.record && this.record.config && this.record.config.training) || {};
+      if (training.steps && typeof training.steps === "object") {
+        const total = training.steps.total, per = training.steps.turn;
+        return typeof total === "number" && typeof per === "number" && per ? Math.ceil(total / per) : null;
+      }
+      return typeof training.epochs === "number" ? training.epochs : null;
+    },
+    monitorKey() {
+      const training = (this.record && this.record.config && this.record.config.training) || {};
+      const checkpoint = training.checkpoint;
+      return checkpoint && typeof checkpoint === "object" && checkpoint.params ? checkpoint.params.monitor || "" : "";
+    },
+    progressInfo() {
+      const lines = this.history.lines;
+      const done = lines.length;
+      const timed = lines.filter(line => typeof line.seconds === "number");
+      const mean = timed.length ? timed.reduce((sum, line) => sum + line.seconds, 0) / timed.length : null;
+      const remaining = this.plan !== null ? Math.max(0, this.plan - done) : null;
+      const eta = mean !== null && remaining !== null ? mean * remaining : null;
+      const last = lines.length ? lines[lines.length - 1] : null;
+      const step = this.steps.lines.length ? this.steps.lines[this.steps.lines.length - 1] : null;
+      const loaders = this.record && this.record.data && this.record.data.loaders;
+      const perTurn = loaders && loaders.train ? loaders.train.batches : null;
+      const inTurn = step && last ? step.step - (last.global_step || 0) : (step ? step.step : null);
+      const share = this.plan ? Math.min(100, 100 * (done + (perTurn && inTurn !== null && inTurn > 0 ? Math.min(inTurn / perTurn, 1) : 0)) / this.plan) : 0;
+      return { done, plan: this.plan, eta, mean, share, step: step ? step.step : null, inTurn, perTurn,
+               losses: step ? Object.entries(step).filter(([key, value]) => key.startsWith("loss/") && typeof value === "number") : [],
+               monitorValue: last && this.monitorKey ? last[this.monitorKey] : null };
+    },
+    monitorChart() {
+      if (!this.monitorKey) return null;
+      const { name } = splitKey(this.monitorKey);
+      return this.metricCharts.find(entry => entry.name === name) || null;
+    },
+    activeLossChart() {
+      const names = Object.keys(this.minimized);
+      const current = names.length ? this.minimized[names[0]][this.minimized[names[0]].length - 1][1] : null;
+      if (!current) return null;
+      return this.metricCharts.find(entry => entry.name === current) || null;
+    },
     epochs() {
       const rows = this.history.lines.map(line => ({ turn: line.turn, seconds: typeof line.seconds === "number" ? line.seconds : null, step: line.global_step }));
       const timed = rows.filter(row => row.seconds !== null);
@@ -648,7 +697,7 @@ const app = Vue.createApp({
     overlayLines() {
       const monitor = this.sweep && this.sweep.objective.monitor;
       if (!monitor) return [];
-      return this.selected.filter(path => this.overlay[path]).map((path, index) => ({
+      return this.overlayPaths.filter(path => this.overlay[path]).map((path, index) => ({
         name: path.split("/").pop(), color: PALETTE[index % PALETTE.length],
         points: this.overlay[path].filter(line => typeof line[monitor] === "number").map(line => [line.turn, line[monitor]]) }));
     },
@@ -657,7 +706,7 @@ const app = Vue.createApp({
     path: { immediate: true, handler() { this.enterRecord(); } },
     tab: { immediate: true, handler() { this.enterTab(); } },
     item() { this.enterItem(); },
-    selected() { this.loadOverlay(); },
+    overlayPaths() { this.loadOverlay(); },
     logName() { if (this.tab === "logs") this.loadLogs(); },
   },
   methods: {
@@ -717,10 +766,16 @@ const app = Vue.createApp({
       return "";
     },
     toggleGroup(name) { this.collapsed = { ...this.collapsed, [name]: !this.collapsed[name] }; },
+    async loadLive() {
+      const found = await api("/api/live");
+      if (found) this.liveBoard = found;
+    },
+    monitorLink(path) { return buildHash(path, { tab: "monitor" }); },
     async loadTree() {
       const tree = await api("/api/tree");
       if (tree) this.tree = tree;
       this.refreshed = new Date().toLocaleTimeString();
+      if (!this.path) await this.loadLive();
       if (!this.record || this.isSweep) return;
       const entry = Object.values(this.tree.groups).flat().find(item => item.path === this.path);
       if (entry && this.stateOf(entry) !== this.state) await this.loadRecord();
@@ -779,8 +834,8 @@ const app = Vue.createApp({
     },
     async enterTab() {
       if (!this.record || this.isSweep) return;
-      if (this.tab === "steps" && !this.steps.lines.length) await this.loadSteps();
-      if (this.tab === "logs") await this.loadLogs();
+      if ((this.tab === "steps" || this.tab === "monitor") && !this.steps.lines.length) await this.loadSteps();
+      if (this.tab === "logs" || this.tab === "monitor") await this.loadLogs();
       if (this.tab === "plots" || this.tab === "samples" || this.tab === "model") await this.loadTexts();
       if (this.tab === "describe") await this.loadDescribe();
       await this.enterItem();
@@ -797,7 +852,7 @@ const app = Vue.createApp({
       if (!this.isSweep) return;
       const path = this.path;
       const found = {};
-      for (const point of this.selected) {
+      for (const point of this.overlayPaths) {
         const history = await api("/api/history", { path: point });
         if (history) found[point] = history.lines;
       }
@@ -841,17 +896,19 @@ const app = Vue.createApp({
       try { await navigator.clipboard.writeText(text || ""); } catch (error) { console.warn("clipboard unavailable", error); }
     },
     async tick() {
-      if (!this.path || !this.record) return;
+      if (!this.path) { await this.loadLive(); return; }
+      if (!this.record) return;
       if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
       if (!["running", "pending"].includes(this.state)) return;
       await this.loadRecord();
-      if (this.tab === "steps") await this.loadSteps();
-      if (this.tab === "logs") await this.loadLogs();
+      if (this.tab === "steps" || this.tab === "monitor") await this.loadSteps();
+      if (this.tab === "logs" || this.tab === "monitor") await this.loadLogs();
     },
   },
   mounted() {
     this.modalHeight = Math.max(360, Math.round(window.innerHeight * 0.72));
     this.loadTree();
+    this.loadLive();
     window.addEventListener("hashchange", () => this.onHash());
     setInterval(() => this.tick(), 3000);
     setInterval(() => this.loadTree(), 10000);

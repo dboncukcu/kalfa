@@ -109,6 +109,12 @@ button { font: inherit; color: inherit; }
   .badge.failed { color: #f2a19c; background: #3e1c1a; border-color: #6a2b27; }
 }
 .progress { height: 5px; background: var(--line); border-radius: 3px; margin-top: 10px; overflow: hidden; max-width: 520px; }
+.progress.wide { max-width: none; height: 7px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.card.live { display: block; color: inherit; text-decoration: none; margin: 0; }
+.card.live:hover { border-color: var(--accent); }
+.card.live .chips { margin-top: 8px; }
+pre.code.small { max-height: 220px; font-size: 11px; }
 .progress .bar { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s; }
 
 .tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); margin: 10px 0 16px; }
