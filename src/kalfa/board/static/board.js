@@ -262,56 +262,79 @@ const Spark = {
     </div>`,
 };
 
+function portSpread(count, low, high) {
+  if (count <= 1) return [(low + high) / 2];
+  return Array.from({ length: count }, (_, position) => low + (high - low) * (position + 1) / (count + 1));
+}
+
 const Diagram = {
-  props: { boxes: { type: Array, default: () => [] }, arrows: { type: Array, default: () => [] }, title: String },
+  props: { boxes: { type: Array, default: () => [] }, arrows: { type: Array, default: () => [] }, widths: { type: Object, default: () => ({}) }, title: String },
   data() { return { hover: null, marker: `arrow-${Math.random().toString(36).slice(2, 8)}` }; },
   computed: {
     layout() {
-      const CHAR = 6.7, LINE = 15, PAD_X = 14, PAD_Y = 10, GAP_X = 72, GAP_Y = 24, EDGE = 20;
+      const CHAR = 6.7, LINE = 15, PAD_X = 14, PAD_Y = 10, GAP_X = 84, GAP_Y = 22, EDGE = 20;
       const columns = {};
       for (const box of this.boxes) (columns[box.column] = columns[box.column] || []).push(box);
       const indices = Object.keys(columns).map(Number).sort((a, b) => a - b);
       if (!indices.length) return { boxes: [], edges: [], width: 200, height: 60 };
-      const widths = {}, heights = {};
+      const widths = {};
       for (const index of indices) {
-        const items = columns[index];
-        const chars = Math.max(4, ...items.flatMap(box => box.lines.map(line => Math.min(line.length, 46))));
+        const chars = Math.max(4, ...columns[index].flatMap(box => box.lines.map(line => Math.min(line.length, 46))));
         widths[index] = Math.min(340, Math.max(96, chars * CHAR + 2 * PAD_X));
-        heights[index] = Math.max(...items.map(box => box.lines.length)) * LINE + 2 * PAD_Y;
       }
-      const height = Math.max(...Object.values(heights));
-      const pitch = height + GAP_Y;
-      const rows = Math.max(...indices.map(index => columns[index].length));
+      const heightOf = box => box.lines.length * LINE + 2 * PAD_Y;
+      const stacks = {};
+      for (const index of indices) stacks[index] = columns[index].reduce((sum, box) => sum + heightOf(box), 0) + GAP_Y * (columns[index].length - 1);
+      const tallest = Math.max(...Object.values(stacks));
       const lefts = {};
       let cursor = EDGE;
       for (const index of indices) { lefts[index] = cursor; cursor += widths[index] + GAP_X; }
       const width = cursor - GAP_X + EDGE;
-      const middle = EDGE + rows * pitch / 2;
+      const middle = EDGE + tallest / 2;
       const placed = {};
       for (const index of indices) {
-        const items = columns[index];
-        for (const box of items) {
-          const y = middle + (box.row - (items.length - 1) / 2) * pitch - height / 2;
-          placed[box.name] = { ...box, x: lefts[index], y, width: widths[index], height,
+        let top = middle - stacks[index] / 2;
+        for (const box of columns[index]) {
+          const height = heightOf(box);
+          placed[box.name] = { ...box, x: lefts[index], y: top, width: widths[index], height,
                                shown: box.lines.map(line => line.length > 46 ? line.slice(0, 45) + "…" : line) };
+          top += height + GAP_Y;
         }
       }
+      const leaving = {}, arriving = {};
+      this.arrows.forEach(([source, target], position) => {
+        if (!placed[source] || !placed[target]) return;
+        (leaving[source] = leaving[source] || []).push(position);
+        (arriving[target] = arriving[target] || []).push(position);
+      });
       const edges = [];
-      for (const [source, target, label, dashed] of this.arrows) {
+      this.arrows.forEach(([source, target, label, dashed], position) => {
         const from = placed[source], to = placed[target];
-        if (!from || !to) continue;
-        const x1 = from.x + from.width, y1 = from.y + from.height / 2, x2 = to.x, y2 = to.y + to.height / 2;
-        const bend = Math.max(28, (x2 - x1) / 2);
-        const shown = label && from.lines[0] !== label ? label : "";
+        if (!from || !to) return;
+        const outs = portSpread(leaving[source].length, from.y + from.height * 0.25, from.y + from.height * 0.75);
+        const ins = portSpread(arriving[target].length, to.y + to.height * 0.25, to.y + to.height * 0.75);
+        const x1 = from.x + from.width, y1 = outs[leaving[source].indexOf(position)], x2 = to.x, y2 = ins[arriving[target].indexOf(position)];
+        const bend = Math.max(30, (x2 - x1) / 2);
+        const name = label && from.lines[0] !== label ? label : "";
+        const wide = label && this.widths[label] ? `[${this.widths[label]}]` : "";
+        const shown = name && wide ? `${name} ${wide}` : (name || wide);
+        const t = 0.6, u = 1 - t;
+        const lx = u * u * u * x1 + 3 * u * u * t * (x1 + bend) + 3 * u * t * t * (x2 - bend) + t * t * t * x2;
+        const ly = u * u * u * y1 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y2;
         edges.push({ key: `${source}->${target}`, path: `M${x1} ${y1} C${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`,
-                     label: shown, lx: (x1 + x2) / 2, ly: (y1 + y2) / 2 - 6, dashed: !!dashed });
-      }
-      return { boxes: Object.values(placed), edges, width, height: EDGE + rows * pitch + EDGE };
+                     label: shown, lx, ly: ly - 7, dashed: !!dashed });
+      });
+      return { boxes: Object.values(placed), edges, width, height: EDGE + tallest + EDGE };
     },
     kinds() { return [...new Set(this.boxes.map(box => box.kind))]; },
     tooltipStyle() {
       if (!this.hover) return {};
       return { left: `${this.hover.x + this.hover.width + 10}px`, top: `${this.hover.y}px` };
+    },
+    hoverNote() {
+      if (!this.hover) return [];
+      const note = this.hover.note && this.hover.note.length ? this.hover.note : (this.hover.detail && this.hover.detail.length ? this.hover.detail : []);
+      return note;
     },
   },
   methods: {

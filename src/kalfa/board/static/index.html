@@ -249,7 +249,7 @@
             <span class="muted">a box of another model opens it</span>
           </div>
           <div class="card">
-            <diagram :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :title="currentArchitecture.label" @pick="pickModel"></diagram>
+            <diagram :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :widths="currentArchitecture.widths || {}" :title="currentArchitecture.label" @pick="pickModel"></diagram>
           </div>
         </template>
         <p class="empty" v-else>no architecture.json in the record; runs write it since this version</p>
@@ -468,9 +468,9 @@
           </text>
         </g>
       </svg>
-      <div class="tooltip" v-if="hover && hover.note && hover.note.length" :style="tooltipStyle">
-        <div v-for="(line, index) in hover.note.slice(0, 40)" :key="index">{{ line }}</div>
-        <div class="muted" v-if="hover.note.length > 40">and {{ hover.note.length - 40 }} more</div>
+      <div class="tooltip" v-if="hoverNote.length" :style="tooltipStyle">
+        <div v-for="(line, index) in hoverNote.slice(0, 40)" :key="index">{{ line }}</div>
+        <div class="muted" v-if="hoverNote.length > 40">and {{ hoverNote.length - 40 }} more</div>
       </div>
     </div>
     <p class="empty" v-if="!layout.boxes.length">nothing to draw</p>

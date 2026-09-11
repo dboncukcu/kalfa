@@ -243,8 +243,8 @@ blocks:
       losses_keys: {uri: /lego/kalfa/const, params: {value: $losses_keys$}, outputs: [losses_keys]}
       # the graph of every report model into architecture.json, what the board draws; no output, it writes the record
       architecture: {uri: /lego/kalfa/architecture_note, params: {predicts: $predicts$},
-                     inputs: {models: selected, composites: composites, loaders: $loader_refs$, losses: losses,
-                              losses_keys: losses_keys, optimizers: optimizers_final}}
+                     inputs: {models: selected, composites: composites, loaders: $loader_refs$, prep: prep,
+                              losses: losses, losses_keys: losses_keys, optimizers: optimizers_final}}
       # bus is wiring.plot_bus, the one place that says what a plot may name in its signature; a new key there reaches
       # every plot, and kalfa plots rebuilds the same keys from the record.
       plots:   {uri: /lego/kalfa/run_all, params: {plots: "@plots", keys: $plots_keys$, predicts: $predicts$},

@@ -1561,7 +1561,7 @@
         "returns": null
       },
       "kind": "lego",
-      "signature": "(models, loaders, composites=None, predicts=None, losses=None, losses_keys=None, optimizers=None, record=None, device=None)"
+      "signature": "(models, loaders, composites=None, prep=None, predicts=None, losses=None, losses_keys=None, optimizers=None, record=None, device=None)"
     },
     "/lego/kalfa/calibrate": {
       "alias": [],
@@ -2168,12 +2168,12 @@
       "alias": [
         "architecture"
       ],
-      "description": "kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model) and the shapes one batch traced through it, the wires as arrows labelled only where the wire is not the node's name, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device",
+      "description": "kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model), the shapes one batch traced through it and the layers inside it, the wires as arrows with their width, the input wire with its feature columns, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device",
       "facts": {
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None, losses_keys=None, optimizers=None, name=None, figures=None)"
+      "signature": "(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None, losses_keys=None, optimizers=None, prep=None, name=None, figures=None)"
     },
     "/plot/kalfa/architecture_text": {
       "alias": [
