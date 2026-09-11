@@ -62,9 +62,10 @@
           </template>
           <template v-else>
             <div class="progress"><div class="bar" :style="{width: (entry.turns_total ? Math.min(100, 100 * entry.turn / entry.turns_total) : 0) + '%'}"></div></div>
+            <div class="progress thin" v-if="entry.steps_per_turn > 1 && entry.step_in_turn !== null"><div class="bar" :style="{width: Math.min(100, 100 * Math.max(0, entry.step_in_turn) / entry.steps_per_turn) + '%'}"></div></div>
             <div class="meta-row">
-              <span>{{ entry.turn }}<template v-if="entry.turns_total"> of {{ entry.turns_total }}</template> turns</span>
-              <span v-if="entry.step_in_turn !== null && entry.steps_per_turn">step {{ Math.max(0, entry.step_in_turn) }} of {{ entry.steps_per_turn }}</span>
+              <span>{{ entry.turn }}<template v-if="entry.turns_total"> of {{ entry.turns_total }}</template> {{ entry.unit }}s</span>
+              <span v-if="entry.step_in_turn !== null && entry.steps_per_turn > 1">batch {{ Math.max(0, entry.step_in_turn) }} of {{ entry.steps_per_turn }} in this {{ entry.unit }}</span>
               <span v-if="entry.eta">about {{ ms(entry.eta * 1000) }} left</span>
               <span v-if="entry.started">started {{ ago(entry.started) }}</span>
               <span v-if="entry.status.last_seen">seen {{ ago(entry.status.last_seen) }}</span>
@@ -203,9 +204,10 @@
           <div class="title-row">
             <span class="card-label">progress</span>
             <span class="badge" :class="state">{{ state }}</span>
-            <span class="muted">{{ progressInfo.done }}<template v-if="progressInfo.plan"> of {{ progressInfo.plan }}</template> {{ turnLabel }}s<template v-if="progressInfo.inTurn !== null && progressInfo.perTurn"> · step {{ Math.max(0, progressInfo.inTurn) }} of {{ progressInfo.perTurn }} in this {{ turnLabel }}</template><template v-if="progressInfo.eta"> · about {{ ms(progressInfo.eta * 1000) }} left</template><template v-if="progressInfo.mean"> · {{ ms(progressInfo.mean * 1000) }} per {{ turnLabel }}</template><template v-if="elapsed"> · {{ elapsed }}</template></span>
+            <span class="muted">{{ progressInfo.done }}<template v-if="progressInfo.plan"> of {{ progressInfo.plan }}</template> {{ turnLabel }}s<template v-if="progressInfo.inTurn !== null && progressInfo.perTurn > 1"> · batch {{ Math.max(0, progressInfo.inTurn) }} of {{ progressInfo.perTurn }} in this {{ turnLabel }}</template><template v-if="progressInfo.eta"> · about {{ ms(progressInfo.eta * 1000) }} left</template><template v-if="progressInfo.mean"> · {{ ms(progressInfo.mean * 1000) }} per {{ turnLabel }}</template><template v-if="elapsed"> · {{ elapsed }}</template></span>
           </div>
           <div class="progress wide"><div class="bar" :style="{width: progressInfo.share + '%'}"></div></div>
+          <div class="progress wide thin" v-if="progressInfo.perTurn > 1 && progressInfo.inTurn !== null"><div class="bar" :style="{width: Math.min(100, 100 * Math.max(0, progressInfo.inTurn) / progressInfo.perTurn) + '%'}"></div></div>
           <div class="chips">
             <span class="chip" v-if="monitorKey">{{ monitorKey }} = {{ fmt(progressInfo.monitorValue) }}</span>
             <span class="chip" v-for="[key, value] in progressInfo.losses" :key="key">{{ key }} = {{ fmt(value) }} at step {{ progressInfo.step }}</span>

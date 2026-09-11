@@ -214,7 +214,7 @@ class Monitor:
         if self.inner is not None:
             self.inner.close()
             self.inner = None
-        if self.progress != "steps":
+        if not self.progress or self.progress == "turns" or not total or total <= 1:
             return
         from tqdm.auto import tqdm
 

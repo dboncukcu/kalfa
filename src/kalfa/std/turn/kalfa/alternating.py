@@ -101,7 +101,6 @@ def alternating(models, optimizers, emas, counters, composites, effects, loader,
     if monitor is not None:
         monitor.turn_begins(limit if limit is not None else cursor.batches())
     taken = 0
-    lines = []
     while limit is None or taken < limit:
         stepped, last = arrangement.step(cursor, scope, active, losses, loss_trackers, counters, settings)
         if not stepped:
@@ -109,7 +108,8 @@ def alternating(models, optimizers, emas, counters, composites, effects, loader,
         counters["global_step"] = int(counters.get("global_step", 0)) + 1
         taken += 1
         line = {"step": counters["global_step"], "turn": turn, **arrangement.line}
-        lines.append(line)
+        if record is not None:
+            History.append_steps(record, [line])
         if monitor is not None:
             monitor.step(line)
         if last is not None and observers:
@@ -117,8 +117,6 @@ def alternating(models, optimizers, emas, counters, composites, effects, loader,
         if cursor.exhausted:
             break
     counters["turn"] = turn
-    if record is not None and lines:
-        History.append_steps(record, lines)
     log_steps(turn, taken, arrangement.order, arrangement.stepped_by, settings)
     idle = [name for name in arrangement.order if arrangement.stepped_by[name] == 0]
     if idle and taken:

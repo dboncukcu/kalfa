@@ -89,6 +89,14 @@ def test_the_monitor_draws_the_inner_bar_and_logs_every_n_steps():
     text = stream.getvalue()
     assert "training.step   step 2  loss/m 0.25  lr/m 0.1" in text and "step 1 " not in text
     assert "step 3 " not in text and "turn 1  train/l 0.5" in text
+    with Monitor(None, progress=True) as monitor:
+        monitor.turn_begins(5)
+        assert monitor.inner is not None and monitor.inner.total == 5
+        monitor.turn_begins(1)
+        assert monitor.inner is None
+    with Monitor(None, progress="turns") as monitor:
+        monitor.turn_begins(5)
+        assert monitor.inner is None
 
 
 def test_turn_line_carries_every_value():

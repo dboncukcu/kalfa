@@ -71,7 +71,7 @@ in `CONFIG.md` section 3).
 kalfa run cfg.yaml [--set path=value ...] [-p name=value ...]     # check, compile, train; opens the record directory
                     [--executor thread --workers N]               # serial by default; under thread an aliasing warning is an error
                     [--log info|debug] [--no-progress]            # print what the run is doing; drop the progress bar
-                    [--progress steps] [--log-every N] [--tensorboard]   # an inner bar over the steps; a line every N steps; event files
+                    [--progress turns] [--log-every N] [--tensorboard]   # only the turn bar; a line every N steps; event files
 kalfa check cfg.yaml [--set ...] [-p ...] [--layers] [--dump] [--recipe] [--measure]
                                                                   # only the problems; --measure runs the data block
 kalfa describe cfg.yaml [--measure] [--section data|model|...] [--wiring] [--save report.txt]
@@ -119,7 +119,7 @@ uses. `resume`, `predict` and `generate` take the same option.
 `--no-progress` (on `run` and `resume`) leaves the tqdm bar out: it is never created and tqdm is never imported.
 `--log info --no-progress` is then the plain form, one line per turn carrying every loss and metric of that turn
 and the learning rates, nothing redrawing itself; `--no-progress` on its own is a silent run that says only how it
-ended. `--progress steps` adds an inner bar over the steps of a turn and `--log-every N` a line every N steps under
+ended. A turn with more than one step shows an inner bar over its steps as well (`--progress turns` keeps only the turn bar) and `--log-every N` prints a line every N steps under
 `--log`, with the loss, the learning rate and the gradient norm of every optimizer. The bar is not disabled on its own when stderr is not a terminal, because a notebook is exactly such a
 stream and that is where a bar is worth the most. The bar itself comes from `tqdm.auto`, so a notebook draws the
 ipywidgets one and a terminal the plain one.

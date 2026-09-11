@@ -84,7 +84,8 @@ class Board:
             if kind == "data":
                 continue
             found.append({"path": relative_to(self.root, path), "kind": kind, "name": manifest.get("name") or path.name,
-                          "started": manifest.get("started"), "status": record.status()})
+                          "started": manifest.get("started"), "status": record.status(),
+                          "unit": "epoch" if manifest.get("turn") == "epoch" else "turn"})
         return found
 
     def tree(self):

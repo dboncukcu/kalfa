@@ -262,7 +262,7 @@ def progress_option(command):
 
 
 def monitor_of(args):
-    progress = False if args.no_progress else ("steps" if args.progress == "steps" else True)
+    progress = False if args.no_progress else ("turns" if args.progress == "turns" else True)
     return Monitor(level_of(args.log), progress=progress, log_every=args.log_every, tensorboard=args.tensorboard)
 
 
