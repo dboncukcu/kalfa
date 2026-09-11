@@ -2154,7 +2154,7 @@
       "alias": [
         "architecture"
       ],
-      "description": "kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model) and the shapes one batch traced through it, the wires as labelled arrows, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device",
+      "description": "kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model) and the shapes one batch traced through it, the wires as arrows labelled only where the wire is not the node's name, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device",
       "facts": {
         "partial": true
       },
@@ -2292,12 +2292,12 @@
       "alias": [
         "loss_curve"
       ],
-      "description": "Every history series over the turns, or the named ones; x: step draws the per update series of steps.jsonl (the loss, the gradient norm of every optimizer) over the steps instead",
+      "description": "Every history series over the turns, or the named ones; x: step draws the per update series of steps.jsonl (the loss, the gradient norm of every optimizer) over the steps instead; rates: true adds a panel of the learning rates below, and a series may name lr/<optimizer>",
       "facts": {
         "partial": true
       },
       "kind": "plot",
-      "signature": "(predictions, history, models, record, series=None, log=False, x='turn', name=None, figures=None)"
+      "signature": "(predictions, history, models, record, series=None, log=False, x='turn', rates=False, name=None, figures=None)"
     },
     "/plot/kalfa/permutation_importance": {
       "alias": [

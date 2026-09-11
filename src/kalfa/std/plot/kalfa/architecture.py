@@ -40,6 +40,26 @@ class Layout:
             table[box.column].append(box)
         return table
 
+    def ordered(self):
+        table = self.columns()
+        feeding = {}
+        for source, target, _ in self.arrows:
+            feeding.setdefault(target, []).append(source)
+        for column in sorted(table):
+            boxes = table[column]
+            if column == 0 or len(boxes) < 2:
+                continue
+
+            def mean_row(box):
+                rows = [self.boxes[name].row for name in feeding.get(box.name, [])
+                        if name in self.boxes and self.boxes[name].column < column]
+                return (sum(rows) / len(rows) if rows else box.row, box.row)
+
+            boxes.sort(key=mean_row)
+            for row, box in enumerate(boxes):
+                box.row = row
+        return table
+
 
 def shape_text(value):
     if isinstance(value, torch.Tensor):
@@ -142,43 +162,78 @@ def training_layout(layout, model, label, last, predicts, losses, losses_keys, o
             layout.link(f"loss:{item.loss}", f"opt:{name}")
 
 
+def labelled(layout, source, wire):
+    if not wire:
+        return False
+    box = layout.boxes.get(source)
+    return box is None or box.lines[0] != wire
+
+
 def draw_layout(figures, layout, label):
     from matplotlib.patches import FancyBboxPatch
 
-    columns = layout.columns()
+    columns = layout.ordered()
     span = max(columns) + 1
-    rows = max(len(items) for items in columns.values())
-    width, height, gap_x, gap_y = 2.3, 1.0, 3.3, 1.5
-    drawing, axes = figures.sized(1.9 * span + 0.6, 0.95 * rows + 1.1)
+    widths = {column: min(3.4, max(1.5, 0.068 * max(len(line) for box in boxes for line in box.lines) + 0.5))
+              for column, boxes in columns.items()}
+    heights = {column: max(0.24 * len(box.lines) + 0.34 for box in boxes) for column, boxes in columns.items()}
+    height = max(heights.values())
+    pitch_y = height + 0.5
+    gap_x = 1.25
+    lefts, cursor = {}, 0.45
+    for column in range(span):
+        lefts[column] = cursor
+        cursor += widths.get(column, 1.5) + gap_x
+    total_w = cursor - gap_x + 0.45
+    rows = max(len(boxes) for boxes in columns.values())
+    total_h = rows * pitch_y + 1.2
+    drawing, axes = figures.sized(total_w, total_h)
+    drawing.subplots_adjust(left=0, right=1, bottom=0, top=1)
     axis = axes[0][0]
+    axis.set_xlim(0, total_w)
+    axis.set_ylim(0, total_h)
+    axis.axis("off")
     palette = figures.categorical
     colors = {"input": figures.ink_muted, "torch": palette[0], "lego": palette[2], "model": palette[6],
               "output": palette[3], "loss": palette[7], "optimizer": palette[1]}
-    centers = {}
-    for box in layout.boxes.values():
-        count = len(columns[box.column])
-        x = box.column * gap_x
-        y = -(box.row - (count - 1) / 2) * gap_y
-        centers[box.name] = (x, y)
-        axis.add_patch(FancyBboxPatch((x - width / 2, y - height / 2), width, height, boxstyle="round,pad=0.08",
-                                      facecolor=colors[box.kind], edgecolor=colors[box.kind], alpha=0.85,
-                                      linewidth=1.0))
-        axis.add_patch(FancyBboxPatch((x - width / 2, y - height / 2), width, height, boxstyle="round,pad=0.08",
-                                      facecolor=figures.surface, edgecolor="none", alpha=0.72))
-        axis.text(x, y, "\n".join(box.lines), ha="center", va="center", fontsize=7, color=figures.ink)
+    middle = (total_h - 0.7) / 2 + 0.35
+    ports = {}
+    for column, boxes in columns.items():
+        width = widths[column]
+        for box in boxes:
+            x = lefts[column]
+            y = middle + ((len(boxes) - 1) / 2 - box.row) * pitch_y - height / 2
+            axis.add_patch(FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.06,rounding_size=0.12",
+                                          facecolor=colors[box.kind], edgecolor=colors[box.kind], alpha=0.9,
+                                          linewidth=1.0))
+            axis.add_patch(FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.06,rounding_size=0.12",
+                                          facecolor=figures.surface, edgecolor="none", alpha=0.78))
+            axis.text(x + width / 2, y + height / 2, "\n".join(box.lines), ha="center", va="center", fontsize=7.5,
+                      color=figures.ink, linespacing=1.35)
+            ports[box.name] = ((x, y + height / 2), (x + width, y + height / 2), box.column)
     for source, target, wire in layout.arrows:
-        if source not in centers or target not in centers:
+        if source not in ports or target not in ports:
             continue
-        (x1, y1), (x2, y2) = centers[source], centers[target]
-        axis.annotate("", xy=(x2 - width / 2, y2), xytext=(x1 + width / 2, y1),
-                      arrowprops={"arrowstyle": "-|>", "color": figures.ink_secondary, "lw": 0.9,
-                                  "shrinkA": 0, "shrinkB": 0})
-        if wire:
-            axis.text((x1 + x2) / 2, (y1 + y2) / 2 + 0.1, wire, ha="center", va="bottom", fontsize=6.5,
-                      color=figures.ink_secondary)
-    axis.set_xlim(-width, (span - 1) * gap_x + width)
-    axis.set_ylim(-(rows - 1) / 2 * gap_y - height, (rows - 1) / 2 * gap_y + height)
-    axis.axis("off")
+        (_, (x1, y1), column1), ((x2, y2), _, column2) = ports[source], ports[target]
+        skips = column2 - column1 > 1
+        rad = (0.16 if y2 >= y1 else -0.16) if skips else 0.0
+        axis.annotate("", xy=(x2 - 0.03, y2), xytext=(x1 + 0.03, y1),
+                      arrowprops={"arrowstyle": "-|>", "color": figures.ink_secondary, "lw": 0.9, "shrinkA": 0,
+                                  "shrinkB": 0, "connectionstyle": f"arc3,rad={rad}", "alpha": 0.9})
+        if labelled(layout, source, wire):
+            along = 0.64
+            axis.text(x1 + (x2 - x1) * along, y1 + (y2 - y1) * along + 0.02, wire, ha="center", va="bottom",
+                      fontsize=6.5, color=figures.ink_secondary,
+                      bbox={"boxstyle": "round,pad=0.15", "facecolor": figures.surface, "edgecolor": "none",
+                            "alpha": 0.9})
+    kinds = [kind for kind in colors if any(box.kind == kind for box in layout.boxes.values())]
+    names = {"input": "input wire", "torch": "torch layer", "lego": "kalfa layer", "model": "model",
+             "output": "output wire", "loss": "loss", "optimizer": "optimizer"}
+    for position, kind in enumerate(kinds):
+        x = 0.45 + position * 1.35
+        axis.add_patch(FancyBboxPatch((x, 0.22), 0.28, 0.16, boxstyle="round,pad=0.02", facecolor=colors[kind],
+                                      edgecolor="none", alpha=0.85))
+        axis.text(x + 0.36, 0.3, names[kind], ha="left", va="center", fontsize=6.5, color=figures.ink_secondary)
     figures.title(drawing, label)
     return drawing
 
@@ -186,8 +241,9 @@ def draw_layout(figures, layout, label):
 @lego("/plot/kalfa/architecture", partial=True, alias="architecture",
       description="kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph "
                   "node with the name from the config, what it is (a torch layer, a lego, another model) and the "
-                  "shapes one batch traced through it, the wires as labelled arrows, the boundary wires as boxes, "
-                  "and the losses and the optimizers beside the outputs they read; matplotlib only, any device")
+                  "shapes one batch traced through it, the wires as arrows labelled only where the wire is not "
+                  "the node's name, the boundary wires as boxes, and the losses and the optimizers beside the "
+                  "outputs they read; matplotlib only, any device")
 def architecture(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None,
                  losses_keys=None, optimizers=None, name=None, figures=None):
     figures = figures or Figure()
@@ -201,7 +257,7 @@ def architecture(predictions, history, models, record, loaders=None, device=None
         shapes = traced_shapes(model, batch, where) if batch is not None else {}
         layout, last = graph_layout(model, label, shapes)
         training_layout(layout, model, label, last, predicts, losses, losses_keys, optimizers)
-        figures.save(draw_layout(figures, layout, label), record, f"{stem}_{label}")
+        figures.save(draw_layout(figures, layout, label), record, f"{stem}_{label}", tight=False)
         logger.debug(f"architecture: drew {label}")
     return None
 

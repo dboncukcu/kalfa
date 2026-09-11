@@ -191,8 +191,9 @@ class Figure:
         directory.mkdir(parents=True, exist_ok=True)
         return directory / name
 
-    def save(self, drawing, record, name, suffix=None):
-        drawing.tight_layout()
+    def save(self, drawing, record, name, suffix=None, tight=True):
+        if tight:
+            drawing.tight_layout()
         path = self.target(record, f"{name}.{suffix or self.format}")
         with atomic(path) as temporary:
             drawing.savefig(temporary, format=suffix or self.format, bbox_inches="tight")

@@ -223,13 +223,17 @@
       </div>
 
       <div class="panel" v-if="record && (tab === 'plots' || tab === 'samples')">
-        <div class="gallery" v-if="gallery.length">
-          <figure v-for="name in gallery" :key="name" @click="lightbox = name">
+        <div class="gallery" v-if="images.length">
+          <figure v-for="name in images" :key="name" @click="lightbox = name">
             <img :src="fileUrl(tab, name)" :alt="name" loading="lazy">
-            <figcaption>{{ name }}</figcaption>
+            <figcaption><span>{{ name }}</span><a class="small" :href="fileUrl(tab, name)" :download="name" @click.stop>save</a></figcaption>
           </figure>
         </div>
-        <p class="empty" v-else>nothing written yet</p>
+        <div class="card text-card" v-for="name in textFiles" :key="name">
+          <div class="toolbar"><span class="card-label">{{ name }}</span><a class="small" :href="fileUrl(tab, name)" :download="name">save</a></div>
+          <pre class="code">{{ texts[name] || 'reading' }}</pre>
+        </div>
+        <p class="empty" v-if="!gallery.length">nothing written yet</p>
       </div>
 
       <div class="panel" v-if="record && tab === 'config'">
@@ -325,20 +329,21 @@
   <div class="lightbox" v-if="lightbox" @click="lightbox = null">
     <figure @click.stop>
       <img :src="fileUrl(tab, lightbox)" :alt="lightbox">
-      <figcaption>{{ lightbox }} <button class="small" @click="stepLightbox(-1)">previous</button> <button class="small" @click="stepLightbox(1)">next</button> <button class="small" @click="lightbox = null">close</button></figcaption>
+      <figcaption>{{ lightbox }} <button class="small" @click="stepLightbox(-1)">previous</button> <button class="small" @click="stepLightbox(1)">next</button> <a class="small" :href="fileUrl(tab, lightbox)" :download="lightbox">save</a> <button class="small" @click="lightbox = null">close</button></figcaption>
     </figure>
   </div>
 </div>
 
 <script type="text/x-template" id="chart-template">
   <div class="chart">
-    <div class="chart-head" v-if="title || lines.length > 1">
+    <div class="chart-head">
       <span class="chart-title">{{ title }}</span>
       <span class="legend">
         <button v-for="line in lines" :key="line.name" class="legend-item" :class="{off: hidden[line.name]}" @click="toggle(line.name)">
           <span class="swatch" :style="{background: line.color}"></span>{{ line.name }}
         </button>
       </span>
+      <button class="small chart-save" @click="save" title="download this chart as a png">save</button>
     </div>
     <svg :viewBox="'0 0 ' + width + ' ' + height" @mousemove="onMove" @mouseleave="hover = null">
       <g class="grid">

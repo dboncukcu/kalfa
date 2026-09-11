@@ -60,6 +60,14 @@ class History:
     def positions(self, key="turn"):
         return [line.get(key, position + 1) for position, line in enumerate(self.lines)]
 
+    def rates(self):
+        found = {}
+        for line in self.lines:
+            for key, value in line.items():
+                if key.startswith("lr/") and is_number(value):
+                    found.setdefault(key, []).append(value)
+        return found
+
     def series(self, names=None):
         found = {}
         for line in self.lines:
@@ -67,10 +75,12 @@ class History:
                 if is_series(key, value):
                     found.setdefault(key, []).append(value)
         if names:
-            missing = [name for name in names if name not in found]
+            rates = self.rates()
+            missing = [name for name in names if name not in found and name not in rates]
             if missing:
-                raise ValueError(f"{missing} are not in the history; the series are {sorted(found)}")
-            found = {name: found[name] for name in names}
+                raise ValueError(f"{missing} are not in the history; the series are {sorted(found)} and the "
+                                 f"rates {sorted(rates)}")
+            found = {name: found[name] if name in found else rates[name] for name in names}
         return found
 
     def last(self, prefixes=("test/",)):

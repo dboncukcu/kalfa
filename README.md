@@ -283,7 +283,7 @@ never written into (an error).
 | `contract.yaml` | the contract the run was compiled by (the wiring and the flow blocks); `predict`, `generate` and `resume` read it back |
 | `flow.yaml` | the tezgah graph that ran: the component tables, the model blocks, the expanded flow and tezgah's resolution comments |
 | `history.jsonl` | per turn the `train/`, `val/`, `test/` values, `global_step`, `lr/<optimizer>`, `seconds`, the rules that fired |
-| `steps.jsonl` | per update `step`, `turn`, `loss/<optimizer>`, `lr/<optimizer>` and, under `grad_clip`, `grad_norm/<optimizer>`; `loss_curve` with `x: step` draws it |
+| `steps.jsonl` | per update `step`, `turn`, `loss/<optimizer>`, `lr/<optimizer>` and, under `grad_clip`, `grad_norm/<optimizer>`; `loss_curve` with `x: step` draws it, `rates: true` adds the learning rates below either curve |
 | `data.json` | the shape of the data at every stage of the data block: rows and columns per transform, the sets, the fitted objects, the features and targets, the loaders; `data_pipeline` draws it |
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |
 | `checkpoints/` | `best.pt`, `last.pt` (by policy); models, optimizers, EMAs, counters, rule states, RNG |

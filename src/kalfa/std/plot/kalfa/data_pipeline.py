@@ -1,3 +1,5 @@
+import textwrap
+
 import numpy
 
 from kalfa.registration import lego
@@ -9,6 +11,13 @@ def count(value):
     return "?" if value is None else f"{value:,}"
 
 
+def named(names, limit=10):
+    names = list(names)
+    if len(names) <= limit:
+        return ", ".join(names)
+    return ", ".join(names[:limit]) + f" and {len(names) - limit} more"
+
+
 def stage_lines(report):
     lines = []
     stages = report.get("stages") or []
@@ -18,9 +27,9 @@ def stage_lines(report):
     for entry in stages[1:]:
         change = []
         if entry.get("added"):
-            change.append("+" + ", ".join(entry["added"]))
+            change.append("+" + named(entry["added"]))
         if entry.get("removed"):
-            change.append("-" + ", ".join(entry["removed"]))
+            change.append("-" + named(entry["removed"]))
         lines.append(("transform", f"{entry['stage']}: {count(entry['rows'])} rows x {entry['columns']} columns"
                                    + (f"  ({'; '.join(change)})" if change else "")))
     split = report.get("split") or {}
@@ -47,6 +56,15 @@ def stage_lines(report):
     return lines
 
 
+def wrapped(lines, width=96):
+    rows = []
+    for kind, text in lines:
+        parts = textwrap.wrap(text, width=width, subsequent_indent="    ") or [""]
+        rows.append((kind, parts[0]))
+        rows.extend(("", part) for part in parts[1:])
+    return rows
+
+
 def histogram_columns(prep, train_df, train_frame, columns):
     if prep is None or train_df is None or not isinstance(train_frame, TableFrame):
         return []
@@ -66,30 +84,32 @@ def histogram_columns(prep, train_df, train_frame, columns):
 
 
 def draw_report(figures, report, histograms, name):
-    lines = stage_lines(report)
-    columns = max(2 * len(histograms), 1)
-    rows = 2 if histograms else 1
+    rows = wrapped(stage_lines(report))
     pyplot = figures.pyplot()
-    drawing = pyplot.figure(figsize=(max(9.0, 3.0 * columns), 0.42 * len(lines) + (3.4 if histograms else 1.0)))
-    grid = drawing.add_gridspec(rows, columns, height_ratios=[0.42 * len(lines), 2.6] if histograms else [1.0])
+    text_height = 0.22 * len(rows) + 0.55
+    panel = 2.4
+    drawing = pyplot.figure(figsize=(10.0, text_height + panel * len(histograms) + 0.5))
+    grid = drawing.add_gridspec(1 + len(histograms), 2, height_ratios=[text_height, *[panel] * len(histograms)],
+                                hspace=0.6, wspace=0.28, left=0.07, right=0.98, top=0.93, bottom=0.08)
     top = drawing.add_subplot(grid[0, :])
     palette = figures.categorical
     colors = {"source": figures.ink_muted, "transform": palette[2], "split": palette[0], "frames": palette[6],
-              "fit": palette[3], "feed": palette[4], "loaders": palette[1]}
-    for position, (kind, text) in enumerate(lines):
-        y = 1.0 - (position + 0.5) / len(lines)
-        top.text(0.0, y, kind, ha="left", va="center", fontsize=8.5, fontweight="bold", color=colors[kind],
-                 transform=top.transAxes)
-        top.text(0.11, y, text, ha="left", va="center", fontsize=8.5, color=figures.ink, family="monospace",
+              "fit": palette[3], "feed": palette[4], "loaders": palette[1], "": figures.ink}
+    for position, (kind, text) in enumerate(rows):
+        y = 1.0 - (position + 0.5) / len(rows)
+        if kind:
+            top.text(0.0, y, kind, ha="left", va="center", fontsize=8.5, fontweight="bold", color=colors[kind],
+                     transform=top.transAxes)
+        top.text(0.09, y, text, ha="left", va="center", fontsize=8, color=figures.ink, family="monospace",
                  transform=top.transAxes)
     top.axis("off")
     for position, (item, before, after) in enumerate(histograms):
-        left = drawing.add_subplot(grid[1, 2 * position])
-        right = drawing.add_subplot(grid[1, 2 * position + 1])
+        left = drawing.add_subplot(grid[1 + position, 0])
+        right = drawing.add_subplot(grid[1 + position, 1])
         left.hist(before[numpy.isfinite(before)], bins=40, color=figures.ink_muted)
         right.hist(after[numpy.isfinite(after)], bins=40, color=palette[0])
-        figures.label(left, title=f"{item.name} before", ylabel="rows" if position == 0 else None)
-        figures.label(right, title=f"{item.columns[0]} after {' > '.join(item.chain)}")
+        figures.label(left, title=f"{item.name} before", ylabel="rows", note="original units")
+        figures.label(right, title=f"{item.columns[0]} after", note=" > ".join(item.chain))
     figures.title(drawing, name)
     return drawing
 
@@ -106,5 +126,5 @@ def data_pipeline(predictions, history, models, record, data_report=None, train_
         return None
     histograms = histogram_columns(prep, train_df, train_frame, columns)
     stem = name or "data_pipeline"
-    figures.save(draw_report(figures, data_report, histograms, stem), record, stem)
+    figures.save(draw_report(figures, data_report, histograms, stem), record, stem, tight=False)
     return None

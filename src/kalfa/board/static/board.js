@@ -155,6 +155,42 @@ const Chart = {
     },
   },
   methods: {
+    save(event) {
+      const svg = event.currentTarget.closest(".chart").querySelector("svg");
+      const copy = svg.cloneNode(true);
+      const originals = svg.querySelectorAll("*");
+      copy.querySelectorAll("*").forEach((node, index) => {
+        const style = getComputedStyle(originals[index]);
+        for (const key of ["fill", "stroke", "stroke-width", "stroke-dasharray", "font-size", "font-family", "opacity"]) {
+          if (style[key]) node.setAttribute(key, style[key]);
+        }
+      });
+      copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      copy.setAttribute("width", this.width * 2);
+      copy.setAttribute("height", this.height * 2);
+      const background = getComputedStyle(svg.closest(".card") || svg).backgroundColor;
+      const image = new Image();
+      const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const title = (this.title || "chart").replace(/[^\w.-]+/g, "_");
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = this.width * 2; canvas.height = this.height * 2;
+        const context = canvas.getContext("2d");
+        context.fillStyle = background && background !== "rgba(0, 0, 0, 0)" ? background : "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(png => {
+          const link = document.createElement("a");
+          link.href = URL.createObjectURL(png);
+          link.download = `${title}.png`;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        }, "image/png");
+      };
+      image.src = url;
+    },
     sx(x) { return this.pad.left + (x - this.domain.xmin) / (this.domain.xmax - this.domain.xmin) * (this.width - this.pad.left - this.pad.right); },
     sy(y) {
       const value = this.logy ? Math.log10(y) : y;
@@ -178,6 +214,7 @@ const app = Vue.createApp({
       tree: { root: "", groups: {} }, filter: "", collapsed: {}, refreshed: "",
       current: { path: null, kind: null }, record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
       tab: "overview", logy: false, metricFilter: "", logs: { name: "stdout.txt", lines: [], total: 0 }, describeText: null,
+      texts: {},
       sweep: null, selected: [], overlay: {}, diff: null, sortKey: null, sortDesc: false, lightbox: null,
     };
   },
@@ -285,6 +322,8 @@ const app = Vue.createApp({
       return marks.length <= 60 ? marks : [];
     },
     gallery() { return this.record ? (this.tab === "plots" ? this.record.plots : this.record.samples) : []; },
+    images() { return this.gallery.filter(name => /\.(png|jpe?g|gif|svg|webp)$/i.test(name)); },
+    textFiles() { return this.gallery.filter(name => /\.(txt|md|json|csv)$/i.test(name)); },
     dataStages() { return (this.record && this.record.data && this.record.data.stages) || []; },
     runNodes() {
       const tree = this.record && this.record.run && this.record.run.tree;
@@ -354,6 +393,17 @@ const app = Vue.createApp({
       const tree = await api("/api/tree");
       if (tree) this.tree = tree;
       this.refreshed = new Date().toLocaleTimeString();
+      if (!this.record || this.current.kind === "sweep") return;
+      const entry = Object.values(this.tree.groups).flat().find(item => item.path === this.current.path);
+      if (entry && this.stateOf(entry) !== this.state) await this.loadRecord();
+    },
+    async loadTexts() {
+      const found = {};
+      for (const name of this.textFiles) {
+        const response = await fetch(this.fileUrl("plots", name));
+        found[name] = response.ok ? await response.text() : "unreadable";
+      }
+      this.texts = found;
     },
     async open(entry) { await this.openPath(entry.path, entry.kind); },
     async openPath(path, kind) {
@@ -372,6 +422,7 @@ const app = Vue.createApp({
       await this.loadHistory();
       if (this.tab === "steps") await this.loadSteps();
       if (this.tab === "logs") await this.loadLogs(this.logs.name);
+      if (this.tab === "plots") await this.loadTexts();
     },
     async loadHistory() {
       const found = await api("/api/history", { path: this.current.path, offset: this.history.offset });
@@ -388,6 +439,7 @@ const app = Vue.createApp({
     async switchTab(name) {
       this.tab = name;
       if (name === "steps" && !this.steps.lines.length) await this.loadSteps();
+      if (name === "plots") await this.loadTexts();
       if (name === "logs") await this.loadLogs(this.record.logs.includes(this.logs.name) ? this.logs.name : (this.record.logs[0] || "stdout.txt"));
       if (name === "describe" && !this.describeText) {
         const found = await api("/api/describe", { path: this.current.path });
@@ -432,14 +484,14 @@ const app = Vue.createApp({
     async tick() {
       if (!this.current.path) return;
       if (this.current.kind === "sweep") { await this.loadSweep(); return; }
-      if (this.state !== "running") return;
+      if (!["running", "pending"].includes(this.state)) return;
       await this.loadRecord();
       if (this.tab === "steps") await this.loadSteps();
     },
   },
   mounted() {
     this.loadTree();
-    setInterval(() => this.tick(), 4000);
+    setInterval(() => this.tick(), 3000);
     setInterval(() => this.loadTree(), 10000);
     window.addEventListener("keydown", event => {
       if (event.key === "Escape") this.lightbox = null;
