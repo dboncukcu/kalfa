@@ -219,6 +219,8 @@ flow:
     figures: {uri: /lego/kalfa/figures, outputs: [figures]}
     losses: {uri: /lego/kalfa/identity, params: {value: '@losses'}, outputs: [losses]}
     losses_keys: {uri: /lego/kalfa/const, params: {value: {adv_d: {}, adv_g: {}}}, outputs: [losses_keys]}
+    architecture: {uri: /lego/kalfa/architecture_note, params: {predicts: anomaly_score}, inputs: {models: selected, composites: composites, loaders: {train: 
+            train_loader, valid: valid_loader, test: test_loader}, losses: losses, losses_keys: losses_keys, optimizers: optimizers_final}, outputs: []}  # implicit: record, device
     plots: {uri: /lego/kalfa/run_all, params: {plots: '@plots', keys: {score_histogram: {lego: /plot/kalfa/class_histogram}, roc: {lego: 
               /plot/torchmetrics/binary_roc}, pr_curve: {lego: /plot/torchmetrics/binary_precision_recall_curve}, architecture: {lego: /plot/kalfa/architecture},
           modules: {lego: /plot/kalfa/architecture_text}}, predicts: anomaly_score}, inputs: {predictions: predictions, history: history, models: selected, 

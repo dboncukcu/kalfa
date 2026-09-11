@@ -1550,6 +1550,19 @@
       "kind": "lego",
       "signature": "(df, frames)"
     },
+    "/lego/kalfa/architecture_note": {
+      "alias": [],
+      "description": "The graph of every report model written to the record as architecture.json: the boxes of the architecture drawing with their column and row, the shapes one batch traced and the wires as arrows; the board draws it",
+      "facts": {
+        "bus": {
+          "device": "device",
+          "record": "record"
+        },
+        "returns": null
+      },
+      "kind": "lego",
+      "signature": "(models, loaders, composites=None, predicts=None, losses=None, losses_keys=None, optimizers=None, record=None, device=None)"
+    },
     "/lego/kalfa/calibrate": {
       "alias": [],
       "description": "Fit every calibration of the calibrate section on the report models and the sets, in order, and keep them in the record under fitted/calibrate; predict applies them to its table",

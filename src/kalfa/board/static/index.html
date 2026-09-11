@@ -222,6 +222,38 @@
         <p class="empty" v-else>no step written yet</p>
       </div>
 
+      <div class="panel" v-if="record && tab === 'model'">
+        <template v-if="currentArchitecture">
+          <div class="toolbar" v-if="architectureModels.length > 1">
+            <button v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" @click="modelPick = label">{{ label }}</button>
+            <span class="muted">a box of another model opens it</span>
+          </div>
+          <div class="card">
+            <diagram :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :title="currentArchitecture.label" @pick="pickModel"></diagram>
+          </div>
+        </template>
+        <p class="empty" v-else>no architecture.json in the record; runs write it since this version</p>
+      </div>
+
+      <div class="panel" v-if="record && tab === 'data'">
+        <div class="card" v-if="pipeline">
+          <diagram :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline"></diagram>
+        </div>
+        <div class="card" v-if="dataStages.length">
+          <div class="card-label">stages</div>
+          <table class="table">
+            <thead><tr><th>stage</th><th class="num">rows</th><th class="num">columns</th><th>added</th><th>removed</th></tr></thead>
+            <tbody>
+              <tr v-for="stage in dataStages" :key="stage.stage">
+                <td class="mono">{{ stage.stage }}</td><td class="num mono">{{ count(stage.rows) }}</td><td class="num mono">{{ stage.columns }}</td>
+                <td class="wrap muted">{{ (stage.added || []).join(', ') }}</td><td class="wrap muted">{{ (stage.removed || []).join(', ') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="empty" v-if="!pipeline">no data.json in the record</p>
+      </div>
+
       <div class="panel" v-if="record && (tab === 'plots' || tab === 'samples')">
         <div class="gallery" v-if="images.length">
           <figure v-for="name in images" :key="name" @click="lightbox = name">
@@ -265,18 +297,6 @@
               <table class="table kv"><tbody><tr v-for="[key, value] in entries(record.git)" :key="key"><td>{{ key }}</td><td class="mono">{{ text(value) }}</td></tr></tbody></table>
             </div>
           </div>
-        </div>
-        <div class="card" v-if="dataStages.length">
-          <div class="card-label">data block</div>
-          <table class="table">
-            <thead><tr><th>stage</th><th class="num">rows</th><th class="num">columns</th><th>added</th><th>removed</th></tr></thead>
-            <tbody>
-              <tr v-for="stage in dataStages" :key="stage.stage">
-                <td class="mono">{{ stage.stage }}</td><td class="num mono">{{ count(stage.rows) }}</td><td class="num mono">{{ stage.columns }}</td>
-                <td class="wrap muted">{{ (stage.added || []).join(', ') }}</td><td class="wrap muted">{{ (stage.removed || []).join(', ') }}</td>
-              </tr>
-            </tbody>
-          </table>
         </div>
         <div class="card" v-if="runNodes.length">
           <div class="card-label">nodes of the run</div>
@@ -334,6 +354,42 @@
   </div>
 </div>
 
+<script type="text/x-template" id="diagram-template">
+  <div class="diagram">
+    <div class="chart-head">
+      <span class="chart-title">{{ title }}</span>
+      <span class="legend">
+        <span v-for="kind in kinds" :key="kind" class="legend-item"><span class="swatch" :style="{background: color(kind)}"></span>{{ kindName(kind) }}</span>
+      </span>
+      <button class="small chart-save" @click="save" title="download this diagram as a png">save</button>
+    </div>
+    <div class="diagram-scroll">
+      <svg :width="layout.width" :height="layout.height" :viewBox="'0 0 ' + layout.width + ' ' + layout.height" @mouseleave="hover = null">
+        <defs>
+          <marker :id="marker" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" class="arrowhead"></path>
+          </marker>
+        </defs>
+        <path v-for="edge in layout.edges" :key="edge.key" :d="edge.path" class="edge" :class="{dashed: edge.dashed}" :marker-end="'url(#' + marker + ')'"></path>
+        <g v-for="edge in layout.edges.filter(item => item.label)" :key="'l' + edge.key">
+          <rect :x="edge.lx - edge.label.length * 3.3 - 4" :y="edge.ly - 9" :width="edge.label.length * 6.6 + 8" height="14" rx="3" class="edge-label-back"></rect>
+          <text :x="edge.lx" :y="edge.ly + 2" text-anchor="middle" class="edge-label">{{ edge.label }}</text>
+        </g>
+        <g v-for="box in layout.boxes" :key="box.name" class="node" :class="{clickable: box.kind === 'model'}" @mouseenter="hover = box" @click="pick(box)">
+          <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" rx="7" :fill="color(box.kind)" fill-opacity="0.16" :stroke="color(box.kind)"></rect>
+          <text :x="box.x + box.width / 2" :y="box.y + 10 + 11" text-anchor="middle">
+            <tspan v-for="(line, index) in box.shown" :key="index" :x="box.x + box.width / 2" :dy="index ? 15 : 0" :class="{first: index === 0}">{{ line }}</tspan>
+          </text>
+        </g>
+      </svg>
+      <div class="tooltip" v-if="hover && hover.note && hover.note.length" :style="tooltipStyle">
+        <div v-for="(line, index) in hover.note.slice(0, 40)" :key="index">{{ line }}</div>
+        <div class="muted" v-if="hover.note.length > 40">and {{ hover.note.length - 40 }} more</div>
+      </div>
+    </div>
+    <p class="empty" v-if="!layout.boxes.length">nothing to draw</p>
+  </div>
+</script>
 <script type="text/x-template" id="chart-template">
   <div class="chart">
     <div class="chart-head">

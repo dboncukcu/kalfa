@@ -118,6 +118,8 @@ flow:
     figures: {uri: /lego/kalfa/figures, outputs: [figures]}
     losses: {uri: /lego/kalfa/identity, params: {value: '@losses'}, outputs: [losses]}
     losses_keys: {uri: /lego/kalfa/const, params: {value: {loss_mse: {}}}, outputs: [losses_keys]}
+    architecture: {uri: /lego/kalfa/architecture_note, params: {predicts: model}, inputs: {models: selected, composites: composites, loaders: {train: 
+            train_loader, valid: valid_loader, test: test_loader}, losses: losses, losses_keys: losses_keys, optimizers: optimizers_final}, outputs: []}  # implicit: record, device
     plots: {uri: /lego/kalfa/run_all, params: {plots: '@plots', keys: {loss_curve: {lego: /plot/kalfa/loss_curve}, forecast: {lego: /plot/kalfa/forecast_samples}},
         predicts: model}, inputs: {predictions: predictions, history: history, models: selected, figures: figures, bus: {prep: prep, train_loader: train_loader, 
             valid_loader: valid_loader, test_loader: test_loader, composites: composites, device: device, counters: counters_final, optimizers: optimizers_final,

@@ -184,6 +184,19 @@ pre.diff .hunk { color: var(--accent); }
 .chart .axis text { fill: var(--muted); font-size: 10.5px; }
 .chart .axis .xlabel { fill: var(--ink-2); }
 .chart .cursor { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; }
+.diagram { position: relative; }
+.diagram-scroll { position: relative; overflow: auto; }
+.diagram svg { display: block; font-family: var(--mono); font-size: 11px; }
+.diagram svg text { fill: var(--ink); }
+.diagram svg tspan.first { font-weight: 600; }
+.diagram .edge { fill: none; stroke: var(--ink-2); stroke-width: 1.3; opacity: 0.85; }
+.diagram .edge.dashed { stroke-dasharray: 4 3; opacity: 0.6; }
+.diagram .arrowhead { fill: var(--ink-2); }
+.diagram .edge-label { font-size: 10px; fill: var(--ink-2); }
+.diagram .edge-label-back { fill: var(--surface); }
+.diagram .node.clickable { cursor: pointer; }
+.diagram .node:hover rect { fill-opacity: 0.3; }
+.diagram .tooltip { transform: none; top: auto; font-family: var(--mono); max-height: 60vh; overflow: auto; }
 .tooltip { position: absolute; top: 34px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); pointer-events: none; white-space: nowrap; z-index: 2; }
 .tooltip .swatch { margin-right: 5px; }
 .tooltip-x { color: var(--muted); margin-bottom: 2px; }

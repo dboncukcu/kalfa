@@ -71,7 +71,8 @@ class Board:
                 "host": record.read_json("host.json"), "device": record.read_json("device.json"),
                 "git": record.read_json("git.json"), "resume": record.read_json("resume.json"),
                 "sweep": record.read_json("sweep.json"), "data": record.read_json("data.json"),
-                "run": record.read_json("run.json"), "plots": plots, "samples": samples,
+                "run": record.read_json("run.json"), "architecture": record.read_json("architecture.json"),
+                "plots": plots, "samples": samples,
                 "resolved": resolved.read_text() if resolved.exists() else None,
                 "events": read_lines(path / "events.jsonl")[-60:],
                 "logs": [name for name in ("stdout.txt", "stderr.txt") if (path / name).is_file()]}

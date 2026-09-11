@@ -1,6 +1,64 @@
 const SET_COLORS = { train: "#2f6fdd", val: "#e8722a", test: "#17a673", calib: "#8e5bd8" };
 const PALETTE = ["#2f6fdd", "#e8722a", "#17a673", "#8e5bd8", "#d6437a", "#c99a06", "#1c9aa8", "#7a7a7a"];
 const SKIP_KEYS = new Set(["turn", "global_step", "step", "seconds", "rules"]);
+const KIND_COLORS = { input: "#8a8f98", torch: "#2f6fdd", lego: "#17a673", model: "#8e5bd8", output: "#e0a106",
+                      loss: "#d8433c", optimizer: "#e8722a", source: "#8a8f98", transform: "#17a673", split: "#2f6fdd",
+                      frames: "#8e5bd8", fit: "#e0a106", feed: "#d6437a", loaders: "#e8722a" };
+const KIND_NAMES = { input: "input wire", torch: "torch layer", lego: "kalfa layer", model: "model", output: "output wire",
+                     loss: "loss", optimizer: "optimizer", source: "source", transform: "transform", split: "split",
+                     frames: "frame transforms", fit: "fit on train", feed: "feed", loaders: "loaders" };
+const SET_ORDER = ["train", "valid", "test"];
+
+function orderedSets(names) {
+  return [...names].sort((a, b) => (SET_ORDER.indexOf(a) + 1 || 99) - (SET_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
+}
+
+function wrapWords(text, width) {
+  const lines = [];
+  let current = "";
+  for (const word of text.split(", ")) {
+    if (current && current.length + word.length + 2 > width) { lines.push(current); current = word; }
+    else current = current ? `${current}, ${word}` : word;
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function downloadSvg(svg, title, width, height, background) {
+  const copy = svg.cloneNode(true);
+  const originals = svg.querySelectorAll("*");
+  copy.querySelectorAll("*").forEach((node, index) => {
+    const style = getComputedStyle(originals[index]);
+    for (const key of ["fill", "stroke", "stroke-width", "stroke-dasharray", "font-size", "font-family", "opacity", "font-weight"]) {
+      if (style[key]) node.setAttribute(key, style[key]);
+    }
+  });
+  copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  if (!copy.getAttribute("viewBox")) copy.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  copy.setAttribute("width", width * 2);
+  copy.setAttribute("height", height * 2);
+  const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const image = new Image();
+  const name = (title || "chart").replace(/[^\w.-]+/g, "_");
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width * 2; canvas.height = height * 2;
+    const context = canvas.getContext("2d");
+    context.fillStyle = background && background !== "rgba(0, 0, 0, 0)" ? background : "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(png => {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(png);
+      link.download = `${name}.png`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }, "image/png");
+  };
+  image.src = url;
+}
 
 async function api(route, params) {
   const query = new URLSearchParams(params || {}).toString();
@@ -157,39 +215,7 @@ const Chart = {
   methods: {
     save(event) {
       const svg = event.currentTarget.closest(".chart").querySelector("svg");
-      const copy = svg.cloneNode(true);
-      const originals = svg.querySelectorAll("*");
-      copy.querySelectorAll("*").forEach((node, index) => {
-        const style = getComputedStyle(originals[index]);
-        for (const key of ["fill", "stroke", "stroke-width", "stroke-dasharray", "font-size", "font-family", "opacity"]) {
-          if (style[key]) node.setAttribute(key, style[key]);
-        }
-      });
-      copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      copy.setAttribute("width", this.width * 2);
-      copy.setAttribute("height", this.height * 2);
-      const background = getComputedStyle(svg.closest(".card") || svg).backgroundColor;
-      const image = new Image();
-      const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: "image/svg+xml;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const title = (this.title || "chart").replace(/[^\w.-]+/g, "_");
-      image.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = this.width * 2; canvas.height = this.height * 2;
-        const context = canvas.getContext("2d");
-        context.fillStyle = background && background !== "rgba(0, 0, 0, 0)" ? background : "#ffffff";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(image, 0, 0);
-        URL.revokeObjectURL(url);
-        canvas.toBlob(png => {
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(png);
-          link.download = `${title}.png`;
-          link.click();
-          setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-        }, "image/png");
-      };
-      image.src = url;
+      downloadSvg(svg, this.title, this.width, this.height, getComputedStyle(svg.closest(".card") || svg).backgroundColor);
     },
     sx(x) { return this.pad.left + (x - this.domain.xmin) / (this.domain.xmax - this.domain.xmin) * (this.width - this.pad.left - this.pad.right); },
     sy(y) {
@@ -207,14 +233,78 @@ const Chart = {
   template: "#chart-template",
 };
 
+const Diagram = {
+  props: { boxes: { type: Array, default: () => [] }, arrows: { type: Array, default: () => [] }, title: String },
+  data() { return { hover: null, marker: `arrow-${Math.random().toString(36).slice(2, 8)}` }; },
+  computed: {
+    layout() {
+      const CHAR = 6.7, LINE = 15, PAD_X = 14, PAD_Y = 10, GAP_X = 72, GAP_Y = 24, EDGE = 20;
+      const columns = {};
+      for (const box of this.boxes) (columns[box.column] = columns[box.column] || []).push(box);
+      const indices = Object.keys(columns).map(Number).sort((a, b) => a - b);
+      if (!indices.length) return { boxes: [], edges: [], width: 200, height: 60 };
+      const widths = {}, heights = {};
+      for (const index of indices) {
+        const items = columns[index];
+        const chars = Math.max(4, ...items.flatMap(box => box.lines.map(line => Math.min(line.length, 46))));
+        widths[index] = Math.min(340, Math.max(96, chars * CHAR + 2 * PAD_X));
+        heights[index] = Math.max(...items.map(box => box.lines.length)) * LINE + 2 * PAD_Y;
+      }
+      const height = Math.max(...Object.values(heights));
+      const pitch = height + GAP_Y;
+      const rows = Math.max(...indices.map(index => columns[index].length));
+      const lefts = {};
+      let cursor = EDGE;
+      for (const index of indices) { lefts[index] = cursor; cursor += widths[index] + GAP_X; }
+      const width = cursor - GAP_X + EDGE;
+      const middle = EDGE + rows * pitch / 2;
+      const placed = {};
+      for (const index of indices) {
+        const items = columns[index];
+        for (const box of items) {
+          const y = middle + (box.row - (items.length - 1) / 2) * pitch - height / 2;
+          placed[box.name] = { ...box, x: lefts[index], y, width: widths[index], height,
+                               shown: box.lines.map(line => line.length > 46 ? line.slice(0, 45) + "…" : line) };
+        }
+      }
+      const edges = [];
+      for (const [source, target, label, dashed] of this.arrows) {
+        const from = placed[source], to = placed[target];
+        if (!from || !to) continue;
+        const x1 = from.x + from.width, y1 = from.y + from.height / 2, x2 = to.x, y2 = to.y + to.height / 2;
+        const bend = Math.max(28, (x2 - x1) / 2);
+        const shown = label && from.lines[0] !== label ? label : "";
+        edges.push({ key: `${source}->${target}`, path: `M${x1} ${y1} C${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`,
+                     label: shown, lx: (x1 + x2) / 2, ly: (y1 + y2) / 2 - 6, dashed: !!dashed });
+      }
+      return { boxes: Object.values(placed), edges, width, height: EDGE + rows * pitch + EDGE };
+    },
+    kinds() { return [...new Set(this.boxes.map(box => box.kind))]; },
+    tooltipStyle() {
+      if (!this.hover) return {};
+      return { left: `${this.hover.x + this.hover.width + 10}px`, top: `${this.hover.y}px` };
+    },
+  },
+  methods: {
+    color(kind) { return KIND_COLORS[kind] || "#7a7a7a"; },
+    kindName(kind) { return KIND_NAMES[kind] || kind; },
+    pick(box) { this.$emit("pick", box); },
+    save(event) {
+      const svg = event.currentTarget.closest(".diagram").querySelector("svg");
+      downloadSvg(svg, this.title, this.layout.width, this.layout.height, getComputedStyle(svg.closest(".card") || svg).backgroundColor);
+    },
+  },
+  template: "#diagram-template",
+};
+
 const app = Vue.createApp({
-  components: { chart: Chart },
+  components: { chart: Chart, diagram: Diagram },
   data() {
     return {
       tree: { root: "", groups: {} }, filter: "", collapsed: {}, refreshed: "",
       current: { path: null, kind: null }, record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
       tab: "overview", logy: false, metricFilter: "", logs: { name: "stdout.txt", lines: [], total: 0 }, describeText: null,
-      texts: {},
+      texts: {}, modelPick: null,
       sweep: null, selected: [], overlay: {}, diff: null, sortKey: null, sortDesc: false, lightbox: null,
     };
   },
@@ -258,7 +348,53 @@ const app = Vue.createApp({
       if (!manifest || manifest.kind !== "point" || this.record.sweep) return "";
       return manifest.objective ? `${manifest.objective.monitor} ${manifest.objective.mode || "min"}, not scored yet` : "";
     },
-    tabNames() { return ["overview", "curves", "steps", "plots", "samples", "config", "notes", "events", "logs", "describe"]; },
+    tabNames() { return ["overview", "curves", "steps", "model", "data", "plots", "samples", "config", "notes", "events", "logs", "describe"]; },
+    architectureModels() { return Object.keys((this.record && this.record.architecture && this.record.architecture.models) || {}); },
+    currentArchitecture() {
+      const models = (this.record && this.record.architecture && this.record.architecture.models) || {};
+      const label = this.modelPick && models[this.modelPick] ? this.modelPick : this.architectureModels[0];
+      return label ? { label, ...models[label] } : null;
+    },
+    pipeline() {
+      const data = this.record && this.record.data;
+      if (!data || !(data.stages || []).length) return null;
+      const boxes = [], arrows = [];
+      const stages = data.stages;
+      let column = 0, previous = "source";
+      boxes.push({ name: "source", kind: "source", column, row: 0, lines: ["source", `${count(stages[0].rows)} rows`, `${stages[0].columns} columns`] });
+      for (const stage of stages.slice(1)) {
+        column += 1;
+        const added = stage.added || [], removed = stage.removed || [];
+        const change = [added.length ? `+${added.length}` : "", removed.length ? `−${removed.length}` : ""].filter(Boolean).join(" ");
+        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note: [...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)],
+                     lines: [stage.stage, `${count(stage.rows)} rows`, `${stage.columns} columns${change ? "  " + change : ""}`] });
+        arrows.push([previous, stage.stage, "", false]);
+        previous = stage.stage;
+      }
+      const sets = orderedSets(Object.keys(data.split || {}));
+      if (!sets.length) return { boxes, arrows };
+      column += 1;
+      sets.forEach((set, row) => { boxes.push({ name: `split:${set}`, kind: "split", column, row, lines: [set, `${count(data.split[set])} rows`] }); arrows.push([previous, `split:${set}`, "", false]); });
+      let last = set => `split:${set}`;
+      const after = data.after_set_transforms || {};
+      if (sets.some(set => after[set] !== undefined && after[set] !== data.split[set])) {
+        column += 1;
+        sets.forEach((set, row) => { boxes.push({ name: `after:${set}`, kind: "transform", column, row, lines: [`${set} transforms`, `${count(after[set])} rows`] }); arrows.push([`split:${set}`, `after:${set}`, "", false]); });
+        last = set => `after:${set}`;
+      }
+      const fit = data.fit || {};
+      column += 1;
+      const fitted = Object.entries(fit.preprocessors || {}).map(([name, columns]) => `${name} ${columns}`).join(", ");
+      const lines = ["fit on train", ...(data.frames || []).length ? [`frames ${data.frames.join(", ")}`] : [], ...wrapWords(fitted || "no preprocessors", 30),
+                     `${fit.features || 0} features, ${(fit.targets || []).length} targets`];
+      boxes.push({ name: "fit", kind: "fit", column, row: 0, lines, note: (fit.targets || []).length ? ["targets", ...fit.targets] : [] });
+      sets.forEach(set => arrows.push([last(set), "fit", "", set !== "train"]));
+      column += 1;
+      sets.forEach((set, row) => { const entry = (data.sets || {})[set] || {}; boxes.push({ name: `feed:${set}`, kind: "feed", column, row, lines: [set, `${count(entry.rows)} rows`, `${entry.features ?? "?"} features`] }); arrows.push(["fit", `feed:${set}`, "", false]); });
+      column += 1;
+      sets.forEach((set, row) => { const entry = (data.loaders || {})[set] || {}; boxes.push({ name: `loader:${set}`, kind: "loaders", column, row, lines: [`${set} loader`, `${count(entry.batches)} x ${entry.size}`] }); arrows.push([`feed:${set}`, `loader:${set}`, "", false]); });
+      return { boxes, arrows };
+    },
     series() {
       const found = {};
       for (const line of this.history.lines) {
@@ -376,6 +512,7 @@ const app = Vue.createApp({
     fileUrl(kind, name) { return `/file?path=${encodeURIComponent(`${this.current.path}/${kind}/${name}`)}`; },
     tabCount(name) {
       if (!this.record) return 0;
+      if (name === "model") return this.architectureModels.length;
       if (name === "plots") return this.record.plots.length;
       if (name === "samples") return this.record.samples.length;
       if (name === "events") return this.record.events.length;
@@ -389,6 +526,11 @@ const app = Vue.createApp({
       return "";
     },
     toggleGroup(name) { this.collapsed = { ...this.collapsed, [name]: !this.collapsed[name] }; },
+    pickModel(box) {
+      if (box.kind !== "model") return;
+      const label = (box.lines[1] || "").replace(/^model /, "");
+      if (this.architectureModels.includes(label)) this.modelPick = label;
+    },
     async loadTree() {
       const tree = await api("/api/tree");
       if (tree) this.tree = tree;
@@ -410,7 +552,7 @@ const app = Vue.createApp({
       this.current = { path, kind };
       this.record = null; this.sweep = null; this.history = { lines: [], offset: 0 }; this.steps = { lines: [], offset: 0 };
       this.selected = []; this.overlay = {}; this.diff = null; this.describeText = null; this.lightbox = null;
-      this.logs = { name: "stdout.txt", lines: [], total: 0 };
+      this.logs = { name: "stdout.txt", lines: [], total: 0 }; this.modelPick = null;
       if (kind === "sweep") { this.tab = "overview"; await this.loadSweep(); return; }
       if (["plots", "samples", "describe"].includes(this.tab)) this.tab = "overview";
       await this.loadRecord();

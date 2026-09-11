@@ -1,5 +1,7 @@
 """kalfa's own architecture drawing: the graph, the traced shapes, the losses and the optimizers."""
 
+import json
+
 import torch
 from torch import nn
 
@@ -9,6 +11,7 @@ from kalfa.std.adapter.kalfa.criterion import CriterionAdapter
 from kalfa.std.adapter.kalfa.objective import ObjectiveAdapter
 from kalfa.std.criterion.kalfa.regression import mse
 from kalfa.std.feed.kalfa.table import table
+from kalfa.std.lego.kalfa.architecture_note import architecture_note
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.optimizer.torch.optimizers import Sgd
 from kalfa.std.plot.kalfa.architecture import architecture, graph_layout, traced_shapes, training_layout
@@ -46,3 +49,14 @@ def test_the_drawing_writes_one_file_per_model(tmp_path):
                  losses_keys={"loss_mse": {}}, optimizers={"m": Sgd({"m": model}, {"lr": 0.1}, None, "loss_mse")})
     written = sorted(path.name for path in (tmp_path / "plots").glob("*.png"))
     assert written == ["architecture_m.png", "architecture_plain.png"]
+
+
+def test_the_note_writes_the_layout_of_every_model(tmp_path):
+    model = tiny_model()
+    loader = torch_loader(table(frame(rows=8)), "test", 4)
+    architecture_note({"m": model, "m.ema": model}, {"test": loader}, predicts="m", record=str(tmp_path))
+    note = json.loads((tmp_path / "architecture.json").read_text())
+    assert list(note["models"]) == ["m"]
+    boxes = {box["name"]: box for box in note["models"]["m"]["boxes"]}
+    assert boxes["layer"]["lines"] == ["layer", "Linear", "2x3 -> 2x1"] and boxes["out:y"]["column"] == 2
+    assert boxes["in:x"]["row"] == 0 and ["layer", "out:y", "y"] in note["models"]["m"]["arrows"]
