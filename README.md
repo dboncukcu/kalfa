@@ -147,7 +147,8 @@ sweep.plan`, `queue $(N)`) and `sweep.sh` (the environment of the site, then `ka
 `--prepare-data` runs the data block once into `<root>/data/` and every point starts from it. `kalfa board <root>`
 watches all of it: a reader of the records under a root, served on `127.0.0.1:8080` with no dependency beyond
 Python (the page is `src/kalfa/board/static/`, a Vue application shipped with its own copy of Vue, so it works
-without a network), that lists the runs, points and sweeps by their manifests, follows a running record, and
+without a network, and the address bar carries the record, the tab, the open plot and the view options, so a
+link shares exactly one view and a reload keeps it), that lists the runs, points and sweeps by their manifests, follows a running record, and
 shows per record the latest metrics, one chart per metric with the sets as lines, the step curves, the plots and
 the samples, the config, the notes, the node timings, the events and the log tails; per sweep the live table of
 points with the best one, the curves of ticked points overlaid and the difference between two of them; on a

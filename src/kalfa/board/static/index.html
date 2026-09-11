@@ -11,7 +11,7 @@
   <aside class="sidebar">
     <header class="brand">
       <div class="brand-row">
-        <h1>kalfa board</h1>
+        <h1><a href="#/">kalfa board</a></h1>
         <span class="pulse" :class="{live: live}" :title="live ? 'following a running record' : 'idle'"></span>
       </div>
       <div class="root" :title="tree.root">{{ tree.root }}</div>
@@ -25,11 +25,12 @@
           <span class="count">{{ group.entries.length }}</span>
         </button>
         <ul v-show="!collapsed[group.name]">
-          <li v-for="entry in group.entries" :key="entry.path" :class="{active: entry.path === current.path}"
-              @click="open(entry)">
-            <span class="dot" :class="stateOf(entry)"></span>
-            <span class="name" :title="entry.path">{{ entry.name }}</span>
-            <span class="badge kind">{{ entry.kind }}</span>
+          <li v-for="entry in group.entries" :key="entry.path" :class="{active: entry.path === path}">
+            <a :href="recordLink(entry.path)" :title="entry.path">
+              <span class="dot" :class="stateOf(entry)"></span>
+              <span class="name">{{ entry.name }}</span>
+              <span class="badge kind">{{ entry.kind }}</span>
+            </a>
           </li>
         </ul>
       </section>
@@ -39,16 +40,17 @@
   </aside>
 
   <main class="content">
-    <section v-if="!current.path" class="welcome">
+    <section v-if="!path" class="welcome">
       <h2>Pick a record</h2>
-      <p>Runs, sweep points and sweeps under the root are listed on the left. A running record is followed
-        every few seconds: its curves, plots and logs grow in place.</p>
+      <p>Runs, sweep points and sweeps under the root are listed on the left. The address bar carries the record,
+        the tab and the open plot, so a link shares exactly this view and a reload keeps it. A running record is
+        followed every few seconds.</p>
     </section>
 
-    <section v-else-if="current.kind === 'sweep'" class="view">
+    <section v-else-if="record && isSweep" class="view">
       <header class="head" v-if="sweep">
         <div class="title-row">
-          <h2 class="title">{{ current.path }}</h2>
+          <h2 class="title">{{ path }}</h2>
           <span class="badge kind">sweep</span>
           <span class="badge" :class="sweepState">{{ sweepState }}</span>
         </div>
@@ -67,7 +69,7 @@
           <span class="big">{{ fmt(sweep.best.objective.value) }}</span>
           <span class="muted">at turn {{ sweep.best.objective.turn }}</span>
           <span class="chip" v-for="(value, key) in sweep.best.values" :key="key">{{ key }} = {{ fmt(value) }}</span>
-          <a href="#" class="link" @click.prevent="openPath(sweep.best.path, 'point')">open point {{ sweep.best.id }}</a>
+          <a class="link" :href="recordLink(sweep.best.path)">open point {{ sweep.best.id }}</a>
         </div>
       </div>
       <div class="card" v-if="sweep">
@@ -85,7 +87,7 @@
           </thead>
           <tbody>
             <tr v-for="point in sortedPoints" :key="point.path" :class="{best: sweep.best && sweep.best.path === point.path}">
-              <td class="tick"><input type="checkbox" :checked="selected.includes(point.path)" @change="toggleSelected(point.path)"></td>
+              <td class="tick"><input type="checkbox" :checked="selected.includes(point.path)" @change="togglePick(point.path)"></td>
               <td class="mono">{{ point.id ?? '' }}</td>
               <td v-for="key in pointKeys" :key="key" class="mono">{{ fmt(point.values[key]) }}</td>
               <td><span class="badge" :class="stateOf(point)">{{ stateOf(point) }}</span></td>
@@ -93,7 +95,7 @@
               <td class="num mono">
                 <template v-if="point.objective">{{ fmt(point.objective.value) }} <span class="muted">@{{ point.objective.turn }}</span></template>
               </td>
-              <td><a href="#" class="link" @click.prevent="openPath(point.path, 'point')">open</a></td>
+              <td><a class="link" :href="recordLink(point.path)">open</a></td>
             </tr>
           </tbody>
         </table>
@@ -102,7 +104,7 @@
       <div class="card" v-if="overlayLines.length">
         <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of the ticked points</div>
         <chart :lines="overlayLines" xlabel="turn" :logy="logy"></chart>
-        <label class="toggle"><input type="checkbox" v-model="logy"> log scale</label>
+        <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
       </div>
       <div class="card" v-if="selected.length >= 2">
         <div class="card-label">difference between {{ selected[0] }} and {{ selected[1] }}</div>
@@ -112,13 +114,13 @@
       </div>
     </section>
 
-    <section v-else class="view" :key="current.path">
-      <header class="head" v-if="record">
+    <section v-else-if="record" class="view">
+      <header class="head">
         <div class="title-row">
-          <h2 class="title">{{ record.manifest && record.manifest.name || current.path }}</h2>
-          <span class="badge kind">{{ current.kind }}</span>
+          <h2 class="title">{{ record.manifest && record.manifest.name || path }}</h2>
+          <span class="badge kind">{{ kind }}</span>
           <span class="badge" :class="state">{{ state }}</span>
-          <span class="path muted" v-if="record.manifest && record.manifest.name">{{ current.path }}</span>
+          <span class="path muted" v-if="record.manifest && record.manifest.name">{{ path }}</span>
         </div>
         <div class="meta-row">
           <span v-if="record.manifest && record.manifest.started">started {{ ago(record.manifest.started) }}</span>
@@ -140,13 +142,13 @@
         </div>
       </header>
 
-      <nav class="tabs" v-if="record">
-        <button v-for="name in tabNames" :key="name" :class="{active: tab === name}" @click="switchTab(name)">
+      <nav class="tabs">
+        <a v-for="name in tabNames" :key="name" :href="tabLink(name)" :class="{active: tab === name}">
           {{ name }}<span class="tab-count" v-if="tabCount(name)">{{ tabCount(name) }}</span>
-        </button>
+        </a>
       </nav>
 
-      <div class="panel" v-if="record && tab === 'overview'">
+      <div class="panel" v-if="tab === 'overview'">
         <div class="grid two">
           <div class="card">
             <div class="card-label">latest turn</div>
@@ -192,15 +194,15 @@
         </div>
       </div>
 
-      <div class="panel" v-if="record && tab === 'curves'">
+      <div class="panel" v-if="tab === 'curves'">
         <div class="toolbar">
-          <input class="filter" v-model.trim="metricFilter" type="search" placeholder="filter metrics" spellcheck="false">
-          <label class="toggle"><input type="checkbox" v-model="logy"> log scale</label>
+          <input class="filter" :value="metricFilter" @input="setFilter($event.target.value.trim())" type="search" placeholder="filter metrics" spellcheck="false">
+          <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
           <span class="muted">{{ metricCharts.length }} metrics · one line per set</span>
         </div>
         <div class="grid charts" v-if="metricCharts.length">
-          <div class="card" v-for="item in metricCharts" :key="item.name">
-            <chart :lines="item.lines" :title="item.name" xlabel="turn" :logy="logy" :marks="ruleMarks"></chart>
+          <div class="card" v-for="entry in metricCharts" :key="entry.name">
+            <chart :lines="entry.lines" :title="entry.name" xlabel="turn" :logy="logy" :marks="ruleMarks"></chart>
           </div>
           <div class="card" v-if="rateLines.length">
             <chart :lines="rateLines" title="learning rate" xlabel="turn" :logy="true"></chart>
@@ -209,23 +211,23 @@
         <p class="empty" v-else>nothing to draw yet</p>
       </div>
 
-      <div class="panel" v-if="record && tab === 'steps'">
+      <div class="panel" v-if="tab === 'steps'">
         <div class="toolbar">
-          <label class="toggle"><input type="checkbox" v-model="logy"> log scale</label>
-          <span class="muted">{{ steps.lines.length }} updates · {{ stepCharts.length ? 'drawn at most 2000 points per line' : '' }}</span>
+          <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
+          <span class="muted">{{ steps.lines.length }} updates<template v-if="stepCharts.length"> · at most 2000 points per line</template></span>
         </div>
         <div class="grid charts" v-if="stepCharts.length">
-          <div class="card" v-for="item in stepCharts" :key="item.name">
-            <chart :lines="item.lines" :title="item.name" xlabel="step" :logy="logy" :marks="turnMarks"></chart>
+          <div class="card" v-for="entry in stepCharts" :key="entry.name">
+            <chart :lines="entry.lines" :title="entry.name" xlabel="step" :logy="logy" :marks="turnMarks"></chart>
           </div>
         </div>
         <p class="empty" v-else>no step written yet</p>
       </div>
 
-      <div class="panel" v-if="record && tab === 'model'">
+      <div class="panel" v-if="tab === 'model'">
         <template v-if="currentArchitecture">
           <div class="toolbar" v-if="architectureModels.length > 1">
-            <button v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" @click="modelPick = label">{{ label }}</button>
+            <a v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" :href="link({model: label})">{{ label }}</a>
             <span class="muted">a box of another model opens it</span>
           </div>
           <div class="card">
@@ -233,17 +235,18 @@
           </div>
         </template>
         <p class="empty" v-else>no architecture.json in the record; runs write it since this version</p>
-        <div class="card" v-if="moduleText">
+        <div class="card" v-if="record.plots.includes('architecture_text.txt')">
           <div class="toolbar">
             <span class="card-label">module text (plots/architecture_text.txt)</span>
             <button class="small" @click="showModuleText = !showModuleText">{{ showModuleText ? 'hide' : 'show' }}</button>
+            <a class="small" :href="link({tab: 'plots', item: 'architecture_text.txt'})">open</a>
             <a class="small" :href="fileUrl('plots', 'architecture_text.txt')" download="architecture_text.txt">save</a>
           </div>
-          <pre class="code" v-if="showModuleText">{{ moduleText }}</pre>
+          <pre class="code" v-if="showModuleText">{{ moduleText === undefined ? 'reading' : moduleText }}</pre>
         </div>
       </div>
 
-      <div class="panel" v-if="record && tab === 'data'">
+      <div class="panel" v-if="tab === 'data'">
         <div class="card" v-if="pipeline">
           <diagram :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline"></diagram>
         </div>
@@ -262,28 +265,32 @@
         <p class="empty" v-if="!pipeline">no data.json in the record</p>
       </div>
 
-      <div class="panel" v-if="record && (tab === 'plots' || tab === 'samples')">
+      <div class="panel" v-if="tab === 'plots' || tab === 'samples'">
         <div class="gallery" v-if="images.length">
-          <figure v-for="name in images" :key="name" @click="lightbox = name">
-            <img :src="fileUrl(tab, name)" :alt="name" loading="lazy">
-            <figcaption><span>{{ name }}</span><a class="small" :href="fileUrl(tab, name)" :download="name" @click.stop>save</a></figcaption>
+          <figure v-for="name in images" :key="name">
+            <a :href="link({item: name})"><img :src="fileUrl(tab, name)" :alt="name" loading="lazy"></a>
+            <figcaption><span>{{ name }}</span><a class="small" :href="fileUrl(tab, name)" :download="name">save</a></figcaption>
           </figure>
         </div>
         <div class="card text-card" v-for="name in textFiles" :key="name">
-          <div class="toolbar"><span class="card-label">{{ name }}</span><a class="small" :href="fileUrl(tab, name)" :download="name">save</a></div>
-          <pre class="code">{{ texts[name] || 'reading' }}</pre>
+          <div class="toolbar">
+            <span class="card-label">{{ name }}</span>
+            <a class="small" :href="link({item: name})">open</a>
+            <a class="small" :href="fileUrl(tab, name)" :download="name">save</a>
+          </div>
+          <pre class="code">{{ texts[textKey(name)] === undefined ? 'reading' : texts[textKey(name)] }}</pre>
         </div>
         <p class="empty" v-if="!gallery.length">nothing written yet</p>
       </div>
 
-      <div class="panel" v-if="record && tab === 'config'">
+      <div class="panel" v-if="tab === 'config'">
         <div class="card">
           <div class="toolbar"><span class="card-label">resolved.yaml</span><button class="small" @click="copy(record.resolved)">copy</button></div>
           <pre class="code">{{ record.resolved || 'no resolved.yaml' }}</pre>
         </div>
       </div>
 
-      <div class="panel" v-if="record && tab === 'notes'">
+      <div class="panel" v-if="tab === 'notes'">
         <div class="grid two">
           <div class="card" v-if="record.manifest">
             <div class="card-label">manifest</div>
@@ -321,7 +328,7 @@
         </div>
       </div>
 
-      <div class="panel" v-if="record && tab === 'events'">
+      <div class="panel" v-if="tab === 'events'">
         <div class="card">
           <table class="table" v-if="record.events.length">
             <thead><tr><th>time</th><th>kind</th><th>node</th><th class="num">ms</th><th>note</th></tr></thead>
@@ -336,28 +343,40 @@
         </div>
       </div>
 
-      <div class="panel" v-if="record && tab === 'logs'">
+      <div class="panel" v-if="tab === 'logs'">
         <div class="toolbar">
-          <button v-for="name in record.logs" :key="name" class="small" :class="{active: logs.name === name}" @click="loadLogs(name)">{{ name }}</button>
+          <a v-for="name in record.logs" :key="name" class="small" :class="{active: logName === name}" :href="link({file: name})">{{ name }}</a>
           <span class="muted" v-if="logs.total">last {{ logs.lines.length }} of {{ logs.total }} lines</span>
         </div>
         <pre class="code log" v-if="logs.lines.length">{{ logs.lines.join('\n') }}</pre>
         <p class="empty" v-else>{{ record.logs.length ? 'empty so far' : 'no log file in the record' }}</p>
       </div>
 
-      <div class="panel" v-if="record && tab === 'describe'">
+      <div class="panel" v-if="tab === 'describe'">
         <div class="card">
           <pre class="code" v-if="describeText">{{ describeText }}</pre>
           <p class="muted" v-else>reading the config under the record's contract</p>
         </div>
       </div>
     </section>
+
+    <section v-else class="welcome">
+      <h2>{{ path }}</h2>
+      <p class="muted">reading the record, or there is no record at this path</p>
+    </section>
   </main>
 
-  <div class="lightbox" v-if="lightbox" @click="lightbox = null">
+  <div class="lightbox" v-if="item && record && !isSweep" @click="closeItem">
     <figure @click.stop>
-      <img :src="fileUrl(tab, lightbox)" :alt="lightbox">
-      <figcaption>{{ lightbox }} <button class="small" @click="stepLightbox(-1)">previous</button> <button class="small" @click="stepLightbox(1)">next</button> <a class="small" :href="fileUrl(tab, lightbox)" :download="lightbox">save</a> <button class="small" @click="lightbox = null">close</button></figcaption>
+      <pre class="code viewer" v-if="itemIsText">{{ itemText === undefined ? 'reading' : itemText }}</pre>
+      <img v-else :src="fileUrl(tab, item)" :alt="item">
+      <figcaption>
+        {{ item }}
+        <button class="small" @click="stepItem(-1)">previous</button>
+        <button class="small" @click="stepItem(1)">next</button>
+        <a class="small" :href="fileUrl(tab, item)" :download="item">save</a>
+        <button class="small" @click="closeItem">close</button>
+      </figcaption>
     </figure>
   </div>
 </div>
@@ -385,7 +404,7 @@
         </g>
         <g v-for="box in layout.boxes" :key="box.name" class="node" :class="{clickable: box.kind === 'model'}" @mouseenter="hover = box" @click="pick(box)">
           <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" rx="7" :fill="color(box.kind)" fill-opacity="0.16" :stroke="color(box.kind)"></rect>
-          <text :x="box.x + box.width / 2" :y="box.y + 10 + 11" text-anchor="middle">
+          <text :x="box.x + box.width / 2" :y="box.y + 21" text-anchor="middle">
             <tspan v-for="(line, index) in box.shown" :key="index" :x="box.x + box.width / 2" :dy="index ? 15 : 0" :class="{first: index === 0}">{{ line }}</tspan>
           </text>
         </g>

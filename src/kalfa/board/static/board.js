@@ -8,57 +8,9 @@ const KIND_NAMES = { input: "input wire", torch: "torch layer", lego: "kalfa lay
                      loss: "loss", optimizer: "optimizer", source: "source", transform: "transform", split: "split",
                      frames: "frame transforms", fit: "fit on train", feed: "feed", loaders: "loaders" };
 const SET_ORDER = ["train", "valid", "test"];
-
-function orderedSets(names) {
-  return [...names].sort((a, b) => (SET_ORDER.indexOf(a) + 1 || 99) - (SET_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
-}
-
-function wrapWords(text, width) {
-  const lines = [];
-  let current = "";
-  for (const word of text.split(", ")) {
-    if (current && current.length + word.length + 2 > width) { lines.push(current); current = word; }
-    else current = current ? `${current}, ${word}` : word;
-  }
-  if (current) lines.push(current);
-  return lines;
-}
-
-function downloadSvg(svg, title, width, height, background) {
-  const copy = svg.cloneNode(true);
-  const originals = svg.querySelectorAll("*");
-  copy.querySelectorAll("*").forEach((node, index) => {
-    const style = getComputedStyle(originals[index]);
-    for (const key of ["fill", "stroke", "stroke-width", "stroke-dasharray", "font-size", "font-family", "opacity", "font-weight"]) {
-      if (style[key]) node.setAttribute(key, style[key]);
-    }
-  });
-  copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  if (!copy.getAttribute("viewBox")) copy.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  copy.setAttribute("width", width * 2);
-  copy.setAttribute("height", height * 2);
-  const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const image = new Image();
-  const name = (title || "chart").replace(/[^\w.-]+/g, "_");
-  image.onload = () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = width * 2; canvas.height = height * 2;
-    const context = canvas.getContext("2d");
-    context.fillStyle = background && background !== "rgba(0, 0, 0, 0)" ? background : "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(image, 0, 0);
-    URL.revokeObjectURL(url);
-    canvas.toBlob(png => {
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(png);
-      link.download = `${name}.png`;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    }, "image/png");
-  };
-  image.src = url;
-}
+const TABS = ["overview", "curves", "steps", "model", "data", "plots", "samples", "config", "notes", "events", "logs", "describe"];
+const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
+const TEXT = /\.(txt|md|json|csv|yaml|yml)$/i;
 
 async function api(route, params) {
   const query = new URLSearchParams(params || {}).toString();
@@ -116,6 +68,21 @@ function setColor(set, position) {
   return SET_COLORS[set] || PALETTE[(position || 0) % PALETTE.length];
 }
 
+function orderedSets(names) {
+  return [...names].sort((a, b) => (SET_ORDER.indexOf(a) + 1 || 99) - (SET_ORDER.indexOf(b) + 1 || 99) || a.localeCompare(b));
+}
+
+function wrapWords(text, width) {
+  const lines = [];
+  let current = "";
+  for (const word of text.split(", ")) {
+    if (current && current.length + word.length + 2 > width) { lines.push(current); current = word; }
+    else current = current ? `${current}, ${word}` : word;
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 function downsample(points, limit) {
   if (points.length <= limit) return points;
   const size = points.length / (limit / 2);
@@ -128,7 +95,9 @@ function downsample(points, limit) {
       if (point[1] < low[1]) low = point;
       if (point[1] > high[1]) high = point;
     }
-    kept.push(...(low[0] <= high[0] ? [low, high] : [high, low]).filter((point, index, pair) => index === 0 || point !== pair[0]));
+    const pair = low[0] <= high[0] ? [low, high] : [high, low];
+    kept.push(pair[0]);
+    if (pair[1] !== pair[0]) kept.push(pair[1]);
   }
   return kept;
 }
@@ -148,6 +117,63 @@ function ticksOf(min, max, target) {
   const found = [];
   for (let value = Math.ceil(min / step) * step; value <= max + step / 1e6; value += step) found.push(Number(value.toFixed(10)));
   return found;
+}
+
+function downloadSvg(svg, title, width, height, background) {
+  const copy = svg.cloneNode(true);
+  const originals = svg.querySelectorAll("*");
+  copy.querySelectorAll("*").forEach((node, index) => {
+    const style = getComputedStyle(originals[index]);
+    for (const key of ["fill", "stroke", "stroke-width", "stroke-dasharray", "font-size", "font-family", "opacity", "font-weight"]) {
+      if (style[key]) node.setAttribute(key, style[key]);
+    }
+  });
+  copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  if (!copy.getAttribute("viewBox")) copy.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  copy.setAttribute("width", width * 2);
+  copy.setAttribute("height", height * 2);
+  const blob = new Blob([new XMLSerializer().serializeToString(copy)], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const image = new Image();
+  const name = (title || "chart").replace(/[^\w.-]+/g, "_");
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    const context = canvas.getContext("2d");
+    context.fillStyle = background && background !== "rgba(0, 0, 0, 0)" ? background : "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(png => {
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(png);
+      link.download = `${name}.png`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    }, "image/png");
+  };
+  image.src = url;
+}
+
+function parseHash(hash) {
+  const text = (hash || "").replace(/^#/, "");
+  const question = text.indexOf("?");
+  const path = decodeURIComponent((question < 0 ? text : text.slice(0, question)).replace(/^\/+/, "").replace(/\/+$/, ""));
+  const params = {};
+  if (question >= 0) {
+    for (const [key, value] of new URLSearchParams(text.slice(question + 1))) params[key] = value;
+  }
+  return { path, params };
+}
+
+function buildHash(path, params) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== null && value !== undefined && value !== "" && value !== false) query.set(key, String(value));
+  }
+  const text = query.toString();
+  return `#/${path.split("/").map(encodeURIComponent).join("/")}${text ? "?" + text : ""}`;
 }
 
 const Chart = {
@@ -195,28 +221,22 @@ const Chart = {
     tooltip() {
       if (this.hover === null || !this.domain) return null;
       const dots = [];
-      let label = null, anchor = null;
+      let anchor = null;
       for (const line of this.visible) {
         let best = null;
         for (const point of line.points) {
           if (best === null || Math.abs(point[0] - this.hover) < Math.abs(best[0] - this.hover)) best = point;
         }
         if (best === null) continue;
-        if (anchor === null || Math.abs(best[0] - this.hover) < Math.abs(anchor - this.hover)) { anchor = best[0]; label = fmt(best[0]); }
+        if (anchor === null || Math.abs(best[0] - this.hover) < Math.abs(anchor - this.hover)) anchor = best[0];
         dots.push({ name: line.name, color: line.color, y: this.sy(best[1]), text: fmt(best[1]), x: best[0] });
       }
       if (anchor === null) return null;
-      return { x: this.sx(anchor), label, dots: dots.filter(dot => dot.x === anchor) };
+      return { x: this.sx(anchor), label: fmt(anchor), dots: dots.filter(dot => dot.x === anchor) };
     },
-    tooltipLeft() {
-      return this.tooltip ? this.tooltip.x / this.width * 100 : 0;
-    },
+    tooltipLeft() { return this.tooltip ? this.tooltip.x / this.width * 100 : 0; },
   },
   methods: {
-    save(event) {
-      const svg = event.currentTarget.closest(".chart").querySelector("svg");
-      downloadSvg(svg, this.title, this.width, this.height, getComputedStyle(svg.closest(".card") || svg).backgroundColor);
-    },
     sx(x) { return this.pad.left + (x - this.domain.xmin) / (this.domain.xmax - this.domain.xmin) * (this.width - this.pad.left - this.pad.right); },
     sy(y) {
       const value = this.logy ? Math.log10(y) : y;
@@ -229,6 +249,10 @@ const Chart = {
       this.hover = this.domain.xmin + (x - this.pad.left) / (this.width - this.pad.left - this.pad.right) * (this.domain.xmax - this.domain.xmin);
     },
     toggle(name) { this.hidden = { ...this.hidden, [name]: !this.hidden[name] }; },
+    save(event) {
+      const svg = event.currentTarget.closest(".chart").querySelector("svg");
+      downloadSvg(svg, this.title, this.width, this.height, getComputedStyle(svg.closest(".card") || svg).backgroundColor);
+    },
   },
   template: "#chart-template",
 };
@@ -301,26 +325,40 @@ const app = Vue.createApp({
   components: { chart: Chart, diagram: Diagram },
   data() {
     return {
+      route: parseHash(location.hash),
       tree: { root: "", groups: {} }, filter: "", collapsed: {}, refreshed: "",
-      current: { path: null, kind: null }, record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
-      tab: "overview", logy: false, metricFilter: "", logs: { name: "stdout.txt", lines: [], total: 0 }, describeText: null,
-      texts: {}, modelPick: null, showModuleText: false,
-      sweep: null, selected: [], overlay: {}, diff: null, sortKey: null, sortDesc: false, lightbox: null,
+      record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
+      logs: { name: "", lines: [], total: 0 }, texts: {}, describeText: null, showModuleText: false,
+      sweep: null, overlay: {}, diff: null,
     };
   },
   computed: {
+    path() { return this.route.path; },
+    isSweep() { return !!(this.record && this.record.manifest && this.record.manifest.kind === "sweep"); },
+    kind() { return (this.record && this.record.manifest && this.record.manifest.kind) || "run"; },
+    tab() { return TABS.includes(this.route.params.tab) ? this.route.params.tab : "overview"; },
+    item() { return this.route.params.item || null; },
+    logy() { return this.route.params.log === "1"; },
+    metricFilter() { return this.route.params.q || ""; },
+    logName() {
+      const names = (this.record && this.record.logs) || [];
+      return names.includes(this.route.params.file) ? this.route.params.file : (names[0] || "");
+    },
+    selected() { return this.route.params.pick ? this.route.params.pick.split(",").filter(Boolean) : []; },
+    sortKey() { return this.route.params.sort || null; },
+    sortDesc() { return this.route.params.desc === "1"; },
     groups() {
       const needle = this.filter.toLowerCase();
       return Object.entries(this.tree.groups).map(([name, entries]) => ({
         name, entries: entries.filter(entry => !needle || entry.name.toLowerCase().includes(needle) || entry.path.toLowerCase().includes(needle)) }))
         .filter(group => group.entries.length);
     },
-    live() {
-      if (!this.current.path) return false;
-      if (this.current.kind === "sweep") return !!(this.sweep && this.sweep.points.some(point => this.stateOf(point) === "running"));
-      return this.state === "running";
-    },
     state() { return this.record ? this.stateOf(this.record) : "pending"; },
+    live() {
+      if (!this.path) return false;
+      if (this.isSweep) return !!(this.sweep && this.sweep.points.some(point => this.stateOf(point) === "running"));
+      return ["running", "pending"].includes(this.state);
+    },
     sweepState() {
       if (!this.sweep) return "pending";
       const states = this.sweep.points.map(point => this.stateOf(point));
@@ -348,54 +386,7 @@ const app = Vue.createApp({
       if (!manifest || manifest.kind !== "point" || this.record.sweep) return "";
       return manifest.objective ? `${manifest.objective.monitor} ${manifest.objective.mode || "min"}, not scored yet` : "";
     },
-    tabNames() { return ["overview", "curves", "steps", "model", "data", "plots", "samples", "config", "notes", "events", "logs", "describe"]; },
-    architectureModels() { return Object.keys((this.record && this.record.architecture && this.record.architecture.models) || {}); },
-    moduleText() { return this.record && this.record.plots.includes("architecture_text.txt") ? this.texts["architecture_text.txt"] || "reading" : null; },
-    currentArchitecture() {
-      const models = (this.record && this.record.architecture && this.record.architecture.models) || {};
-      const label = this.modelPick && models[this.modelPick] ? this.modelPick : this.architectureModels[0];
-      return label ? { label, ...models[label] } : null;
-    },
-    pipeline() {
-      const data = this.record && this.record.data;
-      if (!data || !(data.stages || []).length) return null;
-      const boxes = [], arrows = [];
-      const stages = data.stages;
-      let column = 0, previous = "source";
-      boxes.push({ name: "source", kind: "source", column, row: 0, lines: ["source", `${count(stages[0].rows)} rows`, `${stages[0].columns} columns`] });
-      for (const stage of stages.slice(1)) {
-        column += 1;
-        const added = stage.added || [], removed = stage.removed || [];
-        const change = [added.length ? `+${added.length}` : "", removed.length ? `−${removed.length}` : ""].filter(Boolean).join(" ");
-        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note: [...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)],
-                     lines: [stage.stage, `${count(stage.rows)} rows`, `${stage.columns} columns${change ? "  " + change : ""}`] });
-        arrows.push([previous, stage.stage, "", false]);
-        previous = stage.stage;
-      }
-      const sets = orderedSets(Object.keys(data.split || {}));
-      if (!sets.length) return { boxes, arrows };
-      column += 1;
-      sets.forEach((set, row) => { boxes.push({ name: `split:${set}`, kind: "split", column, row, lines: [set, `${count(data.split[set])} rows`] }); arrows.push([previous, `split:${set}`, "", false]); });
-      let last = set => `split:${set}`;
-      const after = data.after_set_transforms || {};
-      if (sets.some(set => after[set] !== undefined && after[set] !== data.split[set])) {
-        column += 1;
-        sets.forEach((set, row) => { boxes.push({ name: `after:${set}`, kind: "transform", column, row, lines: [`${set} transforms`, `${count(after[set])} rows`] }); arrows.push([`split:${set}`, `after:${set}`, "", false]); });
-        last = set => `after:${set}`;
-      }
-      const fit = data.fit || {};
-      column += 1;
-      const fitted = Object.entries(fit.preprocessors || {}).map(([name, columns]) => `${name} ${columns}`).join(", ");
-      const lines = ["fit on train", ...(data.frames || []).length ? [`frames ${data.frames.join(", ")}`] : [], ...wrapWords(fitted || "no preprocessors", 30),
-                     `${fit.features || 0} features, ${(fit.targets || []).length} targets`];
-      boxes.push({ name: "fit", kind: "fit", column, row: 0, lines, note: (fit.targets || []).length ? ["targets", ...fit.targets] : [] });
-      sets.forEach(set => arrows.push([last(set), "fit", "", set !== "train"]));
-      column += 1;
-      sets.forEach((set, row) => { const entry = (data.sets || {})[set] || {}; boxes.push({ name: `feed:${set}`, kind: "feed", column, row, lines: [set, `${count(entry.rows)} rows`, `${entry.features ?? "?"} features`] }); arrows.push(["fit", `feed:${set}`, "", false]); });
-      column += 1;
-      sets.forEach((set, row) => { const entry = (data.loaders || {})[set] || {}; boxes.push({ name: `loader:${set}`, kind: "loaders", column, row, lines: [`${set} loader`, `${count(entry.batches)} x ${entry.size}`] }); arrows.push([`feed:${set}`, `loader:${set}`, "", false]); });
-      return { boxes, arrows };
-    },
+    tabNames() { return TABS; },
     series() {
       const found = {};
       for (const line of this.history.lines) {
@@ -413,7 +404,7 @@ const app = Vue.createApp({
         const { set, name } = splitKey(key);
         if (set === "lr") continue;
         if (needle && !key.toLowerCase().includes(needle)) continue;
-        (byName[name] = byName[name] || []).push({ name: set || key, color: null, points });
+        (byName[name] = byName[name] || []).push({ name: set || key, points });
       }
       return Object.entries(byName).map(([name, lines]) => ({
         name, lines: lines.map((line, index) => ({ ...line, color: setColor(line.name, index) })) }));
@@ -458,9 +449,64 @@ const app = Vue.createApp({
       }
       return marks.length <= 60 ? marks : [];
     },
-    gallery() { return this.record ? (this.tab === "plots" ? this.record.plots : this.record.samples) : []; },
-    images() { return this.gallery.filter(name => /\.(png|jpe?g|gif|svg|webp)$/i.test(name)); },
-    textFiles() { return this.gallery.filter(name => /\.(txt|md|json|csv)$/i.test(name)); },
+    gallery() {
+      if (!this.record) return [];
+      return this.tab === "samples" ? this.record.samples : this.record.plots;
+    },
+    images() { return this.gallery.filter(name => IMAGE.test(name)); },
+    textFiles() { return this.gallery.filter(name => TEXT.test(name)); },
+    itemIsText() { return !!this.item && TEXT.test(this.item); },
+    itemText() { return this.item ? this.texts[this.textKey(this.item)] : undefined; },
+    architectureModels() { return Object.keys((this.record && this.record.architecture && this.record.architecture.models) || {}); },
+    currentArchitecture() {
+      const models = (this.record && this.record.architecture && this.record.architecture.models) || {};
+      const label = models[this.route.params.model] ? this.route.params.model : this.architectureModels[0];
+      return label ? { label, ...models[label] } : null;
+    },
+    moduleText() {
+      if (!this.record || !this.record.plots.includes("architecture_text.txt")) return null;
+      return this.texts[this.textKey("architecture_text.txt")];
+    },
+    pipeline() {
+      const data = this.record && this.record.data;
+      if (!data || !(data.stages || []).length) return null;
+      const boxes = [], arrows = [];
+      const stages = data.stages;
+      let column = 0, previous = "source";
+      boxes.push({ name: "source", kind: "source", column, row: 0, lines: ["source", `${count(stages[0].rows)} rows`, `${stages[0].columns} columns`] });
+      for (const stage of stages.slice(1)) {
+        column += 1;
+        const added = stage.added || [], removed = stage.removed || [];
+        const change = [added.length ? `+${added.length}` : "", removed.length ? `−${removed.length}` : ""].filter(Boolean).join(" ");
+        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note: [...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)],
+                     lines: [stage.stage, `${count(stage.rows)} rows`, `${stage.columns} columns${change ? "  " + change : ""}`] });
+        arrows.push([previous, stage.stage, "", false]);
+        previous = stage.stage;
+      }
+      const sets = orderedSets(Object.keys(data.split || {}));
+      if (!sets.length) return { boxes, arrows };
+      column += 1;
+      sets.forEach((set, row) => { boxes.push({ name: `split:${set}`, kind: "split", column, row, lines: [set, `${count(data.split[set])} rows`] }); arrows.push([previous, `split:${set}`, "", false]); });
+      let last = set => `split:${set}`;
+      const after = data.after_set_transforms || {};
+      if (sets.some(set => after[set] !== undefined && after[set] !== data.split[set])) {
+        column += 1;
+        sets.forEach((set, row) => { boxes.push({ name: `after:${set}`, kind: "transform", column, row, lines: [`${set} transforms`, `${count(after[set])} rows`] }); arrows.push([`split:${set}`, `after:${set}`, "", false]); });
+        last = set => `after:${set}`;
+      }
+      const fit = data.fit || {};
+      column += 1;
+      const fitted = Object.entries(fit.preprocessors || {}).map(([name, columns]) => `${name} ${columns}`).join(", ");
+      const lines = ["fit on train", ...((data.frames || []).length ? [`frames ${data.frames.join(", ")}`] : []), ...wrapWords(fitted || "no preprocessors", 30),
+                     `${fit.features || 0} features, ${(fit.targets || []).length} targets`];
+      boxes.push({ name: "fit", kind: "fit", column, row: 0, lines, note: (fit.targets || []).length ? ["targets", ...fit.targets] : [] });
+      sets.forEach(set => arrows.push([last(set), "fit", "", set !== "train"]));
+      column += 1;
+      sets.forEach((set, row) => { const entry = (data.sets || {})[set] || {}; boxes.push({ name: `feed:${set}`, kind: "feed", column, row, lines: [set, `${count(entry.rows)} rows`, `${entry.features ?? "?"} features`] }); arrows.push(["fit", `feed:${set}`, "", false]); });
+      column += 1;
+      sets.forEach((set, row) => { const entry = (data.loaders || {})[set] || {}; boxes.push({ name: `loader:${set}`, kind: "loaders", column, row, lines: [`${set} loader`, `${count(entry.batches)} x ${entry.size}`] }); arrows.push([`feed:${set}`, `loader:${set}`, "", false]); });
+      return { boxes, arrows };
+    },
     dataStages() { return (this.record && this.record.data && this.record.data.stages) || []; },
     runNodes() {
       const tree = this.record && this.record.run && this.record.run.tree;
@@ -504,13 +550,45 @@ const app = Vue.createApp({
         points: this.overlay[path].filter(line => typeof line[monitor] === "number").map(line => [line.turn, line[monitor]]) }));
     },
   },
+  watch: {
+    path: { immediate: true, handler() { this.enterRecord(); } },
+    tab: { immediate: true, handler() { this.enterTab(); } },
+    item() { this.enterItem(); },
+    selected() { this.loadOverlay(); },
+    logName() { if (this.tab === "logs") this.loadLogs(); },
+  },
   methods: {
     fmt, count, ms, ago, clock, setColor,
     stateOf(entry) { return (entry.status && entry.status.state) || "pending"; },
     shortUri(uri) { return typeof uri === "string" ? uri.split("/").pop() : ""; },
     text(value) { return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value); },
     entries(mapping, skip) { return Object.entries(mapping || {}).filter(([key]) => !(skip || []).includes(key)); },
-    fileUrl(kind, name) { return `/file?path=${encodeURIComponent(`${this.current.path}/${kind}/${name}`)}`; },
+    fileUrl(kind, name) { return `/file?path=${encodeURIComponent(`${this.path}/${kind}/${name}`)}`; },
+    textKey(name) { return `${this.path}/${this.tab === "samples" ? "samples" : "plots"}/${name}`; },
+    link(changes, path) {
+      const params = { ...this.route.params, ...(changes || {}) };
+      return buildHash(path === undefined ? this.path : path, params);
+    },
+    recordLink(path) { return buildHash(path, {}); },
+    go(changes, replace) {
+      const hash = this.link(changes);
+      if (hash === location.hash) return;
+      if (replace) {
+        history.replaceState(null, "", hash);
+        this.route = parseHash(hash);
+      } else {
+        location.hash = hash;
+      }
+    },
+    onHash() {
+      const parsed = parseHash(location.hash);
+      if (JSON.stringify(parsed) !== JSON.stringify(this.route)) this.route = parsed;
+    },
+    tabLink(name) {
+      const kept = { tab: name, item: null, model: null, file: null, q: null, log: null };
+      if (name === "curves" || name === "steps") kept.log = this.route.params.log;
+      return this.link(kept);
+    },
     tabCount(name) {
       if (!this.record) return 0;
       if (name === "model") return this.architectureModels.length;
@@ -520,127 +598,149 @@ const app = Vue.createApp({
       return 0;
     },
     diffClass(line) {
-      if (line.startsWith("+++") || line.startsWith("---")) return "hunk";
-      if (line.startsWith("@@")) return "hunk";
+      if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) return "hunk";
       if (line.startsWith("+")) return "add";
       if (line.startsWith("-")) return "del";
       return "";
     },
     toggleGroup(name) { this.collapsed = { ...this.collapsed, [name]: !this.collapsed[name] }; },
-    pickModel(box) {
-      if (box.kind !== "model") return;
-      const label = (box.lines[1] || "").replace(/^model /, "");
-      if (this.architectureModels.includes(label)) this.modelPick = label;
-    },
     async loadTree() {
       const tree = await api("/api/tree");
       if (tree) this.tree = tree;
       this.refreshed = new Date().toLocaleTimeString();
-      if (!this.record || this.current.kind === "sweep") return;
-      const entry = Object.values(this.tree.groups).flat().find(item => item.path === this.current.path);
+      if (!this.record || this.isSweep) return;
+      const entry = Object.values(this.tree.groups).flat().find(item => item.path === this.path);
       if (entry && this.stateOf(entry) !== this.state) await this.loadRecord();
     },
-    async loadTexts() {
-      const found = {};
-      const names = this.record ? this.record.plots.filter(name => /\.(txt|md|json|csv)$/i.test(name)) : [];
-      for (const name of names) {
-        const response = await fetch(this.fileUrl("plots", name));
-        found[name] = response.ok ? await response.text() : "unreadable";
-      }
-      this.texts = found;
-    },
-    async open(entry) { await this.openPath(entry.path, entry.kind); },
-    async openPath(path, kind) {
-      this.current = { path, kind };
+    async enterRecord() {
       this.record = null; this.sweep = null; this.history = { lines: [], offset: 0 }; this.steps = { lines: [], offset: 0 };
-      this.selected = []; this.overlay = {}; this.diff = null; this.describeText = null; this.lightbox = null;
-      this.logs = { name: "stdout.txt", lines: [], total: 0 }; this.modelPick = null;
-      if (kind === "sweep") { this.tab = "overview"; await this.loadSweep(); return; }
-      if (["plots", "samples", "describe"].includes(this.tab)) this.tab = "overview";
+      this.overlay = {}; this.diff = null; this.describeText = null; this.showModuleText = false;
+      this.logs = { name: "", lines: [], total: 0 };
+      if (!this.path) return;
       await this.loadRecord();
+      if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
+      await this.enterTab();
     },
     async loadRecord() {
-      const record = await api("/api/record", { path: this.current.path });
-      if (!record) return;
+      const path = this.path;
+      const record = await api("/api/record", { path });
+      if (!record || path !== this.path) return;
       this.record = record;
+      if (record.manifest && record.manifest.kind === "sweep") return;
       await this.loadHistory();
-      if (this.tab === "steps") await this.loadSteps();
-      if (this.tab === "logs") await this.loadLogs(this.logs.name);
-      if (this.tab === "plots" || this.tab === "model") await this.loadTexts();
     },
     async loadHistory() {
-      const found = await api("/api/history", { path: this.current.path, offset: this.history.offset });
-      if (found) this.history = { lines: this.history.lines.concat(found.lines), offset: found.offset };
+      const path = this.path;
+      const found = await api("/api/history", { path, offset: this.history.offset });
+      if (found && path === this.path) this.history = { lines: this.history.lines.concat(found.lines), offset: found.offset };
     },
     async loadSteps() {
-      const found = await api("/api/steps", { path: this.current.path, offset: this.steps.offset });
-      if (found) this.steps = { lines: this.steps.lines.concat(found.lines), offset: found.offset };
+      const path = this.path;
+      const found = await api("/api/steps", { path, offset: this.steps.offset });
+      if (found && path === this.path) this.steps = { lines: this.steps.lines.concat(found.lines), offset: found.offset };
     },
-    async loadLogs(name) {
-      const found = await api("/api/tail", { path: this.current.path, name, lines: 300 });
-      if (found) this.logs = { name, lines: found.lines, total: found.total || 0 };
+    async loadLogs() {
+      if (!this.record || !this.logName) return;
+      const path = this.path, name = this.logName;
+      const found = await api("/api/tail", { path, name, lines: 300 });
+      if (found && path === this.path) this.logs = { name, lines: found.lines, total: found.total || 0 };
     },
-    async switchTab(name) {
-      this.tab = name;
-      if (name === "steps" && !this.steps.lines.length) await this.loadSteps();
-      if (name === "plots" || name === "model") await this.loadTexts();
-      if (name === "logs") await this.loadLogs(this.record.logs.includes(this.logs.name) ? this.logs.name : (this.record.logs[0] || "stdout.txt"));
-      if (name === "describe" && !this.describeText) {
-        const found = await api("/api/describe", { path: this.current.path });
-        this.describeText = found ? found.text : "the record cannot be described";
+    async loadTexts() {
+      if (!this.record) return;
+      const path = this.path;
+      const wanted = [...this.record.plots.filter(name => TEXT.test(name)).map(name => ["plots", name]),
+                      ...this.record.samples.filter(name => TEXT.test(name)).map(name => ["samples", name])];
+      for (const [kind, name] of wanted) {
+        const key = `${path}/${kind}/${name}`;
+        if (this.texts[key] !== undefined) continue;
+        const response = await fetch(`/file?path=${encodeURIComponent(key)}`);
+        const content = response.ok ? await response.text() : "unreadable";
+        this.texts = { ...this.texts, [key]: content };
       }
+    },
+    async loadDescribe() {
+      if (this.describeText !== null) return;
+      const path = this.path;
+      const found = await api("/api/describe", { path });
+      if (path === this.path) this.describeText = found ? found.text : "the record cannot be described";
+    },
+    async enterTab() {
+      if (!this.record || this.isSweep) return;
+      if (this.tab === "steps" && !this.steps.lines.length) await this.loadSteps();
+      if (this.tab === "logs") await this.loadLogs();
+      if (this.tab === "plots" || this.tab === "samples" || this.tab === "model") await this.loadTexts();
+      if (this.tab === "describe") await this.loadDescribe();
+      await this.enterItem();
+    },
+    async enterItem() {
+      if (this.item && TEXT.test(this.item)) await this.loadTexts();
     },
     async loadSweep() {
-      const sweep = await api("/api/sweep", { path: this.current.path });
-      if (sweep) this.sweep = sweep;
-      await this.loadOverlay();
-    },
-    async toggleSelected(path) {
-      this.selected = this.selected.includes(path) ? this.selected.filter(item => item !== path) : [...this.selected, path];
-      await this.loadOverlay();
-      await this.loadDiff();
+      const path = this.path;
+      const sweep = await api("/api/sweep", { path });
+      if (sweep && path === this.path) this.sweep = sweep;
     },
     async loadOverlay() {
+      if (!this.isSweep) return;
+      const path = this.path;
       const found = {};
-      for (const path of this.selected) {
-        const history = await api("/api/history", { path });
-        if (history) found[path] = history.lines;
+      for (const point of this.selected) {
+        const history = await api("/api/history", { path: point });
+        if (history) found[point] = history.lines;
       }
+      if (path !== this.path) return;
       this.overlay = found;
+      await this.loadDiff();
     },
     async loadDiff() {
       if (this.selected.length < 2) { this.diff = null; return; }
       const found = await api("/api/diff", { a: this.selected[0], b: this.selected[1] });
       this.diff = found ? (found.diff.length ? found.diff : ["no difference"]) : ["no resolved.yaml to compare"];
     },
-    sortBy(key) {
-      if (this.sortKey === key) this.sortDesc = !this.sortDesc; else { this.sortKey = key; this.sortDesc = false; }
+    togglePick(path) {
+      const picks = this.selected.includes(path) ? this.selected.filter(item => item !== path) : [...this.selected, path];
+      this.go({ pick: picks.join(",") }, true);
     },
-    stepLightbox(direction) {
+    sortBy(key) {
+      if (this.sortKey === key) this.go({ desc: this.sortDesc ? null : "1" }, true);
+      else this.go({ sort: key, desc: null }, true);
+    },
+    setLog(value) { this.go({ log: value ? "1" : null }, true); },
+    setFilter(value) { this.go({ q: value }, true); },
+    closeItem() { this.go({ item: null }, true); },
+    stepItem(direction) {
       const names = this.gallery;
-      const index = names.indexOf(this.lightbox);
-      if (index < 0) return;
-      this.lightbox = names[(index + direction + names.length) % names.length];
+      const index = names.indexOf(this.item);
+      if (index < 0 || !names.length) return;
+      this.go({ item: names[(index + direction + names.length) % names.length] }, true);
+    },
+    pickModel(box) {
+      if (box.kind !== "model") return;
+      const label = (box.lines[1] || "").replace(/^model /, "");
+      if (this.architectureModels.includes(label)) this.go({ model: label });
     },
     async copy(text) {
       try { await navigator.clipboard.writeText(text || ""); } catch (error) { console.warn("clipboard unavailable", error); }
     },
     async tick() {
-      if (!this.current.path) return;
-      if (this.current.kind === "sweep") { await this.loadSweep(); return; }
+      if (!this.path || !this.record) return;
+      if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
       if (!["running", "pending"].includes(this.state)) return;
       await this.loadRecord();
       if (this.tab === "steps") await this.loadSteps();
+      if (this.tab === "logs") await this.loadLogs();
     },
   },
   mounted() {
     this.loadTree();
+    window.addEventListener("hashchange", () => this.onHash());
     setInterval(() => this.tick(), 3000);
     setInterval(() => this.loadTree(), 10000);
     window.addEventListener("keydown", event => {
-      if (event.key === "Escape") this.lightbox = null;
-      if (this.lightbox && event.key === "ArrowRight") this.stepLightbox(1);
-      if (this.lightbox && event.key === "ArrowLeft") this.stepLightbox(-1);
+      if (!this.item) return;
+      if (event.key === "Escape") this.closeItem();
+      if (event.key === "ArrowRight") this.stepItem(1);
+      if (event.key === "ArrowLeft") this.stepItem(-1);
     });
   },
 });
