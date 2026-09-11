@@ -12,7 +12,7 @@
     <header class="brand">
       <div class="brand-row">
         <h1><a href="#/">kalfa board</a></h1>
-        <span class="pulse" :class="{live: live}" :title="live ? 'following a running record' : 'idle'"></span>
+        <span class="pulse" :class="{live: live && refresh !== 'off'}" :title="live ? 'following a running record' : 'idle'"></span>
       </div>
       <div class="root" :title="tree.root">{{ tree.root }}</div>
       <input class="filter" v-model.trim="filter" type="search" placeholder="filter records" spellcheck="false">
@@ -36,7 +36,18 @@
       </section>
       <p v-if="!groups.length" class="empty">no record under the root yet</p>
     </nav>
-    <footer class="sidebar-foot">refreshed {{ refreshed || 'never' }}</footer>
+    <footer class="sidebar-foot">
+      <label class="refresh">refresh
+        <select v-model="refresh">
+          <option value="realtime">when the record changes</option>
+          <option value="3">every 3 s</option>
+          <option value="5">every 5 s</option>
+          <option value="10">every 10 s</option>
+          <option value="off">off</option>
+        </select>
+      </label>
+      <div>{{ refresh === 'realtime' ? (connected ? 'watching' : 'connecting') : (refresh === 'off' ? 'not refreshing' : 'polling') }} · last {{ refreshed || 'never' }}</div>
+    </footer>
   </aside>
 
   <main class="content">

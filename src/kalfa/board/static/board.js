@@ -375,6 +375,8 @@ const app = Vue.createApp({
       sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] },
       tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
+      refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
+      source: null, timer: null, treeTimer: null, connected: false,
     };
   },
   computed: {
@@ -835,6 +837,10 @@ const app = Vue.createApp({
   },
   watch: {
     path: { immediate: true, handler() { this.enterRecord(); } },
+    refresh() {
+      try { localStorage.setItem("kalfa-board-refresh", this.refresh); } catch (error) { console.warn("storage unavailable", error); }
+      this.applyRefresh();
+    },
     predictionFile() { if (this.tab === "predictions") this.loadPredictions(); },
     "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
     "route.params.b"() { if (this.page === "compare") this.loadCompare(); },
@@ -920,6 +926,7 @@ const app = Vue.createApp({
       this.logs = { name: "", lines: [], total: 0 };
       this.predictionsData = null; this.prepData = null; this.filesData = null; this.fileView = null; this.eventsData = null;
       this.stopPlaying();
+      if (this.refresh === "realtime") this.connectWatch();
       if (this.page === "table") { await this.loadTable(); return; }
       if (this.page === "compare") { await this.loadCompare(); return; }
       if (!this.path) return;
@@ -1104,14 +1111,56 @@ const app = Vue.createApp({
       if (this.tab === "timeline") await this.loadEvents();
     },
     fmtBytes: human,
+    applyRefresh() {
+      if (this.timer) clearInterval(this.timer);
+      if (this.treeTimer) clearInterval(this.treeTimer);
+      this.timer = null; this.treeTimer = null;
+      this.disconnectWatch();
+      if (this.refresh === "realtime") { this.connectWatch(); return; }
+      if (this.refresh === "off") return;
+      const seconds = Number(this.refresh) || 5;
+      this.timer = setInterval(() => this.tick(), seconds * 1000);
+      this.treeTimer = setInterval(() => this.loadTree(), Math.max(seconds * 4, 20) * 1000);
+    },
+    connectWatch() {
+      this.disconnectWatch();
+      if (typeof EventSource === "undefined") { this.refresh = "3"; return; }
+      const target = this.page === "record" ? this.path : "";
+      this.source = new EventSource(`/api/watch?path=${encodeURIComponent(target)}`);
+      this.source.onopen = () => { this.connected = true; };
+      this.source.onerror = () => { this.connected = false; };
+      this.source.onmessage = event => {
+        try { this.onChange(JSON.parse(event.data).changed || []); } catch (error) { console.warn("bad watch event", error); }
+      };
+    },
+    disconnectWatch() {
+      if (this.source) this.source.close();
+      this.source = null;
+      this.connected = false;
+    },
+    async onChange(changed) {
+      this.refreshed = new Date().toLocaleTimeString();
+      const touched = name => changed.some(item => item === name || item.endsWith(`/${name}`));
+      if (changed.includes("tree")) await this.loadTree();
+      if (this.page === "home") { await this.loadLive(); return; }
+      if (this.page === "table") { await this.loadTable(); return; }
+      if (this.page === "compare" || !this.record) return;
+      if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
+      const rest = changed.filter(name => !["tree", "history.jsonl", "steps.jsonl", "stdout.txt", "stderr.txt", "events.jsonl"].includes(name));
+      if (rest.length) await this.loadRecord();
+      else if (touched("history.jsonl")) await this.loadHistory();
+      if (touched("steps.jsonl") && (this.tab === "steps" || this.tab === "monitor")) await this.loadSteps();
+      if ((touched("stdout.txt") || touched("stderr.txt")) && (this.tab === "logs" || this.tab === "monitor")) await this.loadLogs();
+      if (touched("events.jsonl") && this.tab === "timeline") await this.loadEvents();
+      if (touched("predictions.parquet") && this.tab === "predictions") await this.loadPredictions();
+    },
   },
   mounted() {
     this.modalHeight = Math.max(360, Math.round(window.innerHeight * 0.72));
     this.loadTree();
     this.loadLive();
     window.addEventListener("hashchange", () => this.onHash());
-    setInterval(() => this.tick(), 3000);
-    setInterval(() => this.loadTree(), 10000);
+    this.applyRefresh();
     window.addEventListener("keydown", event => {
       if (event.key === "Escape") {
         if (this.route.params.chart) this.closeChart();

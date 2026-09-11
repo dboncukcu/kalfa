@@ -2,6 +2,7 @@ import difflib
 import json
 import math
 import mimetypes
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -109,6 +110,21 @@ def small_state(obj, depth=0):
         if kept is not None:
             state[name] = kept
     return state
+
+
+def stamp(path):
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return [stat.st_size, stat.st_mtime_ns]
+
+
+def stamp_dir(path):
+    if not path.is_dir():
+        return None
+    files = [item for item in path.iterdir() if item.is_file()]
+    return [len(files), max((item.stat().st_mtime_ns for item in files), default=0)]
 
 
 def file_note(root, path):
@@ -334,6 +350,43 @@ class Board:
         lines = read_lines(path / "events.jsonl")
         return {"events": lines[-int(limit):], "total": len(lines)}
 
+    def tree_stamp(self):
+        stamps = [stamp(self.root)]
+        for child in self.root.iterdir():
+            if child.is_dir():
+                stamps.append(stamp(child))
+                stamps.extend(stamp(grandchild) for grandchild in child.iterdir() if grandchild.is_dir())
+        return stamps
+
+    def record_stamp(self, path, files=("manifest.json", "history.jsonl", "steps.jsonl", "events.jsonl", "run.json",
+                                        "stdout.txt", "stderr.txt", "resolved.yaml", "data.json", "architecture.json",
+                                        "sweep.json", "fitted/calibrate/calibrate.json")):
+        snapshot = {name: stamp(path / name) for name in files}
+        for folder in ("plots", "samples", "checkpoints", "final", "export"):
+            snapshot[folder] = stamp_dir(path / folder)
+        for item in path.glob("predictions*.parquet"):
+            snapshot[item.name] = stamp(item)
+        return snapshot
+
+    def watched(self, relative):
+        snapshot = {"tree": self.tree_stamp()}
+        path = self.resolve(relative) if relative else None
+        if path is None or not Record(path).is_record:
+            for entry in self.live()["live"]:
+                if entry["kind"] == "sweep":
+                    continue
+                target = self.resolve(entry["path"])
+                for name in ("history.jsonl", "steps.jsonl", "run.json"):
+                    snapshot[f"{entry['path']}/{name}"] = stamp(target / name)
+            return snapshot
+        snapshot.update(self.record_stamp(path))
+        manifest = Record(path).read_json("manifest.json") or {}
+        if manifest.get("kind") == "sweep":
+            for child in sorted(item for item in path.iterdir() if item.is_dir()):
+                for name in ("manifest.json", "history.jsonl", "sweep.json", "run.json"):
+                    snapshot[f"{child.name}/{name}"] = stamp(child / name)
+        return snapshot
+
     def lines(self, relative, name, offset=0):
         path = self.resolve(relative)
         if path is None:
@@ -426,6 +479,32 @@ def handler_for(board):
             self.end_headers()
             self.wfile.write(payload)
 
+        def stream(self, relative):
+            last = board.watched(relative)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            pinged = time.monotonic()
+            try:
+                self.wfile.write(b": watching\n\n")
+                self.wfile.flush()
+                while True:
+                    time.sleep(1.0)
+                    snapshot = board.watched(relative)
+                    changed = [name for name in snapshot if snapshot.get(name) != last.get(name)]
+                    if changed:
+                        self.wfile.write(f"data: {json.dumps({'changed': changed})}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        last = snapshot
+                        pinged = time.monotonic()
+                    elif time.monotonic() - pinged > 15:
+                        self.wfile.write(b": ping\n\n")
+                        self.wfile.flush()
+                        pinged = time.monotonic()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                return
+
         def send_json(self, value):
             if value is None:
                 self.send(404, json.dumps({"error": "not found"}))
@@ -453,6 +532,8 @@ def handler_for(board):
                 self.send_json(board.tree())
             elif url.path == "/api/live":
                 self.send_json(board.live())
+            elif url.path == "/api/watch":
+                self.stream(path)
             elif url.path == "/api/table":
                 self.send_json(board.table())
             elif url.path == "/api/predictions":

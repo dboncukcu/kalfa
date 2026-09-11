@@ -107,6 +107,13 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert board.tail("runs/one", "resolved.yaml") is None
     assert static_path("index.html").name == "index.html" and static_path("../__init__.py") is None
     assert static_path("vendor/vue.global.prod.js") is not None and static_path("nope.js") is None
+    before = board.watched("runs/one")
+    assert before["history.jsonl"][0] > 0 and before["plots"][0] == 1 and "tree" in before
+    Record(tmp_path / "runs" / "one").append("history.jsonl",
+                                             {"turn": 3, "global_step": 9, "val/rmse": 1.2, "rules": []})
+    after = board.watched("runs/one")
+    assert [name for name in after if after[name] != before[name]] == ["history.jsonl"]
+    assert "0000/history.jsonl" in board.watched("sweeps/grid") and "runs/one/steps.jsonl" in board.watched("")
 
 
 def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
@@ -125,6 +132,15 @@ def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
         assert "runs" in tree["groups"]
         live = json.loads(urllib.request.urlopen(f"{base}/api/live").read())
         assert live["live"][0]["path"] == "runs/one"
+        watch = urllib.request.urlopen(f"{base}/api/watch?path=runs/one", timeout=10)
+        assert watch.headers["Content-Type"].startswith("text/event-stream")
+        assert watch.readline().decode().startswith(": watching")
+        Record(tmp_path / "runs" / "one").append("steps.jsonl", {"step": 2, "turn": 1, "loss/m": 0.9, "lr/m": 0.1})
+        event = ""
+        while not event.startswith("data:"):
+            event = watch.readline().decode()
+        assert json.loads(event[5:])["changed"] == ["steps.jsonl"]
+        watch.close()
         history = json.loads(urllib.request.urlopen(f"{base}/api/history?path=runs/one&offset=1").read())
         assert history["offset"] == 2 and len(history["lines"]) == 1
         image = urllib.request.urlopen(f"{base}/file?path=runs/one/plots/loss_curve.png")

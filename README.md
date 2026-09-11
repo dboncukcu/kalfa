@@ -151,7 +151,9 @@ ApexCharts, so it works without a network, and the address bar carries the recor
 link shares exactly one view and a reload keeps it), whose home page lists what is running with its progress
 and what finished lately, that lists the runs, points and sweeps by their manifests, tabulates every run with
 its params and best value, compares two records (curves overlaid, config diff), follows a running record on
-a monitor tab (progress, the monitored metric, the minimized loss, the step loss, the log tail), explores the
+a monitor tab (progress, the monitored metric, the minimized loss, the step loss, the log tail; by default the
+page refreshes only when a file of the record changes, through a server sent event stream that stats the
+record's files once a second, or every 3, 5 or 10 seconds when the footer says so), explores the
 test predictions, the fitted preprocessors, the files of the record and the timeline of its nodes, and
 shows per record the latest metrics, one chart per metric with the sets as lines, the step curves, the plots and
 the samples, the config, the notes, the node timings, the events and the log tails; per sweep the live table of
