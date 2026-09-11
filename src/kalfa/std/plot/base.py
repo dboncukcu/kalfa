@@ -50,10 +50,14 @@ def report_loader(loaders, set_name=None):
     return None, None
 
 
-def scores_and_labels(predictions):
+def scores_and_labels(predictions, output=None, target=None):
     preds = [column for column in predictions.columns if column.startswith("raw_")]
     targets = [column for column in predictions.columns
                if not column.startswith(("pred_", "raw_")) and column != "row"]
+    if output is not None:
+        preds = [column for column in preds if column == f"raw_{output}" or column.startswith(f"raw_{output}_")]
+    if target is not None:
+        targets = [column for column in targets if column == target]
     if not preds or not targets:
         return None, None
     return predictions[preds[0]].to_numpy(dtype="float64"), predictions[targets[0]].to_numpy()

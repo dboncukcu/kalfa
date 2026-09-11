@@ -177,7 +177,7 @@ def test_the_data_and_diagnostic_plots_draw_from_a_run(workdir):
                        "corr": {"uri": "correlation_heatmap", "sets": ["train"], "width": 7.0},
                        "resid": {"uri": "residuals"},
                        "map": {"uri": "error_map", "params": {"x": "x0", "y": "x1", "bins": 8, "min_count": 2}},
-                       "importance": {"uri": "permutation_importance", "params": {"repeats": 2}},
+                       "importance": {"uri": "permutation_importance", "params": {"repeats": 2, "target": "price"}},
                        "spread": {"uri": "feature_distributions", "params": {"per_row": 3}},
                        "ranked": {"uri": "target_correlation"},
                        "kde": {"uri": "kde", "params": {"x": "x0", "y": "price", "sample": 200}}}

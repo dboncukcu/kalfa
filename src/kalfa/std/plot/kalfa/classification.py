@@ -5,11 +5,13 @@ from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import scores_and_labels
 
 
-@lego("/plot/kalfa/class_histogram", partial=True, alias="class_histogram",
-      description="Histogram of the raw scores of the test set, one series per target class")
-def class_histogram(predictions, history, models, record, bins=40, name=None, figures=None):
+@lego("/plot/kalfa/class_histogram", partial=True, alias="class_histogram", refs={"target": "field"},
+      description="Histogram of the raw scores of the test set, one series per target class; output names the "
+                  "wire and target the field when the table holds several")
+def class_histogram(predictions, history, models, record, output=None, target=None, bins=40, name=None,
+                    figures=None):
     figures = figures or Figure()
-    scores, labels = scores_and_labels(predictions)
+    scores, labels = scores_and_labels(predictions, output, target)
     if scores is None:
         return None
     drawing, axis = figures.single(width=8.0, height=5.0)

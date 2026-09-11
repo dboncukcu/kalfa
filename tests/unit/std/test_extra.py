@@ -70,6 +70,12 @@ def test_score_plots_write_files(tmp_path):
     assert not list((tmp_path / "plots").glob("architecture_*.png"))
     assert binary_roc(pandas.DataFrame({"row": [0], "is_anomaly": [1], "raw_s": [0.5]}), [], {}, str(tmp_path)) is None
     assert class_histogram(pandas.DataFrame(), [], {}, str(tmp_path)) is None
+    two = pandas.DataFrame({"row": [0, 1, 2, 3], "z": [0.1, 0.2, 0.3, 0.4], "z_tail": [0, 1, 0, 1],
+                            "raw_z_hat": [0.5, 0.6, 0.7, 0.8], "raw_tail_logit": [0.1, 0.8, 0.3, 0.9]})
+    binary_roc(two, [], {}, str(tmp_path), output="tail_logit", target="z_tail", name="roc_tail")
+    class_histogram(two, [], {}, str(tmp_path), output="tail_logit", target="z_tail", name="tail_scores")
+    assert (tmp_path / "plots" / "roc_tail.png").exists() and (tmp_path / "plots" / "tail_scores.png").exists()
+    assert binary_roc(two, [], {}, str(tmp_path), output="nope", target="z_tail") is None
 
 
 class Two(nn.Module):

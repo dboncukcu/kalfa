@@ -182,6 +182,8 @@ alias:
   loss_curve: /plot/kalfa/loss_curve
   pred_vs_true: /plot/kalfa/pred_vs_true
   class_histogram: /plot/kalfa/class_histogram
+  binary_roc: /plot/torchmetrics/binary_roc
+  binary_precision_recall_curve: /plot/torchmetrics/binary_precision_recall_curve
   confusion_matrix: /plot/kalfa/confusion_matrix
   forecast_samples: /plot/kalfa/forecast_samples
   architecture: /plot/kalfa/architecture

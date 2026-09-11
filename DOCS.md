@@ -355,7 +355,7 @@ The legos a config writes, by kind.
 |---|---|---|---|---|
 | `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None, losses_keys=None, optimizers=None, name=None, figures=None)` | partial: True | kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model) and the shapes one batch traced through it, the wires as labelled arrows, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device |
 | `/plot/kalfa/architecture_text` | `architecture_text` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | The report models printed as text under plots/<name>.txt, the module repr of each |
-| `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, bins=40, name=None, figures=None)` | partial: True | Histogram of the raw scores of the test set, one series per target class |
+| `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, output=None, target=None, bins=40, name=None, figures=None)` | partial: True; refs: target=field | Histogram of the raw scores of the test set, one series per target class; output names the wire and target the field when the table holds several |
 | `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
 | `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None, figures=None)` | partial: True; needs: train_loader | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
 | `/plot/kalfa/data_pipeline` | `data_pipeline` | `(predictions, history, models, record, data_report=None, train_df=None, train_frame=None, prep=None, columns=None, name=None, figures=None)` | partial: True; needs: data_report | The data block as one picture: every stage with its rows and columns, the split, the fitted frame transforms and preprocessors, the features and targets, the loaders; under the fit, before and after histograms of the columns with the longest chains (columns names others) when the source is a table |
@@ -365,7 +365,7 @@ The legos a config writes, by kind.
 | `/plot/kalfa/image_grid` | `image_grid` | `(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None, figures=None)` | partial: True | n outputs of the predicts model on the report set as an image grid |
 | `/plot/kalfa/image_pairs` | `image_pairs` | `(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None, figures=None)` | partial: True | n inputs of the report set next to the predicts model's outputs (reconstructions) |
 | `/plot/kalfa/loss_curve` | `loss_curve` | `(predictions, history, models, record, series=None, log=False, x='turn', name=None, figures=None)` | partial: True | Every history series over the turns, or the named ones; x: step draws the per update series of steps.jsonl (the loss, the gradient norm of every optimizer) over the steps instead |
-| `/plot/kalfa/permutation_importance` | `permutation_importance` | `(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None, figures=None)` | partial: True | The drop in R2 when one feature column is shuffled, the largest first; the model runs again for every feature and every repeat, so sample bounds the cost |
+| `/plot/kalfa/permutation_importance` | `permutation_importance` | `(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, device=None, repeats=3, sample=20000, top=25, output=None, target=None, groups=None, seed=0, name=None, figures=None)` | partial: True; refs: target=field | The drop in R2 when one feature column is shuffled, the largest first; the model runs again for every feature and every repeat, so sample bounds the cost; output names the wire and target the field it is scored against when the model has several |
 | `/plot/kalfa/pred_vs_true` | `pred_vs_true` | `(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70, figures=None)` | partial: True | Predicted against true values of the test set, one panel per predicted field with its R2, as a hexbin density over many points and a scatter over few; the panel is titled with the field name, plus the output wire when two outputs predict the same field |
 | `/plot/kalfa/residuals` | `residuals` | `(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None, figures=None)` | partial: True; refs: target=field | Three panels of one prediction's residual: the distribution with its bias and sigma, the residual against the truth as a density, and the mean and median error over equal count bins of the target range |
 | `/plot/kalfa/samples_gif` | `samples_gif` | `(predictions, history, models, record, name=None, duration=400, figures=None)` | partial: True | The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning when there are none |
@@ -375,8 +375,8 @@ The legos a config writes, by kind.
 | `/plot/seaborn/kde` | `kde` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None, figures=None)` | partial: True; refs: x=column, y=column, hue=column; needs: train_loader; requires: seaborn | seaborn's kernel density of one column of a set, or of two as contours; skipped with a warning when seaborn is not installed |
 | `/plot/seaborn/pairplot` | `pairplot` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None, figures=None)` | partial: True; needs: train_loader; requires: seaborn | seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; skipped with a warning when seaborn is not installed |
 | `/plot/seaborn/violin` | `violin` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None, figures=None)` | partial: True; refs: value=column, group=column; needs: train_loader; requires: seaborn | seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed |
-| `/plot/torchmetrics/binary_precision_recall_curve` |  | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Precision recall curve of the raw test scores against the binary target |
-| `/plot/torchmetrics/binary_roc` |  | `(predictions, history, models, record, name=None, figures=None)` | partial: True | ROC curve of the raw test scores against the binary target |
+| `/plot/torchmetrics/binary_precision_recall_curve` | `binary_precision_recall_curve` | `(predictions, history, models, record, output=None, target=None, name=None, figures=None)` | partial: True; refs: target=field | Precision recall curve of the raw test scores against the binary target; output names the wire and target the field when the table holds several |
+| `/plot/torchmetrics/binary_roc` | `binary_roc` | `(predictions, history, models, record, output=None, target=None, name=None, figures=None)` | partial: True; refs: target=field | ROC curve of the raw test scores against the binary target; output names the wire and target the field when the table holds several |
 | `/plot/torchview/architecture` | `torchview` | `(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)` | partial: True; requires: torchview | torchview's drawing of every report model the batch feeds, under plots/<name>_<model>.png; it needs the graphviz dot binary and runs on the device of the run, so a composite keeps its referenced models with it |
 
 ### strategy
@@ -659,6 +659,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
+| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
+| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
@@ -853,6 +855,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
+| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
+| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
@@ -1049,6 +1053,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
+| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
+| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
@@ -1273,6 +1279,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
+| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
+| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |
@@ -1491,6 +1499,8 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `loss_curve` | `/plot/kalfa/loss_curve` | plot |
 | `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
 | `class_histogram` | `/plot/kalfa/class_histogram` | plot |
+| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
+| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
 | `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
 | `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
 | `architecture` | `/plot/kalfa/architecture` | plot |

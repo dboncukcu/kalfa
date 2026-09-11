@@ -7,23 +7,24 @@ from kalfa.std.common.runtime import named_outputs, resolve_model
 from kalfa.std.plot.base import bars, first_set
 
 
-def feature_batch(loader, model, prep, sample):
+def feature_batch(loader, model, prep, sample, target=None, device=None):
     wires = list(model.inputs)
-    device = next(iter(model.parameters()), torch.zeros(1)).device
+    where = device.torch if device is not None else next(iter(model.parameters()), torch.zeros(1)).device
     features, targets, taken = [], [], 0
     names = list(prep.targets) if prep is not None else []
+    field = target or (names[0] if names else None)
     for batch in loader:
-        if wires[0] not in batch or not names or names[0] not in batch:
+        if wires[0] not in batch or field is None or field not in batch:
             return None, None
         features.append(batch[wires[0]])
-        targets.append(batch[names[0]])
+        targets.append(batch[field])
         taken += len(features[-1])
         if taken >= int(sample):
             break
     if not features:
         return None, None
-    matrix = torch.cat(features)[:int(sample)].to(device)
-    truth = torch.cat(targets)[:int(sample)].to(device).reshape(len(matrix), -1)
+    matrix = torch.cat(features)[:int(sample)].to(where)
+    truth = torch.cat(targets)[:int(sample)].to(where).reshape(len(matrix), -1)
     if matrix.ndim != 2:
         return None, None
     return matrix, truth
@@ -55,18 +56,20 @@ def importances(model, matrix, truth, wire, base, repeats, seed):
     return means, deviations
 
 
-@lego("/plot/kalfa/permutation_importance", partial=True, alias="permutation_importance",
+@lego("/plot/kalfa/permutation_importance", partial=True, alias="permutation_importance", refs={"target": "field"},
       description="The drop in R2 when one feature column is shuffled, the largest first; the model runs "
-                  "again for every feature and every repeat, so sample bounds the cost")
+                  "again for every feature and every repeat, so sample bounds the cost; output names the wire "
+                  "and target the field it is scored against when the model has several")
 def permutation_importance(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None,
-                           repeats=3, sample=20000, top=25, output=None, groups=None, seed=0, name=None, figures=None):
+                           device=None, repeats=3, sample=20000, top=25, output=None, target=None, groups=None,
+                           seed=0, name=None, figures=None):
     figures = figures or Figure()
     loader = (loaders or {}).get(first_set(sets, "test"))
     if loader is None or prep is None or predicts is None:
         return None
     model = resolve_model(predicts, models)
     model.eval()
-    matrix, truth = feature_batch(loader, model, prep, sample)
+    matrix, truth = feature_batch(loader, model, prep, sample, target, device)
     if matrix is None or matrix.shape[1] != len(prep.features):
         return None
     wire = output or ""
