@@ -48,18 +48,6 @@ def target_vs_features(predictions, history, models, record, loaders=None, prep=
     return None
 
 
-def varying(table, names):
-    constant = [name for name in names if table[name].nunique(dropna=True) <= 1]
-    return [name for name in names if name not in constant], constant
-
-
-def left_out(constant):
-    if not constant:
-        return ""
-    shown = ", ".join(constant[:4]) + (f" and {len(constant) - 4} more" if len(constant) > 4 else "")
-    return f"; {len(constant)} constant column{'s' if len(constant) > 1 else ''} left out: {shown}"
-
-
 @lego("/plot/kalfa/target_correlation", partial=True, alias="target_correlation", refs={"target": "field"},
       needs=["train_loader"],
       description="The rank correlation of every column with the target, the strongest first; groups maps a "
@@ -74,7 +62,7 @@ def target_correlation(predictions, history, models, record, loaders=None, prep=
     field = target or next(iter(prep.targets), None)
     if field is None or field not in table.columns:
         return None
-    picked, constant = varying(table, columns_of(table, columns, skip=(field,) + tuple(prep.targets)))
+    picked = columns_of(table, columns, skip=(field,) + tuple(prep.targets))
     if not picked:
         return None
     truth = table[field]
@@ -89,7 +77,7 @@ def target_correlation(predictions, history, models, record, loaders=None, prep=
     axis = axes[0][0]
     bars(figures, axis, names, [value for _, value in found], groups)
     figures.label(axis, f"Rank correlation with {field}", f"{method} rho", None,
-                 note=f"{len(table):,} rows of the {set_name} set, the {len(names)} strongest{left_out(constant)}")
+                 note=f"{len(table):,} rows of the {set_name} set, the {len(names)} strongest")
     figures.save(drawing, record, name or "target_correlation")
     return None
 
@@ -104,7 +92,7 @@ def correlation_heatmap(predictions, history, models, record, loaders=None, prep
     table = set_frame(loaders, prep, set_name)
     if table is None:
         return None
-    picked, constant = varying(table, columns_of(table, columns))
+    picked = columns_of(table, columns)
     if len(picked) < 2:
         return None
     data = table[picked]
@@ -125,7 +113,7 @@ def correlation_heatmap(predictions, history, models, record, loaders=None, prep
                           color=figures.ink if abs(matrix[row, column]) < 0.6 else "#ffffff")
     figures.colorbar(drawing, drawn, axis, f"{method} rho", fraction=0.032)
     figures.label(axis, "Column correlation", None, None,
-                 note=f"{len(data):,} rows of the {set_name} set, {len(picked)} columns{left_out(constant)}")
+                 note=f"{len(data):,} rows of the {set_name} set, {len(picked)} columns")
     figures.save(drawing, record, name or "correlation_heatmap")
     return None
 
