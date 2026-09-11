@@ -315,13 +315,15 @@ const Diagram = {
         const ins = portSpread(arriving[target].length, to.y + to.height * 0.25, to.y + to.height * 0.75);
         const x1 = from.x + from.width, y1 = outs[leaving[source].indexOf(position)], x2 = to.x, y2 = ins[arriving[target].indexOf(position)];
         const bend = Math.max(30, (x2 - x1) / 2);
+        const skips = to.column - from.column > 1;
+        const off = skips ? ((y1 + y2) / 2 <= middle ? -70 : 70) : 0;
         const name = label && from.lines[0] !== label ? label : "";
         const wide = label && this.widths[label] ? `[${this.widths[label]}]` : "";
         const shown = name && wide ? `${name} ${wide}` : (name || wide);
         const t = 0.6, u = 1 - t;
         const lx = u * u * u * x1 + 3 * u * u * t * (x1 + bend) + 3 * u * t * t * (x2 - bend) + t * t * t * x2;
-        const ly = u * u * u * y1 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y2;
-        edges.push({ key: `${source}->${target}`, path: `M${x1} ${y1} C${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`,
+        const ly = u * u * u * y1 + 3 * u * u * t * (y1 + off) + 3 * u * t * t * (y2 + off) + t * t * t * y2;
+        edges.push({ key: `${source}->${target}`, path: `M${x1} ${y1} C${x1 + bend} ${y1 + off}, ${x2 - bend} ${y2 + off}, ${x2} ${y2}`,
                      label: shown, lx, ly: ly - 7, dashed: !!dashed });
       });
       return { boxes: Object.values(placed), edges, width, height: EDGE + tallest + EDGE };

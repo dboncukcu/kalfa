@@ -288,7 +288,7 @@ def draw_layout(figures, layout, label):
         start = (x1 + w1 + 0.03, outs[::-1][leaving[source].index(position)])
         end = (x2 - 0.03, ins[::-1][arriving[target].index(position)])
         skips = column2 - column1 > 1
-        rad = (0.24 if end[1] >= start[1] else -0.24) if skips else 0.0
+        rad = (-0.3 if (start[1] + end[1]) / 2 >= middle else 0.3) if skips else 0.0
         axis.annotate("", xy=end, xytext=start,
                       arrowprops={"arrowstyle": "-|>", "color": figures.ink_secondary, "lw": 0.9, "shrinkA": 0,
                                   "shrinkB": 0, "connectionstyle": f"arc3,rad={rad}", "alpha": 0.9})
