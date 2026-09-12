@@ -13,10 +13,18 @@ def observed(value):
     return detach() if callable(detach) else value
 
 
+def nested(mapping, path, value):
+    head, _, rest = path.partition(".")
+    out = dict(mapping or {})
+    out[head] = nested(out.get(head), rest, value) if rest else value
+    return out
+
+
 def rebound(function, name, value):
     keywords = dict(getattr(function, "keywords", None) or {})
     base = getattr(function, "func", function)
-    keywords[name] = value
+    head, _, rest = name.partition(".")
+    keywords[head] = nested(keywords.get(head), rest, value) if rest else value
     return functools.partial(base, **keywords)
 
 

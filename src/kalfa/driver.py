@@ -191,9 +191,10 @@ def set_values(targets, losses, aliases, catalog):
     out = {}
     for key, value in (targets or {}).items():
         owner, _, param = key.partition(".")
+        head = param.partition(".")[0]
         entry = losses.get(owner) if isinstance(losses, dict) else None
-        if param and param != "loss" and isinstance(entry, dict) and isinstance(value, str):
-            ref_type = catalog.facts(entry.get("uri", "")).refs.get(param)
+        if head and head != "loss" and isinstance(entry, dict) and isinstance(value, str):
+            ref_type = catalog.facts(entry.get("uri", "")).refs.get(head)
             if Schema.ref(ref_type).lego:
                 out[key] = lego_reference(value, aliases)
                 continue

@@ -79,7 +79,8 @@ training:
   report: null                    # [required] best | last; the identity of the model after training (plots, predictions, generate, kalfa predict); best needs checkpoint best
   stop: []                        # [empty] [{uri: plateau, params: {monitor: val/rmse, patience: 6}}, ...]; test/ cannot be watched; a missing set cannot be watched
   rules: []                       # [empty] [{name, when: {uri, params}, set: {target: value | {times: 0.5} | {plus: -0.1}}, after: name, sticky: true}]; sticky false asks the rule every turn
-                                  # the set targets: <opt>.loss | loss | <loss>.<param> | <opt>.<param> | <model>.trainable
+                                  # the set targets: <opt>.loss | loss | <loss>.<param> | <loss>.<param>.<key> | <opt>.<param> | <model>.trainable
+                                  # a mapping param of a loss is set one key at a time by its dotted path (the key written in the definition) or replaced whole
   # amp, grad_clip, accumulate and every other key go to the turn's params; not in the signature is an error
 
 calibrate: {}                     # [empty] name: {uri: threshold | your own, params}; fitted on the report models and the sets at the end of a run, kept under fitted/calibrate, applied to the predictions

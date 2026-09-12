@@ -1,5 +1,6 @@
 from cirak.registry import registry
 
+from ..std.common.effects import relative_effect
 from ..std.common.runtime import expand_targets
 from .document import block_params, group_of, reference, target_fields, unwrap
 from .text import ARROW, PLAIN, call_text, field_line, number, pad, params_text, short, table
@@ -57,11 +58,14 @@ def definition_table(label, definitions, keys_table, style, width, notes, sets):
     return ["", *table(headers, rows, style, width=width)]
 
 
-def effect_text(value):
-    if isinstance(value, dict) and "times" in value:
-        return f"×{value['times']}"
-    if isinstance(value, dict) and "plus" in value:
-        return f"+{value['plus']}"
+def effect_text(value, style=PLAIN):
+    if relative_effect(value):
+        key, amount = next(iter(value.items()))
+        return f"×{amount}" if key == "times" else f"+{amount}"
+    if isinstance(value, dict) and "uri" in value:
+        return call_text(value, style=style)
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{key}: {effect_text(item, style)}" for key, item in value.items()) + "}"
     return str(value)
 
 
@@ -123,7 +127,7 @@ def training_section(prepared, style, width, probe=None):
         rows = []
         for rule in rules:
             when = trigger_text(triggers.get(reference(rule.get("when"))), style)
-            sets = ", ".join(f"{key} := {effect_text(value)}" for key, value in (rule.get("set") or {}).items())
+            sets = ", ".join(f"{key} := {effect_text(value, style)}" for key, value in (rule.get("set") or {}).items())
             notes = [f"after {rule['after']}"] if rule.get("after") else []
             if rule.get("sticky") is False:
                 notes.append("every turn")

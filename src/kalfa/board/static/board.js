@@ -657,7 +657,7 @@ const app = Vue.createApp({
         const series = {};
         for (const line of this.compareData[which].history) {
           for (const [key, value] of Object.entries(line)) {
-            if (SKIP_KEYS.has(key) || typeof value !== "number" || key.startsWith("lr/") || key.startsWith("minimizes/")) continue;
+            if (SKIP_KEYS.has(key) || typeof value !== "number" || key.startsWith("lr/") || key.startsWith("minimizes/") || key.startsWith("effect/")) continue;
             (series[key] = series[key] || []).push([line.turn, value]);
           }
         }
@@ -738,7 +738,7 @@ const app = Vue.createApp({
       const byName = {};
       for (const [key, points] of Object.entries(this.series)) {
         const { set, name } = splitKey(key);
-        if (set === "lr") continue;
+        if (set === "lr" || set === "effect") continue;
         if (needle && !key.toLowerCase().includes(needle)) continue;
         (byName[name] = byName[name] || []).push({ name: set || key, points });
       }
@@ -752,7 +752,7 @@ const app = Vue.createApp({
       return Object.entries(this.series).filter(([key]) => key.startsWith("lr/")).map(([key, points]) => ({ key, last: points[points.length - 1][1] }));
     },
     latest() {
-      return Object.entries(this.series).filter(([key]) => !key.startsWith("lr/")).map(([key, points]) => {
+      return Object.entries(this.series).filter(([key]) => !key.startsWith("lr/") && !key.startsWith("effect/")).map(([key, points]) => {
         const { set, name } = splitKey(key);
         let low = points[0], high = points[0];
         for (const point of points) { if (point[1] < low[1]) low = point; if (point[1] > high[1]) high = point; }
@@ -795,7 +795,7 @@ const app = Vue.createApp({
         }
         const current = path.length ? path[path.length - 1][1] : null;
         const definition = current ? this.definitionOf(current) : null;
-        const terms = definition && definition.params && typeof definition.params.terms === "object" ? definition.params.terms : null;
+        const terms = definition && definition.params && typeof definition.params.terms === "object" ? this.effectiveTerms(current, definition.params.terms) : null;
         const prefix = current ? `train/${current}/` : null;
         const parts = terms ? Object.entries(terms).map(([term, weight]) => `${fmt(weight)} × ${term}`)
           : (prefix ? Object.keys(this.series).filter(key => key.startsWith(prefix)).map(key => key.slice(prefix.length)) : []);
@@ -804,6 +804,21 @@ const app = Vue.createApp({
       });
     },
     ruleMarks() { return this.history.lines.filter(line => (line.rules || []).length).map(line => line.turn); },
+    effectRows() {
+      const lines = this.history.lines;
+      const targets = [...new Set(lines.flatMap(line => Object.keys(line).filter(key => key.startsWith("effect/"))))].map(key => key.slice(7));
+      return targets.map(target => {
+        const segments = [];
+        for (const line of lines) {
+          const value = line[`effect/${target}`] === undefined ? this.initialOf(target) : line[`effect/${target}`];
+          const shown = JSON.stringify(value === undefined ? null : value);
+          const last = segments[segments.length - 1];
+          if (last && last.shown === shown) last.to = line.turn;
+          else segments.push({ value, shown, from: line.turn, to: line.turn });
+        }
+        return { target, segments };
+      });
+    },
     plan() {
       const training = (this.record && this.record.config && this.record.config.training) || {};
       if (training.steps && typeof training.steps === "object") {
@@ -1053,6 +1068,27 @@ const app = Vue.createApp({
       return { kind: "", uri: "", params: {}, output: "", target: "" };
     },
     text(value) { return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value); },
+    initialOf(target) {
+      const config = (this.record && this.record.config) || {};
+      const [owner, ...rest] = target.split(".");
+      const loss = (config.losses || {})[owner];
+      if (loss && typeof loss === "object") return rest.reduce((value, part) => (value && typeof value === "object" ? value[part] : undefined), loss.params || {});
+      const optimizer = (config.optimizers || {})[owner];
+      if (optimizer && typeof optimizer === "object") return (optimizer.params || {})[rest.join(".")];
+      const model = ((config.model || {}).models || {})[owner];
+      if (model && typeof model === "object" && rest.join(".") === "trainable") return model.trainable === undefined ? true : model.trainable;
+      return undefined;
+    },
+    effectiveTerms(loss, terms) {
+      const last = this.history.lines[this.history.lines.length - 1] || {};
+      const whole = last[`effect/${loss}.terms`];
+      const found = whole && typeof whole === "object" ? { ...whole } : { ...terms };
+      const prefix = `effect/${loss}.terms.`;
+      for (const [key, value] of Object.entries(last)) {
+        if (key.startsWith(prefix)) found[key.slice(prefix.length)] = value;
+      }
+      return found;
+    },
     entries(mapping, skip) { return Object.entries(mapping || {}).filter(([key]) => !(skip || []).includes(key)); },
     fileUrl(kind, name) { return `/file?path=${encodeURIComponent(`${this.path}/${kind}/${name}`)}`; },
     textKey(name) { return `${this.path}/${this.tab === "samples" ? "samples" : "plots"}/${name}`; },

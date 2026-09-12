@@ -181,6 +181,8 @@ def test_set_values_keep_loss_names_and_build_lego_references():
     out = set_values({"loss": "mse", "vae.w": 0.5, "adv.criterion": "bce_logits"}, losses,
                      {"bce_logits": "/criterion/kalfa/bce_logits"}, registry)
     assert out == {"loss": "mse", "vae.w": 0.5, "adv.criterion": {"uri": "/criterion/kalfa/bce_logits"}}
+    assert set_values({"vae.terms.a": 0.5, "vae.terms": {"a": 1.0}}, losses, {}, registry) == \
+        {"vae.terms.a": 0.5, "vae.terms": {"a": 1.0}}
 
 
 def test_template_variables_stay_literal_and_win_inside_the_template(tmp_path):

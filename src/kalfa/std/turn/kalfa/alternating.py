@@ -3,10 +3,11 @@ import warnings
 
 from kalfa.registration import lego
 from kalfa.std.common.device import Device
+from kalfa.std.common.effects import effective_loss
 from kalfa.std.common.history import History
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.runtime import Pass, active_entries, collect_results, observe_all, resolve_entries, set_modes
-from kalfa.std.turn.base import Cursor, Settings, apply_effects, effective_loss, update
+from kalfa.std.turn.base import Cursor, Settings, update
 
 
 logger = logger_for("training.turn")
@@ -80,9 +81,7 @@ def alternating(models, optimizers, emas, counters, composites, effects, loader,
     effects = dict(effects or {})
     settings = Settings.of(extra)
     arrangement = Arrangement(params, optimizers)
-    resolve_entries(losses, loader=loader)
     resolve_entries(metrics, loader=loader)
-    losses = apply_effects(effects, models, optimizers, losses)
     set_modes(models, train=True, composites=composites)
     turn = int(counters.get("turn", 0)) + 1
     device = device or Device.cpu()

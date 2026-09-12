@@ -11,12 +11,12 @@ from helpers import frame, tiny_model
 from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
 from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
 from kalfa.std.common.device import Device
+from kalfa.std.common.effects import apply_effects, effective_loss
 from kalfa.std.criterion.kalfa.regression import huber, mae, mse
 from kalfa.std.feed.kalfa.table import table
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.metric.kalfa.rmse import Rmse
 from kalfa.std.optimizer.torch.optimizers import Sgd
-from kalfa.std.turn.base import apply_effects, effective_loss
 from kalfa.std.turn.kalfa.alternating import alternating
 
 

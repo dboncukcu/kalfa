@@ -1636,7 +1636,7 @@
         "returns": "metrics"
       },
       "kind": "lego",
-      "signature": "(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)"
+      "signature": "(models, emas, composites, counters, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)"
     },
     "/lego/kalfa/figures": {
       "alias": [],
@@ -1692,7 +1692,7 @@
     },
     "/lego/kalfa/history": {
       "alias": [],
-      "description": "Append the turn's line to history.jsonl: the metrics, the learning rate and the loss every optimizer minimized this turn (as the rules set it), the duration as seconds, the rules that fired; and hand it to the monitor",
+      "description": "Append the turn's line to history.jsonl: the metrics, the learning rate and the loss every optimizer minimized this turn (as the rules set it), every other effect of the rules in force as effect/<target>, the duration as seconds, the rules that fired; and hand it to the monitor",
       "facts": {
         "bus": {
           "counters_next": "counters_next",
@@ -2821,12 +2821,21 @@
     },
     "/rule/kalfa/effects": {
       "alias": [],
-      "description": "The effects the fired rules left for this turn",
+      "description": "The effects the fired rules left for this turn, applied once before it: a model's trainable flag and an optimizer's params in place, the models and the optimizers returned as they are, and the loss table as a copy with every loss param the rules set, which the turn and the evaluation of every set read alike",
       "facts": {
-        "returns": "effects"
+        "mutates": [
+          "models",
+          "optimizers"
+        ],
+        "returns": [
+          "effects",
+          "losses",
+          "models",
+          "optimizers"
+        ]
       },
       "kind": "rule",
-      "signature": "(rules)"
+      "signature": "(rules, models, optimizers, losses, loader)"
     },
     "/rule/kalfa/open": {
       "alias": [],

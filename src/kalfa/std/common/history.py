@@ -9,7 +9,7 @@ def is_number(value):
 
 
 def is_series(key, value):
-    return "/" in key and not key.startswith("lr/") and is_number(value)
+    return "/" in key and not key.startswith(("lr/", "effect/")) and is_number(value)
 
 
 class History:
@@ -21,7 +21,7 @@ class History:
         return cls(read_lines(Path(record) / "history.jsonl"))
 
     @staticmethod
-    def line(metrics, counters, optimizers, rules, seconds=None, minimizes=None):
+    def line(metrics, counters, optimizers, rules, seconds=None, minimizes=None, effects=None):
         found = {"turn": int((counters or {}).get("turn", 0)),
                  "global_step": int((counters or {}).get("global_step", 0))}
         found.update(metrics or {})
@@ -29,6 +29,8 @@ class History:
             found[f"lr/{name}"] = optimizer.lr()
         for name, loss in (minimizes or {}).items():
             found[f"minimizes/{name}"] = loss
+        for target, value in (effects or {}).items():
+            found[f"effect/{target}"] = value
         if seconds is not None:
             found["seconds"] = round(float(seconds), 3)
         found["rules"] = list((rules or {}).get("fired") or [])

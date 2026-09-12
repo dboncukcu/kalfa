@@ -80,6 +80,24 @@ def test_set_target_and_set_value(workdir):
     assert kinds.count("set_value") == 3
 
 
+def test_set_reaches_into_a_mapping_param_of_a_loss(workdir):
+    config = minimal()
+    config["losses"]["total"] = {"uri": "/objective/kalfa/weighted_sum",
+                                 "params": {"terms": {"loss_mse": 1.0, "loss_mae": 0.0}}}
+    when = {"uri": "after_epoch", "params": {"at": 1}}
+    config["training"]["rules"] = [
+        {"name": "a", "when": when,
+         "set": {"total.terms.loss_mae": 1.0, "total.terms": {"loss_mse": 2.0, "loss_mae": 1.0}}},
+        {"name": "b", "when": when, "set": {"total.terms.ghost": 1.0}},
+        {"name": "c", "when": when, "set": {"total.terms.loss_mae": "huber"}},
+        {"name": "d", "when": when, "set": {"total.terms": {"times": 2.0}}},
+        {"name": "e", "when": when, "set": {"total.terms": {"ghost": 1.0}}},
+        {"name": "f", "when": when, "set": {"loss_huber.delta": {"a": 1.0}}},
+    ]
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds.count("set_value") == 5 and "set_target" not in kinds
+
+
 def test_glob_ambiguous_and_column_missing(workdir):
     config = minimal()
     config["data"]["fields"] = {"x?": {}, "?1": {}, "price": {"target": True}, "zzz*": {}}

@@ -6,7 +6,7 @@
 # choice is inside a lego (transform_set applies what names its set, evaluate returns empty on an empty set, rule reads its after link).
 # Bus keys: df_i, <set>_df_0, <set>_df_1, frames, <set>_df, prep, <set>_frame, <set>_data, <set>_loader, <model name>, <model name>_ema,
 # models, emas, composites, opt_<name>, optimizers, counters, rules, epochs_left, *_next, train_metrics, valid_metrics,
-# test_metrics, metrics, effects, rules_0..n, rules_ruled, stop, history, models_final, optimizers_final, emas_final, counters_final, rules_final, selected, predictions. The set name on the bus is valid, the history
+# test_metrics, metrics, effects, turn_losses, models_ruled, optimizers_ruled, rules_0..n, rules_ruled, stop, history, models_final, optimizers_final, emas_final, counters_final, rules_final, selected, predictions. The set name on the bus is valid, the history
 # prefix val/. A foreach node is named <foreach name>_<key>, <foreach name>_<index> without a key; a chain key is <chain>_<index>,
 # <chain>_0 is the entry of the chain. "@losses", "@metrics", "@plots", "@checkpoint", "@calibrate" are references to the component
 # sections of the driver document (cirak @name); they are not block variables. The definition level keys (sets, every, inputs, output, target)
@@ -178,21 +178,27 @@ blocks:
           trace: {metrics: history}
           outputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: rules_final}
           body:
-            effects: {uri: /rule/kalfa/effects, inputs: {rules: rules}}
+            # the effects of the rules are applied once, here: the models and the optimizers in place (returned as
+            # models_ruled and optimizers_ruled, which the turn reads), the loss table as a copy with the params the
+            # rules set (turn_losses, which the turn and the evaluation of every set read)
+            effects: {uri: /rule/kalfa/effects, params: {losses: "@losses"},
+                      inputs: {rules: rules, models: models, optimizers: optimizers, loader: train_loader},
+                      outputs: {effects: effects, losses: turn_losses, models: models_ruled, optimizers: optimizers_ruled}}
             turn:    {uri: $turn.uri$,
-                      params: {params: $turn.params$, extra: $turn_params$, losses: "@losses", metrics: "@metrics",
+                      params: {params: $turn.params$, extra: $turn_params$, metrics: "@metrics",
                                losses_keys: $losses_keys$, metrics_keys: $metrics_keys$, predicts: $predicts$, steps: $steps$},
-                      inputs: {models: models, optimizers: optimizers, emas: emas, counters: counters,
-                               composites: composites, effects: effects, loader: train_loader, stream: stream},
+                      inputs: {models: models_ruled, optimizers: optimizers_ruled, emas: emas, counters: counters,
+                               composites: composites, effects: effects, losses: turn_losses, loader: train_loader,
+                               stream: stream},
                       outputs: {models: models_next, optimizers: optimizers_next, emas: emas_next,
                                 counters: counters_next, stream: stream_next, metrics: train_metrics}}
             evaluate:
               foreach: {over: $sets$, item: set, key: $set$,
-                        node: {uri: /lego/kalfa/evaluate, params: {set: $set$, losses: "@losses", metrics: "@metrics",
+                        node: {uri: /lego/kalfa/evaluate, params: {set: $set$, metrics: "@metrics",
                                                                    losses_keys: $losses_keys$, metrics_keys: $metrics_keys$,
                                                                    predicts: $predicts$},
                                inputs: {models: models_next, emas: emas_next, composites: composites,
-                                        counters: counters_next, effects: effects, loader: $set$_loader},
+                                        counters: counters_next, losses: turn_losses, loader: $set$_loader},
                                outputs: [$set$_metrics]}}
             metrics: {uri: /lego/kalfa/merge, params: {prefixes: $history_prefix$}, inputs: {parts: "*_metrics"}}
             rules_0: {uri: /rule/kalfa/open, inputs: {rules: rules}}

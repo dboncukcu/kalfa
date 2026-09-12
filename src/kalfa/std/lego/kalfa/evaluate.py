@@ -13,8 +13,8 @@ logger = logger_for("training.eval")
 @lego("/lego/kalfa/evaluate", returns="metrics", bus=["device", "prep", "record"],
       description="Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; "
                   "an empty set gives an empty mapping; record reaches metrics that write files")
-def evaluate(models, emas, composites, counters, effects, loader, set, losses, metrics, losses_keys, metrics_keys,
-             predicts, device=None, prep=None, record=None):
+def evaluate(models, emas, composites, counters, loader, set, losses, metrics, losses_keys, metrics_keys, predicts,
+             device=None, prep=None, record=None):
     if loader is None or loader.dataset.size() == 0:
         return {}
     turn = int(counters.get("turn", 0))

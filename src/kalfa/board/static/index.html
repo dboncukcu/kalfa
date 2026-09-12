@@ -352,7 +352,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'overview'">
-        <p class="note">The last {{ turnLabel }} of history.jsonl per series with its kind and the lego behind it (from resolved.yaml), the loss every optimizer minimized and the switches the rules made, the learning rates, the best {{ turnLabel }} by the checkpoint monitor, the checkpoints and the calibrations of the record.</p>
+        <p class="note">The last {{ turnLabel }} of history.jsonl per series with its kind and the lego behind it (from resolved.yaml), the loss every optimizer minimized with the weights of its terms as the rules left them, the switches and the other effects of the rules over the {{ turnLabel }}s, the learning rates, the best {{ turnLabel }} by the checkpoint monitor, the checkpoints and the calibrations of the record.</p>
         <div class="cards compact">
             <div class="card" v-if="record.best">
               <div class="card-label">best {{ turnLabel }}</div>
@@ -375,6 +375,13 @@
                 <div class="muted" v-if="entry.lr !== null">learning rate {{ fmt(entry.lr) }} at the last {{ turnLabel }}</div>
                 <div class="muted timeline" v-if="entry.segments.length > 1">
                   <span v-for="segment in entry.segments" :key="segment.from"><span class="mono">{{ segment.loss }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
+                </div>
+              </div>
+              <div class="training" v-if="effectRows.length">
+                <div class="muted">rule effects, as history.jsonl carries them</div>
+                <div class="muted timeline" v-for="row in effectRows" :key="row.target">
+                  <span class="mono">{{ row.target }}</span>
+                  <span v-for="segment in row.segments" :key="segment.from"><span class="mono">{{ segment.value === undefined ? 'as written' : text(segment.value) }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
                 </div>
               </div>
             </div>

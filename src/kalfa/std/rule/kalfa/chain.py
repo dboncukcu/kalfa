@@ -3,25 +3,21 @@ import logging
 from pathlib import Path
 
 from kalfa.registration import lego
+from kalfa.std.common.effects import apply_effects, effect_note, relative_effect
 from kalfa.std.common.files import read_note
 from kalfa.std.common.log import logger_for
+from kalfa.std.common.runtime import resolve_entries
 
 
 logger = logger_for("training.rule")
 
 
-def brief(value):
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    return getattr(value, "__name__", type(value).__name__)
-
-
 def effects_text(targets):
-    return ", ".join(f"{key}={brief(value)}" for key, value in (targets or {}).items())
+    return ", ".join(f"{key}={effect_note(value)}" for key, value in (targets or {}).items())
 
 
 def absolute(effects):
-    return {key: value for key, value in (effects or {}).items() if not isinstance(value, dict)}
+    return {key: value for key, value in (effects or {}).items() if not relative_effect(value)}
 
 
 @lego("/rule/kalfa/open", description="Open the rule chain of a turn")
@@ -65,10 +61,16 @@ def rule(rules, name, when, set, after=None, metrics=None, turn_index=None, stic
     return out
 
 
-@lego("/rule/kalfa/effects", returns="effects",
-      description="The effects the fired rules left for this turn")
-def effects(rules):
-    return dict((rules or {}).get("effects") or {})
+@lego("/rule/kalfa/effects", returns=["effects", "losses", "models", "optimizers"], mutates=["models", "optimizers"],
+      description="The effects the fired rules left for this turn, applied once before it: a model's trainable flag "
+                  "and an optimizer's params in place, the models and the optimizers returned as they are, and the "
+                  "loss table as a copy with every loss param the rules set, which the turn and the evaluation of "
+                  "every set read alike")
+def effects(rules, models, optimizers, losses, loader):
+    found = dict((rules or {}).get("effects") or {})
+    resolve_entries(losses, loader=loader)
+    return {"effects": found, "losses": apply_effects(found, models, optimizers, losses), "models": models,
+            "optimizers": optimizers}
 
 
 def stop_asked(record):

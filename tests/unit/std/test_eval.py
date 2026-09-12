@@ -24,7 +24,7 @@ from kalfa.std.pre.sklearn.scalers import StandardScaler
 def test_evaluate_empty_set_gives_an_empty_mapping():
     model = tiny_model()
     loader = torch_loader(table(frame(rows=0)), "valid", 4)
-    assert evaluate({"model": model}, {}, {}, {"turn": 1}, {}, loader, "valid", {"l": criterion_adapter(mse)},
+    assert evaluate({"model": model}, {}, {}, {"turn": 1}, loader, "valid", {"l": criterion_adapter(mse)},
                     {"r": metric_adapter(Rmse())}, {}, {}, "model") == {}
 
 
@@ -35,10 +35,10 @@ def test_evaluate_reports_losses_and_metrics_and_honours_every_and_sets():
     metrics = {"r": metric_adapter(Rmse()), "slow": metric_adapter(Rmse())}
     losses_keys = {"silent": {"sets": ["test"]}}
     metrics_keys = {"slow": {"every": 2}, "r": {"target": "price"}}
-    out = evaluate({"model": model}, {}, {}, {"turn": 1}, {}, loader, "valid", losses, metrics, losses_keys,
+    out = evaluate({"model": model}, {}, {}, {"turn": 1}, loader, "valid", losses, metrics, losses_keys,
                    metrics_keys, "model")
     assert set(out) == {"l", "r"} and out["r"] == pytest.approx(math.sqrt(out["l"]), rel=1e-4)
-    out = evaluate({"model": model}, {}, {}, {"turn": 2}, {}, loader, "valid", losses, metrics, losses_keys,
+    out = evaluate({"model": model}, {}, {}, {"turn": 2}, loader, "valid", losses, metrics, losses_keys,
                    metrics_keys, "model")
     assert set(out) == {"l", "r", "slow"}
     assert not model.training

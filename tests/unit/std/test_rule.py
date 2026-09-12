@@ -4,6 +4,9 @@ import functools
 
 import kalfa  # noqa: F401
 from kalfa.record import Record
+from kalfa.std.adapter.kalfa.criterion import CriterionAdapter
+from kalfa.std.criterion.kalfa.regression import huber
+from kalfa.std.lego.kalfa.history import noted
 from kalfa.std.rule.kalfa.chain import effects, open_rules, rule, stop
 from kalfa.std.trigger.kalfa.clock import after_turn, time_budget
 from kalfa.std.trigger.kalfa.metrics import metric_above, metric_below, plateau
@@ -78,7 +81,26 @@ def test_after_sticky_and_last_wins():
     assert rules["fired"] == ["c"] and rules["effects"] == {"loss": "z"}
     rules = chain(rules, specs)["rules"]
     assert rules["fired"] == [] and rules["effects"] == {"loss": "z"}
-    assert effects(rules) == {"loss": "z"}
+    assert effects(rules, {}, {}, {}, None) == {"effects": {"loss": "z"}, "losses": {}, "models": {}, "optimizers": {}}
+
+
+def test_a_mapping_value_stays_in_force_while_a_relative_one_applies_once():
+    specs = [{"name": "w", "when": trig(True),
+              "set": {"t.terms": {"a": 1.0}, "t.terms.b": 2.0, "main.lr": {"times": 0.5}}}]
+    rules = chain({}, specs)["rules"]
+    assert rules["effects"] == {"t.terms": {"a": 1.0}, "t.terms.b": 2.0, "main.lr": {"times": 0.5}}
+    rules = chain(rules, specs)["rules"]
+    assert rules["effects"] == {"t.terms": {"a": 1.0}, "t.terms.b": 2.0}
+
+
+def test_the_effects_lego_applies_the_rules_to_a_copy_of_the_loss_table():
+    losses = {"l": CriterionAdapter(functools.partial(huber, delta=1.0, weights={"a": 1.0}))}
+    out = effects({"effects": {"l.delta": 0.2, "l.weights.a": 3.0}}, {}, {}, losses, None)
+    assert out["effects"] == {"l.delta": 0.2, "l.weights.a": 3.0}
+    assert out["losses"]["l"].criterion.keywords == {"delta": 0.2, "weights": {"a": 3.0}}
+    assert losses["l"].criterion.keywords == {"delta": 1.0, "weights": {"a": 1.0}}
+    assert noted({"loss": "x", "main.loss": "y", "l.w": 0.5, "l.recon": huber, "l.terms": {"a": 1}}) == \
+        {"l.w": 0.5, "l.recon": "huber", "l.terms": {"a": 1}}
 
 
 def test_a_rule_with_sticky_false_is_asked_every_turn_and_its_trigger_starts_over():

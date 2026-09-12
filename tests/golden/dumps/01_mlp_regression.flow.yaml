@@ -72,13 +72,13 @@ flow:
     build_opt_model: {uri: /optimizer/torch/adam, params: {params: {lr: 0.001}, schedule: null, loss: loss_mse}, inputs: {models: {model: model}}, outputs: [
           opt_model]}
     optimizers: {uri: /lego/kalfa/pack, inputs: {items: {model: opt_model}}, outputs: [optimizers]}
-  training: # reads: models, optimizers, emas, device, composites, train_loader, prep, record, monitor, valid_loader, test_loader; exports: history, models_final, optimizers_final, emas_final, counters_final, rules_final
+  training: # reads: models, optimizers, emas, device, train_loader, composites, prep, record, monitor, valid_loader, test_loader; exports: history, models_final, optimizers_final, emas_final, counters_final, rules_final
     counters: {uri: /lego/kalfa/const, params: {value: {global_step: 0, turn: 0}}, outputs: [counters]}
     rules: {uri: /lego/kalfa/const, params: {value: {}}, outputs: [rules]}
     stream: {uri: /lego/kalfa/const, params: {value: null}, outputs: [stream]}
     init: {uri: /lego/kalfa/init_state, params: {epochs: 100, steps: null, policy: '@checkpoint'}, inputs: {state: {models: models, optimizers: optimizers, emas: 
             emas, counters: counters, rules: rules}}, outputs: [epochs_left]}  # implicit: device
-    epochs: # reads: composites, train_loader, device, prep, record, monitor, valid_loader, test_loader
+    epochs: # reads: train_loader, composites, device, prep, record, monitor, valid_loader, test_loader
       loop:
         carry: [models, optimizers, emas, counters, rules, stream]
         next: _next
@@ -93,18 +93,20 @@ flow:
           emas: emas_final
           counters: counters_final
           rules: rules_final
-        body:  # reads: rules, models, optimizers, emas, counters, composites, train_loader, stream, device, prep, record, monitor, valid_loader, test_loader, turn_index; exports: models_next, optimizers_next, emas_next, counters_next, stream_next, metrics, rules_next, stop
-          effects: {uri: /rule/kalfa/effects, inputs: {rules: rules}, outputs: [effects]}
-          turn: {uri: /turn/kalfa/alternating, params: {params: {}, extra: {}, losses: '@losses', metrics: '@metrics', losses_keys: {loss_mse: {}, loss_huber: {},
-                loss_mae: {}, loss_logcosh: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model, steps: null}, inputs: {models: models, optimizers: 
-                optimizers, emas: emas, counters: counters, composites: composites, effects: effects, loader: train_loader, stream: stream}, outputs: {models: 
-                models_next, optimizers: optimizers_next, emas: emas_next, counters: counters_next, stream: stream_next, metrics: train_metrics}}  # implicit: device, prep, record, monitor
-          evaluate_valid: {uri: /lego/kalfa/evaluate, params: {set: valid, losses: '@losses', metrics: '@metrics', losses_keys: {loss_mse: {}, loss_huber: {}, 
-                  loss_mae: {}, loss_logcosh: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model}, inputs: {models: models_next, emas: emas_next, 
-                composites: composites, counters: counters_next, effects: effects, loader: valid_loader}, outputs: [valid_metrics]} # implicit: device, prep, record
-          evaluate_test: {uri: /lego/kalfa/evaluate, params: {set: test, losses: '@losses', metrics: '@metrics', losses_keys: {loss_mse: {}, loss_huber: {}, 
-                  loss_mae: {}, loss_logcosh: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model}, inputs: {models: models_next, emas: emas_next, 
-                composites: composites, counters: counters_next, effects: effects, loader: test_loader}, outputs: [test_metrics]} # implicit: device, prep, record
+        body:  # reads: rules, models, optimizers, train_loader, emas, counters, composites, stream, device, prep, record, monitor, valid_loader, test_loader, turn_index; exports: models_next, optimizers_next, emas_next, counters_next, stream_next, metrics, rules_next, stop
+          effects: {uri: /rule/kalfa/effects, params: {losses: '@losses'}, inputs: {rules: rules, models: models, optimizers: optimizers, loader: train_loader}, 
+              outputs: {effects: effects, losses: turn_losses, models: models_ruled, optimizers: optimizers_ruled}}
+          turn: {uri: /turn/kalfa/alternating, params: {params: {}, extra: {}, metrics: '@metrics', losses_keys: {loss_mse: {}, loss_huber: {}, loss_mae: {}, 
+                  loss_logcosh: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model, steps: null}, inputs: {models: models_ruled, optimizers: 
+                optimizers_ruled, emas: emas, counters: counters, composites: composites, effects: effects, losses: turn_losses, loader: train_loader, stream: 
+                stream}, outputs: {models: models_next, optimizers: optimizers_next, emas: emas_next, counters: counters_next, stream: stream_next, metrics: 
+                train_metrics}}  # implicit: device, prep, record, monitor
+          evaluate_valid: {uri: /lego/kalfa/evaluate, params: {set: valid, metrics: '@metrics', losses_keys: {loss_mse: {}, loss_huber: {}, loss_mae: {}, 
+                  loss_logcosh: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model}, inputs: {models: models_next, emas: emas_next, composites: composites, 
+                counters: counters_next, losses: turn_losses, loader: valid_loader}, outputs: [valid_metrics]} # implicit: device, prep, record
+          evaluate_test: {uri: /lego/kalfa/evaluate, params: {set: test, metrics: '@metrics', losses_keys: {loss_mse: {}, loss_huber: {}, loss_mae: {}, 
+                  loss_logcosh: {}}, metrics_keys: {rmse: {}, mae: {}}, predicts: model}, inputs: {models: models_next, emas: emas_next, composites: composites, 
+                counters: counters_next, losses: turn_losses, loader: test_loader}, outputs: [test_metrics]} # implicit: device, prep, record
           metrics: {uri: /lego/kalfa/merge, params: {prefixes: {train: train, valid: val, test: test}}, inputs: {parts: '*_metrics'}, outputs: [metrics]} # parts *_metrics: test_metrics, train_metrics, valid_metrics
           rules_0: {uri: /rule/kalfa/open, inputs: {rules: rules}, outputs: [rules_0]}
           rule_1: {uri: /rule/kalfa/rule, params: {name: to_huber, when: '@triggers.to_huber', set: {loss: loss_huber}, after: null, sticky: true}, inputs: {

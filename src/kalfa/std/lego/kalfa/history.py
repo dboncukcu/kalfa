@@ -1,6 +1,6 @@
 from kalfa.registration import lego
+from kalfa.std.common.effects import effect_note, effective_loss
 from kalfa.std.common.history import History
-from kalfa.std.turn.base import effective_loss
 
 
 def minimized(effects, optimizers):
@@ -8,15 +8,21 @@ def minimized(effects, optimizers):
             if optimizer.loss is not None or f"{name}.loss" in (effects or {})}
 
 
+def noted(effects):
+    return {target: effect_note(value) for target, value in (effects or {}).items()
+            if target != "loss" and not target.endswith(".loss")}
+
+
 @lego("/lego/kalfa/history", returns=None,
       bus=["monitor", "metrics", "turn_index", "counters_next", "optimizers_next", "rules_next", "effects", "record"],
       description="Append the turn's line to history.jsonl: the metrics, the learning rate and the loss every "
-                  "optimizer minimized this turn (as the rules set it), the duration as seconds, the rules that "
-                  "fired; and hand it to the monitor")
+                  "optimizer minimized this turn (as the rules set it), every other effect of the rules in force as "
+                  "effect/<target>, the duration as seconds, the rules that fired; and hand it to the monitor")
 def history(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None,
             effects=None, record=None):
     line = History.line(metrics, counters_next, optimizers_next, rules_next,
-                        monitor.elapsed() if monitor is not None else None, minimized(effects, optimizers_next))
+                        monitor.elapsed() if monitor is not None else None, minimized(effects, optimizers_next),
+                        noted(effects))
     if record is not None:
         History.append(record, line)
     if monitor is not None:

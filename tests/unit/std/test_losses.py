@@ -103,6 +103,16 @@ def test_with_param_rebuilds_the_partial():
     assert changed.criterion.keywords == {"delta": 0.1} and adapter.criterion.keywords == {"delta": 1.0}
 
 
+def test_with_param_reaches_a_key_of_a_mapping_param_by_its_dotted_path():
+    import functools
+
+    adapter = criterion_adapter(functools.partial(huber, delta=1.0, weights={"a": 1.0, "b": {"c": 0.5}}))
+    changed = adapter.with_param("weights.b.c", 2.0).criterion.keywords
+    assert changed == {"delta": 1.0, "weights": {"a": 1.0, "b": {"c": 2.0}}}
+    assert adapter.criterion.keywords["weights"] == {"a": 1.0, "b": {"c": 0.5}}
+    assert adapter.with_param("weights", {"a": 3.0}).criterion.keywords["weights"] == {"a": 3.0}
+
+
 def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
     import numpy
     from helpers import scores_frame

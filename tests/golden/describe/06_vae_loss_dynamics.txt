@@ -63,7 +63,7 @@ config.yaml                                                                     
 
   rules (evaluated at the end of a turn, effective in the next)
     turn ≥ 10                 ─→  half_recon  vae_loss.w_rec := 0.5
-    val/recon_rmse plateau 5  ─→  to_huber    vae_loss.recon := {'uri': '/criterion/kalfa/huber'}
+    val/recon_rmse plateau 5  ─→  to_huber    vae_loss.recon := huber
 
 ── AFTER ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   report      best        predict vae ─→ predictions.parquet

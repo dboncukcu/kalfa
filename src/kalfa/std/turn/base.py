@@ -17,51 +17,6 @@ class Settings:
         return cls(bool(extra.get("amp", False)), extra.get("grad_clip"), int(extra.get("accumulate", 1) or 1))
 
 
-def effective_loss(name, effects, optimizers):
-    if f"{name}.loss" in effects:
-        return effects[f"{name}.loss"]
-    if "loss" in effects and len(optimizers) == 1:
-        return effects["loss"]
-    if optimizers[name].loss is None:
-        raise ValueError(f"optimizer {name!r} names no loss")
-    return optimizers[name].loss
-
-
-def relative(current, value):
-    if "times" in value:
-        return current * float(value["times"])
-    if "plus" in value:
-        return current + float(value["plus"])
-    raise KeyError(f"a relative effect is {{times: x}} or {{plus: x}}, got {sorted(value)}")
-
-
-def apply_effects(effects, models, optimizers, losses):
-    table = dict(losses)
-    for key, value in effects.items():
-        if "." not in key:
-            continue
-        owner, param = key.split(".", 1)
-        if param == "loss":
-            continue
-        if owner in models and param == "trainable":
-            model = models[owner]
-            model.trainable = bool(value)
-            for parameter in model.parameters():
-                parameter.requires_grad_(bool(value))
-        elif owner in optimizers:
-            if isinstance(value, dict):
-                current = optimizers[owner].params.get(param)
-                if current is None:
-                    raise KeyError(f"rule effect {key!r} is relative, but the optimizer has no {param!r} to change")
-                value = relative(float(current), value)
-            optimizers[owner].set_param(param, value)
-        elif owner in table:
-            table[owner] = table[owner].with_param(param, value)
-        else:
-            raise KeyError(f"rule effect {key!r} names neither a model, an optimizer nor a loss")
-    return table
-
-
 class Cursor:
     def __init__(self, loader, endless):
         self.loader = loader

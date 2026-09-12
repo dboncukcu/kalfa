@@ -1,15 +1,21 @@
 from ..config import resolve_alias
 from ..kinds import kalfa_kind, names_of
+from ..std.common.effects import relative_effect
 from ..std.common.optional import installed
 from ..std.common.runtime import expand_targets
 from ..std.pre.base import assign_fields
 
 
-def relative_effect(value):
-    if len(value) != 1 or next(iter(value)) not in ("times", "plus"):
-        return False
-    amount = next(iter(value.values()))
-    return isinstance(amount, (int, float)) and not isinstance(amount, bool)
+def value_kind(value):
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, (int, float)):
+        return "number"
+    if isinstance(value, dict):
+        return "mapping"
+    if isinstance(value, list):
+        return "list"
+    return "text" if isinstance(value, str) else type(value).__name__
 
 
 class RefRules:
@@ -39,25 +45,61 @@ class RefRules:
                 self.error("set_value", f"set {key}: a relative effect is {{times: x}} or {{plus: x}} with a number",
                            path)
             return
-        if isinstance(value, dict):
-            self.error("set_value", f"set {key}: a relative effect ({{times}}, {{plus}}) changes an optimizer "
-                                    f"param only", path)
-            return
         if owner in self.losses:
-            entry = self.losses[owner]
-            uri = entry.get("uri") if isinstance(entry, dict) else entry
-            names = self.parameters(self.registry.resolve_quietly(uri)) if isinstance(uri, str) else None
-            if names is not None and param not in names:
-                self.error("set_value", f"set {key}: {uri} has no parameter {param!r}", path)
-                return
-            ref_type = self.registry.facts(uri).refs.get(param) if isinstance(uri, str) else None
-            if ref_type is not None and isinstance(value, str):
-                if ref_type == "loss" and value not in self.losses:
-                    self.error("set_value", f"set {key} names {value!r}, which losses does not define", path)
-                elif ref_type != "loss" and resolve_alias(value, self.surface.aliases) is None:
-                    self.error("set_value", f"set {key} names {value!r}, which is no known {ref_type}", path)
+            self.loss_effect(key, owner, param, value, path)
             return
         self.error("set_target", f"set target {key!r} names neither an optimizer, a loss nor a trained model", path)
+
+    def loss_effect(self, key, owner, param, value, path):
+        entry = self.losses[owner]
+        uri = entry.get("uri") if isinstance(entry, dict) else entry
+        head, _, inner = param.partition(".")
+        names = self.parameters(self.registry.resolve_quietly(uri)) if isinstance(uri, str) else None
+        if names is not None and head not in names:
+            self.error("set_value", f"set {key}: {uri} has no parameter {head!r}", path)
+            return
+        if relative_effect(value):
+            self.error("set_value", f"set {key}: a relative effect ({{times}}, {{plus}}) changes an optimizer param "
+                                    f"only", path,
+                       hint=f"to set a key named {next(iter(value))!r} of {owner}.{head}, write it by its dotted path")
+            return
+        written = (entry.get("params") or {}).get(head) if isinstance(entry, dict) else None
+        if inner:
+            self.inner_effect(key, f"{owner}.{head}", written, inner, value, path)
+            return
+        ref_type = self.registry.facts(uri).refs.get(head) if isinstance(uri, str) else None
+        if isinstance(value, dict):
+            self.mapping_effect(key, owner, head, written, value, ref_type, path)
+        elif ref_type == "loss" and isinstance(value, str) and value not in self.losses:
+            self.error("set_value", f"set {key} names {value!r}, which losses does not define", path)
+        elif ref_type not in (None, "loss") and isinstance(value, str) \
+                and resolve_alias(value, self.surface.aliases) is None:
+            self.error("set_value", f"set {key} names {value!r}, which is no known {ref_type}", path)
+
+    def mapping_effect(self, key, owner, head, written, value, ref_type, path):
+        if not isinstance(written, dict):
+            self.error("set_value", f"set {key}: a mapping replaces a mapping param, and the definition of {owner} "
+                                    f"does not write {head} as one", path)
+            return
+        if ref_type != "loss":
+            return
+        for name in value:
+            if name not in self.losses:
+                self.error("set_value", f"set {key} names {name!r}, which losses does not define", path)
+
+    def inner_effect(self, key, walked, written, inner, value, path):
+        current = written
+        for part in inner.split("."):
+            if not isinstance(current, dict) or part not in current:
+                self.error("set_value", f"set {key}: the definition writes no {part!r} under {walked}", path,
+                           hint="write it in the definition with the value it starts with, 0.0 for a weight that "
+                                "begins silent")
+                return
+            current = current[part]
+            walked = f"{walked}.{part}"
+        if value_kind(value) != value_kind(current):
+            self.error("set_value", f"set {key}: {value!r} is a {value_kind(value)}, the definition holds a "
+                                    f"{value_kind(current)}", path)
 
     def refs_of(self, uri, params, path):
         if not isinstance(uri, str) or not isinstance(params, dict):
