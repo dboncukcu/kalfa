@@ -21,6 +21,8 @@ class Box:
     column: int
     row: int = 0
     detail: list = field(default_factory=list)
+    layers: list = field(default_factory=list)
+    parameters: int = 0
 
 
 @dataclass
@@ -29,8 +31,9 @@ class Layout:
     arrows: list = field(default_factory=list)
     widths: dict = field(default_factory=dict)
 
-    def add(self, key, kind, lines, column, detail=()):
-        self.boxes[key] = Box(key, kind, list(lines), column, detail=list(detail))
+    def add(self, key, kind, lines, column, detail=(), layers=(), parameters=0):
+        self.boxes[key] = Box(key, kind, list(lines), column, detail=list(detail), layers=list(layers),
+                              parameters=parameters)
 
     def link(self, source, target, wire=""):
         self.arrows.append((source, target, wire))
@@ -79,20 +82,49 @@ def widths_of(shape):
     return [part.split("x", 1)[1] if "x" in part else part for part in shape.split(", ")] if shape else []
 
 
+def child_key(key, name):
+    return f"{key}.{name}" if key is not None else name
+
+
 def summary_of(module):
     extra = module.extra_repr().replace("in_features=", "").replace("out_features=", "").replace(", bias=True", "")
-    extra = extra.replace(", inplace=False", "")
-    return extra if len(extra) <= 34 else extra[:33] + "…"
+    return extra.replace(", inplace=False", "")
 
 
-def child_lines(module, key, shapes):
-    lines = []
+def layer_kind(module):
+    return "torch" if type(module).__module__.startswith("torch.") else "lego"
+
+
+def parameter_count(module):
+    return sum(parameter.numel() for parameter in module.parameters())
+
+
+def trainable_count(module):
+    return sum(parameter.numel() for parameter in module.parameters() if parameter.requires_grad)
+
+
+def layer_tree(module, key, shapes):
+    layers = []
     for name, child in module.named_children():
-        summary = summary_of(child)
-        traced = shapes.get(f"{key}.{name}")
-        lines.append(f"{name}: {type(child).__name__}" + (f"({summary})" if summary else "")
-                     + (f" -> {traced[1]}" if traced else ""))
-    return lines
+        traced = shapes.get(child_key(key, name))
+        layers.append({"name": name, "kind": layer_kind(child), "class": type(child).__name__,
+                       "summary": summary_of(child), "shapes": list(traced) if traced else None,
+                       "parameters": parameter_count(child),
+                       "children": layer_tree(child, child_key(key, name), shapes)})
+    return layers
+
+
+def layer_line(item):
+    summary = item["summary"] if len(item["summary"]) <= 34 else item["summary"][:33] + "…"
+    traced = f" -> {item['shapes'][1]}" if item["shapes"] else ""
+    return f"{item['name']}: {item['class']}" + (f"({summary})" if summary else "") + traced
+
+
+def drawn_lines(box):
+    shown = [layer_line(item) for item in box.layers]
+    if len(shown) > 12:
+        shown = [*shown[:11], f"+{len(shown) - 11} more"]
+    return [*box.lines, *shown]
 
 
 def graph_of(model):
@@ -109,10 +141,12 @@ def traced_shapes(model, batch, device):
         return hook
 
     graph = graph_of(model)
-    targets = {node.name: model.node_module(node) for node in graph.nodes} if graph is not None else {}
-    for key, module in list(targets.items()):
-        for name, child in (module.named_children() if module is not None else []):
-            targets[f"{key}.{name}"] = child
+    roots = {node.name: model.node_module(node) for node in graph.nodes} if graph is not None else {None: model}
+    targets = dict(roots)
+    for key, module in roots.items():
+        for name, child in (module.named_modules() if module is not None else []):
+            if name:
+                targets[child_key(key, name)] = child
     targets[None] = model
     for key, module in targets.items():
         if module is not None:
@@ -132,7 +166,7 @@ def traced_shapes(model, batch, device):
 def kind_of(node, module):
     if node.ref is not None:
         return "model"
-    return "torch" if type(module).__module__.startswith("torch.") else "lego"
+    return layer_kind(module)
 
 
 def input_lines(wire, features):
@@ -147,7 +181,7 @@ def graph_layout(model, label, shapes, features=None):
     graph = graph_of(model)
     if graph is None:
         layout.add(label, "lego", [label, type(model).__name__, *shape_lines(shapes.get(None))], 0,
-                   child_lines(model, None, shapes))
+                   layers=layer_tree(model, None, shapes), parameters=parameter_count(model))
         return layout, 0
     depth = {wire: 0 for wire in graph.inputs}
     producer = {}
@@ -162,10 +196,9 @@ def graph_layout(model, label, shapes, features=None):
         column = 1 + max((depth.get(wire, 0) for wire in node.inputs), default=0)
         module = model.node_module(node)
         what = f"model {node.ref}" if node.ref is not None else type(module).__name__
-        detail = child_lines(module, node.name, shapes) if node.ref is None and module is not None else []
-        shown = detail if len(detail) <= 12 else [*detail[:11], f"+{len(detail) - 11} more"]
-        layout.add(node.name, kind_of(node, module), [node.name, what, *shape_lines(shapes.get(node.name)), *shown],
-                   column, detail)
+        layers = layer_tree(module, node.name, shapes) if node.ref is None and module is not None else []
+        layout.add(node.name, kind_of(node, module), [node.name, what, *shape_lines(shapes.get(node.name))], column,
+                   layers=layers, parameters=parameter_count(module) if module is not None else 0)
         traced = shapes.get(node.name)
         for wire, width in zip(node.outputs, widths_of(traced[1]) if traced else []):
             layout.widths[wire] = width
@@ -234,9 +267,10 @@ def draw_layout(figures, layout, label):
 
     columns = layout.ordered()
     span = max(columns) + 1
-    widths = {column: min(3.6, max(1.5, 0.068 * max(len(line) for box in boxes for line in box.lines) + 0.5))
+    texts = {box.name: drawn_lines(box) for boxes in columns.values() for box in boxes}
+    widths = {column: min(3.6, max(1.5, 0.068 * max(len(line) for box in boxes for line in texts[box.name]) + 0.5))
               for column, boxes in columns.items()}
-    heights = {box.name: 0.2 * len(box.lines) + 0.34 for boxes in columns.values() for box in boxes}
+    heights = {box.name: 0.2 * len(texts[box.name]) + 0.34 for boxes in columns.values() for box in boxes}
     gap_x, gap_y = 1.35, 0.42
     lefts, cursor = {}, 0.45
     for column in range(span):
@@ -269,8 +303,8 @@ def draw_layout(figures, layout, label):
                                           linewidth=1.0))
             axis.add_patch(FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.06,rounding_size=0.12",
                                           facecolor=figures.surface, edgecolor="none", alpha=0.78))
-            axis.text(x + width / 2, y + height / 2, "\n".join(box.lines), ha="center", va="center", fontsize=7.5,
-                      color=figures.ink, linespacing=1.35)
+            axis.text(x + width / 2, y + height / 2, "\n".join(texts[box.name]), ha="center", va="center",
+                      fontsize=7.5, color=figures.ink, linespacing=1.35)
             frames[box.name] = (x, y, width, height, box.column)
     leaving = {name: [] for name in frames}
     arriving = {name: [] for name in frames}

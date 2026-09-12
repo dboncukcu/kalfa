@@ -155,7 +155,9 @@ its params and best value, compares two records (curves overlaid, config diff), 
 a monitor tab (progress, the monitored metric, the minimized loss, the step loss, the log tail; by default the
 page refreshes only when a file of the record changes, through a server sent event stream that stats the
 record's files once a second, or every 3, 5 or 10 seconds when the footer says so; a stop button asks the
-record to end after its current turn), explores the test predictions, the fitted preprocessors, the files
+record to end after its current turn), explores the test predictions, the architecture (a box clicked opens
+into its layers block by block, with their shapes and parameter counts), the data pipeline (a stage clicked
+lists the columns it added or removed), the fitted preprocessors, the files
 of the record and the timeline of its nodes, and
 shows per record the latest metrics, one chart per metric with the sets as lines, the step curves, the plots and
 the samples, the config, the notes, the node timings, the events and the log tails; per sweep the live table of
@@ -295,7 +297,7 @@ never written into (an error).
 | `contract.yaml` | the contract the run was compiled by (the wiring and the flow blocks); `predict`, `generate` and `resume` read it back |
 | `flow.yaml` | the tezgah graph that ran: the component tables, the model blocks, the expanded flow and tezgah's resolution comments |
 | `history.jsonl` | per turn the `train/`, `val/`, `test/` values (`val/` steers the checkpoint, the stop and the rules, `test/` is only reported), `global_step`, `lr/<optimizer>`, `minimizes/<optimizer>` (the loss it stepped on that turn), `seconds`, the rules that fired |
-| `architecture.json` | the graph of every report model: the boxes of the architecture drawing with their column and row, the traced shapes and the wires; the board draws it |
+| `architecture.json` | the graph of every report model: the boxes of the architecture drawing with their column and row, the traced shapes and the wires, the layers inside every node as a tree with their shapes and parameter counts; the board draws it and opens a box into its layers |
 | `steps.jsonl` | per update `step`, `turn`, `loss/<optimizer>`, `lr/<optimizer>` and, under `grad_clip`, `grad_norm/<optimizer>`; `loss_curve` with `x: step` draws it, `rates: true` adds the learning rates below either curve |
 | `data.json` | the shape of the data at every stage of the data block: rows and columns per transform with the transform's call, the sets, the fitted objects, the features and targets, the loaders; `data_pipeline` draws it |
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |

@@ -1552,7 +1552,7 @@
     },
     "/lego/kalfa/architecture_note": {
       "alias": [],
-      "description": "The graph of every report model written to the record as architecture.json: the boxes of the architecture drawing with their column and row, the shapes one batch traced and the wires as arrows; the board draws it",
+      "description": "The graph of every report model written to the record as architecture.json: the boxes of the architecture drawing with their column and row, the layers inside every node as a tree with the shapes one batch traced and their parameter counts, the wires as arrows; the board draws it and opens a box into its layers",
       "facts": {
         "bus": {
           "device": "device",

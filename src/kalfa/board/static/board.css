@@ -158,6 +158,28 @@ a.small.active { border-color: var(--accent); color: var(--accent); background: 
 .chart:hover .chart-save { opacity: 1; }
 .gallery figcaption { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .text-card .toolbar { justify-content: space-between; }
+button.tiny { border: 0; background: none; color: var(--accent); cursor: pointer; font-size: 11px; padding: 0 4px; }
+button.tiny:hover { text-decoration: underline; }
+.names { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.names .chip { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.inside .section + .section { margin-top: 14px; }
+.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+.lines { font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.layers { display: flex; flex-direction: column; gap: 5px; }
+.layer .layers { margin: 0 8px 8px 22px; }
+.layer { border: 1px solid var(--line); border-left: 3px solid var(--line-2); border-radius: 6px; background: var(--surface); }
+.layer.torch { border-left-color: #2f6fdd; }
+.layer.lego { border-left-color: #17a673; }
+.layer.model { border-left-color: #8e5bd8; }
+.layer-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 6px 12px; }
+.layer-row.clickable { cursor: pointer; }
+.layer-row.clickable:hover { background: var(--surface-2); }
+.layer-name { color: var(--muted); }
+.layer-class { font-weight: 600; }
+.layer-summary { color: var(--ink-2); }
+.layer-shape { margin-left: auto; color: var(--ink-2); }
+.layer-params, .layer-toggle { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.layer-link { height: 12px; margin-left: 18px; border-left: 1px solid var(--line-2); }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden; }
 .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
@@ -250,7 +272,8 @@ pre.diff .hunk { color: var(--accent); }
 .diagram .edge-label-back { fill: var(--surface); }
 .diagram .node.clickable { cursor: pointer; }
 .diagram .node:hover rect { fill-opacity: 0.3; }
-.diagram .tooltip { transform: none; top: auto; font-family: var(--mono); max-height: 60vh; overflow: auto; }
+.diagram .node.selected rect { fill-opacity: 0.36; stroke-width: 2.2; }
+.diagram .tooltip { transform: none; top: auto; font-family: var(--mono); }
 .tooltip { position: absolute; top: 34px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); pointer-events: none; white-space: nowrap; z-index: 2; }
 .tooltip .swatch { margin-right: 5px; }
 .tooltip-x { color: var(--muted); margin-bottom: 2px; }

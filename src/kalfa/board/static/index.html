@@ -487,7 +487,7 @@
                 <tr v-for="item in prepData.fields" :key="item.name">
                   <td class="mono">{{ item.name }}</td><td><span class="badge" :class="item.target ? 'loss' : 'metric'">{{ item.target ? 'target' : 'feature' }}</span></td>
                   <td class="mono">{{ item.dtype || '' }}</td><td class="mono">{{ item.chain.join(' → ') }}</td>
-                  <td class="wrap mono">{{ item.columns.join(', ') }}</td><td class="wrap mono">{{ item.extras.join(', ') }}</td>
+                  <td class="wrap"><names :items="item.columns" :limit="8"></names></td><td class="wrap"><names :items="item.extras" :limit="8"></names></td>
                 </tr>
               </tbody>
             </table>
@@ -518,8 +518,8 @@
             </div>
           </div>
           <div class="card" v-if="prepData.drop && prepData.drop.length">
-            <div class="card-label">dropped columns</div>
-            <div class="mono wrap">{{ prepData.drop.join(', ') }}</div>
+            <div class="card-label">dropped columns <span class="muted">· {{ prepData.drop.length }}</span></div>
+            <names :items="prepData.drop" :limit="40"></names>
           </div>
         </template>
       </div>
@@ -603,15 +603,18 @@
       </div>
 
       <div class="panel" v-if="tab === 'model'">
-        <p class="note">The graph of every report model from architecture.json, written at the end of the run: one box per node with the layers inside it and the shapes one batch traced, every wire with its width, the input with its feature columns. A box of another model opens that model; hover lists everything a box holds; the module text is the torch repr.</p>
+        <p class="note">The graph of every report model from architecture.json, written at the end of the run: one box per node with the shapes one batch traced, every wire with its width, the input with its feature columns. A box clicked opens below the drawing, block by block: the layers of a node with their shapes and parameter counts (a block with layers inside unfolds), the features of the input, the nodes of another model; hover lists a few. The module text is the torch repr.</p>
         <template v-if="currentArchitecture">
-          <div class="toolbar" v-if="architectureModels.length > 1">
-            <a v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" :href="link({model: label})">{{ label }}</a>
-            <span class="muted">a box of another model opens it</span>
+          <div class="toolbar" v-if="architectureModels.length > 1 || currentArchitecture.parameters">
+            <template v-if="architectureModels.length > 1">
+              <a v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" :href="link({model: label, node: null})">{{ label }}</a>
+            </template>
+            <span class="muted" v-if="currentArchitecture.parameters">{{ paramCount(currentArchitecture.parameters) }}<template v-if="currentArchitecture.trainable !== undefined && currentArchitecture.trainable !== currentArchitecture.parameters">, {{ count(currentArchitecture.trainable) }} trainable</template></span>
           </div>
           <div class="card">
-            <diagram :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :widths="currentArchitecture.widths || {}" :title="currentArchitecture.label" @pick="pickModel"></diagram>
+            <diagram :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :widths="currentArchitecture.widths || {}" :title="currentArchitecture.label" :selected="route.params.node || ''" @pick="pickBox"></diagram>
           </div>
+          <inside v-if="selectedBox" :box="selectedBox" :open="selectedBox.ref ? link({model: selectedBox.ref, node: null}) : ''" @close="closeBox"></inside>
         </template>
         <p class="empty" v-else>no architecture.json in the record; runs write it since this version</p>
         <div class="card" v-if="record.plots.includes('architecture_text.txt')">
@@ -626,10 +629,11 @@
       </div>
 
       <div class="panel" v-if="tab === 'data'">
-        <p class="note">The data block from data.json: the source, every transform with its call and the columns it added or removed (hover), the split, the fit on train (dashed arrows from valid and test: applied, never fitted), the feeds and the loaders; the tables below list the calls and the columns in full.</p>
+        <p class="note">The data block from data.json: the source, every transform with its call and the columns it added or removed, the split, the fit on train (dashed arrows from valid and test: applied, never fitted), the feeds and the loaders. A box clicked opens below the drawing with everything it holds, the columns as chips; hover lists a few. The tables below list the calls and the columns of every stage.</p>
         <div class="card" v-if="pipeline">
-          <diagram :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline"></diagram>
+          <diagram :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline" :selected="route.params.node || ''" @pick="pickBox"></diagram>
         </div>
+        <inside v-if="pipeline && selectedBox" :box="selectedBox" @close="closeBox"></inside>
         <div class="card" v-if="dataStages.length">
           <div class="card-label">stages before the split</div>
           <div class="table-scroll">
@@ -640,7 +644,7 @@
               <tr v-for="stage in dataStages" :key="stage.stage">
                 <td class="mono">{{ stage.stage }}</td><td class="num mono">{{ count(stage.rows) }}</td><td class="num mono">{{ stage.columns }}</td>
                 <td class="wrap mono"><template v-if="stage.call"><b>{{ shortUri(stage.call.uri) }}</b> {{ paramsText(stage.call.params) }}</template></td>
-                <td class="wrap muted">{{ (stage.added || []).join(', ') }}</td><td class="wrap muted">{{ (stage.removed || []).join(', ') }}</td>
+                <td class="wrap"><names :items="stage.added || []" :limit="8"></names></td><td class="wrap"><names :items="stage.removed || []" :limit="8"></names></td>
               </tr>
             </tbody>
           </table>
@@ -845,7 +849,7 @@
       <button class="small chart-save" @click="save" title="download this diagram as a png">save</button>
     </div>
     <div class="diagram-scroll">
-      <svg :width="layout.width" :height="layout.height" :viewBox="'0 0 ' + layout.width + ' ' + layout.height" @mouseleave="hover = null">
+      <svg :width="layout.width" :height="layout.height" :viewBox="'0 0 ' + layout.width + ' ' + layout.height" @mouseleave="hover = null" @mousemove="onMove">
         <defs>
           <marker :id="marker" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="arrowhead"></path>
@@ -856,7 +860,7 @@
           <rect :x="edge.lx - edge.label.length * 3.3 - 4" :y="edge.ly - 9" :width="edge.label.length * 6.6 + 8" height="14" rx="3" class="edge-label-back"></rect>
           <text :x="edge.lx" :y="edge.ly + 2" text-anchor="middle" class="edge-label">{{ edge.label }}</text>
         </g>
-        <g v-for="box in layout.boxes" :key="box.name" class="node" :class="{clickable: box.kind === 'model'}" @mouseenter="hover = box" @click="pick(box)">
+        <g v-for="box in layout.boxes" :key="box.name" class="node" :class="{clickable: clickable(box), selected: box.name === selected}" @mouseenter="hover = box" @click="pick(box)">
           <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" rx="7" :fill="color(box.kind)" fill-opacity="0.16" :stroke="color(box.kind)"></rect>
           <text :x="box.x + box.width / 2" :y="box.y + 21" text-anchor="middle">
             <tspan v-for="(line, index) in box.shown" :key="index" :x="box.x + box.width / 2" :dy="index ? 15 : 0" :class="{first: index === 0}">{{ line }}</tspan>
@@ -864,8 +868,7 @@
         </g>
       </svg>
       <div class="tooltip" v-if="hoverNote.length" :style="tooltipStyle">
-        <div v-for="(line, index) in hoverNote.slice(0, 40)" :key="index">{{ line }}</div>
-        <div class="muted" v-if="hoverNote.length > 40">and {{ hoverNote.length - 40 }} more</div>
+        <div v-for="(line, index) in hoverNote" :key="index">{{ line }}</div>
       </div>
     </div>
     <p class="empty" v-if="!layout.boxes.length">nothing to draw</p>

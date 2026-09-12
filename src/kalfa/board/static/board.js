@@ -7,6 +7,7 @@ const KIND_COLORS = { input: "#8a8f98", torch: "#2f6fdd", lego: "#17a673", model
 const KIND_NAMES = { input: "input wire", torch: "torch layer", lego: "kalfa layer", model: "model", output: "output wire",
                      loss: "loss", optimizer: "optimizer", source: "source", transform: "transform", split: "split",
                      frames: "frame transforms", fit: "fit on train", feed: "feed", loaders: "loaders" };
+const NODE_KINDS = new Set(["torch", "lego", "model"]);
 const SET_ORDER = ["train", "valid", "test"];
 const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "predictions", "prep", "plots", "samples", "config", "notes", "files", "timeline", "events", "logs", "describe"];
 const PAGES = ["table", "compare"];
@@ -96,6 +97,66 @@ function shortUri(uri) {
 
 function paramsText(params) {
   return Object.entries(params || {}).map(([key, value]) => `${key}=${typeof value === "object" && value !== null ? JSON.stringify(value) : value}`).join(" ");
+}
+
+function paramCount(value) {
+  if (typeof value !== "number" || value <= 0) return "";
+  if (value < 1000) return `${value} params`;
+  if (value < 1e6) return `${(value / 1e3).toFixed(1)}k params`;
+  return `${(value / 1e6).toFixed(2)}M params`;
+}
+
+function callLines(uri, params) {
+  return [`uri ${uri}`, ...Object.entries(params || {}).map(([key, value]) => `${key}: ${typeof value === "object" && value !== null ? JSON.stringify(value) : value}`)];
+}
+
+function parseShape(line) {
+  const parts = typeof line === "string" && !line.includes(": ") ? line.split(" -> ") : [];
+  return parts.length === 2 ? parts : null;
+}
+
+function parseDetail(line) {
+  const item = { name: line, kind: "", class: "", summary: "", shapes: null, parameters: 0, children: [] };
+  const match = /^(.+?): ([A-Za-z_]\w*)(?:\((.*)\))?(?: -> (.+))?$/.exec(line);
+  if (!match) return item;
+  return { ...item, name: match[1], class: match[2], summary: match[3] || "", shapes: match[4] ? ["", match[4]] : null };
+}
+
+function layerItems(box) {
+  return Array.isArray(box.layers) ? box.layers : (box.detail || []).map(parseDetail);
+}
+
+function layerLine(item) {
+  const summary = item.summary.length > 34 ? item.summary.slice(0, 33) + "…" : item.summary;
+  const shape = item.shapes && item.shapes[1] ? ` -> ${item.shapes[1]}` : "";
+  return `${item.name}: ${item.class}${summary ? `(${summary})` : ""}${shape}`;
+}
+
+function nodeItem(box) {
+  return { name: box.name, kind: box.kind, class: box.lines[1] || "", summary: "", shapes: parseShape(box.lines[2]),
+           parameters: box.parameters || 0, children: layerItems(box) };
+}
+
+function modelBox(box, models) {
+  if (box.kind === "input") {
+    const features = box.detail || [];
+    return { ...box, title: `input ${box.lines[0]}`, subtitle: features.length ? `${features.length} features` : "",
+             note: features, sections: features.length ? [{ title: "features", chips: features }] : [] };
+  }
+  if (box.kind === "model") {
+    const label = (box.lines[1] || "").replace(/^model /, "");
+    const nodes = ((models[label] && models[label].boxes) || []).filter(item => NODE_KINDS.has(item.kind)).map(nodeItem);
+    return { ...box, ref: label, title: `model ${label}`, subtitle: [parseShape(box.lines[2]) ? box.lines[2] : "", paramCount(box.parameters)].filter(Boolean).join(" · "),
+             note: nodes.map(layerLine), sections: [{ title: `nodes of ${label}`, layers: nodes, chain: false }] };
+  }
+  if (!NODE_KINDS.has(box.kind)) return { ...box, note: [], sections: [] };
+  const items = layerItems(box);
+  const shape = parseShape(box.lines[2]);
+  const head = box.lines.slice(0, shape ? 3 : 2);
+  const hint = [items.length ? `${items.length} layers` : "", paramCount(box.parameters)].filter(Boolean).join(" · ");
+  return { ...box, title: `node ${box.name}`, subtitle: [head[1], shape ? head[2] : "", paramCount(box.parameters)].filter(Boolean).join(" · "),
+           lines: hint ? [...head, hint] : head, note: items.map(layerLine),
+           sections: [{ title: "layers", layers: items, chain: head[1] === "Sequential" }] };
 }
 
 function orderedSets(names) {
@@ -304,14 +365,79 @@ const Spark = {
     </div>`,
 };
 
+const Names = {
+  props: { items: { type: Array, default: () => [] }, limit: { type: Number, default: 12 } },
+  data() { return { all: false }; },
+  computed: { shown() { return this.all || this.items.length <= this.limit ? this.items : this.items.slice(0, this.limit); } },
+  watch: { items() { this.all = false; } },
+  template: `
+    <div class="names">
+      <span class="chip" v-for="(name, index) in shown" :key="index" :title="name">{{ name }}</span>
+      <button class="tiny" v-if="items.length > limit" @click="all = !all">{{ all ? 'fewer' : '+' + (items.length - limit) + ' more' }}</button>
+    </div>`,
+};
+
+const Layers = {
+  name: "layers",
+  props: { items: { type: Array, default: () => [] }, chain: Boolean },
+  data() { return { open: {} }; },
+  watch: { items() { this.open = {}; } },
+  methods: {
+    paramCount,
+    toggle(index) { this.open = { ...this.open, [index]: !this.open[index] }; },
+  },
+  template: `
+    <div class="layers">
+      <template v-for="(item, index) in items" :key="index">
+        <div class="layer-link" v-if="chain && index"></div>
+        <div class="layer" :class="item.kind">
+          <div class="layer-row" :class="{clickable: item.children.length}" @click="toggle(index)">
+            <span class="layer-name mono">{{ item.name }}</span>
+            <span class="layer-class">{{ item.class }}</span>
+            <span class="layer-summary mono" v-if="item.summary">{{ item.summary }}</span>
+            <span class="layer-shape mono" v-if="item.shapes">{{ item.shapes[0] ? item.shapes[0] + ' → ' : '→ ' }}{{ item.shapes[1] }}</span>
+            <span class="layer-params" v-if="item.parameters">{{ paramCount(item.parameters) }}</span>
+            <span class="layer-toggle" v-if="item.children.length">{{ open[index] ? '▾' : '▸' }} {{ item.children.length }} inside</span>
+          </div>
+          <layers v-if="open[index]" :items="item.children" :chain="item.class === 'Sequential'"></layers>
+        </div>
+      </template>
+    </div>`,
+};
+
+const Inside = {
+  components: { names: Names, layers: Layers },
+  props: { box: { type: Object, required: true }, open: { type: String, default: "" } },
+  emits: ["close"],
+  template: `
+    <div class="card inside">
+      <div class="toolbar">
+        <span class="card-label">{{ box.title || box.name }}</span>
+        <span class="muted" v-if="box.subtitle">{{ box.subtitle }}</span>
+        <a class="small" v-if="open" :href="open">open {{ box.ref }}</a>
+        <button class="small" @click="$emit('close')">close</button>
+      </div>
+      <div class="section" v-for="(section, index) in box.sections" :key="index">
+        <div class="section-label" v-if="section.title">{{ section.title }}</div>
+        <names v-if="section.chips" :items="section.chips" :limit="60"></names>
+        <template v-else-if="section.layers">
+          <layers v-if="section.layers.length" :items="section.layers" :chain="section.chain"></layers>
+          <p class="muted" v-else>one operation, nothing inside</p>
+        </template>
+        <div class="lines" v-else-if="section.lines"><div v-for="(line, position) in section.lines" :key="position">{{ line }}</div></div>
+      </div>
+    </div>`,
+};
+
 function portSpread(count, low, high) {
   if (count <= 1) return [(low + high) / 2];
   return Array.from({ length: count }, (_, position) => low + (high - low) * (position + 1) / (count + 1));
 }
 
 const Diagram = {
-  props: { boxes: { type: Array, default: () => [] }, arrows: { type: Array, default: () => [] }, widths: { type: Object, default: () => ({}) }, title: String },
-  data() { return { hover: null, marker: `arrow-${Math.random().toString(36).slice(2, 8)}` }; },
+  props: { boxes: { type: Array, default: () => [] }, arrows: { type: Array, default: () => [] }, widths: { type: Object, default: () => ({}) }, title: String,
+           selected: { type: String, default: "" } },
+  data() { return { hover: null, mouse: { x: 0, y: 0 }, marker: `arrow-${Math.random().toString(36).slice(2, 8)}` }; },
   computed: {
     layout() {
       const CHAR = 6.7, LINE = 15, PAD_X = 14, PAD_Y = 10, GAP_X = 84, GAP_Y = 22, EDGE = 20;
@@ -372,19 +498,25 @@ const Diagram = {
     },
     kinds() { return [...new Set(this.boxes.map(box => box.kind))]; },
     tooltipStyle() {
-      if (!this.hover) return {};
-      return { left: `${this.hover.x + this.hover.width + 10}px`, top: `${this.hover.y}px` };
+      const lines = this.hoverNote;
+      const width = Math.max(8, ...lines.map(line => line.length)) * 6.6 + 20;
+      const height = lines.length * 17 + 14;
+      const left = this.mouse.x + 16 + width > window.innerWidth ? this.mouse.x - 16 - width : this.mouse.x + 16;
+      const top = this.mouse.y + 16 + height > window.innerHeight ? this.mouse.y - 16 - height : this.mouse.y + 16;
+      return { position: "fixed", left: `${Math.max(4, left)}px`, top: `${Math.max(4, top)}px` };
     },
     hoverNote() {
-      if (!this.hover) return [];
-      const note = this.hover.note && this.hover.note.length ? this.hover.note : (this.hover.detail && this.hover.detail.length ? this.hover.detail : []);
-      return note;
+      const note = (this.hover && this.hover.note) || [];
+      if (note.length <= 14) return note;
+      return [...note.slice(0, 12), `and ${note.length - 12} more${this.clickable(this.hover) ? ", click the box for all of them" : ""}`];
     },
   },
   methods: {
     color(kind) { return KIND_COLORS[kind] || "#7a7a7a"; },
     kindName(kind) { return KIND_NAMES[kind] || kind; },
-    pick(box) { this.$emit("pick", box); },
+    clickable(box) { return !!(box && box.sections && box.sections.length); },
+    pick(box) { if (this.clickable(box)) this.$emit("pick", box); },
+    onMove(event) { this.mouse = { x: event.clientX, y: event.clientY }; },
     save(event) {
       const svg = event.currentTarget.closest(".diagram").querySelector("svg");
       downloadSvg(svg, this.title, this.layout.width, this.layout.height, getComputedStyle(svg.closest(".card") || svg).backgroundColor);
@@ -394,7 +526,7 @@ const Diagram = {
 };
 
 const app = Vue.createApp({
-  components: { chart: Chart, spark: Spark, diagram: Diagram },
+  components: { chart: Chart, spark: Spark, diagram: Diagram, names: Names, inside: Inside },
   data() {
     return {
       route: parseHash(location.hash),
@@ -763,7 +895,16 @@ const app = Vue.createApp({
     currentArchitecture() {
       const models = (this.record && this.record.architecture && this.record.architecture.models) || {};
       const label = models[this.route.params.model] ? this.route.params.model : this.architectureModels[0];
-      return label ? { label, ...models[label] } : null;
+      if (!label) return null;
+      return { label, ...models[label], boxes: (models[label].boxes || []).map(box => modelBox(box, models)) };
+    },
+    diagramBoxes() {
+      if (this.tab === "data") return this.pipeline ? this.pipeline.boxes : [];
+      return this.currentArchitecture ? this.currentArchitecture.boxes : [];
+    },
+    selectedBox() {
+      const name = this.route.params.node;
+      return name ? this.diagramBoxes.find(box => box.name === name) || null : null;
     },
     moduleText() {
       if (!this.record || !this.record.plots.includes("architecture_text.txt")) return null;
@@ -777,16 +918,23 @@ const app = Vue.createApp({
       let column = 0, previous = "source";
       const source = (this.record.config && this.record.config.data && this.record.config.data.source) || {};
       const sourceParams = typeof source === "object" ? source.params || {} : {};
-      boxes.push({ name: "source", kind: "source", column, row: 0, note: source.uri ? [`uri ${source.uri}`, ...Object.entries(sourceParams).map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`)] : [],
+      const sourceLines = source.uri ? callLines(source.uri, sourceParams) : [];
+      boxes.push({ name: "source", kind: "source", column, row: 0, note: sourceLines, title: "source",
+                   subtitle: `${count(stages[0].rows)} rows · ${stages[0].columns} columns`,
+                   sections: sourceLines.length ? [{ title: "source", lines: sourceLines }] : [],
                    lines: [source.uri ? shortUri(source.uri) : "source", ...(sourceParams.path ? [String(sourceParams.path).split("/").pop()] : []), `${count(stages[0].rows)} rows · ${stages[0].columns} columns`] });
       for (const stage of stages.slice(1)) {
         column += 1;
         const added = stage.added || [], removed = stage.removed || [];
         const change = [added.length ? `+${added.length}` : "", removed.length ? `−${removed.length}` : ""].filter(Boolean).join(" ");
         const params = stage.call ? paramsText(stage.call.params) : "";
-        const note = [`stage ${stage.stage}`, ...(stage.call ? [`uri ${stage.call.uri}`, ...Object.entries(stage.call.params || {}).map(([key, value]) => `${key}: ${typeof value === "object" ? JSON.stringify(value) : value}`)] : []), "",
-                      ...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)];
-        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note,
+        const call = stage.call ? callLines(stage.call.uri, stage.call.params) : [];
+        const note = [`stage ${stage.stage}`, ...call, ...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)];
+        const sections = [call.length ? { title: "transform", lines: call } : null,
+                          added.length ? { title: `${added.length} columns added`, chips: added } : null,
+                          removed.length ? { title: `${removed.length} columns removed`, chips: removed } : null].filter(Boolean);
+        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note, sections, title: `stage ${stage.stage}`,
+                     subtitle: `${count(stage.rows)} rows · ${stage.columns} columns`,
                      lines: [stage.call ? shortUri(stage.call.uri) : stage.stage, ...(params ? [params] : []), `${count(stage.rows)} rows · ${stage.columns} columns${change ? "  " + change : ""}`] });
         arrows.push([previous, stage.stage, "", false]);
         previous = stage.stage;
@@ -802,7 +950,9 @@ const app = Vue.createApp({
         column += 1;
         sets.forEach((set, row) => {
           const calls = (perSet[set] || []).map(call => `${shortUri(call.uri)} ${paramsText(call.params)}`.trim());
-          boxes.push({ name: `after:${set}`, kind: "transform", column, row, note: (perSet[set] || []).map(call => `uri ${call.uri} ${paramsText(call.params)}`),
+          const detail = (perSet[set] || []).flatMap(call => callLines(call.uri, call.params));
+          boxes.push({ name: `after:${set}`, kind: "transform", column, row, note: detail, title: `${set} transforms`,
+                       sections: detail.length ? [{ title: "transforms", lines: detail }] : [],
                        lines: [`${set} transforms`, ...(calls.length ? calls : ["none"]), `${count(after[set] !== undefined ? after[set] : data.split[set])} rows`] });
           arrows.push([`split:${set}`, `after:${set}`, "", false]);
         });
@@ -813,7 +963,13 @@ const app = Vue.createApp({
       const fitted = Object.entries(fit.preprocessors || {}).map(([name, columns]) => `${name} ${columns}`).join(", ");
       const lines = ["fit on train", ...((data.frames || []).length ? [`frames ${data.frames.join(", ")}`] : []), ...wrapWords(fitted || "no preprocessors", 30),
                      `${fit.features || 0} features, ${(fit.targets || []).length} targets`];
-      boxes.push({ name: "fit", kind: "fit", column, row: 0, lines, note: (fit.targets || []).length ? ["targets", ...fit.targets] : [] });
+      const fitSections = [(fit.targets || []).length ? { title: "targets", chips: fit.targets } : null,
+                           Object.keys(fit.preprocessors || {}).length ? { title: "preprocessors", lines: Object.entries(fit.preprocessors).map(([name, columns]) => `${name}: ${columns} columns`) } : null,
+                           (data.frames || []).length ? { title: "frame transforms", lines: data.frames } : null,
+                           (fit.extras || []).length ? { title: "extras", chips: fit.extras } : null].filter(Boolean);
+      boxes.push({ name: "fit", kind: "fit", column, row: 0, lines, title: "fit on train", sections: fitSections,
+                   subtitle: `${fit.features || 0} features, ${(fit.targets || []).length} targets`,
+                   note: (fit.targets || []).length ? ["targets", ...fit.targets] : [] });
       sets.forEach(set => arrows.push([last(set), "fit", "", set !== "train"]));
       column += 1;
       sets.forEach((set, row) => { const entry = (data.sets || {})[set] || {}; boxes.push({ name: `feed:${set}`, kind: "feed", column, row, lines: [set, `${count(entry.rows)} rows`, `${entry.features ?? "?"} features`] }); arrows.push(["fit", `feed:${set}`, "", false]); });
@@ -883,7 +1039,7 @@ const app = Vue.createApp({
     logName() { if (this.tab === "logs") this.loadLogs(); },
   },
   methods: {
-    fmt, count, ms, ago, clock, setColor, shortUri, paramsText,
+    fmt, count, ms, ago, clock, setColor, shortUri, paramsText, paramCount,
     stateOf(entry) { return (entry.status && entry.status.state) || "pending"; },
     definitionOf(name) {
       const config = (this.record && this.record.config) || {};
@@ -920,7 +1076,7 @@ const app = Vue.createApp({
       if (JSON.stringify(parsed) !== JSON.stringify(this.route)) this.route = parsed;
     },
     tabLink(name) {
-      const kept = { tab: name, item: null, model: null, file: null, q: null, log: null, chart: null };
+      const kept = { tab: name, item: null, model: null, node: null, file: null, q: null, log: null, chart: null };
       if (name === "curves" || name === "steps") kept.log = this.route.params.log;
       return this.link(kept);
     },
@@ -1124,11 +1280,8 @@ const app = Vue.createApp({
       if (index < 0 || !names.length) return;
       this.go({ item: names[(index + direction + names.length) % names.length] }, true);
     },
-    pickModel(box) {
-      if (box.kind !== "model") return;
-      const label = (box.lines[1] || "").replace(/^model /, "");
-      if (this.architectureModels.includes(label)) this.go({ model: label });
-    },
+    pickBox(box) { this.go({ node: box.name }, true); },
+    closeBox() { this.go({ node: null }, true); },
     async copy(text) {
       try { await navigator.clipboard.writeText(text || ""); } catch (error) { console.warn("clipboard unavailable", error); }
     },
