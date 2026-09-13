@@ -1,8 +1,11 @@
 import argparse
 import json
+import platform
+import re
 import signal
 import sys
 import warnings
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from cirak.errors import CirakError, ConfigError
@@ -10,7 +13,7 @@ from cirak.loader import parse_value
 from cirak.registry import registry
 from tezgah import TezgahError
 
-from . import api, board, collect, describe, docs, sweep
+from . import __version__, api, board, collect, describe, docs, sweep
 from .config import import_plugins, pack_tables, parse_sets
 from .contract import Contract
 from .kinds import kalfa_kind
@@ -33,176 +36,326 @@ def main(argv=None) -> int:
         return 1
 
 
-def build_parser():
-    parser = argparse.ArgumentParser(prog="kalfa", description="YAML front end for PyTorch training")
-    commands = parser.add_subparsers(dest="command", required=True)
+def installed_version(name):
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        return "not installed"
 
-    run_cmd = commands.add_parser("run", help="check, compile and train; the record directory holds everything")
-    run_cmd.add_argument("config", nargs="+")
-    set_option(run_cmd)
-    contract_option(run_cmd)
-    run_cmd.add_argument("--prepared", metavar="DIR", help="start from the data kalfa prepare wrote into DIR")
-    run_cmd.add_argument("--executor", default="serial")
-    run_cmd.add_argument("--workers", type=int)
-    log_option(run_cmd)
-    progress_option(run_cmd)
+
+def version_text():
+    parts = ", ".join(f"{name} {installed_version(name)}" for name in ("cirak", "tezgah", "torch"))
+    return f"kalfa {__version__} ({parts}, python {platform.python_version()})"
+
+
+def examples_text(examples):
+    pairs = [re.split(r" {4,}", line, maxsplit=1) for line in examples]
+    width = max((len(pair[0]) for pair in pairs), default=0)
+    shown = [f"  {pair[0]:<{width}}   {pair[1]}" if len(pair) > 1 else f"  {pair[0]}" for pair in pairs]
+    return "examples:\n" + "\n".join(shown)
+
+
+def command(commands, name, summary, description, examples=()):
+    return commands.add_parser(name, help=summary, description=description,
+                               epilog=examples_text(examples) if examples else None,
+                               formatter_class=argparse.RawDescriptionHelpFormatter)
+
+
+def executor_options(command):
+    command.add_argument("--executor", choices=["serial", "thread", "dask"], default="serial", metavar="NAME",
+                         help="how tezgah runs the nodes: serial (the default), thread (unordered nodes side by side, "
+                              "the aliasing warning becomes an error) or dask when it is installed")
+    command.add_argument("--workers", type=int, metavar="N", help="the threads or workers of the executor")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="kalfa", formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="YAML front end for PyTorch training: a config names the data, the models, the losses, the\n"
+                    "optimizers and the training; kalfa checks it, compiles it and runs it into a record directory\n"
+                    "that every other command reads.",
+        epilog="a first pass:\n"
+               "  kalfa check cfg.yaml                  every problem of the config, nothing runs\n"
+               "  kalfa describe cfg.yaml --measure     the config as an analysis, with the real sizes\n"
+               "  kalfa run cfg.yaml -p lr=1e-4         check, compile and train into the record directory\n"
+               "  kalfa predict runs/x --data new.parquet\n"
+               "  kalfa board runs                      follow the records in the browser\n\n"
+               "kalfa <command> --help explains a command with examples; CONFIG.md is the reference of the config,\n"
+               "kalfa docs the reference of the legos, kalfa ls what a name resolves to.")
+    parser.add_argument("--version", action="version", version=version_text(),
+                        help="the versions of kalfa, cirak, tezgah, torch and python, what a bug report needs")
+    commands = parser.add_subparsers(dest="command", required=True, title="commands", metavar="<command>")
+
+    run_cmd = command(commands, "run", "check, compile and train into the record directory",
+                      "Check the config, compile it and train. The record directory the config names is created and "
+                      "holds everything: the resolved config, the history, the checkpoints, the predictions, the "
+                      "plots. A non empty record directory is an error, nothing is overwritten. Ctrl-c while training "
+                      "asks the run to stop after its turn and the after block still runs; a second ctrl-c aborts.",
+                      ["kalfa run cfg.yaml",
+                       "kalfa run base.yaml site.yaml -p lr=1e-4 -p epochs=50    later files override earlier ones",
+                       "kalfa run cfg.yaml --set device=cuda --log --progress steps",
+                       "kalfa run cfg.yaml --prepared data/prepared    start from the data kalfa prepare wrote"])
+    run_cmd.add_argument("config", nargs="+", metavar="CONFIG",
+                         help="one or more YAML files; later ones override earlier ones")
+    overrides = run_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
+    running = run_cmd.add_argument_group("running")
+    running.add_argument("--prepared", metavar="DIR", help="start from the data kalfa prepare wrote into DIR")
+    executor_options(running)
+    output = run_cmd.add_argument_group("output")
+    log_option(output)
+    progress_option(output)
     run_cmd.set_defaults(handler=cmd_run)
 
-    check_cmd = commands.add_parser("check", help="report every problem without running")
-    check_cmd.add_argument("config", nargs="+")
-    set_option(check_cmd)
-    contract_option(check_cmd)
-    check_cmd.add_argument("--layers", action="store_true", help="print the layer tree and the overridden leaves")
-    check_cmd.add_argument("--dump", action="store_true", help="print the expanded flow the way flow.yaml records it")
-    check_cmd.add_argument("--recipe", action="store_true", help="print the driver document the templates open")
-    check_cmd.add_argument("--measure", action="store_true",
-                           help="run the data block and count the set sizes after the transforms")
-    check_cmd.add_argument("--prepared", metavar="DIR", help="check against the data kalfa prepare wrote into DIR")
+    check_cmd = command(commands, "check", "report every problem of a config without running",
+                        "Read the config and report every problem without running anything: unknown and missing keys, "
+                        "names that resolve to nothing, kinds that do not fit, a signature mismatch, columns no field "
+                        "matches, targets that pair with nothing, and the warnings. The exit code is 1 when there are "
+                        "errors. A record directory in place of the config reads its resolved.yaml under the contract "
+                        "it ran by.",
+                        ["kalfa check cfg.yaml",
+                         "kalfa check cfg.yaml --measure    the set sizes after the transforms, from the data",
+                         "kalfa check cfg.yaml --dump > flow.yaml    the expanded flow, the way flow.yaml records it",
+                         "kalfa check runs/x    the config a run went by"])
+    check_cmd.add_argument("config", nargs="+", metavar="CONFIG", help="one or more YAML files, or a record directory")
+    overrides = check_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
+    overrides.add_argument("--prepared", metavar="DIR", help="check against the data kalfa prepare wrote into DIR")
+    printing = check_cmd.add_argument_group("what else to print")
+    printing.add_argument("--layers", action="store_true", help="the layer tree of the files and the overridden leaves")
+    printing.add_argument("--dump", action="store_true", help="the expanded flow the way flow.yaml records it")
+    printing.add_argument("--recipe", action="store_true", help="the driver document the templates open")
+    printing.add_argument("--measure", action="store_true",
+                          help="run the data block and report the set sizes after the transforms")
     check_cmd.set_defaults(handler=cmd_check)
 
-    describe_cmd = commands.add_parser("describe", help="the config as an analysis: data, model, training, after "
-                                                       "and the columns, after the same checks")
-    describe_cmd.add_argument("config", nargs="+")
-    set_option(describe_cmd)
-    contract_option(describe_cmd)
-    describe_cmd.add_argument("--measure", action="store_true",
-                              help="run the data and model blocks: the set sizes after the transforms, the fitted "
-                                   "column widths, the tensor slots and the parameter counts")
-    describe_cmd.add_argument("--prepared", metavar="DIR",
-                              help="describe against the data kalfa prepare wrote into DIR")
-    describe_cmd.add_argument("--section", action="append", default=[], choices=list(describe.ALL_SECTIONS),
-                              help="print this section only (repeatable)")
-    describe_cmd.add_argument("--wiring", action="store_true",
-                              help="add the implicit bindings of the compiled pipeline")
-    describe_cmd.add_argument("--save", metavar="PATH",
-                              help="write the analysis to this file instead of printing it, with nothing clipped "
-                                   "and no colors")
+    describe_cmd = command(commands, "describe", "the config as an analysis: data, model, training, after, columns",
+                           "The same checks as kalfa check, then the config as an analysis: DATA (source, split, "
+                           "batch, feed, the field table, the path of every set), MODEL (one line per model with its "
+                           "layers), TRAINING (optimizers, losses, metrics, checkpoint, stop, the rule chain), AFTER "
+                           "(report, predict, plots, generate, record) and COLUMNS (every source column with its "
+                           "dtype, field, chain, role and tensor slot). The tables fit the width of the terminal.",
+                           ["kalfa describe cfg.yaml",
+                            "kalfa describe cfg.yaml --measure    real sizes, column widths, parameter counts",
+                            "kalfa describe cfg.yaml --section model --section training",
+                            "kalfa describe cfg.yaml --save report.txt    nothing clipped, no colors",
+                            "kalfa describe runs/x    the config a run went by"])
+    describe_cmd.add_argument("config", nargs="+", metavar="CONFIG",
+                              help="one or more YAML files, or a record directory")
+    overrides = describe_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
+    overrides.add_argument("--prepared", metavar="DIR", help="describe against the data kalfa prepare wrote into DIR")
+    printing = describe_cmd.add_argument_group("what to print")
+    printing.add_argument("--measure", action="store_true",
+                          help="run the data and model blocks: the set sizes after the transforms, the fitted column "
+                               "widths, the tensor slots and the parameter counts")
+    printing.add_argument("--section", action="append", default=[], choices=list(describe.ALL_SECTIONS),
+                          metavar="NAME", help=f"this section only, repeatable: {', '.join(describe.ALL_SECTIONS)}")
+    printing.add_argument("--wiring", action="store_true", help="add the implicit bindings of the compiled pipeline")
+    printing.add_argument("--save", metavar="PATH",
+                          help="write the analysis to this file instead of printing it, nothing clipped, no colors")
     describe_cmd.set_defaults(handler=cmd_describe)
 
-    predict_cmd = commands.add_parser("predict", help="predict with a recorded run")
-    predict_cmd.add_argument("run")
-    predict_cmd.add_argument("--model", help="any model of the run, composites and .ema copies included")
-    predict_cmd.add_argument("--which", choices=["best", "last", "final"])
-    predict_cmd.add_argument("--data", help="predict on this file instead of the run's test set")
+    predict_cmd = command(commands, "predict", "predict with a recorded run, on its test set or on a new file",
+                          "Predict with a recorded run: the report model, or any model with --model, on the run's test "
+                          "set or on a new file with --data. The predictions land beside the run in the original "
+                          "units, with the raw outputs and the row ids: predictions.parquet, or "
+                          "predictions_<file>.parquet with --data.",
+                          ["kalfa predict runs/x",
+                           "kalfa predict runs/x --data new.parquet --plots    and the plots on these predictions",
+                           "kalfa predict runs/x --model encoder --which last --device cuda"])
+    predict_cmd.add_argument("run", metavar="RUN", help="the record directory of a run")
+    predict_cmd.add_argument("--model", metavar="NAME",
+                             help="any model of the run, composites and .ema copies included; the report model without")
+    predict_cmd.add_argument("--which", choices=["best", "last", "final"],
+                             help="the weights to load; without it what training.report chose")
+    predict_cmd.add_argument("--data", metavar="PATH", help="predict on this file instead of the run's test set")
     predict_cmd.add_argument("--plots", nargs="?", const="all", metavar="NAMES",
                              help="draw the plots section on the predictions just made: every plot, or a comma "
                                   "separated list of definitions; the files take the suffix of the predictions file")
     device_option(predict_cmd)
-    set_option(predict_cmd)
-    contract_option(predict_cmd)
+    overrides = predict_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
     log_option(predict_cmd)
     predict_cmd.set_defaults(handler=cmd_predict)
 
-    generate_cmd = commands.add_parser("generate", help="run the generate lego of a recorded run")
-    generate_cmd.add_argument("run")
-    generate_cmd.add_argument("--which", choices=["best", "last", "final"])
+    generate_cmd = command(commands, "generate", "run the generate lego of a recorded run",
+                           "Run the generate section of a recorded run with its report model and write what the "
+                           "sampler produces under samples/ of the run.",
+                           ["kalfa generate runs/x", "kalfa generate runs/x --which last --device cuda"])
+    generate_cmd.add_argument("run", metavar="RUN", help="the record directory of a run")
+    generate_cmd.add_argument("--which", choices=["best", "last", "final"],
+                              help="the weights to load; without it what training.report chose")
     device_option(generate_cmd)
-    set_option(generate_cmd)
-    contract_option(generate_cmd)
+    overrides = generate_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
     log_option(generate_cmd)
     generate_cmd.set_defaults(handler=cmd_generate)
 
-    prepare_cmd = commands.add_parser("prepare", help="run the data block once and write the applied sets, the "
-                                                      "fitted state and the data report into a directory a run "
-                                                      "starts from with --prepared")
-    prepare_cmd.add_argument("config", nargs="+")
-    prepare_cmd.add_argument("--out", required=True, metavar="DIR", help="the directory to write")
-    set_option(prepare_cmd)
-    contract_option(prepare_cmd)
+    prepare_cmd = command(commands, "prepare", "run the data block once into a directory runs start from",
+                          "Run the data block once and write it into a directory: one parquet per set after the "
+                          "transforms and the split, the fitted preprocessors and frame transforms, the data report "
+                          "and a manifest. A run or a sweep point starts from it with --prepared and skips the data "
+                          "block.",
+                          ["kalfa prepare cfg.yaml --out data/prepared",
+                           "kalfa run cfg.yaml --prepared data/prepared"])
+    prepare_cmd.add_argument("config", nargs="+", metavar="CONFIG",
+                             help="one or more YAML files; later ones override earlier ones")
+    prepare_cmd.add_argument("--out", required=True, metavar="DIR", help="the directory to write; it must not exist")
+    overrides = prepare_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
     log_option(prepare_cmd)
     prepare_cmd.set_defaults(handler=cmd_prepare)
 
-    export_cmd = commands.add_parser("export", help="write a model of a recorded run in another format: onnx, "
-                                                    "pt2 or state_dict, or an export lego of your own")
-    export_cmd.add_argument("run")
+    export_cmd = command(commands, "export", "write a model of a recorded run in another format",
+                         "Write a model of a recorded run in another format: onnx, pt2 or state_dict, or an export "
+                         "lego of your own by alias or URI, under <run>/export or the directory --out names.",
+                         ["kalfa export runs/x",
+                          "kalfa export runs/x --format onnx --model encoder --which best",
+                          "kalfa export runs/x --format /export/acme/mine --out exported"])
+    export_cmd.add_argument("run", metavar="RUN", help="the record directory of a run")
     export_cmd.add_argument("--format", default="state_dict", metavar="NAME",
-                            help="an export lego by alias or URI (default state_dict)")
-    export_cmd.add_argument("--model", help="any model of the run, composites included; the predicts model without")
-    export_cmd.add_argument("--which", choices=["best", "last", "final"])
-    export_cmd.add_argument("--out", metavar="DIR", help="the directory to write into (default <run>/export)")
+                            help="an export lego by alias or URI: onnx, pt2, state_dict (the default) or your own")
+    export_cmd.add_argument("--model", metavar="NAME",
+                            help="any model of the run, composites included; the predicts model without")
+    export_cmd.add_argument("--which", choices=["best", "last", "final"],
+                            help="the weights to load; without it what training.report chose")
+    export_cmd.add_argument("--out", metavar="DIR", help="the directory to write into; <run>/export without it")
     device_option(export_cmd)
-    set_option(export_cmd)
-    contract_option(export_cmd)
+    overrides = export_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
     log_option(export_cmd)
     export_cmd.set_defaults(handler=cmd_export)
 
-    plots_cmd = commands.add_parser("plots", help="redraw the plots section of a recorded run from its files and its "
-                                                  "data; nothing is fitted or trained again")
-    plots_cmd.add_argument("run")
+    plots_cmd = command(commands, "plots", "redraw the plots section of a recorded run",
+                        "Redraw the plots section of a recorded run from its files: the predictions and the history "
+                        "from the record, the models from the report weights, the data replayed without a fit. Nothing "
+                        "is fitted or trained again.",
+                        ["kalfa plots runs/x",
+                         "kalfa plots runs/x --only loss_curve,residuals",
+                         "kalfa plots runs/x --set figures.format=pdf"])
+    plots_cmd.add_argument("run", metavar="RUN", help="the record directory of a run")
     plots_cmd.add_argument("--only", metavar="NAMES", help="a comma separated list of the plot definitions to draw")
     device_option(plots_cmd)
-    set_option(plots_cmd)
-    contract_option(plots_cmd)
+    overrides = plots_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
     log_option(plots_cmd)
     plots_cmd.set_defaults(handler=cmd_plots)
 
-    resume_cmd = commands.add_parser("resume", help="continue a run from last.pt or final/ into a new directory")
-    resume_cmd.add_argument("run")
-    set_option(resume_cmd)
-    contract_option(resume_cmd)
-    resume_cmd.add_argument("--executor", default="serial")
-    resume_cmd.add_argument("--workers", type=int)
-    log_option(resume_cmd)
-    progress_option(resume_cmd)
+    resume_cmd = command(commands, "resume", "continue a run from its last checkpoint into a new directory",
+                         "Continue a run from last.pt, or from final/ when it ended, into a new record directory next "
+                         "to it: the models, the optimizers, the counters and the rule state carry over and the "
+                         "history continues.",
+                         ["kalfa resume runs/x",
+                          "kalfa resume runs/x --set training.epochs=200    more epochs than the config wrote"])
+    resume_cmd.add_argument("run", metavar="RUN", help="the record directory of the run to continue")
+    overrides = resume_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
+    running = resume_cmd.add_argument_group("running")
+    executor_options(running)
+    output = resume_cmd.add_argument_group("output")
+    log_option(output)
+    progress_option(output)
     resume_cmd.set_defaults(handler=cmd_resume)
 
-    sweep_cmd = commands.add_parser("sweep", help="run the points of the config's sweep section: the local loop "
-                                                  "(every point in a subprocess), --id N for one point, --count, "
-                                                  "--show N")
-    sweep_cmd.add_argument("config", nargs="+")
+    sweep_cmd = command(commands, "sweep", "run the points of the sweep section, locally or one point per job",
+                        "Run the sweep section of the config: the strategy draws the points and each one is an "
+                        "ordinary run under <root>/<id>/. The local loop runs every point in a subprocess; on a queue "
+                        "system --plan writes the root once and every job runs one point with --id.",
+                        ["kalfa sweep cfg.yaml    every point, one after the other",
+                         "kalfa sweep cfg.yaml --count    how many points",
+                         "kalfa sweep cfg.yaml --show 3    the params of point 3",
+                         "kalfa sweep cfg.yaml --plan --prepare-data --record sweeps/lr    root, plan and data",
+                         "kalfa sweep cfg.yaml --id 3 --record sweeps/lr    one point, for a queue job",
+                         "kalfa collect sweeps/lr    the table and the best point"])
+    sweep_cmd.add_argument("config", nargs="+", metavar="CONFIG",
+                           help="one or more YAML files with a sweep section")
     set_option(sweep_cmd)
-    sweep_cmd.add_argument("--record", help="root directory of the points (overrides sweep.record)")
-    sweep_cmd.add_argument("--count", action="store_true", help="print the number of points and stop")
-    sweep_cmd.add_argument("--show", type=int, metavar="N", help="print point N and stop (strategies deterministic "
-                                                                 "by id)")
+    sweep_cmd.add_argument("--record", metavar="ROOT", help="the root directory of the points; overrides sweep.record")
+    asking = sweep_cmd.add_argument_group("without running")
+    asking.add_argument("--count", action="store_true", help="print the number of points and stop")
+    asking.add_argument("--show", type=int, metavar="N",
+                        help="print point N and stop; the strategies are deterministic by id")
+    asking.add_argument("--plan", action="store_true",
+                        help="write the root once: manifest.json, sweep.plan and the site files sweep.sub and "
+                             "sweep.sh (never overwritten), then stop")
+    asking.add_argument("--prepare-data", action="store_true", dest="prepare_data",
+                        help="with --plan, run the data block once into <root>/data; the points start from it")
     sweep_cmd.add_argument("--id", type=int, metavar="N", dest="point_id",
                            help="run point N only, for a queue job; the record is <root>/<N>")
-    sweep_cmd.add_argument("--plan", action="store_true",
-                           help="write the root once: manifest.json, sweep.plan and the site files sweep.sub and "
-                                "sweep.sh (never overwritten), then stop")
-    sweep_cmd.add_argument("--prepare-data", action="store_true", dest="prepare_data",
-                           help="with --plan, run the data block once into <root>/data; the points start from it")
     sweep_cmd.add_argument("--point", help=argparse.SUPPRESS)
     sweep_cmd.set_defaults(handler=cmd_sweep)
 
-    collect_cmd = commands.add_parser("collect", help="summarize fold runs (cv.json, cv.md), a list of runs or a "
-                                                      "sweep root (sweep.csv, sweep.json, sweep.md, the best point)")
-    collect_cmd.add_argument("runs", nargs="+")
-    collect_cmd.add_argument("--out", help="directory for the summary files (default: the runs' parent)")
+    collect_cmd = command(commands, "collect", "summarize fold runs or a sweep root",
+                          "Summarize a list of runs or the fold runs of a cross validation (cv.json, cv.md), or a "
+                          "sweep root (sweep.csv, sweep.json, sweep.md and the best point), from the records alone.",
+                          ["kalfa collect runs/cv_*", "kalfa collect sweeps/lr --out reports"])
+    collect_cmd.add_argument("runs", nargs="+", metavar="RECORD", help="record directories, or one sweep root")
+    collect_cmd.add_argument("--out", metavar="DIR", help="the directory of the summary files; the runs' parent "
+                             "without it")
     collect_cmd.set_defaults(handler=cmd_collect)
 
-    docs_cmd = commands.add_parser("docs", help="print the lego reference generated from the registry, or write it "
-                                                "with --write DOCS.md")
+    docs_cmd = command(commands, "docs", "the lego reference generated from the registry",
+                       "Print the lego reference generated from the registry: every lego by kind with its URI, "
+                       "aliases, signature, facts and description, and the alias packs. With --plugin or --config your "
+                       "own legos come with.",
+                       ["kalfa docs | less", "kalfa docs --write DOCS.md", "kalfa docs --plugin my_legos"])
     docs_cmd.add_argument("--write", metavar="PATH", help="write the reference to this file instead of printing it")
     plugin_option(docs_cmd)
     docs_cmd.set_defaults(handler=cmd_docs)
 
-    ls_cmd = commands.add_parser("ls", help="list alias packs and legos with their kinds and facts; a word without "
-                                            "a leading slash searches names, aliases and descriptions")
-    ls_cmd.add_argument("prefix", nargs="?", default=None, metavar="PREFIX|WORD")
-    ls_cmd.add_argument("--kind")
+    ls_cmd = command(commands, "ls", "list alias packs and legos, or search them by a word",
+                     "List the alias packs and the legos with their kinds and facts. A URI prefix narrows the list, a "
+                     "word without a leading slash searches names, aliases and descriptions.",
+                     ["kalfa ls",
+                      "kalfa ls /alias/kalfa/tabular    what the pack binds",
+                      "kalfa ls /criterion    every criterion",
+                      "kalfa ls scaler    every lego with scaler in its name or description",
+                      "kalfa ls --kind plot --plugin my_legos"])
+    ls_cmd.add_argument("prefix", nargs="?", default=None, metavar="PREFIX|WORD",
+                        help="a URI prefix (/criterion, /alias/kalfa/base) or a word to search for")
+    ls_cmd.add_argument("--kind", metavar="KIND", help="only the legos of this kind: layer, criterion, plot, ...")
     plugin_option(ls_cmd)
     ls_cmd.set_defaults(handler=cmd_ls)
 
-    board_cmd = commands.add_parser("board", help="a reader of records: serve the runs, points and sweeps under a "
-                                                  "root as a page that follows the growing files and can stop a "
-                                                  "running record; no dependency, reach it through an ssh tunnel "
-                                                  "on a batch system")
-    board_cmd.add_argument("root")
-    board_cmd.add_argument("--host", default="127.0.0.1")
-    board_cmd.add_argument("--port", type=int, default=8080)
+    board_cmd = command(commands, "board", "a page over the records under a root, live",
+                        "Serve the records under a root as a page: what is running with its progress, every run as a "
+                        "table, the curves, the architecture, the data pipeline, the predictions, the files, and a "
+                        "stop button for a running record. It reads the records and writes nothing but stop.json. No "
+                        "dependency beyond Python; on a batch system run it where the files are and reach it through "
+                        "an ssh tunnel.",
+                        ["kalfa board runs",
+                         "kalfa board /scratch/sweeps --port 9000",
+                         "ssh -L 8080:127.0.0.1:8080 login.node    then open http://127.0.0.1:8080"])
+    board_cmd.add_argument("root", metavar="ROOT", help="the directory whose records are shown, searched recursively")
+    board_cmd.add_argument("--host", default="127.0.0.1", metavar="HOST",
+                           help="the address to listen on; 127.0.0.1 without it, this machine only")
+    board_cmd.add_argument("--port", type=int, default=8080, metavar="PORT", help="the port; 8080 without it")
     log_option(board_cmd)
     board_cmd.set_defaults(handler=cmd_board)
 
-    stop_cmd = commands.add_parser("stop", help="ask a running record to stop after its current turn: writes "
-                                                "stop.json into it (into a sweep root and its running points); "
-                                                "the run ends like an early stop, with its final state, "
-                                                "predictions and plots")
-    stop_cmd.add_argument("record", nargs="+")
+    stop_cmd = command(commands, "stop", "ask a running record to stop after its current turn",
+                       "Write stop.json into a running record, or into a sweep root and its running points. The loop "
+                       "ends after the turn that sees it and the run finishes as an early stop would: the final state, "
+                       "the predictions, the plots. A stopped run continues with kalfa resume.",
+                       ["kalfa stop runs/x", "kalfa stop sweeps/lr    the root and every running point"])
+    stop_cmd.add_argument("record", nargs="+", metavar="RECORD", help="record directories or sweep roots")
     stop_cmd.set_defaults(handler=cmd_stop)
 
-    contract_cmd = commands.add_parser("contract", help="print the contract kalfa runs configs by (the wiring and "
-                                                        "the flow blocks), or write it with --write for editing")
+    contract_cmd = command(commands, "contract", "the contract kalfa runs configs by",
+                           "Print the contract, the wiring and the flow blocks that take a config to the pipeline. "
+                           "Write it out with --write to edit it and run against the copy with --contract.",
+                           ["kalfa contract", "kalfa contract --write contract.yaml",
+                            "kalfa run cfg.yaml --contract contract.yaml"])
     contract_cmd.add_argument("--write", metavar="PATH", help="write the contract to this file instead of printing it")
     contract_cmd.set_defaults(handler=cmd_contract)
     return parser
@@ -338,6 +491,7 @@ def cmd_check(args) -> int:
         prepared = api.check(args.config, layer_of(args), measure=args.measure, contract=contract_of(args),
                              prepared=args.prepared)
     style = style_for(sys.stdout)
+    print(style.dim(version_text()))
     if args.layers:
         print(prepared.surface.layers_text())
     if prepared.problems:

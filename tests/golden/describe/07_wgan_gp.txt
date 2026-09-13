@@ -1,4 +1,4 @@
-config.yaml                                                                                                               kalfa 0.2.4
+config.yaml                                                                                                               kalfa 0.2.5
   layers      config.yaml, /alias/kalfa/base, /alias/kalfa/vision
   params
     epochs     100       latent     128       seed       7

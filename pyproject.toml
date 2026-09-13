@@ -1,6 +1,6 @@
 [project]
 name = "kalfa"
-version = "0.2.4"
+version = "0.2.5"
 description = "YAML front end for PyTorch training: config sections compiled through cirak templates onto tezgah pipelines"
 readme = "README.md"
 license = "MIT"
@@ -48,9 +48,6 @@ dev = [
     "ruff>=0.6",
 ]
 
-[tool.uv.sources]
-cirak = { path = "../cirak", editable = true }
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -65,12 +62,6 @@ markers = [
     "slow: trains a model",
     "subprocess: spawns kalfa in a child process (the sweep loop)",
     "optional: needs seaborn, torchview, cuda or mps and skips itself without them",
-]
-filterwarnings = [
-    "ignore:the test backbone",
-    "ignore:auroc is undefined",
-    "ignore:average_precision is undefined",
-    "ignore::cirak.errors.CirakWarning",
 ]
 
 [tool.ruff]

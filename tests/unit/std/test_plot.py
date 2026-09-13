@@ -1,9 +1,11 @@
 """Plots write their files under plots/."""
 
+import contextlib
 import importlib.util
 
 import pandas
 import pytest
+from cirak.errors import CirakWarning
 
 import kalfa  # noqa: F401
 from kalfa.std.common.figure import Figure
@@ -182,7 +184,9 @@ def test_the_data_and_diagnostic_plots_draw_from_a_run(workdir):
                        "ranked": {"uri": "target_correlation"},
                        "kde": {"uri": "kde", "params": {"x": "x0", "y": "price", "sample": 200}}}
     path = write_config(workdir / "cfg.yaml", config)
-    record = Path(run([path], parse_sets([])).record) / "plots"
+    missing = importlib.util.find_spec("seaborn") is None
+    with pytest.warns(CirakWarning, match="library_missing") if missing else contextlib.nullcontext():
+        record = Path(run([path], parse_sets([])).record) / "plots"
     for drawn in ("tvf", "corr", "resid", "map", "importance", "spread", "ranked"):
         assert (record / f"{drawn}.pdf").exists(), drawn
     assert not list(record.glob("*.png"))

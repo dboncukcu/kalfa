@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pandas
 import pytest
+from cirak.errors import CirakWarning
 
 from helpers import anomaly_frame
 from kalfa.api import check, predict
@@ -34,7 +35,12 @@ def test_check_the_plugin_config(dataset):
 
 
 def test_two_optimizers_five_models_and_the_score_plots(trained):
-    result = trained("alad")
+    with pytest.warns(Warning) as caught:
+        result = trained("alad")
+    messages = [str(item.message) for item in caught]
+    assert any("4 problems" in message and "unused_output" in message for message in messages)
+    assert any("auroc is undefined" in message for message in messages)
+    assert any("average_precision is undefined" in message for message in messages)
     record = Path(result.record)
     assert record == Path("runs/alad_fixed")
     history = History.read(record)
@@ -51,5 +57,6 @@ def test_two_optimizers_five_models_and_the_score_plots(trained):
     table = pandas.read_parquet(record / "predictions.parquet")
     assert list(table.columns) == ["row", "is_anomaly", "raw_score", "pred_score"]
     assert set(table["is_anomaly"].unique()) <= {0, 1} and (table["pred_score"] >= 0.0).all()
-    again = predict(result.record)
+    with pytest.warns(CirakWarning, match="unused_output"):
+        again = predict(result.record)
     assert again.model == "anomaly_score" and len(again.table) == len(table)

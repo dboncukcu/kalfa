@@ -36,12 +36,14 @@ def backbone_norm(record, tag="last"):
 
 def test_frozen_backbone_then_unfreeze(dataset, trained):
     dataset("04_cnn_images")
-    frozen = run(["config.yaml"], parse_sets(SETS, ["epochs=1", "unfreeze_at=5"]), when="frozen")
+    with pytest.warns(UserWarning, match="the test backbone 'resnet50' has no pretrained weights"):
+        frozen = run(["config.yaml"], parse_sets(SETS, ["epochs=1", "unfreeze_at=5"]), when="frozen")
     history = History.read(frozen.record)
     assert {"train/ce", "train/accuracy", "val/accuracy", "lr/main"} <= set(history[0])
     assert history[0]["lr/main"] == pytest.approx(1e-3) and history[0]["rules"] == []
     assert torch.equal(backbone_norm(frozen.record), torch.zeros(8))
-    thawed = trained("04_cnn_images")
+    with pytest.warns(UserWarning, match="the test backbone 'resnet50' has no pretrained weights"):
+        thawed = trained("04_cnn_images")
     history = History.read(thawed.record)
     assert [line["rules"] for line in history] == [["unfreeze"], []]
     assert not torch.equal(backbone_norm(thawed.record), torch.zeros(8))
@@ -55,7 +57,8 @@ def test_frozen_backbone_then_unfreeze(dataset, trained):
 
 def test_the_balanced_sampler_is_wired(dataset):
     dataset("04_cnn_images")
-    prepared = prepare(["config.yaml"], parse_sets(SETS), dry=False)
+    with pytest.warns(UserWarning, match="the test backbone 'resnet50' has no pretrained weights"):
+        prepared = prepare(["config.yaml"], parse_sets(SETS), dry=False)
     assert prepared.errors == []
     loaders = prepared.document["flow"]["data"]["params"]["loaders"]
     assert loaders["train"]["params"] == {"set": "train", "size": 16, "eval_size": 32, "balanced": True}

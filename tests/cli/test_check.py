@@ -9,7 +9,7 @@ def test_check_reports_problems_and_exit_codes(workdir, capsys):
     path = write_config(workdir / "cfg.yaml", minimal())
     assert main(["check", path]) == 0
     out = capsys.readouterr().out
-    assert out.strip() == "no problems found"
+    assert out.splitlines()[0].startswith("kalfa ") and out.strip().endswith("no problems found")
     config = minimal()
     config["training"]["checkpoint"] = "last"
     path = write_config(workdir / "bad.yaml", config)

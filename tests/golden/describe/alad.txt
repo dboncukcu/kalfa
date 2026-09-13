@@ -1,4 +1,4 @@
-config.yaml                                                                                                                                                                             kalfa 0.2.4
+config.yaml                                                                                                                                                                             kalfa 0.2.5
   layers      config.yaml, /alias/kalfa/base, /alias/kalfa/tabular
   params
     log_base    10        latent_dim  4         lr          0.0002

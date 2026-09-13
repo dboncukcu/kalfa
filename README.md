@@ -12,6 +12,7 @@ Python 3.13 and above.
 ```
 pip install kalfa            # or: uv add kalfa
 kalfa --help
+kalfa --version                                                   # kalfa with cirak, tezgah, torch and python, the versions a bug report needs
 ```
 
 The dependencies come with it: cirak and tezgah (the recipe compiler and the pipeline runner), torch, pandas,
