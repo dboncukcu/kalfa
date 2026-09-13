@@ -23,7 +23,8 @@ from kalfa.std.pre.base import Grouped, read_prep
 
 logger = logger_for("board")
 
-TEXT_SUFFIXES = (".yaml", ".yml", ".json", ".jsonl", ".txt", ".md", ".csv", ".py", ".sh", ".sub", ".plan", ".log")
+TEXT_SUFFIXES = (".yaml", ".yml", ".json", ".jsonl", ".txt", ".md", ".csv", ".tsv", ".py", ".sh", ".sub", ".plan",
+                 ".log", ".toml", ".ini", ".cfg", ".rst", ".html", ".xml")
 
 
 def relative_to(root, path):
@@ -279,7 +280,7 @@ class Board:
                                   if key.startswith(("val/", "test/")) and is_number(value) and "/total" not in key}})
         return {"rows": rows}
 
-    def predictions(self, relative, sample=2000, name="predictions.parquet"):
+    def predictions(self, relative, sample=2000, name="predictions.parquet", bins=40):
         path = self.resolve(relative)
         if path is None or not name.startswith("predictions") or not name.endswith(".parquet"):
             return None
@@ -294,7 +295,7 @@ class Board:
             guess = table[pred].to_numpy(dtype="float64")
             mask = numpy.isfinite(actual) & numpy.isfinite(guess)
             error = guess[mask] - actual[mask]
-            counts, edges = numpy.histogram(error, bins=40) if len(error) else ([], [])
+            counts, edges = numpy.histogram(error, bins=max(2, int(bins))) if len(error) else ([], [])
             order = numpy.argsort(-numpy.abs(error))[:15]
             rows = table.loc[table.index[mask][order]]
             found.append({"pred": pred, "target": truth, "points": int(mask.sum()),
@@ -306,7 +307,8 @@ class Board:
                                     for _, row in rows[["row", truth, pred]].iterrows()]})
         flags = [column for column in table.columns if column.startswith("flag_")]
         keep = list(dict.fromkeys(["row", *[column for pair in pairs for column in pair], *flags]))
-        picked = table if len(table) <= int(sample) else table.sample(int(sample), random_state=0).sort_values("row")
+        whole = sample == "all" or len(table) <= int(sample)
+        picked = table if whole else table.sample(int(sample), random_state=0).sort_values("row")
         return clean({"file": name, "rows": len(table), "columns": list(table.columns), "pairs": found, "flags": flags,
                       "sample": picked[keep].to_dict("records")})
 
@@ -373,13 +375,13 @@ class Board:
     def watched(self, relative):
         snapshot = {"tree": self.tree_stamp()}
         path = self.resolve(relative) if relative else None
+        for entry in self.live()["live"]:
+            target = self.resolve(entry["path"])
+            if entry["kind"] == "sweep" or target == path:
+                continue
+            for name in ("history.jsonl", "steps.jsonl", "run.json"):
+                snapshot[f"{entry['path']}/{name}"] = stamp(target / name)
         if path is None or not Record(path).is_record:
-            for entry in self.live()["live"]:
-                if entry["kind"] == "sweep":
-                    continue
-                target = self.resolve(entry["path"])
-                for name in ("history.jsonl", "steps.jsonl", "run.json"):
-                    snapshot[f"{entry['path']}/{name}"] = stamp(target / name)
             return snapshot
         snapshot.update(self.record_stamp(path))
         manifest = Record(path).read_json("manifest.json") or {}
@@ -468,7 +470,7 @@ class Board:
 
     def file(self, relative):
         path = self.resolve(relative)
-        if path is None or not path.is_file() or path.parent.name not in ("plots", "samples"):
+        if path is None or not path.is_file():
             return None
         return path
 
@@ -546,7 +548,7 @@ def handler_for(board):
                 self.send_json(board.table())
             elif url.path == "/api/predictions":
                 self.send_json(board.predictions(path, query.get("sample", 2000),
-                                                 query.get("name", "predictions.parquet")))
+                                                 query.get("name", "predictions.parquet"), query.get("bins", 40)))
             elif url.path == "/api/files":
                 self.send_json(board.files(path))
             elif url.path == "/api/text":

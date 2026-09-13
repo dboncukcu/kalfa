@@ -11,8 +11,20 @@ const NODE_KINDS = new Set(["torch", "lego", "model"]);
 const SET_ORDER = ["train", "valid", "test"];
 const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "predictions", "prep", "plots", "samples", "config", "notes", "files", "timeline", "events", "logs", "describe"];
 const PAGES = ["table", "compare"];
-const IMAGE = /\.(png|jpe?g|gif|svg|webp)$/i;
+const IMAGE = /\.(png|jpe?g|gif|svg|webp|bmp)$/i;
 const TEXT = /\.(txt|md|json|csv|yaml|yml)$/i;
+const FILE_TEXT = /\.(yaml|yml|json|jsonl|txt|md|csv|tsv|py|sh|sub|plan|log|toml|ini|cfg|rst|html|xml)$/i;
+const FILE_PDF = /\.pdf$/i;
+
+function fileKind(name) {
+  if (IMAGE.test(name)) return "image";
+  if (FILE_PDF.test(name)) return "pdf";
+  return FILE_TEXT.test(name) ? "text" : "binary";
+}
+
+function defaultPlot() {
+  return { logy: false, width: 1.6, markers: 3, dots: 0, curve: "straight", grid: true, bins: 40 };
+}
 
 async function api(route, params) {
   const query = new URLSearchParams(params || {}).toString();
@@ -138,25 +150,21 @@ function nodeItem(box) {
 }
 
 function modelBox(box, models) {
+  const shape = parseShape(box.lines[2]);
   if (box.kind === "input") {
     const features = box.detail || [];
-    return { ...box, title: `input ${box.lines[0]}`, subtitle: features.length ? `${features.length} features` : "",
-             note: features, sections: features.length ? [{ title: "features", chips: features }] : [] };
+    return { ...box, note: features, groups: features.length ? [{ title: `${features.length} features`, items: features }] : [] };
   }
   if (box.kind === "model") {
     const label = (box.lines[1] || "").replace(/^model /, "");
     const nodes = ((models[label] && models[label].boxes) || []).filter(item => NODE_KINDS.has(item.kind)).map(nodeItem);
-    return { ...box, ref: label, title: `model ${label}`, subtitle: [parseShape(box.lines[2]) ? box.lines[2] : "", paramCount(box.parameters)].filter(Boolean).join(" · "),
-             note: nodes.map(layerLine), sections: [{ title: `nodes of ${label}`, layers: nodes, chain: false }] };
+    return { ...box, note: nodes.map(layerLine), blocks: nodes, chain: false, open: models[label] ? label : "" };
   }
-  if (!NODE_KINDS.has(box.kind)) return { ...box, note: [], sections: [] };
+  if (!NODE_KINDS.has(box.kind)) return { ...box, note: [] };
   const items = layerItems(box);
-  const shape = parseShape(box.lines[2]);
   const head = box.lines.slice(0, shape ? 3 : 2);
   const hint = [items.length ? `${items.length} layers` : "", paramCount(box.parameters)].filter(Boolean).join(" · ");
-  return { ...box, title: `node ${box.name}`, subtitle: [head[1], shape ? head[2] : "", paramCount(box.parameters)].filter(Boolean).join(" · "),
-           lines: hint ? [...head, hint] : head, note: items.map(layerLine),
-           sections: [{ title: "layers", layers: items, chain: head[1] === "Sequential" }] };
+  return { ...box, lines: hint ? [...head, hint] : head, note: items.map(layerLine), blocks: items, chain: head[1] === "Sequential" };
 }
 
 function orderedSets(names) {
@@ -242,6 +250,22 @@ function downloadSvg(svg, title, width, height, background) {
   image.src = url;
 }
 
+function iconSvg(state, share) {
+  const ground = { idle: "#9aa0a8", running: "#e39b12", failed: "#d8433c" }[state] || "#2f6fdd";
+  const bar = share === null || share === undefined ? ""
+    : `<rect x="4" y="28" width="${(24 * Math.max(0, Math.min(1, share))).toFixed(1)}" height="2" rx="1" fill="#fff" opacity=".9"/>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${ground}"/>`
+    + `<rect x="5" y="17" width="9" height="9" rx="1.6" fill="#fff"/><rect x="11.5" y="10.5" width="9" height="9" rx="1.6" fill="#fff" opacity=".82"/>`
+    + `<rect x="18" y="4" width="9" height="9" rx="1.6" fill="#fff" opacity=".64"/>${bar}</svg>`;
+}
+
+function setIcon(svg) {
+  let link = document.querySelector("link[rel~=icon]");
+  if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.appendChild(link); }
+  link.type = "image/svg+xml";
+  link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 function parseHash(hash) {
   const text = (hash || "").replace(/^#/, "");
   const question = text.indexOf("?");
@@ -264,36 +288,53 @@ function buildHash(path, params) {
 
 function chartOptions(view) {
   const dark = darkMode();
+  const settings = { ...defaultPlot(), ...(view.settings || {}) };
   const kind = view.kind || "line";
-  const series = view.lines.map(line => ({
-    name: line.name,
-    data: line.points.filter(point => Number.isFinite(point[1]) && (!view.logy || point[1] > 0)).map(point => [Number(point[0]), point[1]]) }));
+  const logy = !!view.logy;
+  const up = value => (logy ? Math.log10(value) : value);
+  const down = value => (logy ? Math.pow(10, value) : value);
   const back = value => (view.xlog ? Math.pow(10, Number(value)) : Number(value));
+  const kinds = view.lines.map(line => line.kind || kind);
+  const series = view.lines.map((line, index) => ({
+    name: line.name, type: kinds[index],
+    data: line.points.filter(point => Number.isFinite(point[1]) && (!logy || point[1] > 0)).map(point => [Number(point[0]), up(point[1])]) }));
   const xs = series.flatMap(entry => entry.data.map(point => point[0]));
   const [low, high] = extent(xs);
   const [bottom, top] = extent(series.flatMap(entry => entry.data.map(point => point[1])));
   const integral = high > low && high - low < 8 && xs.every(Number.isInteger);
   const ticks = view.xlog && Number.isFinite(high - low) ? Math.max(1, Math.round(high - low)) : (integral ? high - low : 8);
   const pad = bottom === top && Number.isFinite(top) ? (Math.abs(top) * 0.1 || 1) : 0;
+  const marks = (view.marks || []).map(mark => (typeof mark === "number" ? { x: mark } : mark));
+  const shownMarks = marks.filter((_, index) => index % (Math.ceil(marks.length / 60) || 1) === 0);
+  const labelled = Math.ceil(shownMarks.length / 12) || 1;
+  const noteOf = value => {
+    if (!view.turns) return "";
+    const found = marks.filter(mark => mark.text && mark.x <= value).pop();
+    return found ? ` · ${found.text}` : "";
+  };
   return {
-    chart: { type: kind, height: view.height, background: "transparent", fontFamily: "inherit", foreColor: dark ? "#b7bcc4" : "#4a4f57",
-             animations: { enabled: false }, zoom: { enabled: kind !== "bar", type: kind === "scatter" ? "xy" : "x", autoScaleYaxis: kind !== "scatter" },
+    chart: { type: kinds.some(item => item !== kind) ? "line" : kind, height: view.height, background: "transparent", fontFamily: "inherit",
+             foreColor: dark ? "#b7bcc4" : "#4a4f57", animations: { enabled: false },
+             zoom: { enabled: kind !== "bar", type: kind === "scatter" ? "xy" : "x", autoScaleYaxis: kind !== "scatter" },
              toolbar: { show: true, offsetY: -4, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } } },
     series,
     colors: view.lines.map(line => line.color),
-    stroke: { width: kind === "scatter" ? 0 : 1.6, curve: "straight", dashArray: view.lines.map(line => line.dashed ? 5 : 0) },
-    markers: { size: kind === "scatter" ? 3 : 0, hover: { size: 4 } },
+    stroke: { width: kinds.map(item => (item === "scatter" ? 0 : settings.width)), curve: settings.curve, dashArray: view.lines.map(line => (line.dashed ? 5 : 0)) },
+    markers: { size: kinds.map(item => (item === "scatter" ? settings.markers : settings.dots)), hover: { size: Math.max(4, settings.markers) } },
     plotOptions: { bar: { columnWidth: "90%" } },
     dataLabels: { enabled: false },
     legend: { position: "top", horizontalAlign: "left", showForSingleSeries: true, onItemClick: { toggleDataSeries: true } },
-    grid: { borderColor: dark ? "#2d3238" : "#e3e6ea" },
+    grid: { show: settings.grid, borderColor: dark ? "#2d3238" : "#e3e6ea" },
     xaxis: { type: "numeric", title: { text: view.xlabel || "" }, tickAmount: ticks,
              labels: { formatter: value => tick(back(value)), rotate: 0, hideOverlappingLabels: true }, tooltip: { enabled: false } },
-    yaxis: { logarithmic: !!view.logy, title: { text: view.ylabel || "" }, labels: { formatter: value => tick(Number(value)) },
+    yaxis: { title: { text: view.ylabel || "" }, labels: { formatter: value => tick(down(Number(value))) },
              ...(pad ? { min: bottom - pad, max: top + pad } : {}) },
     tooltip: { shared: kind !== "scatter", intersect: kind === "scatter", theme: dark ? "dark" : "light",
-               x: { formatter: value => `${view.xlabel || "x"} ${fmt(back(value))}` }, y: { formatter: value => fmt(Number(value)) } },
-    annotations: { xaxis: (view.marks || []).map(mark => ({ x: mark, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3 })) },
+               x: { formatter: value => `${view.xlabel || "x"} ${fmt(back(value))}${noteOf(back(value))}` }, y: { formatter: value => fmt(down(Number(value))) } },
+    annotations: { xaxis: shownMarks.map((mark, index) => ({
+      x: mark.x, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3,
+      ...(mark.text && index % labelled === 0 ? { label: { text: mark.text, position: "top", orientation: "horizontal", borderWidth: 0, offsetY: -2,
+                                                           style: { background: "transparent", color: dark ? "#868d97" : "#7d838d", fontSize: "10px", fontFamily: "inherit" } } } : {}) })) },
     theme: { mode: dark ? "dark" : "light" },
   };
 }
@@ -301,7 +342,7 @@ function chartOptions(view) {
 const Chart = {
   props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, ylabel: String, logy: Boolean,
            marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String, kind: { type: String, default: "line" },
-           xlog: Boolean },
+           xlog: Boolean, turns: Boolean, settings: { type: Object, default: () => ({}) } },
   data() { return { chart: null }; },
   computed: { options() { return chartOptions(this); } },
   watch: {
@@ -315,11 +356,23 @@ const Chart = {
     if (this.chart) this.chart.destroy();
     this.chart = null;
   },
+  methods: {
+    download() {
+      if (!this.chart) return;
+      const name = (this.title || this.ylabel || "chart").replace(/[^\w.-]+/g, "_");
+      this.chart.dataURI().then(({ imgURI }) => {
+        const link = document.createElement("a");
+        link.href = imgURI;
+        link.download = `${name}.png`;
+        link.click();
+      });
+    },
+  },
   template: `
     <div class="chart">
       <div class="chart-head" v-if="title || expand">
         <span class="chart-title">{{ title }}</span>
-        <a v-if="expand" class="small chart-save" :href="expand" title="open this chart in a large view">expand</a>
+        <a v-if="expand" class="small chart-save" :href="expand" title="open this chart in a large view with its settings">expand</a>
       </div>
       <div ref="host"></div>
     </div>`,
@@ -377,125 +430,271 @@ const Names = {
     </div>`,
 };
 
-const Layers = {
-  name: "layers",
-  props: { items: { type: Array, default: () => [] }, chain: Boolean },
-  data() { return { open: {} }; },
-  watch: { items() { this.open = {}; } },
-  methods: {
-    paramCount,
-    toggle(index) { this.open = { ...this.open, [index]: !this.open[index] }; },
-  },
-  template: `
-    <div class="layers">
-      <template v-for="(item, index) in items" :key="index">
-        <div class="layer-link" v-if="chain && index"></div>
-        <div class="layer" :class="item.kind">
-          <div class="layer-row" :class="{clickable: item.children.length}" @click="toggle(index)">
-            <span class="layer-name mono">{{ item.name }}</span>
-            <span class="layer-class">{{ item.class }}</span>
-            <span class="layer-summary mono" v-if="item.summary">{{ item.summary }}</span>
-            <span class="layer-shape mono" v-if="item.shapes">{{ item.shapes[0] ? item.shapes[0] + ' → ' : '→ ' }}{{ item.shapes[1] }}</span>
-            <span class="layer-params" v-if="item.parameters">{{ paramCount(item.parameters) }}</span>
-            <span class="layer-toggle" v-if="item.children.length">{{ open[index] ? '▾' : '▸' }} {{ item.children.length }} inside</span>
-          </div>
-          <layers v-if="open[index]" :items="item.children" :chain="item.class === 'Sequential'"></layers>
-        </div>
-      </template>
-    </div>`,
-};
+const CHAR = 6.7, LINE = 15, PIN = 14, PIN_SPACE = 30, BOX_PAD = 8, GAP_X = 96, GAP_Y = 26, EDGE = 26, MAX_TEXT = 46;
 
-const Inside = {
-  components: { names: Names, layers: Layers },
-  props: { box: { type: Object, required: true }, open: { type: String, default: "" } },
-  emits: ["close"],
-  template: `
-    <div class="card inside">
-      <div class="toolbar">
-        <span class="card-label">{{ box.title || box.name }}</span>
-        <span class="muted" v-if="box.subtitle">{{ box.subtitle }}</span>
-        <a class="small" v-if="open" :href="open">open {{ box.ref }}</a>
-        <button class="small" @click="$emit('close')">close</button>
-      </div>
-      <div class="section" v-for="(section, index) in box.sections" :key="index">
-        <div class="section-label" v-if="section.title">{{ section.title }}</div>
-        <names v-if="section.chips" :items="section.chips" :limit="60"></names>
-        <template v-else-if="section.layers">
-          <layers v-if="section.layers.length" :items="section.layers" :chain="section.chain"></layers>
-          <p class="muted" v-else>one operation, nothing inside</p>
-        </template>
-        <div class="lines" v-else-if="section.lines"><div v-for="(line, position) in section.lines" :key="position">{{ line }}</div></div>
-      </div>
-    </div>`,
-};
+function wireColor(name) {
+  if (!name) return "";
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) % 1000003;
+  return PALETTE[hash % PALETTE.length];
+}
 
-function portSpread(count, low, high) {
-  if (count <= 1) return [(low + high) / 2];
-  return Array.from({ length: count }, (_, position) => low + (high - low) * (position + 1) / (count + 1));
+function effectText(value) {
+  if (value && typeof value === "object" && "times" in value) return `×${value.times}`;
+  if (value && typeof value === "object" && "plus" in value) return value.plus < 0 ? `−${Math.abs(value.plus)}` : `+${value.plus}`;
+  return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value);
+}
+
+function fitText(text, chars) { return text.length > chars ? text.slice(0, chars - 1) + "…" : text; }
+
+function unique(items) { return [...new Set(items)]; }
+
+function wireLabel(wire, widths) { return wire ? (widths[wire] ? `${wire} [${widths[wire]}]` : wire) : ""; }
+
+function chainGraph(items, key, dashed) {
+  const boxes = items.map((item, index) => ({
+    name: `${key}/${index}`, kind: item.kind || "torch", column: index, item, inputs: [""], outputs: [""],
+    lines: [`${item.name}: ${item.class}${item.summary ? `(${item.summary})` : ""}`, ...(item.parameters ? [paramCount(item.parameters)] : [])],
+    note: [`${item.class}${item.summary ? `(${item.summary})` : ""}`, item.shapes ? `${item.shapes[0] || "?"} → ${item.shapes[1]}` : "", paramCount(item.parameters)].filter(Boolean),
+    blocks: item.children || [], chain: item.class === "Sequential" }));
+  const arrows = [];
+  boxes.forEach((box, index) => {
+    const previous = boxes[index - 1];
+    if (!previous) arrows.push({ source: "in:", target: box.name, wire: "", label: box.item.shapes ? box.item.shapes[0] || "" : "", dashed });
+    else arrows.push({ source: previous.name, target: box.name, wire: "", label: previous.item.shapes ? previous.item.shapes[1] : "", dashed });
+  });
+  const last = boxes[boxes.length - 1];
+  if (last) arrows.push({ source: last.name, target: "out:", wire: "", label: last.item.shapes ? last.item.shapes[1] : "", dashed });
+  return { boxes, arrows };
+}
+
+function modelGraph(models, label) {
+  const model = models[label];
+  if (!model) return null;
+  const boxes = (model.boxes || []).filter(box => NODE_KINDS.has(box.kind)).map(box => modelBox(box, models));
+  const names = new Set(boxes.map(box => box.name));
+  const arrows = (model.arrows || [])
+    .filter(([source, target]) => (names.has(source) || source.startsWith("in:")) && (names.has(target) || target.startsWith("out:")))
+    .map(([source, target, wire, dashed]) => ({ source, target, wire: wire || "", label: wireLabel(wire || "", model.widths || {}), dashed: !!dashed }));
+  return { boxes, arrows };
+}
+
+function innerOf(box, key, models) {
+  if (box.kind === "model" && box.open) {
+    const graph = modelGraph(models, box.open);
+    return graph ? { graph } : null;
+  }
+  if (box.blocks && box.blocks.length) return { graph: chainGraph(box.blocks, key, !box.chain) };
+  const lines = [...(box.text || [])];
+  for (const group of box.groups || []) {
+    lines.push(group.title);
+    for (const item of group.items) lines.push(`- ${item}`);
+  }
+  if (!lines.length) return null;
+  return { lines: lines.length > 200 ? [...lines.slice(0, 199), `… and ${lines.length - 199} more`] : lines };
+}
+
+function expandable(box) {
+  return !!((box.blocks && box.blocks.length) || box.open || (box.text && box.text.length) || (box.groups && box.groups.length));
+}
+
+function schematic(graph, open, prefix, models) {
+  const boxes = graph.boxes.map(box => ({ ...box }));
+  const arrows = graph.arrows;
+  for (const box of boxes) {
+    box.inputs = box.inputs || unique(arrows.filter(arrow => arrow.target === box.name).map(arrow => arrow.wire));
+    box.outputs = box.outputs || unique(arrows.filter(arrow => arrow.source === box.name).map(arrow => arrow.wire));
+    box.key = `${prefix}${box.name}`;
+    box.shown = box.lines.map(line => fitText(line, MAX_TEXT));
+    box.head = box.shown.length * LINE + 6;
+    box.inner = null;
+    box.body = null;
+    if (open[box.key] && expandable(box)) {
+      const inner = innerOf(box, box.key, models);
+      if (inner && inner.graph) box.inner = schematic(inner.graph, open, `${box.key}/`, models);
+      else if (inner) box.body = inner.lines;
+    }
+    const pinRows = Math.max(box.inputs.length, box.outputs.length);
+    box.inLabel = Math.max(0, ...box.inputs.map(name => name.length)) * 6;
+    box.outLabel = Math.max(0, ...box.outputs.map(name => name.length)) * 6;
+    box.left = Math.max(PIN_SPACE, box.inLabel + 44);
+    box.right = Math.max(PIN_SPACE, box.outLabel + 44);
+    const pinWidth = box.inLabel + box.outLabel + 28;
+    const headWidth = Math.max(...box.shown.map(line => line.length)) * CHAR + 2 * BOX_PAD;
+    const bodyWidth = box.inner ? box.inner.width + box.left + box.right
+      : (box.body ? Math.max(0, ...box.body.map(line => line.length)) * 6.2 + 2 * BOX_PAD + 12 : 0);
+    box.width = Math.max(96, headWidth, pinWidth, bodyWidth);
+    const content = box.inner ? Math.max(box.inner.height, pinRows * PIN)
+      : (box.body ? Math.max(box.body.length * 13 + 4, pinRows * PIN) : pinRows * PIN);
+    box.height = box.head + content + BOX_PAD;
+  }
+  const ranks = unique(boxes.map(box => box.column)).sort((a, b) => a - b);
+  const columns = ranks.map(rank => boxes.filter(box => box.column === rank));
+  const widths = columns.map(items => Math.max(...items.map(box => box.width)));
+  const stacks = columns.map(items => items.reduce((sum, box) => sum + box.height, 0) + GAP_Y * (items.length - 1));
+  const tallest = Math.max(0, ...stacks);
+  let cursor = 0;
+  columns.forEach((items, index) => {
+    let top = (tallest - stacks[index]) / 2;
+    for (const box of items) { box.x = cursor; box.y = top; box.rank = index; box.width = widths[index]; top += box.height + GAP_Y; }
+    cursor += widths[index] + GAP_X;
+  });
+  const lanes = laneCounts(boxes, arrows, tallest / 2, ranks.length - 1);
+  const laneTop = lanes.top ? 10 + 6 * lanes.top : 0, laneBottom = lanes.bottom ? 10 + 6 * lanes.bottom : 0;
+  for (const box of boxes) box.y += laneTop;
+  return { width: Math.max(0, cursor - GAP_X), height: tallest + laneTop + laneBottom, top: laneTop, bottom: laneBottom, boxes, arrows };
+}
+
+function laneCounts(boxes, arrows, middle, last) {
+  const byName = Object.fromEntries(boxes.map(box => [box.name, box]));
+  const pinY = (box, side, wire) => box.y + box.head + PIN / 2 + Math.max(0, (side === "in" ? box.inputs : box.outputs).indexOf(wire)) * PIN;
+  const counts = { top: 0, bottom: 0 };
+  for (const arrow of arrows) {
+    const source = byName[arrow.source], target = byName[arrow.target];
+    const a = source ? { rank: source.rank, y: pinY(source, "out", arrow.wire) } : { rank: -1, y: target ? pinY(target, "in", arrow.wire) : 0 };
+    const b = target ? { rank: target.rank, y: pinY(target, "in", arrow.wire) } : { rank: Infinity, y: a.y };
+    if (!skipping(a, b, last)) continue;
+    counts[(a.y + b.y) / 2 <= middle ? "top" : "bottom"] += 1;
+  }
+  return counts;
+}
+
+function pinAt(box, side, index) {
+  const y = box.y + box.head + PIN / 2 + index * PIN;
+  return side === "in" ? { x: box.x - 8, y, rank: box.rank } : { x: box.x + box.width + 8, y, rank: box.rank };
+}
+
+function endOf(name, side, placed, outer, layout, wire) {
+  const box = placed[name];
+  if (box) {
+    const pins = side === "out" ? box.outputs : box.inputs;
+    return pinAt(box, side, Math.max(0, pins.indexOf(wire)));
+  }
+  const virtual = name.startsWith("in:") ? "in" : (name.startsWith("out:") ? "out" : null);
+  if (!outer || !virtual) return null;
+  const pins = virtual === "in" ? outer.inputs : outer.outputs;
+  let index = pins.indexOf(name.slice(virtual.length + 1));
+  if (index < 0) {
+    const seen = unique(layout.arrows.map(arrow => (virtual === "in" ? arrow.source : arrow.target)).filter(item => item.startsWith(`${virtual}:`)));
+    index = Math.min(Math.max(0, seen.indexOf(name)), Math.max(0, pins.length - 1));
+  }
+  const y = outer.y + outer.head + PIN / 2 + index * PIN;
+  return virtual === "in" ? { x: outer.x + outer.inLabel + 10, y, rank: -1 } : { x: outer.x + outer.width - outer.outLabel - 10, y, rank: Infinity };
+}
+
+function skipping(a, b, last) {
+  if (Number.isFinite(a.rank) && Number.isFinite(b.rank)) return b.rank - a.rank > 1;
+  return (a.rank === -1 && b.rank > 0) || (b.rank === Infinity && a.rank < last);
+}
+
+function channels(wires) {
+  const gaps = {};
+  for (const wire of wires) (gaps[wire.a.rank] = gaps[wire.a.rank] || []).push(wire);
+  for (const group of Object.values(gaps)) {
+    const bundles = [];
+    const byPin = {};
+    for (const wire of group) {
+      const pin = `${wire.a.x},${wire.a.y}`;
+      if (!byPin[pin]) { byPin[pin] = { wires: [] }; bundles.push(byPin[pin]); }
+      byPin[pin].wires.push(wire);
+    }
+    for (const bundle of bundles) bundle.y = Math.min(...bundle.wires.map(wire => wire.b.y));
+    bundles.sort((first, second) => first.y - second.y || first.wires[0].a.y - second.wires[0].a.y);
+    bundles.forEach((bundle, index) => { for (const wire of bundle.wires) wire.share = (index + 1) / (bundles.length + 1); });
+  }
+}
+
+function labelAt(label, x1, x2, y) {
+  const width = label.length * 6.2 + 6;
+  return x2 - x1 >= width + 8 ? { lx: (x1 + x2 - width) / 2 + 3, ly: y - 5 } : null;
+}
+
+function channel(wire, bend) {
+  const { a, b } = wire;
+  const own = a.x + (b.x - a.x) * (wire.share || 0.5);
+  const xm = typeof bend === "number" ? Math.min(b.x - 6, Math.max(a.x + 6, bend)) : own;
+  const label = wire.arrow.label || "";
+  const placed = labelAt(label, a.x, xm, a.y) || labelAt(label, xm, b.x, b.y) || { lx: xm + 4, ly: (a.y + b.y) / 2 };
+  return { path: `M${a.x} ${a.y} H${xm} V${b.y} H${b.x}`, xm, y1: a.y, y2: b.y, ...placed };
+}
+
+function detour(wire, middle, top, height, lanes) {
+  const { a, b } = wire;
+  const above = (a.y + b.y) / 2 <= middle;
+  const lane = above ? (lanes.top += 1) : (lanes.bottom += 1);
+  const y = above ? top - 4 - 6 * lane : top + height + 4 + 6 * lane;
+  const out = a.x + 8 + 5 * lane, back = b.x - 8 - 5 * lane;
+  const width = (wire.arrow.label || "").length * 6.2 + 6;
+  return { path: `M${a.x} ${a.y} H${out} V${y} H${back} V${b.y} H${b.x}`, lx: (out + back - width) / 2 + 3, ly: y - 5 };
+}
+
+function render(layout, ox, oy, outer, out, level, state) {
+  const placed = {};
+  for (const box of layout.boxes) {
+    const shift = state.moved[box.key] || { dx: 0, dy: 0 };
+    const item = { ...box, x: ox + box.x + shift.dx, y: oy + box.y + shift.dy, level };
+    placed[box.name] = item;
+    out.boxes.push(item);
+    if (box.inner) render(box.inner, item.x + item.left + (item.width - item.left - item.right - box.inner.width) / 2, item.y + box.head, item, out, level + 1, state);
+  }
+  const wires = [];
+  const last = Math.max(-1, ...layout.boxes.map(box => box.rank));
+  layout.arrows.forEach((arrow, position) => {
+    const a = endOf(arrow.source, "out", placed, outer, layout, arrow.wire);
+    const b = endOf(arrow.target, "in", placed, outer, layout, arrow.wire);
+    if (a && b) wires.push({ key: `${level}/${position}/${arrow.source}>${arrow.target}`, a, b, arrow, direct: b.x > a.x + 12 && !skipping(a, b, last) });
+  });
+  channels(wires.filter(wire => wire.direct));
+  const lanes = { top: 0, bottom: 0 };
+  const content = { top: oy + layout.top, height: layout.height - layout.top - layout.bottom };
+  const shown = new Set();
+  for (const wire of wires) {
+    const routed = wire.direct ? channel(wire, state.bends[wire.key]) : detour(wire, content.top + content.height / 2, content.top, content.height, lanes);
+    const mark = `${wire.a.x},${wire.a.y}|${wire.arrow.label}`;
+    const label = wire.arrow.label && !shown.has(mark) ? wire.arrow.label : "";
+    shown.add(mark);
+    out.wires.push({ key: wire.key, ...routed, label, dashed: wire.arrow.dashed, color: wireColor(wire.arrow.wire) });
+  }
 }
 
 const Diagram = {
-  props: { boxes: { type: Array, default: () => [] }, arrows: { type: Array, default: () => [] }, widths: { type: Object, default: () => ({}) }, title: String,
-           selected: { type: String, default: "" } },
-  data() { return { hover: null, mouse: { x: 0, y: 0 }, marker: `arrow-${Math.random().toString(36).slice(2, 8)}` }; },
+  props: { boxes: { type: Array, default: () => [] }, arrows: { type: Array, default: () => [] }, widths: { type: Object, default: () => ({}) },
+           models: { type: Object, default: () => ({}) }, title: String, store: { type: String, default: "" }, expand: { type: String, default: "" },
+           modal: Boolean, height: { type: Number, default: 0 } },
+  emits: ["close"],
+  data() {
+    return { hover: null, open: {}, moved: {}, bends: {}, zoom: 1, pan: { x: 0, y: 0 }, fitted: false, drag: null,
+             mouse: { x: 0, y: 0 }, marker: `arrow-${Math.random().toString(36).slice(2, 8)}` };
+  },
+  watch: {
+    store() { this.load(); },
+    open() { this.persist(); },
+    moved() { this.persist(); },
+    bends() { this.persist(); },
+    zoom() { this.persist(); },
+    pan() { this.persist(); },
+  },
   computed: {
-    layout() {
-      const CHAR = 6.7, LINE = 15, PAD_X = 14, PAD_Y = 10, GAP_X = 84, GAP_Y = 22, EDGE = 20;
-      const columns = {};
-      for (const box of this.boxes) (columns[box.column] = columns[box.column] || []).push(box);
-      const indices = Object.keys(columns).map(Number).sort((a, b) => a - b);
-      if (!indices.length) return { boxes: [], edges: [], width: 200, height: 60 };
-      const widths = {};
-      for (const index of indices) {
-        const chars = Math.max(4, ...columns[index].flatMap(box => box.lines.map(line => Math.min(line.length, 46))));
-        widths[index] = Math.min(340, Math.max(96, chars * CHAR + 2 * PAD_X));
-      }
-      const heightOf = box => box.lines.length * LINE + 2 * PAD_Y;
-      const stacks = {};
-      for (const index of indices) stacks[index] = columns[index].reduce((sum, box) => sum + heightOf(box), 0) + GAP_Y * (columns[index].length - 1);
-      const tallest = Math.max(...Object.values(stacks));
-      const lefts = {};
-      let cursor = EDGE;
-      for (const index of indices) { lefts[index] = cursor; cursor += widths[index] + GAP_X; }
-      const width = cursor - GAP_X + EDGE;
-      const middle = EDGE + tallest / 2;
-      const placed = {};
-      for (const index of indices) {
-        let top = middle - stacks[index] / 2;
-        for (const box of columns[index]) {
-          const height = heightOf(box);
-          placed[box.name] = { ...box, x: lefts[index], y: top, width: widths[index], height,
-                               shown: box.lines.map(line => line.length > 46 ? line.slice(0, 45) + "…" : line) };
-          top += height + GAP_Y;
-        }
-      }
-      const leaving = {}, arriving = {};
-      this.arrows.forEach(([source, target], position) => {
-        if (!placed[source] || !placed[target]) return;
-        (leaving[source] = leaving[source] || []).push(position);
-        (arriving[target] = arriving[target] || []).push(position);
-      });
-      const edges = [];
-      this.arrows.forEach(([source, target, label, dashed], position) => {
-        const from = placed[source], to = placed[target];
-        if (!from || !to) return;
-        const outs = portSpread(leaving[source].length, from.y + from.height * 0.25, from.y + from.height * 0.75);
-        const ins = portSpread(arriving[target].length, to.y + to.height * 0.25, to.y + to.height * 0.75);
-        const x1 = from.x + from.width, y1 = outs[leaving[source].indexOf(position)], x2 = to.x, y2 = ins[arriving[target].indexOf(position)];
-        const bend = Math.max(30, (x2 - x1) / 2);
-        const skips = to.column - from.column > 1;
-        const off = skips ? ((y1 + y2) / 2 <= middle ? -70 : 70) : 0;
-        const name = label && from.lines[0] !== label ? label : "";
-        const wide = label && this.widths[label] ? `[${this.widths[label]}]` : "";
-        const shown = name && wide ? `${name} ${wide}` : (name || wide);
-        const t = 0.6, u = 1 - t;
-        const lx = u * u * u * x1 + 3 * u * u * t * (x1 + bend) + 3 * u * t * t * (x2 - bend) + t * t * t * x2;
-        const ly = u * u * u * y1 + 3 * u * u * t * (y1 + off) + 3 * u * t * t * (y2 + off) + t * t * t * y2;
-        edges.push({ key: `${source}->${target}`, path: `M${x1} ${y1} C${x1 + bend} ${y1 + off}, ${x2 - bend} ${y2 + off}, ${x2} ${y2}`,
-                     label: shown, lx, ly: ly - 7, dashed: !!dashed });
-      });
-      return { boxes: Object.values(placed), edges, width, height: EDGE + tallest + EDGE };
+    storeKey() { return this.store ? `kalfa-board-diagram:${this.store}` : ""; },
+    graph() {
+      return { boxes: this.boxes,
+               arrows: this.arrows.map(([source, target, wire, dashed]) => ({ source, target, wire: wire || "", label: wireLabel(wire || "", this.widths), dashed: !!dashed })) };
     },
+    layout() {
+      const inner = schematic(this.graph, this.open, "", this.models);
+      const out = { boxes: [], wires: [], width: inner.width + 2 * EDGE, height: inner.height + 2 * EDGE, top: inner.top, bottom: inner.bottom };
+      render(inner, EDGE, EDGE, null, out, 0, { moved: this.moved, bends: this.bends });
+      return out;
+    },
+    bounds() {
+      const boxes = this.layout.boxes;
+      if (!boxes.length) return { x: 0, y: 0, width: 200, height: 100 };
+      const x = Math.min(...boxes.map(box => box.x)) - 14, y = Math.min(...boxes.map(box => box.y)) - 14 - this.layout.top;
+      return { x, y, width: Math.max(...boxes.map(box => box.x + box.width)) + 14 - x,
+               height: Math.max(...boxes.map(box => box.y + box.height)) + 14 + this.layout.bottom - y };
+    },
+    viewHeight() { return this.height || Math.min(720, Math.max(300, this.layout.height)); },
+    canvas() { return `translate(${this.pan.x} ${this.pan.y}) scale(${this.zoom})`; },
     kinds() { return [...new Set(this.boxes.map(box => box.kind))]; },
     tooltipStyle() {
       const lines = this.hoverNote;
@@ -506,27 +705,112 @@ const Diagram = {
       return { position: "fixed", left: `${Math.max(4, left)}px`, top: `${Math.max(4, top)}px` };
     },
     hoverNote() {
+      if (this.drag) return [];
       const note = (this.hover && this.hover.note) || [];
       if (note.length <= 14) return note;
-      return [...note.slice(0, 12), `and ${note.length - 12} more${this.clickable(this.hover) ? ", click the box for all of them" : ""}`];
+      return [...note.slice(0, 12), `and ${note.length - 12} more${expandable(this.hover) ? ", click the block to open it" : ""}`];
     },
+  },
+  mounted() {
+    this.load();
+    if (!this.fitted) this.fit();
   },
   methods: {
     color(kind) { return KIND_COLORS[kind] || "#7a7a7a"; },
     kindName(kind) { return KIND_NAMES[kind] || kind; },
-    clickable(box) { return !!(box && box.sections && box.sections.length); },
-    pick(box) { if (this.clickable(box)) this.$emit("pick", box); },
+    palette() { return PALETTE; },
+    markerFor(color) { const index = PALETTE.indexOf(color); return index < 0 ? this.marker : `${this.marker}-${index}`; },
+    clickable(box) { return expandable(box); },
+    pinY(box, index) { return box.y + box.head + PIN / 2 + index * PIN; },
+    toggle(box) { if (expandable(box)) this.open = { ...this.open, [box.key]: !this.open[box.key] }; },
+    enter(box) { this.hover = box.inner || box.body ? null : box; },
     onMove(event) { this.mouse = { x: event.clientX, y: event.clientY }; },
-    save(event) {
-      const svg = event.currentTarget.closest(".diagram").querySelector("svg");
-      downloadSvg(svg, this.title, this.layout.width, this.layout.height, getComputedStyle(svg.closest(".card") || svg).backgroundColor);
+    saved() {
+      try { return this.storeKey ? JSON.parse(localStorage.getItem(this.storeKey) || "null") : null; } catch (error) { return null; }
+    },
+    load() {
+      const saved = this.saved() || {};
+      const view = (saved.views || {})[this.modal ? "modal" : "inline"];
+      this.open = saved.open || {};
+      this.moved = saved.moved || {};
+      this.bends = saved.bends || {};
+      this.zoom = view ? view.zoom : 1;
+      this.pan = view ? view.pan : { x: 0, y: 0 };
+      this.fitted = !!view;
+      if (!view) this.$nextTick(() => this.fit());
+    },
+    persist() {
+      if (!this.storeKey) return;
+      const views = { ...((this.saved() || {}).views || {}), [this.modal ? "modal" : "inline"]: { zoom: this.zoom, pan: this.pan } };
+      const state = { open: this.open, moved: this.moved, bends: this.bends, views };
+      try { localStorage.setItem(this.storeKey, JSON.stringify(state)); } catch (error) { console.warn("storage unavailable", error); }
+    },
+    reset() {
+      this.open = {}; this.moved = {}; this.bends = {};
+      this.$nextTick(() => this.fit());
+    },
+    fit() {
+      const svg = this.$refs.svg;
+      const width = svg ? svg.clientWidth : 800, height = this.viewHeight, bounds = this.bounds;
+      const zoom = Math.min(1.5, (width - 24) / bounds.width, (height - 24) / bounds.height);
+      this.zoom = zoom;
+      this.pan = { x: (width - bounds.width * zoom) / 2 - bounds.x * zoom, y: (height - bounds.height * zoom) / 2 - bounds.y * zoom };
+      this.fitted = true;
+    },
+    onWheel(event) {
+      const rect = this.$refs.svg.getBoundingClientRect();
+      const cx = event.clientX - rect.left, cy = event.clientY - rect.top;
+      const zoom = Math.min(4, Math.max(0.15, this.zoom * Math.exp(-event.deltaY * 0.0012)));
+      const ratio = zoom / this.zoom;
+      this.pan = { x: cx - (cx - this.pan.x) * ratio, y: cy - (cy - this.pan.y) * ratio };
+      this.zoom = zoom;
+    },
+    startDrag(kind, target, event) {
+      if (event.button !== 0) return;
+      const drag = { kind, target, startX: event.clientX, startY: event.clientY, went: false, pan: { ...this.pan } };
+      if (kind === "box") drag.from = { ...(this.moved[target.key] || { dx: 0, dy: 0 }) };
+      if (kind === "bend") drag.from = target.xm;
+      this.drag = drag;
+      window.addEventListener("mousemove", this.onDrag);
+      window.addEventListener("mouseup", this.endDrag);
+    },
+    onDrag(event) {
+      const drag = this.drag;
+      if (!drag) return;
+      const dx = event.clientX - drag.startX, dy = event.clientY - drag.startY;
+      if (Math.abs(dx) + Math.abs(dy) > 3) drag.went = true;
+      if (!drag.went) return;
+      if (drag.kind === "pan") this.pan = { x: drag.pan.x + dx, y: drag.pan.y + dy };
+      else if (drag.kind === "box") this.moved = { ...this.moved, [drag.target.key]: { dx: drag.from.dx + dx / this.zoom, dy: drag.from.dy + dy / this.zoom } };
+      else if (drag.kind === "bend") this.bends = { ...this.bends, [drag.target.key]: drag.from + dx / this.zoom };
+    },
+    endDrag() {
+      window.removeEventListener("mousemove", this.onDrag);
+      window.removeEventListener("mouseup", this.endDrag);
+      const drag = this.drag;
+      this.drag = null;
+      if (drag && drag.kind === "box" && !drag.went) this.toggle(drag.target);
+    },
+    save() {
+      const svg = this.$refs.svg;
+      const group = svg.querySelector("g.canvas");
+      const bounds = this.bounds;
+      const before = { transform: group.getAttribute("transform"), viewBox: svg.getAttribute("viewBox") };
+      group.setAttribute("transform", `translate(${-bounds.x} ${-bounds.y})`);
+      svg.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
+      try {
+        downloadSvg(svg, this.title, bounds.width, bounds.height, getComputedStyle(svg).backgroundColor);
+      } finally {
+        group.setAttribute("transform", before.transform);
+        if (before.viewBox === null) svg.removeAttribute("viewBox"); else svg.setAttribute("viewBox", before.viewBox);
+      }
     },
   },
   template: "#diagram-template",
 };
 
 const app = Vue.createApp({
-  components: { chart: Chart, spark: Spark, diagram: Diagram, names: Names, inside: Inside },
+  components: { chart: Chart, spark: Spark, diagram: Diagram, names: Names },
   data() {
     return {
       route: parseHash(location.hash),
@@ -537,7 +821,8 @@ const app = Vue.createApp({
       tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
       refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
-      source: null, timer: null, treeTimer: null, connected: false,
+      source: null, timer: null, treeTimer: null, connected: false, queue: {}, plot: defaultPlot(), busy: 0,
+      sidebar: (() => { try { return localStorage.getItem("kalfa-board-sidebar") !== "closed"; } catch (error) { return true; } })(),
     };
   },
   computed: {
@@ -560,9 +845,12 @@ const app = Vue.createApp({
     scatterLines() {
       if (!this.pairInfo || !this.predictionsData) return [];
       const pair = this.pairInfo;
-      return [{ name: `${pair.pred} against ${pair.target}`, color: PALETTE[0],
-                points: this.predictionsData.sample.map(row => [row[pair.target], row[pair.pred]]).filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1])) }];
+      const points = this.predictionsData.sample.map(row => [row[pair.target], row[pair.pred]]).filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      const [low, high] = extent(points.flatMap(point => point));
+      const diagonal = Number.isFinite(low) && Number.isFinite(high) && high > low ? [{ name: "y = x", color: "#9aa0a8", kind: "line", dashed: true, points: [[low, low], [high, high]] }] : [];
+      return [{ name: `${pair.pred} against ${pair.target}`, color: PALETTE[0], points }, ...diagonal];
     },
+    sampleAll() { return this.route.params.sample === "all"; },
     histogramLines() {
       if (!this.pairInfo) return [];
       const { edges, counts } = this.pairInfo.histogram;
@@ -669,6 +957,13 @@ const app = Vue.createApp({
       return Object.entries(byName).map(([name, lines]) => ({ name, lines }));
     },
     item() { return this.route.params.item || null; },
+    expandedDiagram() {
+      const which = this.route.params.diagram;
+      if (!this.record || this.isSweep) return null;
+      if (which === "model" && this.currentArchitecture) return "model";
+      if (which === "data" && this.pipeline) return "data";
+      return null;
+    },
     logy() { return this.route.params.log === "1"; },
     metricFilter() { return this.route.params.q || ""; },
     logName() {
@@ -690,6 +985,27 @@ const app = Vue.createApp({
         .filter(group => group.entries.length);
     },
     state() { return this.record ? this.stateOf(this.record) : "pending"; },
+    liveProgress() {
+      const runs = this.liveBoard.live.filter(entry => entry.kind !== "sweep" && typeof entry.turns_total === "number" && entry.turns_total > 0);
+      const done = runs.reduce((sum, entry) => sum + Math.min(entry.turn || 0, entry.turns_total), 0);
+      const planned = runs.reduce((sum, entry) => sum + entry.turns_total, 0);
+      return { running: this.liveBoard.live.length, done, planned, share: planned ? done / planned : null };
+    },
+    badge() {
+      if (this.record && !this.isSweep && this.state === "failed") return "failed";
+      if (this.record && !this.isSweep && ["running", "pending"].includes(this.state)) return "running";
+      const live = this.liveBoard.live, latest = this.liveBoard.recent[0];
+      const failedAt = latest && this.stateOf(latest) === "failed" ? Date.parse(latest.status.last_seen || "") : NaN;
+      const started = Math.max(-Infinity, ...live.map(entry => Date.parse(entry.started || "")).filter(Number.isFinite));
+      if (Number.isFinite(failedAt) && (!live.length || failedAt > started)) return "failed";
+      return live.length ? "running" : "idle";
+    },
+    chrome() {
+      const summary = this.liveProgress;
+      const percent = summary.share === null ? "" : ` (${Math.round(100 * summary.share)}%)`;
+      return { title: summary.running ? `Kalfa Board${percent}` : "Kalfa Board", badge: this.badge, share: this.badge === "running" ? summary.share : null };
+    },
+    logoSvg() { return iconSvg(this.chrome.badge, this.chrome.share); },
     live() {
       if (!this.path) return false;
       if (this.isSweep) return !!(this.sweep && this.sweep.points.some(point => this.stateOf(point) === "running"));
@@ -749,7 +1065,16 @@ const app = Vue.createApp({
       return Object.entries(this.series).filter(([key]) => key.startsWith("lr/")).map(([key, points], index) => ({ name: key.slice(3), color: PALETTE[index % PALETTE.length], points }));
     },
     rateRows() {
-      return Object.entries(this.series).filter(([key]) => key.startsWith("lr/")).map(([key, points]) => ({ key, last: points[points.length - 1][1] }));
+      return Object.entries(this.series).filter(([key]) => key.startsWith("lr/")).map(([key, points]) => {
+        const segments = [];
+        for (const [turn, value] of points) {
+          const last = segments[segments.length - 1];
+          if (last && last.value === value) last.to = turn;
+          else segments.push({ value, from: turn, to: turn });
+        }
+        const shown = segments.length > 10 ? [...segments.slice(0, 4), null, ...segments.slice(-4)] : segments;
+        return { key, last: points[points.length - 1][1], segments: shown, changes: segments.length };
+      });
     },
     latest() {
       return Object.entries(this.series).filter(([key]) => !key.startsWith("lr/") && !key.startsWith("effect/")).map(([key, points]) => {
@@ -761,7 +1086,7 @@ const app = Vue.createApp({
       });
     },
     rulesFired() {
-      return this.history.lines.filter(line => (line.rules || []).length).map(line => `${this.turnLabel} ${line.turn}: ${line.rules.join(", ")}`);
+      return this.history.lines.filter(line => (line.rules || []).length).map(line => ({ turn: line.turn, names: line.rules.join(", ") }));
     },
     turnLabel() {
       const noted = this.record && this.record.manifest && this.record.manifest.turn;
@@ -803,20 +1128,27 @@ const app = Vue.createApp({
         return { name, current, uri: definition ? definition.uri : "", segments, parts, lr: rates ? rates[rates.length - 1][1] : null };
       });
     },
-    ruleMarks() { return this.history.lines.filter(line => (line.rules || []).length).map(line => line.turn); },
+    ruleMarks() { return this.history.lines.filter(line => (line.rules || []).length).map(line => ({ x: line.turn, text: line.rules.join(", ") })); },
     effectRows() {
       const lines = this.history.lines;
       const targets = [...new Set(lines.flatMap(line => Object.keys(line).filter(key => key.startsWith("effect/"))))].map(key => key.slice(7));
+      const relative = value => !!(value && typeof value === "object" && ("times" in value || "plus" in value));
       return targets.map(target => {
+        const [owner, ...rest] = target.split(".");
+        const rate = rest.join(".") === "lr" && lines.some(line => typeof line[`lr/${owner}`] === "number") ? `lr/${owner}` : null;
+        if (!rate && lines.some(line => relative(line[`effect/${target}`]))) {
+          const firings = lines.filter(line => relative(line[`effect/${target}`])).map(line => ({ turn: line.turn, text: effectText(line[`effect/${target}`]) }));
+          return { target, written: this.initialOf(target), firings, segments: [] };
+        }
         const segments = [];
         for (const line of lines) {
-          const value = line[`effect/${target}`] === undefined ? this.initialOf(target) : line[`effect/${target}`];
+          const value = rate ? line[rate] : (line[`effect/${target}`] === undefined ? this.initialOf(target) : line[`effect/${target}`]);
           const shown = JSON.stringify(value === undefined ? null : value);
           const last = segments[segments.length - 1];
           if (last && last.shown === shown) last.to = line.turn;
           else segments.push({ value, shown, from: line.turn, to: line.turn });
         }
-        return { target, segments };
+        return { target, segments, firings: [] };
       });
     },
     plan() {
@@ -881,18 +1213,24 @@ const app = Vue.createApp({
       const marks = [];
       let previous = null;
       for (const line of this.steps.lines) {
-        if (previous !== null && line.turn !== previous) marks.push(line.step);
+        if (line.turn !== previous) marks.push({ x: line.step, text: `${this.turnLabel} ${line.turn}` });
         previous = line.turn;
       }
-      return marks.length <= 60 ? marks : [];
+      return marks;
     },
     expanded() {
       const name = this.route.params.chart;
       if (!name || !this.record) return null;
       if (this.isSweep) return name === "overlay" && this.overlayLines.length ? { name: this.sweep.objective.monitor || "objective", lines: this.overlayLines, xlabel: "turn", marks: [] } : null;
-      if (this.tab === "steps") {
+      if (this.tab === "steps" || (this.tab === "monitor" && name.startsWith("loss/"))) {
         const found = this.stepCharts.find(entry => entry.name === name);
-        return found ? { name, lines: found.lines, xlabel: "step", marks: this.turnMarks } : null;
+        return found ? { name, lines: found.lines, xlabel: "step", marks: this.turnMarks, turns: true } : null;
+      }
+      if (this.tab === "predictions" && this.pairInfo) {
+        const pair = this.pairInfo;
+        if (name === "scatter") return { name: `${pair.pred} against ${pair.target}`, lines: this.scatterLines, kind: "scatter", xlabel: pair.target, ylabel: pair.pred, marks: [] };
+        if (name === "histogram") return { name: "residual (prediction minus target)", lines: this.histogramLines, kind: "bar", xlabel: "residual", ylabel: "points", marks: [], bins: true };
+        return null;
       }
       if (name === "learning rate") return this.rateLines.length ? { name, lines: this.rateLines, xlabel: this.turnLabel, marks: [], logy: true } : null;
       const found = this.metricCharts.find(entry => entry.name === name);
@@ -913,14 +1251,6 @@ const app = Vue.createApp({
       if (!label) return null;
       return { label, ...models[label], boxes: (models[label].boxes || []).map(box => modelBox(box, models)) };
     },
-    diagramBoxes() {
-      if (this.tab === "data") return this.pipeline ? this.pipeline.boxes : [];
-      return this.currentArchitecture ? this.currentArchitecture.boxes : [];
-    },
-    selectedBox() {
-      const name = this.route.params.node;
-      return name ? this.diagramBoxes.find(box => box.name === name) || null : null;
-    },
     moduleText() {
       if (!this.record || !this.record.plots.includes("architecture_text.txt")) return null;
       return this.texts[this.textKey("architecture_text.txt")];
@@ -934,9 +1264,7 @@ const app = Vue.createApp({
       const source = (this.record.config && this.record.config.data && this.record.config.data.source) || {};
       const sourceParams = typeof source === "object" ? source.params || {} : {};
       const sourceLines = source.uri ? callLines(source.uri, sourceParams) : [];
-      boxes.push({ name: "source", kind: "source", column, row: 0, note: sourceLines, title: "source",
-                   subtitle: `${count(stages[0].rows)} rows · ${stages[0].columns} columns`,
-                   sections: sourceLines.length ? [{ title: "source", lines: sourceLines }] : [],
+      boxes.push({ name: "source", kind: "source", column, row: 0, note: sourceLines, text: sourceLines,
                    lines: [source.uri ? shortUri(source.uri) : "source", ...(sourceParams.path ? [String(sourceParams.path).split("/").pop()] : []), `${count(stages[0].rows)} rows · ${stages[0].columns} columns`] });
       for (const stage of stages.slice(1)) {
         column += 1;
@@ -945,11 +1273,9 @@ const app = Vue.createApp({
         const params = stage.call ? paramsText(stage.call.params) : "";
         const call = stage.call ? callLines(stage.call.uri, stage.call.params) : [];
         const note = [`stage ${stage.stage}`, ...call, ...added.map(name => `+ ${name}`), ...removed.map(name => `− ${name}`)];
-        const sections = [call.length ? { title: "transform", lines: call } : null,
-                          added.length ? { title: `${added.length} columns added`, chips: added } : null,
-                          removed.length ? { title: `${removed.length} columns removed`, chips: removed } : null].filter(Boolean);
-        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note, sections, title: `stage ${stage.stage}`,
-                     subtitle: `${count(stage.rows)} rows · ${stage.columns} columns`,
+        const groups = [added.length ? { title: `+ ${added.length} columns added`, items: added } : null,
+                        removed.length ? { title: `− ${removed.length} columns removed`, items: removed } : null].filter(Boolean);
+        boxes.push({ name: stage.stage, kind: "transform", column, row: 0, note, text: call, groups,
                      lines: [stage.call ? shortUri(stage.call.uri) : stage.stage, ...(params ? [params] : []), `${count(stage.rows)} rows · ${stage.columns} columns${change ? "  " + change : ""}`] });
         arrows.push([previous, stage.stage, "", false]);
         previous = stage.stage;
@@ -966,8 +1292,7 @@ const app = Vue.createApp({
         sets.forEach((set, row) => {
           const calls = (perSet[set] || []).map(call => `${shortUri(call.uri)} ${paramsText(call.params)}`.trim());
           const detail = (perSet[set] || []).flatMap(call => callLines(call.uri, call.params));
-          boxes.push({ name: `after:${set}`, kind: "transform", column, row, note: detail, title: `${set} transforms`,
-                       sections: detail.length ? [{ title: "transforms", lines: detail }] : [],
+          boxes.push({ name: `after:${set}`, kind: "transform", column, row, note: detail, text: detail,
                        lines: [`${set} transforms`, ...(calls.length ? calls : ["none"]), `${count(after[set] !== undefined ? after[set] : data.split[set])} rows`] });
           arrows.push([`split:${set}`, `after:${set}`, "", false]);
         });
@@ -978,12 +1303,11 @@ const app = Vue.createApp({
       const fitted = Object.entries(fit.preprocessors || {}).map(([name, columns]) => `${name} ${columns}`).join(", ");
       const lines = ["fit on train", ...((data.frames || []).length ? [`frames ${data.frames.join(", ")}`] : []), ...wrapWords(fitted || "no preprocessors", 30),
                      `${fit.features || 0} features, ${(fit.targets || []).length} targets`];
-      const fitSections = [(fit.targets || []).length ? { title: "targets", chips: fit.targets } : null,
-                           Object.keys(fit.preprocessors || {}).length ? { title: "preprocessors", lines: Object.entries(fit.preprocessors).map(([name, columns]) => `${name}: ${columns} columns`) } : null,
-                           (data.frames || []).length ? { title: "frame transforms", lines: data.frames } : null,
-                           (fit.extras || []).length ? { title: "extras", chips: fit.extras } : null].filter(Boolean);
-      boxes.push({ name: "fit", kind: "fit", column, row: 0, lines, title: "fit on train", sections: fitSections,
-                   subtitle: `${fit.features || 0} features, ${(fit.targets || []).length} targets`,
+      const fitText = [...Object.entries(fit.preprocessors || {}).map(([name, columns]) => `${name}: ${columns} columns`),
+                       ...(data.frames || []).map(name => `frame transform ${name}`)];
+      const fitGroups = [(fit.targets || []).length ? { title: "targets", items: fit.targets } : null,
+                         (fit.extras || []).length ? { title: "extras", items: fit.extras } : null].filter(Boolean);
+      boxes.push({ name: "fit", kind: "fit", column, row: 0, lines, text: fitText, groups: fitGroups,
                    note: (fit.targets || []).length ? ["targets", ...fit.targets] : [] });
       sets.forEach(set => arrows.push([last(set), "fit", "", set !== "train"]));
       column += 1;
@@ -1041,11 +1365,22 @@ const app = Vue.createApp({
   },
   watch: {
     path: { immediate: true, handler() { this.enterRecord(); } },
+    chrome: {
+      immediate: true,
+      handler(now, before) {
+        if (before && now.title === before.title && now.badge === before.badge && now.share === before.share) return;
+        document.title = now.title;
+        setIcon(iconSvg(now.badge, now.share));
+      },
+    },
     refresh() {
       try { localStorage.setItem("kalfa-board-refresh", this.refresh); } catch (error) { console.warn("storage unavailable", error); }
       this.applyRefresh();
     },
     predictionFile() { if (this.tab === "predictions") this.loadPredictions(); },
+    sampleAll() { if (this.tab === "predictions") this.loadPredictions(); },
+    "plot.bins"() { if (this.tab === "predictions" && this.predictionsData) this.loadPredictions(); },
+    expanded(now, before) { if (now && !before) this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), bins: this.plot.bins }; },
     "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
     "route.params.b"() { if (this.page === "compare") this.loadCompare(); },
     tab: { immediate: true, handler() { this.enterTab(); } },
@@ -1068,6 +1403,13 @@ const app = Vue.createApp({
       return { kind: "", uri: "", params: {}, output: "", target: "" };
     },
     text(value) { return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value); },
+    chainText(value) { return typeof value === "number" ? fmt(value) : this.text(value); },
+    pairLabel(pair) {
+      const pairs = (this.predictionsData && this.predictionsData.pairs) || [];
+      const suffix = `_${pair.target}`;
+      if (pairs.filter(item => item.target === pair.target).length < 2 || pair.pred === `pred_${pair.target}` || !pair.pred.endsWith(suffix)) return pair.target;
+      return `${pair.target} (${pair.pred.slice("pred_".length, -suffix.length)})`;
+    },
     initialOf(target) {
       const config = (this.record && this.record.config) || {};
       const [owner, ...rest] = target.split(".");
@@ -1112,7 +1454,7 @@ const app = Vue.createApp({
       if (JSON.stringify(parsed) !== JSON.stringify(this.route)) this.route = parsed;
     },
     tabLink(name) {
-      const kept = { tab: name, item: null, model: null, node: null, file: null, q: null, log: null, chart: null };
+      const kept = { tab: name, item: null, model: null, file: null, q: null, log: null, chart: null, diagram: null };
       if (name === "curves" || name === "steps") kept.log = this.route.params.log;
       return this.link(kept);
     },
@@ -1131,6 +1473,10 @@ const app = Vue.createApp({
       return "";
     },
     toggleGroup(name) { this.collapsed = { ...this.collapsed, [name]: !this.collapsed[name] }; },
+    toggleSidebar() {
+      this.sidebar = !this.sidebar;
+      try { localStorage.setItem("kalfa-board-sidebar", this.sidebar ? "open" : "closed"); } catch (error) { console.warn("storage unavailable", error); }
+    },
     async loadLive() {
       const found = await api("/api/live");
       if (found) this.liveBoard = found;
@@ -1165,17 +1511,16 @@ const app = Vue.createApp({
       if (!record || path !== this.path) return;
       this.record = record;
       if (record.manifest && record.manifest.kind === "sweep") return;
-      await this.loadHistory();
+      await this.loadMore("history");
     },
-    async loadHistory() {
-      const path = this.path;
-      const found = await api("/api/history", { path, offset: this.history.offset });
-      if (found && path === this.path) this.history = { lines: this.history.lines.concat(found.lines), offset: found.offset };
-    },
-    async loadSteps() {
-      const path = this.path;
-      const found = await api("/api/steps", { path, offset: this.steps.offset });
-      if (found && path === this.path) this.steps = { lines: this.steps.lines.concat(found.lines), offset: found.offset };
+    loadMore(name) {
+      const chained = (this.queue[name] || Promise.resolve()).then(async () => {
+        const path = this.path;
+        const found = await api(`/api/${name}`, { path, offset: this[name].offset });
+        if (found && path === this.path) this[name] = { lines: this[name].lines.concat(found.lines), offset: found.offset };
+      });
+      this.queue[name] = chained.catch(error => console.warn(`${name} did not load`, error));
+      return chained;
     },
     async loadLogs() {
       if (!this.record || !this.logName) return;
@@ -1199,52 +1544,62 @@ const app = Vue.createApp({
     async loadDescribe() {
       if (this.describeText !== null) return;
       const path = this.path;
-      const found = await api("/api/describe", { path });
+      const found = await this.heavy(api("/api/describe", { path }));
       if (path === this.path) this.describeText = found ? found.text : "the record cannot be described";
     },
     async loadTable() {
-      const found = await api("/api/table");
+      const found = await this.heavy(api("/api/table"));
       if (found) { this.tableRows = found.rows; this.tableLoaded = true; }
     },
     async loadCompare() {
       const { a, b } = this.route.params;
       if (!a || !b) { this.compareData = null; return; }
-      const [recordA, recordB, historyA, historyB, diff] = await Promise.all([
+      const [recordA, recordB, historyA, historyB, diff] = await this.heavy(Promise.all([
         api("/api/record", { path: a }), api("/api/record", { path: b }), api("/api/history", { path: a }), api("/api/history", { path: b }),
-        api("/api/diff", { a, b })]);
+        api("/api/diff", { a, b })]));
       if (!recordA || !recordB) { this.compareData = { missing: true }; return; }
       this.compareData = { a: { path: a, record: recordA, history: historyA ? historyA.lines : [] },
                            b: { path: b, record: recordB, history: historyB ? historyB.lines : [] },
                            diff: diff ? (diff.diff.length ? diff.diff : ["no difference"]) : ["no resolved.yaml to compare"] };
     },
+    heavy(promise) {
+      this.busy += 1;
+      return promise.finally(() => { this.busy -= 1; });
+    },
     async loadPredictions() {
       if (!this.record || !this.predictionFile) { this.predictionsData = null; return; }
-      const path = this.path;
-      const found = await api("/api/predictions", { path, name: this.predictionFile, sample: 2000 });
-      if (path === this.path) this.predictionsData = found;
+      const path = this.path, name = this.predictionFile;
+      const found = await this.heavy(api("/api/predictions", { path, name, sample: this.sampleAll ? "all" : 2000, bins: this.plot.bins }));
+      if (path === this.path && name === this.predictionFile) this.predictionsData = found;
     },
     async loadPrep() {
       if (this.prepData !== null) return;
       const path = this.path;
-      const found = await api("/api/prep", { path });
+      const found = await this.heavy(api("/api/prep", { path }));
       if (path === this.path) this.prepData = found || { fields: [], preprocessors: {}, missing: true };
     },
     async loadFiles() {
       const path = this.path;
-      const found = await api("/api/files", { path });
+      const found = await this.heavy(api("/api/files", { path }));
       if (path === this.path) this.filesData = found;
     },
+    recordFile(name) { return `/file?path=${encodeURIComponent(`${this.path}/${name}`)}`; },
     async openFile(name) {
+      const kind = fileKind(name);
+      if (kind === "image" || kind === "pdf") { this.fileView = { name, kind, url: this.recordFile(name) }; return; }
+      if (kind === "binary") {
+        this.fileView = { name, kind, text: `a .${name.split(".").pop()} file is not shown here; save it and open it with the tool that reads it` };
+        return;
+      }
       const path = this.path;
-      const found = await api("/api/text", { path, name });
-      if (path === this.path) this.fileView = found || { name, text: "this file is not shown as text", truncated: false, size: 0 };
+      const found = await this.heavy(api("/api/text", { path, name }));
+      if (path === this.path) this.fileView = found ? { ...found, kind } : { name, kind, text: "this file could not be read", truncated: false, size: 0 };
     },
     async loadEvents() {
       const path = this.path;
-      const found = await api("/api/events", { path });
+      const found = await this.heavy(api("/api/events", { path }));
       if (path === this.path) this.eventsData = found;
     },
-    isText(name) { return /\.(yaml|yml|json|jsonl|txt|md|csv|py|sh|sub|plan|log)$/i.test(name); },
     togglePlaying() {
       if (this.playing) { this.stopPlaying(); return; }
       if (!this.record || !this.record.samples.length) return;
@@ -1263,7 +1618,7 @@ const app = Vue.createApp({
       if (this.tab === "files") await this.loadFiles();
       if (this.tab === "timeline") await this.loadEvents();
       if (this.tab !== "samples") this.stopPlaying();
-      if ((this.tab === "steps" || this.tab === "monitor") && !this.steps.lines.length) await this.loadSteps();
+      if ((this.tab === "steps" || this.tab === "monitor") && !this.steps.lines.length) await this.loadMore("steps");
       if (this.tab === "logs" || this.tab === "monitor") await this.loadLogs();
       if (this.tab === "plots" || this.tab === "samples" || this.tab === "model") await this.loadTexts();
       if (this.tab === "describe") await this.loadDescribe();
@@ -1306,6 +1661,7 @@ const app = Vue.createApp({
     setFilter(value) { this.go({ q: value }, true); },
     closeItem() { this.go({ item: null }, true); },
     closeChart() { this.go({ chart: null }, true); },
+    closeDiagram() { this.go({ diagram: null }, true); },
     openChart(name) {
       this.modalHeight = Math.max(360, Math.round(window.innerHeight * 0.72));
       this.go({ chart: name });
@@ -1316,19 +1672,20 @@ const app = Vue.createApp({
       if (index < 0 || !names.length) return;
       this.go({ item: names[(index + direction + names.length) % names.length] }, true);
     },
-    pickBox(box) { this.go({ node: box.name }, true); },
-    closeBox() { this.go({ node: null }, true); },
+    downloadModal() { if (this.$refs.modal) this.$refs.modal.download(); },
+    resetPlot() { this.plot = { ...defaultPlot(), logy: this.logy }; },
     async copy(text) {
       try { await navigator.clipboard.writeText(text || ""); } catch (error) { console.warn("clipboard unavailable", error); }
     },
     async tick() {
-      if (!this.path) { await this.loadLive(); return; }
+      await this.loadLive();
+      if (!this.path) return;
       if (this.page === "table") { await this.loadTable(); return; }
       if (this.page === "compare" || !this.record) return;
       if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
       if (!["running", "pending"].includes(this.state)) return;
       await this.loadRecord();
-      if (this.tab === "steps" || this.tab === "monitor") await this.loadSteps();
+      if (this.tab === "steps" || this.tab === "monitor") await this.loadMore("steps");
       if (this.tab === "logs" || this.tab === "monitor") await this.loadLogs();
       if (this.tab === "timeline") await this.loadEvents();
     },
@@ -1382,19 +1739,21 @@ const app = Vue.createApp({
     },
     async onChange(changed) {
       this.refreshed = new Date().toLocaleTimeString();
-      const touched = name => changed.some(item => item === name || item.endsWith(`/${name}`));
+      const own = name => changed.some(item => item === name || item === `${this.path}/${name}`);
+      const elsewhere = changed.some(item => item === "tree" || item.endsWith("/history.jsonl") || item.endsWith("/run.json"));
       if (changed.includes("tree")) await this.loadTree();
-      if (this.page === "home") { await this.loadLive(); return; }
+      if (this.page === "home" || elsewhere) await this.loadLive();
+      if (this.page === "home") return;
       if (this.page === "table") { await this.loadTable(); return; }
       if (this.page === "compare" || !this.record) return;
       if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
-      const rest = changed.filter(name => !["tree", "history.jsonl", "steps.jsonl", "stdout.txt", "stderr.txt", "events.jsonl"].includes(name));
+      const rest = changed.filter(name => !name.includes("/") && !["tree", "history.jsonl", "steps.jsonl", "stdout.txt", "stderr.txt", "events.jsonl"].includes(name));
       if (rest.length) await this.loadRecord();
-      else if (touched("history.jsonl")) await this.loadHistory();
-      if (touched("steps.jsonl") && (this.tab === "steps" || this.tab === "monitor")) await this.loadSteps();
-      if ((touched("stdout.txt") || touched("stderr.txt")) && (this.tab === "logs" || this.tab === "monitor")) await this.loadLogs();
-      if (touched("events.jsonl") && this.tab === "timeline") await this.loadEvents();
-      if (touched("predictions.parquet") && this.tab === "predictions") await this.loadPredictions();
+      else if (own("history.jsonl")) await this.loadMore("history");
+      if (own("steps.jsonl") && (this.tab === "steps" || this.tab === "monitor")) await this.loadMore("steps");
+      if ((own("stdout.txt") || own("stderr.txt")) && (this.tab === "logs" || this.tab === "monitor")) await this.loadLogs();
+      if (own("events.jsonl") && this.tab === "timeline") await this.loadEvents();
+      if (own("predictions.parquet") && this.tab === "predictions") await this.loadPredictions();
     },
   },
   mounted() {
@@ -1406,6 +1765,7 @@ const app = Vue.createApp({
     window.addEventListener("keydown", event => {
       if (event.key === "Escape") {
         if (this.route.params.chart) this.closeChart();
+        else if (this.route.params.diagram) this.closeDiagram();
         else if (this.item) this.closeItem();
         return;
       }

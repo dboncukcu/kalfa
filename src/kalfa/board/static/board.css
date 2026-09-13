@@ -50,13 +50,25 @@ button { font: inherit; color: inherit; }
 .note { color: var(--ink-2); max-width: 900px; margin: 0 0 12px; }
 .training { padding: 4px 0; }
 .training + .training { border-top: 1px solid var(--line); }
-.timeline { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; }
+.chain { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; margin-top: 2px; }
+.chain .arrow { color: var(--muted); }
+.effect { margin-top: 8px; }
+.cards.compact .card.wide { grid-column: span 2; }
+@media (max-width: 960px) { .cards.compact .card.wide { grid-column: auto; } }
 .empty { color: var(--muted); margin: 8px 0; }
 .error { color: var(--failed); }
 
 .sidebar { width: 292px; flex: none; display: flex; flex-direction: column; background: var(--surface); border-right: 1px solid var(--line); }
 .brand { padding: 14px 14px 10px; border-bottom: 1px solid var(--line); }
 .brand-row { display: flex; align-items: center; gap: 8px; }
+.logo { width: 20px; height: 20px; display: inline-flex; flex: none; }
+.logo svg { width: 100%; height: 100%; display: block; }
+button.fold { margin-left: auto; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 6px 2px; border-radius: 4px; }
+button.fold:hover { background: var(--surface-2); color: var(--ink); }
+.sidebar.closed { width: 44px; }
+.sidebar.closed .brand { padding: 12px 6px; border-bottom: 0; }
+.sidebar.closed .brand-row { flex-direction: column; gap: 10px; }
+.sidebar.closed button.fold { margin-left: 0; }
 .brand h1 { font-size: 15px; letter-spacing: 0.01em; }
 .brand h1 a { color: inherit; text-decoration: none; }
 .root { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
@@ -162,24 +174,10 @@ button.tiny { border: 0; background: none; color: var(--accent); cursor: pointer
 button.tiny:hover { text-decoration: underline; }
 .names { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .names .chip { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.inside .section + .section { margin-top: 14px; }
-.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
-.lines { font-family: var(--mono); font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.layers { display: flex; flex-direction: column; gap: 5px; }
-.layer .layers { margin: 0 8px 8px 22px; }
-.layer { border: 1px solid var(--line); border-left: 3px solid var(--line-2); border-radius: 6px; background: var(--surface); }
-.layer.torch { border-left-color: #2f6fdd; }
-.layer.lego { border-left-color: #17a673; }
-.layer.model { border-left-color: #8e5bd8; }
-.layer-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 6px 12px; }
-.layer-row.clickable { cursor: pointer; }
-.layer-row.clickable:hover { background: var(--surface-2); }
-.layer-name { color: var(--muted); }
-.layer-class { font-weight: 600; }
-.layer-summary { color: var(--ink-2); }
-.layer-shape { margin-left: auto; color: var(--ink-2); }
-.layer-params, .layer-toggle { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.layer-link { height: 12px; margin-left: 18px; border-left: 1px solid var(--line-2); }
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--line-2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.file-image { max-width: 100%; background: white; border-radius: 6px; display: block; }
+.file-frame { width: 100%; height: 70vh; border: 1px solid var(--line); border-radius: 6px; }
 
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: var(--shadow); margin-bottom: 14px; overflow: hidden; }
 .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
@@ -231,8 +229,17 @@ ul.plain { margin: 0; padding-left: 18px; }
 .gallery figcaption { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 6px; text-align: center; }
 .lightbox { position: fixed; inset: 0; background: rgba(10, 12, 16, 0.78); display: flex; align-items: center; justify-content: center; z-index: 10; cursor: zoom-out; }
 .lightbox figure { margin: 0; max-width: 92vw; max-height: 92vh; cursor: default; text-align: center; }
-.chart-modal { width: min(94vw, 1400px); cursor: default; margin: 0; }
+.chart-modal { width: min(96vw, 1600px); cursor: default; margin: 0; }
 .chart-modal .toolbar { margin-bottom: 4px; }
+.modal-body { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 18px; }
+.modal-chart { min-width: 0; }
+.plot-panel { display: flex; flex-direction: column; gap: 10px; font-size: 12px; color: var(--ink-2); border-left: 1px solid var(--line); padding-left: 18px; }
+.plot-panel label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plot-panel input[type=range] { flex: 1; min-width: 60px; }
+.plot-panel select { font: inherit; font-size: 12px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 2px 4px; }
+.plot-panel .card-label { margin-bottom: 0; }
+.panel-actions { display: flex; gap: 8px; margin-top: 6px; }
+@media (max-width: 900px) { .modal-body { grid-template-columns: 1fr; } .plot-panel { border-left: 0; padding-left: 0; } }
 .lightbox img { max-width: 92vw; max-height: 84vh; background: white; border-radius: 6px; }
 .lightbox pre.viewer { width: min(92vw, 1100px); max-height: 80vh; background: var(--surface); padding: 16px 18px; border-radius: 6px; text-align: left; margin: 0 auto; }
 .lightbox figcaption { color: #e8eaed; margin-top: 10px; font-family: var(--mono); font-size: 12px; display: flex; gap: 8px; justify-content: center; align-items: center; }
@@ -262,17 +269,26 @@ pre.diff .hunk { color: var(--accent); }
 .chart .cursor { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; }
 .diagram { position: relative; }
 .diagram-scroll { position: relative; overflow: auto; }
-.diagram svg { display: block; font-family: var(--mono); font-size: 11px; }
+.diagram svg { display: block; font-family: var(--mono); font-size: 11px; background: var(--surface-2); border-radius: 6px; cursor: grab; user-select: none; }
+.diagram svg.grabbing { cursor: grabbing; }
+.chart-tools { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.chart-tools .small { padding: 1px 8px; font-size: 11px; }
 .diagram svg text { fill: var(--ink); }
 .diagram svg tspan.first { font-weight: 600; }
-.diagram .edge { fill: none; stroke: var(--ink-2); stroke-width: 1.3; opacity: 0.85; }
-.diagram .edge.dashed { stroke-dasharray: 4 3; opacity: 0.6; }
 .diagram .arrowhead { fill: var(--ink-2); }
 .diagram .edge-label { font-size: 10px; fill: var(--ink-2); }
 .diagram .edge-label-back { fill: var(--surface); }
 .diagram .node.clickable { cursor: pointer; }
-.diagram .node:hover rect { fill-opacity: 0.3; }
-.diagram .node.selected rect { fill-opacity: 0.36; stroke-width: 2.2; }
+.diagram .node.clickable:not(.open) > rect:hover { fill-opacity: 0.28; }
+.diagram .node.open > rect { stroke-dasharray: 5 3; }
+.diagram .pin line { stroke: var(--ink-2); stroke-width: 1.3; }
+.diagram .pin-label { font-size: 9.5px; fill: var(--muted); }
+.diagram text.body { font-size: 11px; fill: var(--ink-2); }
+.diagram .wire { fill: none; stroke: var(--ink-2); stroke-width: 1.3; opacity: 0.85; }
+.diagram .wire:hover { stroke-width: 2.6; opacity: 1; }
+.diagram .wire.dashed { stroke-dasharray: 4 3; opacity: 0.6; }
+.diagram .wire-handle { stroke: transparent; stroke-width: 10; cursor: ew-resize; }
+.diagram .wire-handle:hover { stroke: var(--accent-soft); }
 .diagram .tooltip { transform: none; top: auto; font-family: var(--mono); }
 .tooltip { position: absolute; top: 34px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); pointer-events: none; white-space: nowrap; z-index: 2; }
 .tooltip .swatch { margin-right: 5px; }

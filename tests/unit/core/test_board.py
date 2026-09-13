@@ -64,7 +64,8 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert [point["status"]["state"] for point in sweep["points"]] == ["running", "finished"]
     assert sweep["points"][0]["objective"] == {"value": 3.0, "turn": 1} and sweep["best"]["id"] == 1
     assert "-lr: 3.0" in board.diff("sweeps/grid/0000", "sweeps/grid/0001")["diff"]
-    assert board.record("../outside") is None and board.file("runs/one/resolved.yaml") is None
+    assert board.record("../outside") is None and board.file("../outside/resolved.yaml") is None
+    assert board.file("runs/one/resolved.yaml").name == "resolved.yaml" and board.file("runs/one") is None
     assert board.file("runs/one/plots/loss_curve.png").read_bytes() == b"png" and board.record("nowhere") is None
     assert run["logs"] == ["stdout.txt"] and list(run["architecture"]["models"]) == ["m"]
     assert run["config"]["seed"] == 7
@@ -82,6 +83,9 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert pair["rmse"] > 0 and len(pair["histogram"]["counts"]) == 40 and pair["worst"][0]["row"] == 3
     assert predictions["flags"] == ["flag_y"] and len(predictions["sample"]) == 4
     assert board.predictions("nowhere") is None
+    coarse = board.predictions("runs/one", sample="all", bins=5)
+    assert len(coarse["pairs"][0]["histogram"]["counts"]) == 5 and len(coarse["sample"]) == 4
+    assert len(board.predictions("runs/one", sample=2)["sample"]) == 2
     files = board.files("runs/one")
     assert "history.jsonl" in [item["name"] for item in files["files"]] and files["total"] > 0
     assert board.text("runs/one", "resolved.yaml")["text"].startswith("seed: 7")
@@ -114,6 +118,8 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     after = board.watched("runs/one")
     assert [name for name in after if after[name] != before[name]] == ["history.jsonl"]
     assert "0000/history.jsonl" in board.watched("sweeps/grid") and "runs/one/steps.jsonl" in board.watched("")
+    assert "sweeps/grid/0000/history.jsonl" in board.watched("runs/one")
+    assert "runs/one/history.jsonl" not in board.watched("runs/one")
     assert board.stop("nowhere") is None
     assert board.stop("sweeps/grid") == {"stopped": ["sweeps/grid", "sweeps/grid/0000"]}
     assert board.record("sweeps/grid/0000")["status"]["stop"]["by"] == "board"

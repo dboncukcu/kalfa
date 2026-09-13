@@ -149,7 +149,7 @@ def test_stop_is_an_or_and_keeps_trigger_states():
     out = stop(out["rules"], [functools.partial(metric_below, monitor="v", value=1.0), trig(False)], {"v": 5.0})
     assert out["stop"] is False and out["rules"]["stop"][1] == {"seen": 2}
     assert stop(open_rules({}), [], {})["stop"] is False
-    assert effects({}) == {}
+    assert effects({}, {}, {}, {}, None)["effects"] == {}
 
 
 def test_a_stop_file_in_the_record_ends_the_loop(tmp_path):

@@ -3,21 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>kalfa board</title>
+<title>Kalfa Board</title>
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 <link rel="stylesheet" href="/static/board.css">
 </head>
 <body>
 <div id="app" v-cloak>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{closed: !sidebar}">
     <header class="brand">
       <div class="brand-row">
-        <h1><a href="#/">kalfa board</a></h1>
+        <a class="logo" href="#/" v-html="logoSvg" aria-hidden="true" title="home"></a>
+        <h1 v-if="sidebar"><a href="#/">kalfa board</a></h1>
         <span class="pulse" :class="{live: live && refresh !== 'off'}" :title="live ? 'following a running record' : 'idle'"></span>
+        <span class="spinner" v-if="busy" title="reading"></span>
+        <button class="fold" @click="toggleSidebar" :title="sidebar ? 'hide the records' : 'show the records'">{{ sidebar ? '‹' : '›' }}</button>
       </div>
-      <div class="root" :title="tree.root">{{ tree.root }}</div>
-      <input class="filter" v-model.trim="filter" type="search" placeholder="filter records" spellcheck="false">
+      <div class="root" :title="tree.root" v-if="sidebar">{{ tree.root }}</div>
+      <input class="filter" v-model.trim="filter" type="search" placeholder="filter records" spellcheck="false" v-if="sidebar">
     </header>
-    <nav class="tree">
+    <nav class="tree" v-show="sidebar">
       <section v-for="group in groups" :key="group.name" class="group">
         <button class="group-head" @click="toggleGroup(group.name)">
           <span class="chevron" :class="{open: !collapsed[group.name]}"></span>
@@ -36,7 +40,7 @@
       </section>
       <p v-if="!groups.length" class="empty">no record under the root yet</p>
     </nav>
-    <footer class="sidebar-foot">
+    <footer class="sidebar-foot" v-show="sidebar">
       <label class="refresh">refresh
         <select v-model="refresh">
           <option value="realtime">when the record changes</option>
@@ -322,7 +326,7 @@
             <chart :lines="activeLossChart.lines" :title="activeLossChart.name + ' (minimized)'" :xlabel="turnLabel" :ylabel="activeLossChart.name" :logy="logy" :marks="ruleMarks" :expand="link({tab: 'curves', chart: activeLossChart.name})"></chart>
           </div>
           <div class="card" v-for="entry in stepCharts.filter(item => item.name.startsWith('loss/'))" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name + ' per step'" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :expand="link({tab: 'steps', chart: entry.name})"></chart>
+            <chart :lines="entry.lines" :title="entry.name + ' per step'" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :turns="true" :expand="link({tab: 'steps', chart: entry.name})"></chart>
           </div>
         </div>
         <p class="empty" v-if="!monitorChart && !activeLossChart && !stepCharts.length">nothing recorded yet, the first {{ turnLabel }} is running</p>
@@ -343,7 +347,12 @@
           </div>
             <div class="card" v-if="rulesFired.length">
               <div class="card-label">rules fired</div>
-              <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
+              <div class="chain">
+                <template v-for="(firing, index) in rulesFired" :key="firing.turn">
+                  <span class="arrow" v-if="index">→</span>
+                  <span><b class="mono">{{ firing.names }}</b> <span class="muted">({{ turnLabel }} {{ firing.turn }})</span></span>
+                </template>
+              </div>
             </div>
             <div class="card" v-if="logs.lines.length">
               <div class="toolbar"><span class="card-label">{{ logs.name }}</span><a class="small" :href="link({tab: 'logs'})">all</a></div>
@@ -368,34 +377,61 @@
               </tbody></table>
               </div>
             </div>
-            <div class="card" v-if="training.length">
+            <div class="card wide" v-if="training.length">
               <div class="card-label">training</div>
               <div class="training" v-for="entry in training" :key="entry.name">
                 <div><b>{{ entry.name }}</b> minimizes <b class="mono">{{ entry.current || 'its loss' }}</b><span class="muted mono" v-if="entry.uri" :title="entry.uri"> ({{ shortUri(entry.uri) }})</span><span class="muted" v-if="entry.parts.length"> = {{ entry.parts.join(' + ') }}</span></div>
                 <div class="muted" v-if="entry.lr !== null">learning rate {{ fmt(entry.lr) }} at the last {{ turnLabel }}</div>
-                <div class="muted timeline" v-if="entry.segments.length > 1">
-                  <span v-for="segment in entry.segments" :key="segment.from"><span class="mono">{{ segment.loss }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
+                <div class="chain" v-if="entry.segments.length > 1">
+                  <template v-for="(segment, index) in entry.segments" :key="segment.from">
+                    <span class="arrow" v-if="index">→</span>
+                    <span><b class="mono">{{ segment.loss }}</b> <span class="muted">({{ turnLabel }} {{ segment.from }})</span></span>
+                  </template>
                 </div>
               </div>
               <div class="training" v-if="effectRows.length">
-                <div class="muted">rule effects, as history.jsonl carries them</div>
-                <div class="muted timeline" v-for="row in effectRows" :key="row.target">
-                  <span class="mono">{{ row.target }}</span>
-                  <span v-for="segment in row.segments" :key="segment.from"><span class="mono">{{ segment.value === undefined ? 'as written' : text(segment.value) }}</span> {{ turnLabel }}s {{ segment.from }} to {{ segment.to }}</span>
+                <div class="card-label">rule effects, as history.jsonl carries them</div>
+                <div class="effect" v-for="row in effectRows" :key="row.target">
+                  <div class="mono muted">{{ row.target }}</div>
+                  <div class="chain">
+                    <template v-if="row.segments.length">
+                      <template v-for="(segment, index) in row.segments" :key="segment.from">
+                        <span class="arrow" v-if="index">→</span>
+                        <span><b class="mono">{{ segment.value === undefined ? 'as written' : chainText(segment.value) }}</b> <span class="muted">({{ turnLabel }} {{ segment.from }})</span></span>
+                      </template>
+                    </template>
+                    <template v-else>
+                      <span v-if="row.written !== undefined"><b class="mono">{{ chainText(row.written) }}</b> <span class="muted">(as written)</span></span>
+                      <template v-for="firing in row.firings" :key="firing.turn">
+                        <span class="arrow">→</span>
+                        <span><b class="mono">{{ firing.text }}</b> <span class="muted">({{ turnLabel }} {{ firing.turn }})</span></span>
+                      </template>
+                    </template>
+                  </div>
                 </div>
               </div>
             </div>
             <div class="card" v-if="rateRows.length">
               <div class="card-label">learning rates</div>
-              <div class="table-scroll">
-              <table class="table"><tbody>
-                <tr v-for="row in rateRows" :key="row.key"><td>{{ row.key }}</td><td class="num mono">{{ fmt(row.last) }}</td></tr>
-              </tbody></table>
+              <div class="effect" v-for="row in rateRows" :key="row.key">
+                <div class="mono muted">{{ row.key }} <template v-if="row.changes > 10">· {{ row.changes }} values, the first and the last four</template></div>
+                <div class="chain">
+                  <template v-for="(segment, index) in row.segments" :key="segment ? segment.from : 'gap'">
+                    <span class="arrow" v-if="index">→</span>
+                    <span v-if="segment"><b class="mono">{{ fmt(segment.value) }}</b> <span class="muted">({{ turnLabel }} {{ segment.from }})</span></span>
+                    <span class="muted" v-else>…</span>
+                  </template>
+                </div>
               </div>
             </div>
             <div class="card" v-if="rulesFired.length">
               <div class="card-label">rules fired</div>
-              <ul class="plain"><li v-for="line in rulesFired" :key="line">{{ line }}</li></ul>
+              <div class="chain">
+                <template v-for="(firing, index) in rulesFired" :key="firing.turn">
+                  <span class="arrow" v-if="index">→</span>
+                  <span><b class="mono">{{ firing.names }}</b> <span class="muted">({{ turnLabel }} {{ firing.turn }})</span></span>
+                </template>
+              </div>
             </div>
             <div class="card" v-if="record.resume">
               <div class="card-label">resumed from</div>
@@ -442,28 +478,32 @@
       </div>
 
       <div class="panel" v-if="tab === 'predictions'">
-        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth on a sample of 2,000 rows, the residual histogram and the largest errors over every row, in the original units; the calibration flags are counted on the sample.</p>
+        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
         <div class="toolbar" v-if="record.predictions.length">
           <a v-for="name in record.predictions" :key="name" class="small" :class="{active: predictionFile === name}" :href="link({set: name, pair: null})">{{ name }}</a>
           <template v-if="predictionsData && predictionsData.pairs.length > 1">
             <span class="muted">·</span>
-            <a v-for="pair in predictionsData.pairs" :key="pair.pred" class="small" :class="{active: pairInfo && pairInfo.pred === pair.pred}" :href="link({pair: pair.pred})">{{ pair.target }}</a>
+            <a v-for="pair in predictionsData.pairs" :key="pair.pred" class="small" :class="{active: pairInfo && pairInfo.pred === pair.pred}" :href="link({pair: pair.pred})">{{ pairLabel(pair) }}</a>
           </template>
-          <span class="muted" v-if="predictionsData">{{ count(predictionsData.rows) }} rows · {{ predictionsData.sample.length }} drawn</span>
+          <span class="muted">·</span>
+          <a class="small" :class="{active: !sampleAll}" :href="link({sample: null})">a sample of 2,000</a>
+          <a class="small" :class="{active: sampleAll}" :href="link({sample: 'all'})">all rows</a>
+          <span class="muted" v-if="predictionsData">{{ count(predictionsData.rows) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
+          <span class="spinner" v-if="busy"></span>
         </div>
         <p class="empty" v-if="!record.predictions.length">no predictions file in the record yet</p>
-        <p class="empty" v-else-if="!predictionsData">reading the predictions</p>
+        <p class="empty" v-else-if="!predictionsData"><span class="spinner"></span> reading the predictions</p>
         <template v-else-if="pairInfo">
           <div class="chips">
             <span class="chip">R² = {{ fmt(pairInfo.r2) }}</span>
             <span class="chip">rmse = {{ fmt(pairInfo.rmse) }}</span>
             <span class="chip">mae = {{ fmt(pairInfo.mae) }}</span>
             <span class="chip">{{ count(pairInfo.points) }} points</span>
-            <span class="chip" v-for="flag in predictionsData.flags" :key="flag">{{ flag }}: {{ predictionsData.sample.filter(row => row[flag]).length }} of {{ predictionsData.sample.length }} drawn</span>
+            <span class="chip" v-for="flag in predictionsData.flags" :key="flag">{{ flag }}: {{ count(predictionsData.sample.filter(row => row[flag]).length) }} of {{ count(predictionsData.sample.length) }} drawn</span>
           </div>
           <div class="grid charts">
-            <div class="card"><chart :lines="scatterLines" :title="pairInfo.pred + ' against ' + pairInfo.target" :xlabel="pairInfo.target" :ylabel="pairInfo.pred" kind="scatter" :height="360"></chart></div>
-            <div class="card"><chart :lines="histogramLines" title="residual (prediction minus target)" xlabel="residual" ylabel="points" kind="bar" :height="360"></chart></div>
+            <div class="card"><chart :lines="scatterLines" :title="pairInfo.pred + ' against ' + pairInfo.target" :xlabel="pairInfo.target" :ylabel="pairInfo.pred" kind="scatter" :height="360" :expand="link({chart: 'scatter'})"></chart></div>
+            <div class="card"><chart :lines="histogramLines" title="residual (prediction minus target)" xlabel="residual" ylabel="points" kind="bar" :height="360" :expand="link({chart: 'histogram'})"></chart></div>
           </div>
           <div class="card">
             <div class="card-label">largest errors</div>
@@ -482,7 +522,7 @@
 
       <div class="panel" v-if="tab === 'prep'">
         <p class="note">The fitted plan under fitted/preprocessors: every field with its chain and the columns it produces, and what each preprocessor learned on the train set (a scaler's mean and scale per column, an encoder's categories, an imputer's statistic), read from the pickles.</p>
-        <p class="empty" v-if="!prepData">reading the fitted preprocessors</p>
+        <p class="empty" v-if="!prepData"><span class="spinner"></span> reading the fitted preprocessors</p>
         <p class="empty" v-else-if="prepData.missing">no fitted preprocessors in the record</p>
         <template v-else>
           <div class="card">
@@ -532,26 +572,35 @@
       </div>
 
       <div class="panel" v-if="tab === 'files'">
-        <p class="note">Every file of the record with its size and time; text files open here (the first 400 KB), weights and tables are listed only.</p>
+        <p class="note">Every file of the record with its size and time. A name opens the file here: text (the first 400 KB), images and PDFs; a weights file or a table says it is not shown. Save downloads any file as it is.</p>
         <div class="grid" :class="{two: fileView}">
           <div class="card">
             <div class="card-label">files <span class="muted" v-if="filesData">· {{ filesData.files.length }} files, {{ fmtBytes(filesData.total) }}</span></div>
             <div class="table-scroll" v-if="filesData">
             <table class="table">
-              <thead><tr><th>name</th><th class="num">size</th><th>modified</th></tr></thead>
+              <thead><tr><th>name</th><th class="num">size</th><th>modified</th><th></th></tr></thead>
               <tbody>
                 <tr v-for="item in filesData.files" :key="item.name" :class="{active: fileView && fileView.name === item.name}">
-                  <td class="mono"><a class="link" v-if="isText(item.name)" href="#" @click.prevent="openFile(item.name)">{{ item.name }}</a><template v-else>{{ item.name }}</template></td>
+                  <td class="mono"><a class="link" href="#" @click.prevent="openFile(item.name)">{{ item.name }}</a></td>
                   <td class="num mono">{{ fmtBytes(item.size) }}</td><td class="muted">{{ ago(item.modified) }}</td>
+                  <td><a class="small" :href="recordFile(item.name)" :download="item.name.split('/').pop()">save</a></td>
                 </tr>
               </tbody>
             </table>
             </div>
-            <p class="empty" v-else>reading the files</p>
+            <p class="empty" v-else><span class="spinner"></span> reading the files</p>
           </div>
           <div class="card" v-if="fileView">
-            <div class="toolbar"><span class="card-label">{{ fileView.name }}</span><span class="muted" v-if="fileView.truncated">first {{ fmtBytes(400000) }} of {{ fmtBytes(fileView.size) }}</span><button class="small" @click="fileView = null">close</button></div>
-            <pre class="code">{{ fileView.text }}</pre>
+            <div class="toolbar">
+              <span class="card-label">{{ fileView.name }}</span>
+              <span class="muted" v-if="fileView.truncated">first {{ fmtBytes(400000) }} of {{ fmtBytes(fileView.size) }}</span>
+              <a class="small" :href="recordFile(fileView.name)" :download="fileView.name.split('/').pop()">save</a>
+              <button class="small" @click="fileView = null">close</button>
+            </div>
+            <img class="file-image" v-if="fileView.kind === 'image'" :src="fileView.url" :alt="fileView.name">
+            <iframe class="file-frame" v-else-if="fileView.kind === 'pdf'" :src="fileView.url" :title="fileView.name"></iframe>
+            <p class="muted" v-else-if="fileView.kind === 'binary'">{{ fileView.text }}</p>
+            <pre class="code" v-else>{{ fileView.text }}</pre>
           </div>
         </div>
       </div>
@@ -599,29 +648,30 @@
         </div>
         <p class="note">One line of steps.jsonl per optimizer update: loss/&lt;optimizer&gt; is the batch loss that update stepped
           on (not the running mean of the turn), lr/&lt;optimizer&gt; its learning rate at that step, grad_norm/&lt;optimizer&gt;
-          the gradient norm before clipping under grad_clip. Dashed lines mark the turns; a long run is drawn with at most
-          2000 points per line, the extremes of every bucket kept, so spikes stay visible.</p>
+          the gradient norm before clipping under grad_clip. Dashed lines mark the {{ turnLabel }}s, labelled along the top,
+          and the tooltip names the {{ turnLabel }} of a step; a long run is drawn with at most 2000 points per line, the
+          extremes of every bucket kept, so spikes stay visible.</p>
         <div class="grid charts" v-if="stepCharts.length">
           <div class="card" v-for="entry in stepCharts" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :expand="link({chart: entry.name})"></chart>
+            <chart :lines="entry.lines" :title="entry.name" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :turns="true" :expand="link({chart: entry.name})"></chart>
           </div>
         </div>
         <p class="empty" v-else>no step written yet</p>
       </div>
 
       <div class="panel" v-if="tab === 'model'">
-        <p class="note">The graph of every report model from architecture.json, written at the end of the run: one box per node with the shapes one batch traced, every wire with its width, the input with its feature columns. A box clicked opens below the drawing, block by block: the layers of a node with their shapes and parameter counts (a block with layers inside unfolds), the features of the input, the nodes of another model; hover lists a few. The module text is the torch repr.</p>
+        <p class="note">Every report model from architecture.json, written at the end of the run, drawn as a schematic: one block per node of the config with its input pins on the left and its output pins on the right, every wire with its width, the losses and the optimizers beside the outputs. A block clicked opens in place: the layers of a node chained left to right with the tensor shapes on the wires between them, the nodes of another model with their wires, the features of the input one per line; an inner block opens the same way, a second click closes it; hover lists what a block holds. Drag a block to move it, drag the upright part of a wire to bend it elsewhere, the wheel zooms, the background pans; the arrangement is kept in this browser per record, fit and reset undo it, save writes the png as arranged, expand opens it large. The module text is the torch repr.</p>
         <template v-if="currentArchitecture">
           <div class="toolbar" v-if="architectureModels.length > 1 || currentArchitecture.parameters">
             <template v-if="architectureModels.length > 1">
-              <a v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" :href="link({model: label, node: null})">{{ label }}</a>
+              <a v-for="label in architectureModels" :key="label" class="small" :class="{active: currentArchitecture.label === label}" :href="link({model: label})">{{ label }}</a>
             </template>
             <span class="muted" v-if="currentArchitecture.parameters">{{ paramCount(currentArchitecture.parameters) }}<template v-if="currentArchitecture.trainable !== undefined && currentArchitecture.trainable !== currentArchitecture.parameters">, {{ count(currentArchitecture.trainable) }} trainable</template></span>
           </div>
           <div class="card">
-            <diagram :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :widths="currentArchitecture.widths || {}" :title="currentArchitecture.label" :selected="route.params.node || ''" @pick="pickBox"></diagram>
+            <diagram v-if="expandedDiagram !== 'model'" :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :widths="currentArchitecture.widths || {}" :models="record.architecture.models" :title="currentArchitecture.label" :store="path + '/model/' + currentArchitecture.label" :expand="link({diagram: 'model'})"></diagram>
+            <p class="muted" v-else>open in the large view</p>
           </div>
-          <inside v-if="selectedBox" :box="selectedBox" :open="selectedBox.ref ? link({model: selectedBox.ref, node: null}) : ''" @close="closeBox"></inside>
         </template>
         <p class="empty" v-else>no architecture.json in the record; runs write it since this version</p>
         <div class="card" v-if="record.plots.includes('architecture_text.txt')">
@@ -636,11 +686,11 @@
       </div>
 
       <div class="panel" v-if="tab === 'data'">
-        <p class="note">The data block from data.json: the source, every transform with its call and the columns it added or removed, the split, the fit on train (dashed arrows from valid and test: applied, never fitted), the feeds and the loaders. A box clicked opens below the drawing with everything it holds, the columns as chips; hover lists a few. The tables below list the calls and the columns of every stage.</p>
+        <p class="note">The data block from data.json: the source, every transform with its call and the columns it added or removed, the split, the fit on train (dashed wires from valid and test: applied, never fitted), the feeds and the loaders. A block clicked opens in place with everything it holds, the columns named one per line; a second click closes it; hover lists a few. The tables below list the calls and the columns of every stage.</p>
         <div class="card" v-if="pipeline">
-          <diagram :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline" :selected="route.params.node || ''" @pick="pickBox"></diagram>
+          <diagram v-if="expandedDiagram !== 'data'" :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline" :store="path + '/data'" :expand="link({diagram: 'data'})"></diagram>
+          <p class="muted" v-else>open in the large view</p>
         </div>
-        <inside v-if="pipeline && selectedBox" :box="selectedBox" @close="closeBox"></inside>
         <div class="card" v-if="dataStages.length">
           <div class="card-label">stages before the split</div>
           <div class="table-scroll">
@@ -823,15 +873,39 @@
 
   <div class="lightbox" v-if="expanded" @click="closeChart">
     <div class="chart-modal card" @click.stop>
-      <div class="toolbar">
-        <span class="card-label">{{ expanded.name }}</span>
-        <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
-        <button class="small" @click="closeChart">close</button>
+      <div class="modal-body">
+        <div class="modal-chart">
+          <div class="toolbar">
+            <span class="card-label">{{ expanded.name }}</span>
+            <button class="small" @click="closeChart">close</button>
+          </div>
+          <chart ref="modal" :lines="expanded.lines" :kind="expanded.kind || 'line'" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel || expanded.name" :logy="plot.logy" :marks="expanded.marks" :turns="!!expanded.turns" :settings="plot" :height="modalHeight"></chart>
+        </div>
+        <aside class="plot-panel">
+          <div class="card-label">settings</div>
+          <label class="toggle"><input type="checkbox" v-model="plot.logy"> log scale on y</label>
+          <label class="toggle"><input type="checkbox" v-model="plot.grid"> grid</label>
+          <label>line width <input type="range" min="0.5" max="6" step="0.5" v-model.number="plot.width"><span class="mono">{{ plot.width }}</span></label>
+          <label>points on lines <input type="range" min="0" max="8" step="1" v-model.number="plot.dots"><span class="mono">{{ plot.dots }}</span></label>
+          <label v-if="expanded.kind === 'scatter'">point size <input type="range" min="1" max="10" step="1" v-model.number="plot.markers"><span class="mono">{{ plot.markers }}</span></label>
+          <label>curve <select v-model="plot.curve"><option value="straight">straight</option><option value="smooth">smooth</option><option value="stepline">steps</option></select></label>
+          <label v-if="expanded.bins">bins <input type="range" min="5" max="200" step="5" v-model.number="plot.bins"><span class="mono">{{ plot.bins }}</span><span class="spinner" v-if="busy"></span></label>
+          <div class="panel-actions">
+            <button class="small" @click="downloadModal">download png</button>
+            <button class="small" @click="resetPlot">reset</button>
+          </div>
+          <p class="muted">the chart's own menu at the top right downloads it too, as it is drawn with these settings</p>
+        </aside>
       </div>
-      <chart :lines="expanded.lines" :xlabel="expanded.xlabel" :ylabel="expanded.name" :logy="expanded.logy || logy" :marks="expanded.marks" :height="modalHeight"></chart>
     </div>
   </div>
-  <div class="lightbox" v-if="item && record && !isSweep && !expanded" @click="closeItem">
+  <div class="lightbox" v-if="expandedDiagram" @click="closeDiagram">
+    <div class="chart-modal card" @click.stop>
+      <diagram v-if="expandedDiagram === 'model'" :boxes="currentArchitecture.boxes" :arrows="currentArchitecture.arrows" :widths="currentArchitecture.widths || {}" :models="record.architecture.models" :title="currentArchitecture.label" :store="path + '/model/' + currentArchitecture.label" :modal="true" :height="modalHeight" @close="closeDiagram"></diagram>
+      <diagram v-else :boxes="pipeline.boxes" :arrows="pipeline.arrows" title="data pipeline" :store="path + '/data'" :modal="true" :height="modalHeight" @close="closeDiagram"></diagram>
+    </div>
+  </div>
+  <div class="lightbox" v-if="item && record && !isSweep && !expanded && !expandedDiagram" @click="closeItem">
     <figure @click.stop>
       <pre class="code viewer" v-if="itemIsText">{{ itemText === undefined ? 'reading' : itemText }}</pre>
       <img v-else :src="fileUrl(tab, item)" :alt="item">
@@ -853,25 +927,48 @@
       <span class="legend">
         <span v-for="kind in kinds" :key="kind" class="legend-item"><span class="swatch" :style="{background: color(kind)}"></span>{{ kindName(kind) }}</span>
       </span>
-      <button class="small chart-save" @click="save" title="download this diagram as a png">save</button>
+      <span class="chart-tools">
+        <button class="small" @click="fit" title="zoom and pan so that everything is in view">fit</button>
+        <button class="small" @click="reset" title="close every block, put every block and wire back, fit">reset</button>
+        <button class="small" @click="save" title="download this schematic as a png, as arranged">save</button>
+        <a v-if="expand && !modal" class="small" :href="expand" title="open this schematic large">expand</a>
+        <button v-if="modal" class="small" @click="$emit('close')">close</button>
+      </span>
     </div>
     <div class="diagram-scroll">
-      <svg :width="layout.width" :height="layout.height" :viewBox="'0 0 ' + layout.width + ' ' + layout.height" @mouseleave="hover = null" @mousemove="onMove">
+      <svg ref="svg" width="100%" :height="viewHeight" :class="{grabbing: drag && drag.kind === 'pan'}" @wheel.prevent="onWheel" @mousedown="startDrag('pan', null, $event)" @mouseleave="hover = null" @mousemove="onMove">
         <defs>
           <marker :id="marker" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" class="arrowhead"></path>
           </marker>
+          <marker v-for="(color, index) in palette()" :key="index" :id="marker + '-' + index" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" :fill="color"></path>
+          </marker>
         </defs>
-        <path v-for="edge in layout.edges" :key="edge.key" :d="edge.path" class="edge" :class="{dashed: edge.dashed}" :marker-end="'url(#' + marker + ')'"></path>
-        <g v-for="edge in layout.edges.filter(item => item.label)" :key="'l' + edge.key">
-          <rect :x="edge.lx - edge.label.length * 3.3 - 4" :y="edge.ly - 9" :width="edge.label.length * 6.6 + 8" height="14" rx="3" class="edge-label-back"></rect>
-          <text :x="edge.lx" :y="edge.ly + 2" text-anchor="middle" class="edge-label">{{ edge.label }}</text>
-        </g>
-        <g v-for="box in layout.boxes" :key="box.name" class="node" :class="{clickable: clickable(box), selected: box.name === selected}" @mouseenter="hover = box" @click="pick(box)">
-          <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" rx="7" :fill="color(box.kind)" fill-opacity="0.16" :stroke="color(box.kind)"></rect>
-          <text :x="box.x + box.width / 2" :y="box.y + 21" text-anchor="middle">
-            <tspan v-for="(line, index) in box.shown" :key="index" :x="box.x + box.width / 2" :dy="index ? 15 : 0" :class="{first: index === 0}">{{ line }}</tspan>
-          </text>
+        <g class="canvas" :transform="canvas">
+          <g v-for="box in layout.boxes" :key="box.key" class="node" :class="[box.kind, {clickable: clickable(box), open: !!(box.inner || box.body)}]" @mousedown.stop="startDrag('box', box, $event)" @mouseenter="enter(box)">
+            <rect :x="box.x" :y="box.y" :width="box.width" :height="box.height" rx="4" :fill="color(box.kind)" :fill-opacity="box.inner || box.body ? 0.05 : 0.14" :stroke="color(box.kind)"></rect>
+            <text :x="box.x + box.width / 2" :y="box.y + 15" text-anchor="middle">
+              <tspan v-for="(line, index) in box.shown" :key="index" :x="box.x + box.width / 2" :dy="index ? 15 : 0" :class="{first: index === 0}">{{ line }}</tspan>
+            </text>
+            <g v-for="(pin, index) in box.inputs" :key="'i' + index" class="pin">
+              <line :x1="box.x - 8" :y1="pinY(box, index)" :x2="box.x" :y2="pinY(box, index)"></line>
+              <text :x="box.x + 4" :y="pinY(box, index) + 3.5" class="pin-label">{{ pin }}</text>
+            </g>
+            <g v-for="(pin, index) in box.outputs" :key="'o' + index" class="pin">
+              <line :x1="box.x + box.width" :y1="pinY(box, index)" :x2="box.x + box.width + 8" :y2="pinY(box, index)"></line>
+              <text :x="box.x + box.width - 4" :y="pinY(box, index) + 3.5" text-anchor="end" class="pin-label">{{ pin }}</text>
+            </g>
+            <text v-if="box.body" class="body" :x="box.x + 14" :y="box.y + box.head + 10">
+              <tspan v-for="(line, index) in box.body" :key="index" :x="box.x + 14" :dy="index ? 13 : 0">{{ line }}</tspan>
+            </text>
+          </g>
+          <path v-for="wire in layout.wires" :key="wire.key" :d="wire.path" class="wire" :class="{dashed: wire.dashed}" :stroke="wire.color || null" :marker-end="'url(#' + markerFor(wire.color) + ')'"></path>
+          <line v-for="wire in layout.wires.filter(item => item.xm !== undefined)" :key="'h' + wire.key" :x1="wire.xm" :y1="wire.y1" :x2="wire.xm" :y2="wire.y2" class="wire-handle" @mousedown.stop="startDrag('bend', wire, $event)"></line>
+          <g v-for="wire in layout.wires.filter(item => item.label)" :key="'l' + wire.key">
+            <rect :x="wire.lx - 3" :y="wire.ly - 9" :width="wire.label.length * 6.2 + 6" height="13" rx="3" class="edge-label-back"></rect>
+            <text :x="wire.lx" :y="wire.ly + 1" class="edge-label" :fill="wire.color || null">{{ wire.label }}</text>
+          </g>
         </g>
       </svg>
       <div class="tooltip" v-if="hoverNote.length" :style="tooltipStyle">
