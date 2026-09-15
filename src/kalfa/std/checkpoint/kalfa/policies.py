@@ -4,23 +4,25 @@ from kalfa.std.checkpoint.base import Policy
 
 
 class Best(Policy):
-    def __init__(self, monitor, mode="min"):
+    def __init__(self, monitor, mode="min", last=True):
         if mode not in ("min", "max"):
             raise ValueError(f"mode must be min or max, got {mode!r}")
         self.monitor = monitor
         self.mode = mode
+        self.last = bool(last)
         self.best = None
 
     def tags(self, metrics):
+        trailing = ["last"] if self.last else []
         value = (metrics or {}).get(self.monitor)
         if value is None or (isinstance(value, float) and math.isnan(value)):
-            return ["last"]
+            return trailing
         value = float(value)
         improved = self.best is None or (value > self.best if self.mode == "max" else value < self.best)
         if improved:
             self.best = value
-            return ["best", "last"]
-        return ["last"]
+            return ["best", *trailing]
+        return trailing
 
     def state(self):
         return {"best": self.best}

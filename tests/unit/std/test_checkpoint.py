@@ -39,6 +39,24 @@ def test_policies():
     assert snap.tags({}) == ["last"] and snap.tags({}) == ["last", "snapshot_2"]
 
 
+def test_best_without_last_writes_only_the_improving_turns():
+    policy = Best("val/rmse", last=False)
+    assert policy.tags({"val/rmse": 1.0}) == ["best"]
+    assert policy.tags({"val/rmse": 2.0}) == []
+    assert policy.tags({}) == [] and policy.tags({"val/rmse": float("nan")}) == []
+    assert policy.tags({"val/rmse": 0.5}) == ["best"] and policy.state() == {"best": 0.5}
+
+
+def test_best_without_last_leaves_last_pt_out(tmp_path):
+    state = state_of()
+    policy = Best("val/rmse", last=False)
+    checkpoint(suffixed(state), policy, {"val/rmse": 1.0}, str(tmp_path))
+    assert (tmp_path / "checkpoints" / "best.pt").exists()
+    assert not (tmp_path / "checkpoints" / "last.pt").exists()
+    checkpoint(suffixed(state), policy, {"val/rmse": 3.0}, str(tmp_path))
+    assert sorted(item.name for item in (tmp_path / "checkpoints").iterdir()) == ["best.pt"]
+
+
 def test_checkpoint_writes_files_and_restores_the_policy(tmp_path):
     state = state_of()
     state["models"]["model"](torch.ones(1, 3)).sum().backward()
