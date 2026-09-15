@@ -19,6 +19,11 @@ def test_check_column_refs(dataset):
     assert "dropped_column_ref" in [problem.kind for problem in prepared.problems]
     prepared = check(["config.yaml"], parse_sets(["data.fields.site_id={}"]))
     assert "column_in_fields" in [problem.kind for problem in prepared.problems]
+    prepared = check(["config.yaml"])
+    assert prepared.document["flow"]["data"]["params"]["prep"]["params"]["spectators"] == ["site_id"]
+    prepared = check(["config.yaml"], parse_sets(["data.spectators=[site_id]"]))
+    assert prepared.problems == []
+    assert prepared.document["flow"]["data"]["params"]["prep"]["params"]["spectators"] == ["site_id"]
 
 
 def test_windows_with_context_and_the_forecast(trained):
@@ -39,3 +44,6 @@ def test_windows_with_context_and_the_forecast(trained):
     assert first["load_23"] == pytest.approx(source.loc[int(first["row"]) + 23, "load"], abs=1e-2)
     assert (record / "plots" / "forecast.png").exists()
     assert abs(float(predictions["pred_y_0"].mean()) - float(predictions["load_0"].mean())) < 60.0
+    assert "site_id" in predictions.columns
+    assert set(predictions["site_id"]) == {"site_0", "site_1", "site_2"}
+    assert predictions.loc[predictions.index[0], "site_id"] == source.loc[int(first["row"]), "site_id"]

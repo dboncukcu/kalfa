@@ -21,11 +21,25 @@ def observed_columns(model, loader, dataset, device):
     return raw, observed
 
 
+def carried_columns(dataset):
+    frame = getattr(dataset, "frame", None)
+    extra = getattr(frame, "extra", None)
+    if extra is None or not len(extra.columns):
+        return {}
+    rows = numpy.asarray(dataset.rows())
+    try:
+        picked = extra.loc[rows]
+    except KeyError:
+        return {}
+    return {column: picked[column].to_numpy() for column in extra.columns}
+
+
 def prediction_table(model, loader, prep, dataset, device=None, target_map=None):
     model.eval()
     raw, observed = observed_columns(model, loader, dataset, device or Device.cpu())
     set_name = dataset.frame.set
     columns = {"row": numpy.asarray(dataset.rows())}
+    carried = carried_columns(dataset)
     widths = {}
     for name in dataset.targets:
         values = numpy.concatenate(observed[name]) if observed[name] else numpy.zeros((0, 1))
@@ -56,6 +70,9 @@ def prediction_table(model, loader, prep, dataset, device=None, target_map=None)
             names = list(dataset.targets)
             write_blocks(columns, prep, matrix, names, widths, set_name,
                          [f"pred_{wire}" if single is not None else f"pred_{wire}_{name}" for name in names])
+    for column, values in carried.items():
+        if column not in columns:
+            columns[column] = values
     return pandas.DataFrame(columns)
 
 

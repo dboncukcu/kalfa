@@ -7,8 +7,8 @@ from kalfa.std.common.log import clock, logger_for
 from kalfa.std.common.samples import is_samples
 from kalfa.std.common.stream import is_stream
 from kalfa.std.pre.base import (Prep, SampleFrame, StreamFrame, StreamView, TableFrame, cast_values, columns_of,
-                                extra_columns, fit_chains, fit_stream, read_prep, report_fitted, resolve_fields,
-                                run_chain, sets_of, torch_dtype, typed_extras, values_of, write_prep)
+                                extra_columns, fit_chains, fit_stream, matches_any, read_prep, report_fitted,
+                                resolve_fields, run_chain, sets_of, torch_dtype, typed_extras, values_of, write_prep)
 
 
 logger = logger_for("data.prep")
@@ -89,11 +89,12 @@ def table_frame(df, prep, set, sets, mask=None):
         data = pandas.DataFrame({column: numpy.zeros(0, dtype=prep.dtypes[column]) for column in prep.dtypes},
                                 index=df.index)
     named = {item.name for item in prep.fields}
-    extra = df[[column for column in df.columns if column not in named and column not in prep.drop]]
+    extra = df[[column for column in df.columns
+                if column not in named and matches_any(column, prep.spectators)]]
     return TableFrame(prep.features, prep.targets, set, data=data, extra=extra, mask=kept_rows(df, mask))
 
 
-def fit(df, fields, preprocessors, drop, keys=None, record=None):
+def fit(df, fields, preprocessors, drop, keys=None, record=None, spectators=None):
     started = clock()
     templates = dict(preprocessors or {})
     unknown = sorted({name for spec in (fields or {}).values() for name in ((spec or {}).get("preprocessors") or [])
@@ -112,7 +113,7 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
         fitted = fit_samples(items, df, templates, dtypes)
     else:
         fitted = fit_table(items, df, templates, sets, dtypes)
-    prep = Prep(items, fitted, sets, dtypes, list(drop or []))
+    prep = Prep(items, fitted, sets, dtypes, list(drop or []), list(spectators or []))
     if record is not None:
         write_prep(prep, record)
     return report_fitted(prep, started)

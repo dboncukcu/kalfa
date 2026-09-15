@@ -1,4 +1,5 @@
-from .document import batch_size, data_params, field_plan, owners_of
+from ..std.pre.base import matches_any
+from .document import batch_size, data_params, field_plan, owners_of, spectators_of
 from .text import (ARROW, DOT, PLAIN, call_text, columns_text, count, field_line, number, pad, params_text, short,
                    table, width_of)
 
@@ -96,6 +97,10 @@ def fields_table(prepared, style, width=None):
             chain.append(f"{name} ({', '.join(sets)} only)" if sets else name)
         rows.append([pattern, columns_text(matched), f" {ARROW} ".join(chain) or "—",
                      "target" if spec.get("target") else "feature"])
+    _, columns = owners_of(prepared)
+    for pattern in spectators_of(prepared):
+        matched = [column for column in columns if column not in owners and matches_any(column, [pattern])]
+        rows.append([pattern, columns_text(matched), "—", "spectator"])
     return table(["field", "columns", "preprocessors", "role"], rows, style, width=width)
 
 

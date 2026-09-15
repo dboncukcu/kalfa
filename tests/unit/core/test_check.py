@@ -105,6 +105,39 @@ def test_glob_ambiguous_and_column_missing(workdir):
     assert "glob_ambiguous" in kinds and "column_missing" in kinds
 
 
+def narrowed():
+    config = minimal()
+    config["data"]["fields"] = {"x0": {"preprocessors": ["std_scaler"]},
+                                "price": {"target": True, "preprocessors": ["target_std"]}}
+    config["data"]["drop"] = ["x2", "x3", "x4", "x5", "x6", "x7"]
+    return config
+
+
+def test_spectators_carry_a_column_past_the_model(workdir):
+    prepared, kinds = kinds_of(workdir, narrowed())
+    assert kinds == ["column_unused"]
+    assert any("x1" in problem.message for problem in prepared.problems)
+    config = narrowed()
+    config["data"]["spectators"] = ["x1"]
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == []
+    assert prepared.document["flow"]["data"]["params"]["prep"]["params"]["spectators"] == ["x1"]
+
+
+def test_a_spectator_is_not_a_field_and_not_a_dropped_column(workdir):
+    config = minimal()
+    config["data"]["spectators"] = ["x1"]
+    _, kinds = kinds_of(workdir, config)
+    assert "spectator_in_fields" in kinds
+    config["data"]["spectators"] = ["ghost"]
+    _, kinds = kinds_of(workdir, config)
+    assert "spectator_missing" in kinds
+    config = narrowed()
+    config["data"]["spectators"] = ["x7"]
+    _, kinds = kinds_of(workdir, config)
+    assert "dropped_spectator" in kinds
+
+
 def test_set_missing_and_test_monitor(workdir):
     config = minimal()
     config["data"]["split"] = {"ratios": [0.8, 0.0, 0.2], "seed": 1}

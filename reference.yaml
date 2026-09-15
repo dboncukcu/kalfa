@@ -37,6 +37,8 @@ data:
   drop: []                        # [empty] columns dropped before the field mapping; column typed params (group) cannot be dropped
   fields: {}                      # [required] glob: {preprocessors: [..], target: true}; a field that is not written does not enter the model; input is a reserved word
                                   # specificity: a name without wildcards > the count of fixed characters > the count of ? > a check error
+  spectators: []                  # [empty] globs; carried raw through no preprocessor to the plots and predictions.parquet, never into the model
+                                  # a column typed param (group) is carried on its own; a column that is neither a field nor a spectator is read and discarded (a warning)
   feed: null                      # [required] table | {uri: window, params: {size, horizon, context, group}} | {uri: next_token, params: {seq_len}} | your own lego
                                   # table: the non target fields into one tensor (x), the targets under their own names; Dataset fields under their own names
 

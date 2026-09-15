@@ -18,7 +18,8 @@ class Schema:
     builtin_variables = ("datetime",)
     short_calls = (("training", "turn"), ("training", "checkpoint"), ("data", "feed"), ("sweep", "strategy"),
                    ("device",), ("rng",))
-    data = ("source", "transform", "split", "frame", "batch", "mask", "preprocessors", "drop", "fields", "feed")
+    data = ("source", "transform", "split", "frame", "batch", "mask", "preprocessors", "drop", "fields",
+            "spectators", "feed")
     data_required = ("source", "split", "fields", "feed")
     transform = ("uri", "params", "sets")
     ratio_split = ("ratios", "seed")

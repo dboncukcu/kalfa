@@ -73,6 +73,13 @@ def is_pattern(key):
     return any(character in key for character in "*?[")
 
 
+def matches_any(column, patterns):
+    for pattern in patterns or ():
+        if fnmatch.fnmatchcase(column, pattern) if is_pattern(pattern) else column == pattern:
+            return True
+    return False
+
+
 def specificity(pattern):
     fixed = sum(1 for character in pattern if character not in "*?[")
     return fixed, pattern.count("?")
@@ -163,6 +170,7 @@ class Prep:
     sets: dict
     dtypes: dict
     drop: list
+    spectators: list = field(default_factory=list)
 
     @property
     def features(self):
@@ -263,7 +271,7 @@ class Prep:
     def plan(self):
         return {"fields": [{"name": item.name, "chain": item.chain, "target": item.target, "columns": item.columns,
                             "extras": item.extras} for item in self.fields],
-                "sets": self.sets, "dtypes": self.dtypes, "drop": self.drop}
+                "sets": self.sets, "dtypes": self.dtypes, "drop": self.drop, "spectators": self.spectators}
 
 
 @dataclass
@@ -592,7 +600,8 @@ def read_prep(record):
     fields = [Field(item["name"], list(item["chain"]), bool(item["target"]), list(item["columns"]),
                     list(item.get("extras") or []))
               for item in plan["fields"]]
-    return Prep(fields, fitted, dict(plan["sets"]), dict(plan["dtypes"]), list(plan["drop"]))
+    return Prep(fields, fitted, dict(plan["sets"]), dict(plan["dtypes"]), list(plan["drop"]),
+                list(plan.get("spectators") or []))
 
 
 def pil_image(value):

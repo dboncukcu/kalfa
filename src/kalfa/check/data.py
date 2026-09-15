@@ -2,8 +2,9 @@ from pathlib import Path
 
 import pandas
 
+from ..driver import column_refs
 from ..std.common.runtime import parameter_names
-from ..std.pre.base import assign_fields, torch_dtype
+from ..std.pre.base import assign_fields, matches_any, torch_dtype
 
 
 def empty_table(header):
@@ -90,6 +91,9 @@ class DataRules:
         if data.get("mask") is not None:
             self.error("lazy_mask", "a stream source cannot carry a mask; it needs the table in memory",
                        ("data", "mask"), hint=hint)
+        if data.get("spectators"):
+            self.error("lazy_spectators", "a stream source carries only the fields it reads; data.spectators needs "
+                                          "the table in memory", ("data", "spectators"), hint=hint)
         for position, item in enumerate(data.get("transform") or []):
             if isinstance(item, dict) and self.fact_of(item, "needs_table"):
                 self.error("lazy_transform", f"transform {position} ({item.get('uri')}) needs the table in memory; "
@@ -136,22 +140,8 @@ class DataRules:
         return {name: None if size is None else size != 0 for name, size in found.items()}
 
     def column_refs(self):
-        data = self.data.get("data") or {}
-        found = []
-        calls = [("split", data.get("split")), ("feed", data.get("feed"))]
-        for name, entry in (data.get("preprocessors") or {}).items():
-            calls.append((f"preprocessors.{name}", entry))
-        for position, entry in enumerate(data.get("frame") or []):
-            calls.append((f"frame.{position}", entry))
-        for label, call in calls:
-            if not isinstance(call, dict) or not isinstance(call.get("uri"), str):
-                continue
-            refs = self.registry.facts(call["uri"]).refs
-            for param, ref_type in refs.items():
-                value = (call.get("params") or {}).get(param)
-                if ref_type == "column" and isinstance(value, str):
-                    found.append((value, ("data", *label.split("."), "params", param)))
-        return found
+        return [(column, ("data", *label.split(".")))
+                for column, label in column_refs(self.data.get("data") or {}, self.registry)]
 
     def header_reader(self):
         source = (self.data.get("data") or {}).get("source")
@@ -234,6 +224,39 @@ class DataRules:
             if column == "x" and not spec.get("target"):
                 self.error("reserved_field", "column 'x' is reserved for the feature tensor",
                            ("data", "fields"))
+        self.spectator_columns(data, header, columns, owners)
+
+    def spectator_columns(self, data, header, columns, owners):
+        spectators = data.get("spectators") or []
+        if not isinstance(spectators, list):
+            self.error("invalid_value", "data.spectators must be a list of column names or globs",
+                       ("data", "spectators"))
+            return
+        for position, pattern in enumerate(spectators):
+            path = ("data", "spectators", position)
+            if not isinstance(pattern, str):
+                self.error("invalid_value", f"data.spectators takes column names or globs, got {pattern!r}", path)
+                continue
+            claimed = [column for column in columns if matches_any(column, [pattern])]
+            if not claimed and not any(matches_any(column, [pattern]) for column in header["columns"]):
+                self.warning("spectator_missing", f"spectator {pattern!r} matches no column; the columns are "
+                                                  f"{list(header['columns'])}", path)
+            elif not claimed:
+                self.error("dropped_spectator", f"spectator {pattern!r} matches only dropped columns; drop and "
+                                                f"spectators cannot name the same column", path)
+            for column in claimed:
+                if column in owners:
+                    self.error("spectator_in_fields", f"column {column!r} is a field ({owners[column]!r}) and a "
+                                                      f"spectator; a column is one or the other", path)
+        referenced = {column for column, _ in column_refs(data, self.registry)}
+        carried = [column for column in columns
+                   if column not in owners and (matches_any(column, spectators) or column in referenced)]
+        dropped = [column for column in columns if column not in owners and column not in carried]
+        if dropped:
+            self.warning("column_unused", f"columns {dropped} match no field and no spectator; they are read and "
+                                          f"discarded", ("data", "fields"),
+                         hint="write them in data.spectators to carry them to the plots and predictions.parquet, "
+                              "or in data.drop to say they are meant to go")
 
     def sizes(self):
         header = self.header if self.header is not None else self.source_header()

@@ -2,7 +2,8 @@ from cirak.registry import registry
 
 from ..check import Checker
 from ..std.common.runtime import expand_targets
-from .document import block_params, field_plan, owners_of, target_fields
+from ..std.pre.base import matches_any
+from .document import block_params, field_plan, owners_of, spectators_of, target_fields
 from .text import ARROW, table
 
 
@@ -36,6 +37,7 @@ def columns_section(prepared, style, width, probe=None):
     fields, drop, _ = field_plan(prepared)
     owners, _ = owners_of(prepared)
     refs = column_refs(prepared)
+    spectators = spectators_of(prepared)
     wires = target_slots(prepared, probe)
     produced = {}
     slots = {}
@@ -58,7 +60,12 @@ def columns_section(prepared, style, width, probe=None):
         if column in drop:
             rows.append([column, dtype, "—", "—", "dropped", "—"])
         elif pattern is None:
-            role = f"read by {refs[column]}" if column in refs else "not a field"
+            if column in refs:
+                role = f"spectator, read by {refs[column]}"
+            elif matches_any(column, spectators):
+                role = "spectator"
+            else:
+                role = "discarded"
             rows.append([column, dtype, "—", "—", role, "—"])
         elif spec.get("target"):
             wire, position = wires.get(column, (None, None))

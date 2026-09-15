@@ -304,11 +304,35 @@ def frames_of(data, contract, record=None):
     return {"uri": contract.wiring["fit_frames"], "params": {"frames": frames}, "inputs": {"df": "train_df_1"}}
 
 
-def prep_of(data, preprocessors, keys, contract, record=None):
+def column_refs(data, catalog=None):
+    catalog = catalog if catalog is not None else registry
+    calls = [("split", data.get("split")), ("feed", data.get("feed"))]
+    for name, entry in (data.get("preprocessors") or {}).items():
+        calls.append((f"preprocessors.{name}", entry))
+    for position, entry in enumerate(data.get("frame") or []):
+        calls.append((f"frame.{position}", entry))
+    found = []
+    for label, call in calls:
+        if not isinstance(call, dict) or not isinstance(call.get("uri"), str):
+            continue
+        for param, ref_type in catalog.facts(call["uri"]).refs.items():
+            value = (call.get("params") or {}).get(param)
+            if ref_type == "column" and isinstance(value, str):
+                found.append((value, f"{label}.params.{param}"))
+    return found
+
+
+def spectators_of(data, catalog=None):
+    written = [str(name) for name in data.get("spectators") or []]
+    referenced = [column for column, _ in column_refs(data, catalog)]
+    return [*written, *dict.fromkeys(column for column in referenced if column not in written)]
+
+
+def prep_of(data, preprocessors, keys, contract, record=None, spectators=None):
     if record is not None:
         return {"uri": contract.wiring["read_prep"], "params": {"record": str(record)}, "inputs": {}}
     params = {"fields": dict(data.get("fields") or {}), "preprocessors": preprocessors,
-              "drop": list(data.get("drop") or []), "keys": keys}
+              "drop": list(data.get("drop") or []), "keys": keys, "spectators": list(spectators or [])}
     return {"uri": contract.wiring["fit"], "params": params, "inputs": {"df": "train_df"}}
 
 
@@ -351,7 +375,7 @@ def data_params(data, aliases=None, catalog=None, contract=None, record=None, pr
             "loaders": loaders_of(data.get("batch"), contract, sets),
             "mask": data.get("mask"),
             "frames": frames_of(data, contract, record),
-            "prep": prep_of(data, preprocessors, keys, contract, record),
+            "prep": prep_of(data, preprocessors, keys, contract, record, spectators_of(data, catalog)),
             "preprocessors_keys": keys,
             "feed": call_with_params(data["feed"])}
     if prepared is not None:

@@ -60,6 +60,9 @@ class SectionRules:
         if data.get("frame") and self.fact_of(data.get("source"), "samples"):
             self.error("frame_needs_table", "a Dataset source has no frame to transform; data.frame needs a table",
                        ("data", "frame"))
+        if data.get("spectators") and self.fact_of(data.get("source"), "samples"):
+            self.error("spectators_need_table", "a Dataset source has no frame to carry columns in; "
+                                                "data.spectators needs a table", ("data", "spectators"))
         split = data.get("split")
         if isinstance(split, dict) and "uri" in split:
             uri = self.call_of(split, ("data", "split"), ("split",), "data.split")

@@ -31,6 +31,11 @@ def batch_size(params):
     return (loader.get("params") or {}).get("size")
 
 
+def spectators_of(prepared):
+    params = data_params(prepared) or {}
+    return list(((params.get("prep") or {}).get("params") or {}).get("spectators") or [])
+
+
 def owners_of(prepared):
     header = prepared.header
     if header is None:

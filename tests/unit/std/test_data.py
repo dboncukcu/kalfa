@@ -295,6 +295,40 @@ def test_drop_and_empty_set_keep_the_layout():
     assert len(dataset) == 0 and dataset.x.shape == (0, 7)
 
 
+def test_only_the_spectators_ride_along_beside_the_fields():
+    data = housing_frame(rows=20)
+    data["run_id"] = numpy.arange(20)
+    data["note"] = "kept out"
+    plain = apply(data, fit(data, {"x*": {}, "price": {"target": True}}, {}, []), "test")
+    assert list(plain.extra.columns) == []
+    prep = fit(data, {"x*": {}, "price": {"target": True}}, {}, [], spectators=["run_*"])
+    assert prep.spectators == ["run_*"]
+    carried = apply(data, prep, "test")
+    assert list(carried.extra.columns) == ["run_id"]
+    assert carried.extra["run_id"].tolist() == list(range(20))
+    assert "run_id" not in prep.features and "note" not in prep.features
+
+
+def test_the_spectators_survive_the_fitted_plan_on_disk(tmp_path):
+    data = housing_frame(rows=12)
+    data["run_id"] = numpy.arange(12)
+    fit(data, {"x*": {}, "price": {"target": True}}, {}, [], spectators=["run_id"], record=str(tmp_path))
+    assert read_prep(tmp_path).spectators == ["run_id"]
+
+
+def test_the_prediction_table_carries_the_spectators(tmp_path):
+    from helpers import tiny_model
+    from kalfa.std.common.prediction import prediction_table
+
+    data = housing_frame(rows=16)
+    data["run_id"] = numpy.arange(16)
+    prep = fit(data, {"x*": {}, "price": {"target": True}}, {}, [], spectators=["run_id"])
+    loader = torch_loader(table(apply(data, prep, "test")), "test", 8)
+    written = prediction_table(tiny_model(in_features=8), loader, prep, loader.dataset)
+    assert "run_id" in written.columns and written["run_id"].tolist() == list(range(16))
+    assert list(written.columns)[:2] == ["row", "price"]
+
+
 def test_table_feed_names_x_and_targets():
     dataset = table(frame(rows=10, features=3))
     assert dataset.inputs == ["x"] and dataset.targets == ["price"]

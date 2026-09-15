@@ -337,12 +337,14 @@ data:
     onehot:   {uri: one_hot}
     y_scaler: {uri: standard_scaler}                # a second definition keeps a second set of statistics
 
-  drop: [event_id, run_id]                          # never reach a glob
+  drop: [event_id]                                  # never reach a glob
 
   fields:                                           # globs: ? one character, * zero or more
     "m*":     {preprocessors: [x_scaler]}
     "cat_*":  {preprocessors: [onehot]}
     y:        {target: true, preprocessors: [y_scaler]}
+
+  spectators: [run_id, "weight_*"]                  # carried raw to the plots and predictions.parquet, never to the model
 
   feed: table                                       # table | window | next_token
 ```
@@ -353,6 +355,7 @@ data:
 | `split` | the bare `{ratios, seed}` is `random_split`; also `sequential` (with `group`), `given`, `kfold` |
 | `feed` | `table` (features join into one tensor `x`, targets keep their names), `window` (`{size, horizon, context, group}`), `next_token` (`{seq_len}`) |
 | `fields` | a column that matches no glob never reaches the model; the most specific glob wins, a tie is an error |
+| `spectators` | columns that ride along unpreprocessed; anything neither field, spectator nor lego reference is read and discarded, and `check` says so |
 | `batch` | unwritten means no batching at all: one batch per set, one step per turn |
 
 A scaler is fitted on the **train set only**, lands in `fitted/preprocessors/`, and is inverted in the metrics
@@ -954,7 +957,7 @@ a time. A thousand sweep points can write into one shared filesystem while someb
 | `checkpoints/` | `best.pt`, `last.pt`, `snapshot_<n>.pt` by policy: models, optimizers, EMAs, counters, rule states, RNG |
 | `final/state.pt` | always, once the run ends |
 | `fitted/` | `preprocessors/` (one file per name plus `plan.json`), `frames/`, `calibrate/` |
-| `predictions.parquet` | the test set: `row`, the targets inverted, `pred_<output>`, `raw_<output>`, the calibration flags |
+| `predictions.parquet` | the test set: `row`, the targets inverted, `pred_<output>`, `raw_<output>`, the calibration flags, and the `data.spectators` columns as they were read |
 | `plots/`, `samples/` | named after the definition (`plots.confusion` → `confusion.png`); `samples/` is what `generate` wrote |
 | `data.json` | rows and columns at every stage of the data block, the sets, the fitted objects, the loaders |
 | `architecture.json` | every report model as boxes, wires and traced shapes, with the layers inside each node |
