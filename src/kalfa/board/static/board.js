@@ -8,6 +8,16 @@ const KIND_NAMES = { input: "input wire", torch: "torch layer", lego: "kalfa lay
                      loss: "loss", optimizer: "optimizer", source: "source", transform: "transform", split: "split",
                      frames: "frame transforms", fit: "fit on train", feed: "feed", loaders: "loaders" };
 const NODE_KINDS = new Set(["torch", "lego", "model"]);
+const RAMP_LIGHT = ["#7d1a15", "#b5332a", "#d6604f", "#9aa0a8", "#4a8fe0", "#2360b4", "#14396f"];
+const RAMP_DARK = ["#f2a7a0", "#e06a5e", "#c03d33", "#8b9099", "#2f6fd0", "#5f9ae8", "#9ec5f4"];
+const SCORE_BANDS_LIGHT = ["#7d1a15", "#c94a3e", "#9aa0a8", "#3d7fd0", "#14396f"];
+const SCORE_BANDS_DARK = ["#f2a7a0", "#d4544a", "#8b9099", "#3f7ad6", "#9ec5f4"];
+const BANDS_LIGHT = ["#0d366b", "#256abf", "#3987e5", "#5598e7", "#86b6ef"];
+const BANDS_DARK = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#184f95"];
+const MARK_LIGHT = "#5f6672";
+const MARK_DARK = "#9aa3af";
+const STATE_COLORS = { running: "#e39b12", finished: "#17a673", failed: "#d8433c", pending: "#9aa0a8" };
+const EXTRA_AXES = ["objective", "turns", "id", "state"];
 const SET_ORDER = ["train", "valid", "test"];
 const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "predictions", "prep", "plots", "samples", "config", "notes", "files", "timeline", "events", "logs", "describe"];
 const PAGES = ["table", "compare"];
@@ -56,6 +66,50 @@ function tick(value) {
   if (size < 1e-12) return "0";
   if (size >= 1e5 || size < 1e-3) return value.toExponential(1);
   return String(Number(value.toPrecision(3)));
+}
+
+function rampColor(share) {
+  const ramp = darkMode() ? RAMP_DARK : RAMP_LIGHT;
+  return ramp[Math.round(Math.min(1, Math.max(0, share)) * (ramp.length - 1))];
+}
+
+function bandColors(score) {
+  if (score) return darkMode() ? SCORE_BANDS_DARK : SCORE_BANDS_LIGHT;
+  return darkMode() ? BANDS_DARK : BANDS_LIGHT;
+}
+
+function markColor() {
+  return darkMode() ? MARK_DARK : MARK_LIGHT;
+}
+
+function axisNorm(axis, value) {
+  if (!axis || value === null || value === undefined) return null;
+  if (axis.kind === "choices") {
+    const index = axis.values.findIndex(item => item === value);
+    if (index < 0) return null;
+    return axis.values.length > 1 ? index / (axis.values.length - 1) : 0.5;
+  }
+  const low = axis.log ? Math.log10(axis.low) : axis.low;
+  const high = axis.log ? Math.log10(axis.high) : axis.high;
+  const at = axis.log ? Math.log10(value) : value;
+  if (!Number.isFinite(at) || !Number.isFinite(low) || !Number.isFinite(high)) return null;
+  if (high === low) return 0.5;
+  return Math.min(1, Math.max(0, (at - low) / (high - low)));
+}
+
+function axisTicks(axis) {
+  if (axis.kind === "choices") return axis.values.map(value => ({ at: axisNorm(axis, value), text: fmt(value) }));
+  const low = axis.log ? Math.log10(axis.low) : axis.low;
+  const high = axis.log ? Math.log10(axis.high) : axis.high;
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return [];
+  return [0, 0.25, 0.5, 0.75, 1].map(at => ({ at, text: tick(axis.log ? Math.pow(10, low + at * (high - low)) : low + at * (high - low)) }));
+}
+
+function median(values) {
+  const sorted = [...values].sort((first, second) => first - second);
+  if (!sorted.length) return null;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 function extent(values) {
@@ -809,15 +863,151 @@ const Diagram = {
   template: "#diagram-template",
 };
 
+const Parallel = {
+  props: { axes: { type: Array, default: () => [] }, rows: { type: Array, default: () => [] },
+           brush: { type: Object, default: () => ({}) }, height: { type: Number, default: 380 } },
+  emits: ["update:brush", "pick"],
+  data() { return { hover: null, drag: null }; },
+  computed: {
+    layout() {
+      const width = 1000, left = 70, right = 70, top = 30, bottom = 54;
+      const plot = this.height - top - bottom;
+      const gaps = Math.max(this.axes.length - 1, 1);
+      return { width, left, right, top, bottom, plot,
+               columns: this.axes.map((axis, index) => {
+                 const x = this.axes.length > 1 ? left + index * (width - left - right) / gaps : width / 2;
+                 return { axis, key: axis.key, label: axis.label || axis.key, x,
+                          ticks: axisTicks(axis).map(item => ({ ...item, y: top + (1 - item.at) * plot })) };
+               }) };
+    },
+    lines() {
+      const { columns, top, plot } = this.layout;
+      const drawn = this.rows.map(row => {
+        const seats = columns.map(column => {
+          const at = axisNorm(column.axis, row.values[column.key]);
+          return at === null ? null : { x: column.x, y: top + (1 - at) * plot };
+        }).filter(Boolean);
+        return { ...row, polyline: seats.map(seat => `${seat.x.toFixed(1)},${seat.y.toFixed(1)}`).join(" "),
+                 seats, end: seats[seats.length - 1] };
+      }).filter(row => row.seats.length > 1);
+      return drawn.sort((first, second) => (second.share === null ? 2 : second.share) - (first.share === null ? 2 : first.share));
+    },
+    tags() {
+      return this.lines.filter(row => row.place && row.place <= 3 && row.end && row.scored);
+    },
+    bands() {
+      const { top, plot, columns } = this.layout;
+      return Object.entries(this.brush).map(([key, range]) => {
+        const column = columns.find(item => item.key === key);
+        return column ? { key, x: column.x - 6, y: top + (1 - range[1]) * plot,
+                          height: Math.max(3, (range[1] - range[0]) * plot) } : null;
+      }).filter(Boolean);
+    },
+    detail() {
+      if (!this.hover) return [];
+      return this.layout.columns.map(column => ({ key: column.label, value: fmt(this.hover.values[column.key]) }));
+    },
+  },
+  methods: {
+    fmt,
+    colorOf(row) { return row.share === null ? (darkMode() ? "#5a6067" : "#c8ccd2") : rampColor(row.share); },
+    widthOf(row) {
+      if (this.hover) return this.hover.path === row.path ? 3.4 : 1.3;
+      if (!row.scored) return 1.2;
+      return row.place === 1 ? 3 : 1.8;
+    },
+    fadeOf(row) {
+      if (this.hover) return this.hover.path === row.path ? 1 : 0.12;
+      return row.scored ? 0.9 : 0.3;
+    },
+    at(event) {
+      const svg = this.$refs.svg;
+      const seat = svg.createSVGPoint();
+      seat.x = event.clientX;
+      seat.y = event.clientY;
+      const local = seat.matrixTransform(svg.getScreenCTM().inverse());
+      return Math.min(1, Math.max(0, 1 - (local.y - this.layout.top) / this.layout.plot));
+    },
+    startBrush(column, event) {
+      this.drag = { key: column.key, from: this.at(event), went: false };
+      window.addEventListener("mousemove", this.onBrush);
+      window.addEventListener("mouseup", this.endBrush);
+    },
+    onBrush(event) {
+      if (!this.drag) return;
+      const to = this.at(event);
+      const range = [Math.min(this.drag.from, to), Math.max(this.drag.from, to)];
+      if (range[1] - range[0] < 0.015) return;
+      this.drag.went = true;
+      this.$emit("update:brush", { ...this.brush, [this.drag.key]: range });
+    },
+    endBrush() {
+      window.removeEventListener("mousemove", this.onBrush);
+      window.removeEventListener("mouseup", this.endBrush);
+      const drag = this.drag;
+      this.drag = null;
+      if (!drag || drag.went) return;
+      const next = { ...this.brush };
+      delete next[drag.key];
+      this.$emit("update:brush", next);
+    },
+    save() {
+      const svg = this.$refs.svg;
+      downloadSvg(svg, "parallel", this.layout.width, this.height, getComputedStyle(svg).backgroundColor);
+    },
+  },
+  template: "#parallel-template",
+};
+
+const Strip = {
+  props: { levels: { type: Array, default: () => [] }, low: Number, high: Number, monitor: String },
+  data() { return { hover: null }; },
+  computed: {
+    layout() {
+      const width = 320, left = 52, right = 16, top = 8, step = 24;
+      const height = top + this.levels.length * step + 22;
+      const place = value => left + (this.high > this.low ? (value - this.low) / (this.high - this.low) : 0.5) * (width - left - right);
+      return { width, height, left, right, top, step, place,
+               axis: [this.low, (this.low + this.high) / 2, this.high].map(value => ({ x: place(value), text: tick(value) })),
+               rows: this.levels.map((level, index) => ({
+                 ...level, y: top + index * step + step / 2,
+                 dots: level.values.map(value => ({ x: place(value), value })),
+                 middle: level.values.length ? place(median(level.values)) : null })) };
+    },
+  },
+  methods: { fmt },
+  template: `
+    <div class="strip">
+      <svg :viewBox="'0 0 ' + layout.width + ' ' + layout.height" preserveAspectRatio="xMidYMid meet" @mouseleave="hover = null">
+        <g v-for="row in layout.rows" :key="row.label">
+          <text class="strip-label" :x="layout.left - 8" :y="row.y + 3">{{ row.label }}</text>
+          <line class="strip-rule" :x1="layout.left" :x2="layout.width - layout.right" :y1="row.y" :y2="row.y"></line>
+          <line class="strip-median" v-if="row.middle !== null" :x1="row.middle" :x2="row.middle" :y1="row.y - 7" :y2="row.y + 7"></line>
+          <circle v-for="(dot, index) in row.dots" :key="index" :cx="dot.x" :cy="row.y" r="4"
+                  :class="{picked: hover && hover.value === dot.value && hover.label === row.label}"
+                  @mouseenter="hover = {value: dot.value, label: row.label, n: row.values.length}"></circle>
+          <text class="strip-n" :x="layout.width - layout.right + 2" :y="row.y + 3">{{ row.values.length }}</text>
+        </g>
+        <g class="strip-axis">
+          <text v-for="(item, index) in layout.axis" :key="index" :x="item.x" :y="layout.height - 6">{{ item.text }}</text>
+        </g>
+      </svg>
+      <div class="strip-note">
+        <template v-if="hover">{{ hover.label }} · {{ monitor }} <b>{{ fmt(hover.value) }}</b></template>
+        <template v-else>dot per point, tick is the median, right number is n</template>
+      </div>
+    </div>`,
+};
+
 const app = Vue.createApp({
-  components: { chart: Chart, spark: Spark, diagram: Diagram, names: Names },
+  components: { chart: Chart, spark: Spark, diagram: Diagram, names: Names, parallel: Parallel, strip: Strip },
   data() {
     return {
       route: parseHash(location.hash),
-      tree: { root: "", groups: {} }, filter: "", collapsed: {}, refreshed: "",
+      tree: { root: "", groups: {} }, filter: "", collapsed: {}, opened: {}, refreshed: "",
       record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
       logs: { name: "", lines: [], total: 0 }, texts: {}, describeText: null, showModuleText: false,
-      sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] },
+      sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] }, brush: {},
       tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
       whereDraft: "",
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
@@ -926,18 +1116,133 @@ const app = Vue.createApp({
       });
       return rows;
     },
-    sweepParamCharts() {
+    sweepSpace() { return (this.sweep && this.sweep.space) || {}; },
+    objectiveName() { return (this.sweep && this.sweep.objective && this.sweep.objective.monitor) || "objective"; },
+    objectiveMode() { return (this.sweep && this.sweep.objective && this.sweep.objective.mode) || "min"; },
+    scoreExtent() {
+      const values = this.sweep ? this.sweep.points.filter(point => point.objective).map(point => point.objective.value) : [];
+      return values.length ? extent(values) : [0, 1];
+    },
+    scoreAxis() {
+      const [low, high] = this.scoreExtent;
+      return { key: "objective", kind: "range", log: false, low, high, label: this.objectiveName };
+    },
+    paramAxes() { return Object.entries(this.sweepSpace).map(([key, axis]) => ({ ...axis, key, label: key })); },
+    rampSteps() { return darkMode() ? RAMP_DARK : RAMP_LIGHT; },
+    parallelAxes() { return [...this.paramAxes, this.scoreAxis]; },
+    sweepRows() {
       if (!this.sweep) return [];
-      const scored = this.sweep.points.filter(point => point.objective);
-      return this.pointKeys.map(key => {
-        const points = scored.filter(point => typeof point.values[key] === "number").map(point => [point.values[key], point.objective.value]);
-        const xs = points.map(point => point[0]);
-        if (new Set(xs).size < 2) return null;
-        const [low, high] = extent(xs);
-        const xlog = low > 0 && high / low >= 100;
-        const shown = xlog ? points.map(point => [Math.log10(point[0]), point[1]]) : points;
-        return { name: key, xlog, lines: [{ name: this.sweep.objective.monitor || "objective", color: PALETTE[0], points: shown }] };
-      }).filter(Boolean);
+      const sign = this.objectiveMode === "min" ? 1 : -1;
+      const ranked = this.sweep.points.filter(point => point.objective)
+        .sort((first, second) => sign * (first.objective.value - second.objective.value));
+      const order = new Map(ranked.map((point, index) => [point.path, index]));
+      return this.sweep.points.map(point => {
+        const score = point.objective ? point.objective.value : null;
+        const state = this.stateOf(point);
+        const at = order.get(point.path);
+        return { path: point.path, id: point.id, label: point.path.split("/").pop(), state, turns: point.turns,
+                 score, scored: score !== null, place: at === undefined ? null : at + 1,
+                 share: at === undefined ? null : (ranked.length > 1 ? at / (ranked.length - 1) : 0),
+                 values: { ...point.values, objective: score, turns: point.turns, id: point.id, state } };
+      });
+    },
+    brushed() {
+      const keys = Object.keys(this.brush);
+      if (!keys.length) return this.sweepRows;
+      const axes = Object.fromEntries(this.parallelAxes.map(axis => [axis.key, axis]));
+      return this.sweepRows.filter(row => keys.every(key => {
+        const at = axisNorm(axes[key], row.values[key]);
+        return at !== null && at >= this.brush[key][0] - 1e-6 && at <= this.brush[key][1] + 1e-6;
+      }));
+    },
+    brushNotes() {
+      const axes = Object.fromEntries(this.parallelAxes.map(axis => [axis.key, axis]));
+      return Object.entries(this.brush).map(([key, range]) => {
+        const axis = axes[key];
+        if (!axis) return { key, text: key };
+        if (axis.kind === "choices") {
+          const kept = axis.values.filter(value => {
+            const at = axisNorm(axis, value);
+            return at >= range[0] - 1e-6 && at <= range[1] + 1e-6;
+          });
+          return { key, text: `${key} = ${kept.map(fmt).join(", ") || "none"}` };
+        }
+        const low = axis.log ? Math.log10(axis.low) : axis.low;
+        const high = axis.log ? Math.log10(axis.high) : axis.high;
+        const back = at => (axis.log ? Math.pow(10, low + at * (high - low)) : low + at * (high - low));
+        return { key, text: `${key} ${tick(back(range[0]))} to ${tick(back(range[1]))}` };
+      });
+    },
+    sweepStats() {
+      const rows = this.sweepRows;
+      const scores = rows.filter(row => row.scored).map(row => row.score);
+      const [low, high] = scores.length ? extent(scores) : [null, null];
+      const count = name => rows.filter(row => row.state === name).length;
+      return { total: rows.length, planned: (this.sweep && this.sweep.manifest.total) || rows.length,
+               scored: scores.length, failed: count("failed"), running: count("running"), pending: count("pending"),
+               low, high, spread: low && high && low !== 0 ? (high - low) / Math.abs(low) : null };
+    },
+    axisChoices() { return [...this.paramAxes.map(axis => axis.key), "objective", "turns", "id"]; },
+    colorChoices() { return [...this.paramAxes.map(axis => axis.key), "objective", "state"]; },
+    explore() {
+      const params = this.route.params;
+      const keys = this.paramAxes.map(axis => axis.key);
+      const categorical = this.paramAxes.find(axis => axis.kind === "choices");
+      return { x: params.x || keys[0] || "id", y: params.y || "objective",
+               color: params.color || (categorical ? categorical.key : "state") };
+    },
+    exploreChart() {
+      if (!this.sweep) return null;
+      const { x, y, color } = this.explore;
+      const axes = Object.fromEntries(this.parallelAxes.map(axis => [axis.key, axis]));
+      const ready = row => typeof row.values[x] === "number" && typeof row.values[y] === "number";
+      const rows = this.brushed.filter(ready);
+      const xlog = !!(axes[x] && axes[x].kind === "range" && axes[x].log);
+      const lines = this.colorGroups(rows, color).map(group => ({
+        name: group.name, color: group.color, kind: "scatter",
+        points: group.rows.map(row => [xlog ? Math.log10(row.values[x]) : row.values[x], row.values[y]]) }));
+      return { lines: lines.filter(line => line.points.length), xlog, xlabel: x, ylabel: y, shown: rows.length };
+    },
+    paramCharts() {
+      if (!this.sweep) return [];
+      const rows = this.brushed.filter(row => row.scored);
+      const [low, high] = this.scoreExtent;
+      return this.paramAxes.map(axis => {
+        if (axis.kind === "choices") {
+          return { key: axis.key, shape: "strip", low, high,
+                   levels: axis.values.map(value => ({ label: fmt(value),
+                     values: rows.filter(row => row.values[axis.key] === value).map(row => row.score) })) };
+        }
+        const points = rows.filter(row => typeof row.values[axis.key] === "number")
+          .map(row => [axis.log ? Math.log10(row.values[axis.key]) : row.values[axis.key], row.score]);
+        return { key: axis.key, shape: "scatter", xlog: !!axis.log,
+                 lines: [{ name: this.objectiveName, color: markColor(), kind: "scatter", points }] };
+      });
+    },
+    hasFailures() { return this.sweepRows.some(row => row.state === "failed"); },
+    failureMap() {
+      const rows = this.sweepRows;
+      return this.paramAxes.filter(axis => axis.kind === "choices").map(axis => ({
+        key: axis.key,
+        levels: axis.values.map(value => {
+          const here = rows.filter(row => row.values[axis.key] === value);
+          const failed = here.filter(row => row.state === "failed").length;
+          const scored = here.filter(row => row.scored).length;
+          return { label: fmt(value), total: here.length, failed, scored, other: here.length - failed - scored };
+        }) }));
+    },
+    progressChart() {
+      const rows = this.sweepRows.filter(row => row.scored && typeof row.id === "number")
+        .sort((first, second) => first.id - second.id);
+      if (rows.length < 2) return null;
+      const pick = this.objectiveMode === "min" ? Math.min : Math.max;
+      let running = null;
+      const best = rows.map(row => {
+        running = running === null ? row.score : pick(running, row.score);
+        return [row.id, running];
+      });
+      return { lines: [{ name: this.objectiveName, color: markColor(), kind: "scatter", points: rows.map(row => [row.id, row.score]) },
+                       { name: "best so far", color: rampColor(0), kind: "line", points: best }] };
     },
     compareCharts() {
       if (!this.compareData) return [];
@@ -982,8 +1287,17 @@ const app = Vue.createApp({
     sortDesc() { return this.route.params.desc === "1"; },
     groups() {
       const needle = this.filter.toLowerCase();
-      return Object.entries(this.tree.groups).map(([name, entries]) => ({
-        name, entries: entries.filter(entry => !needle || entry.name.toLowerCase().includes(needle) || entry.path.toLowerCase().includes(needle)) }))
+      const all = this.tree.groups;
+      const hit = entry => !needle || entry.name.toLowerCase().includes(needle) || entry.path.toLowerCase().includes(needle);
+      const held = new Set(Object.values(all).flat().map(entry => entry.path));
+      const attach = (entry, forced) => {
+        const mine = forced || hit(entry);
+        const children = (all[entry.path] || []).map(child => attach(child, mine));
+        return { ...entry, children: mine ? children : children.filter(child => child.keep),
+                 keep: mine || children.some(child => child.keep) };
+      };
+      return Object.entries(all).filter(([name]) => !held.has(name))
+        .map(([name, entries]) => ({ name, entries: entries.map(entry => attach(entry, false)).filter(entry => entry.keep) }))
         .filter(group => group.entries.length);
     },
     state() { return this.record ? this.stateOf(this.record) : "pending"; },
@@ -1340,7 +1654,8 @@ const app = Vue.createApp({
     },
     sortedPoints() {
       if (!this.sweep) return [];
-      const points = [...this.sweep.points];
+      const kept = new Set(this.brushed.map(row => row.path));
+      const points = this.sweep.points.filter(point => kept.has(point.path));
       if (!this.sortKey) return points;
       const value = point => {
         if (this.sortKey === "id") return point.id;
@@ -1479,6 +1794,47 @@ const app = Vue.createApp({
       return "";
     },
     toggleGroup(name) { this.collapsed = { ...this.collapsed, [name]: !this.collapsed[name] }; },
+    childrenOpen(entry) {
+      const choice = this.opened[entry.path];
+      if (choice !== undefined) return choice;
+      if (this.filter) return true;
+      return entry.children.some(child => child.path === this.path);
+    },
+    toggleChildren(entry) { this.opened = { ...this.opened, [entry.path]: !this.childrenOpen(entry) }; },
+    colorGroups(rows, key) {
+      if (key === "state") {
+        return [...new Set(rows.map(row => row.state))].map(name => ({
+          name, color: STATE_COLORS[name] || PALETTE[7], rows: rows.filter(row => row.state === name) }));
+      }
+      const axis = this.parallelAxes.find(item => item.key === key);
+      if (axis && axis.kind === "choices" && axis.values.length <= 3) {
+        return axis.values.map((value, index) => ({ name: `${key} ${fmt(value)}`, color: PALETTE[index],
+          rows: rows.filter(row => row.values[key] === value) })).filter(group => group.rows.length);
+      }
+      const score = key === "objective";
+      const colors = score && this.objectiveMode === "max" ? [...bandColors(true)].reverse() : bandColors(score);
+      if (axis && axis.kind === "choices") {
+        const step = Math.max(1, Math.floor(colors.length / Math.max(axis.values.length - 1, 1)));
+        return axis.values.map((value, index) => ({ name: `${key} ${fmt(value)}`, color: colors[Math.min(index * step, colors.length - 1)],
+          rows: rows.filter(row => row.values[key] === value) })).filter(group => group.rows.length);
+      }
+      const values = rows.map(row => row.values[key]).filter(value => typeof value === "number");
+      if (!values.length) return [{ name: key, color: PALETTE[0], rows }];
+      const [low, high] = extent(values);
+      if (high === low) return [{ name: `${key} ${tick(low)}`, color: colors[0], rows }];
+      const edges = colors.map((item, index) => low + (index + 1) * (high - low) / colors.length);
+      return colors.map((color, index) => ({
+        name: `${tick(index ? edges[index - 1] : low)} to ${tick(edges[index])}`, color,
+        rows: rows.filter(row => {
+          const value = row.values[key];
+          return typeof value === "number" && value <= edges[index] && (index === 0 || value > edges[index - 1]);
+        }) })).filter(group => group.rows.length);
+    },
+    setExplore(which, value) { this.go({ [which]: value }); },
+    setBrush(next) { this.brush = next; },
+    openPoint(path) { location.hash = this.recordLink(path); },
+    clearBrush() { this.brush = {}; },
+    dropBrush(key) { const next = { ...this.brush }; delete next[key]; this.brush = next; },
     toggleSidebar() {
       this.sidebar = !this.sidebar;
       try { localStorage.setItem("kalfa-board-sidebar", this.sidebar ? "open" : "closed"); } catch (error) { console.warn("storage unavailable", error); }
@@ -1498,7 +1854,7 @@ const app = Vue.createApp({
       if (entry && this.stateOf(entry) !== this.state) await this.loadRecord();
     },
     async enterRecord() {
-      this.record = null; this.sweep = null; this.history = { lines: [], offset: 0 }; this.steps = { lines: [], offset: 0 };
+      this.record = null; this.sweep = null; this.brush = {}; this.history = { lines: [], offset: 0 }; this.steps = { lines: [], offset: 0 };
       this.overlay = {}; this.diff = null; this.describeText = null; this.showModuleText = false;
       this.logs = { name: "", lines: [], total: 0 };
       this.predictionsData = null; this.prepData = null; this.filesData = null; this.fileView = null; this.eventsData = null;

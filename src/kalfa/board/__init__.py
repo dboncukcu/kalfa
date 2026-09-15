@@ -1,7 +1,9 @@
+import ast
 import difflib
 import json
 import math
 import mimetypes
+import re
 import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -81,6 +83,32 @@ def clean(value):
     return value
 
 
+def axis_of(declared, seen):
+    text = declared if isinstance(declared, str) else ""
+    numbers = [value for value in seen if is_number(value)]
+    choices = re.search(r"Choices\(values=(\[[^\]]*\])", text)
+    if choices:
+        try:
+            return {"kind": "choices", "values": list(ast.literal_eval(choices.group(1)))}
+        except (ValueError, SyntaxError):
+            pass
+    bounds = re.search(r"Range\(([^)]*)\)", text)
+    if bounds:
+        body = bounds.group(1)
+        low = re.search(r"\blow=([-\d.eE+]+)", body)
+        high = re.search(r"\bhigh=([-\d.eE+]+)", body)
+        return {"kind": "range", "log": "log=True" in body,
+                "low": float(low.group(1)) if low else (min(numbers) if numbers else None),
+                "high": float(high.group(1)) if high else (max(numbers) if numbers else None)}
+    unique = sorted(set(numbers))
+    if numbers and len(unique) <= 6:
+        return {"kind": "choices", "values": unique}
+    if numbers:
+        low, high = min(numbers), max(numbers)
+        return {"kind": "range", "log": low > 0 and high / low >= 100, "low": low, "high": high}
+    return {"kind": "choices", "values": sorted({str(value) for value in seen})}
+
+
 def sweep_state(states):
     if "running" in states:
         return "running"
@@ -100,6 +128,13 @@ def settle(entries):
         if states:
             entry["status"] = {**entry["status"], "state": sweep_state(states)}
     return entries
+
+
+def read_space(manifest, points):
+    declared = (manifest or {}).get("space") or {}
+    keys = list(declared) or sorted({key for point in points for key in point.get("values") or {}})
+    return {key: axis_of(declared.get(key), [point["values"][key] for point in points
+                                             if key in (point.get("values") or {})]) for key in keys}
 
 
 def small_value(value, depth=0):
@@ -476,13 +511,14 @@ class Board:
                 objective = {key: done["objective"].get(key) for key in ("monitor", "mode", "at")}
             points.append({"path": relative_to(self.root, child), "id": done["id"] if done else note.get("id"),
                            "values": done["point"] if done else note.get("values") or {},
-                           "status": record.status(), "turns": len(history),
+                           "status": record.status(), "turns": len(history), "started": note.get("started"),
                            "objective": {"value": done["objective"]["value"], "turn": done["objective"]["turn"]}
                            if done else self.best_so_far(history, objective)})
         scored = [point for point in points if point["objective"] is not None]
         pick = min if objective.get("mode", "min") == "min" else max
         best = pick(scored, key=lambda point: point["objective"]["value"]) if scored else None
-        return {"path": relative, "manifest": manifest, "objective": objective, "points": points, "best": best}
+        return {"path": relative, "manifest": manifest, "objective": objective, "points": points, "best": best,
+                "space": read_space(manifest, points)}
 
     def diff(self, first, second):
         paths = [self.resolve(first), self.resolve(second)]

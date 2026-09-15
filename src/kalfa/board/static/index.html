@@ -30,11 +30,30 @@
         </button>
         <ul v-show="!collapsed[group.name]">
           <li v-for="entry in group.entries" :key="entry.path" :class="{active: entry.path === path}">
-            <a :href="recordLink(entry.path)" :title="entry.path">
-              <span class="dot" :class="stateOf(entry)"></span>
-              <span class="name">{{ entry.name }}</span>
-              <span class="badge kind">{{ entry.kind }}</span>
-            </a>
+            <div class="row">
+              <button class="twist" v-if="entry.children.length" @click="toggleChildren(entry)"
+                      :title="childrenOpen(entry) ? 'hide the points' : 'show the points'">
+                <span class="chevron" :class="{open: childrenOpen(entry)}"></span>
+              </button>
+              <span class="twist" v-else></span>
+              <a :href="recordLink(entry.path)" :title="entry.path">
+                <span class="dot" :class="stateOf(entry)"></span>
+                <span class="name">{{ entry.name }}</span>
+                <span class="badge kind">{{ entry.kind }}</span>
+                <span class="count" v-if="entry.children.length">{{ entry.children.length }}</span>
+              </a>
+            </div>
+            <ul class="nested" v-if="entry.children.length" v-show="childrenOpen(entry)">
+              <li v-for="child in entry.children" :key="child.path" :class="{active: child.path === path}">
+                <div class="row">
+                  <a :href="recordLink(child.path)" :title="child.path">
+                    <span class="dot" :class="stateOf(child)"></span>
+                    <span class="name">{{ child.name }}</span>
+                    <span class="badge kind">{{ child.kind }}</span>
+                  </a>
+                </div>
+              </li>
+            </ul>
           </li>
         </ul>
       </section>
@@ -208,7 +227,60 @@
         </div>
         <div class="progress"><div class="bar" :style="{width: progress + '%'}"></div></div>
       </header>
-      <p class="note" v-if="sweep">The points of the sweep from their manifests and sweep.json: finished ones scored, running ones with the best value so far from their history; every param against the objective, the objective curves of the running or ticked points, and the diff of two ticked points.</p>
+      <p class="note" v-if="sweep">The points of the sweep from their manifests and sweep.json: finished ones scored, running ones with the best value so far from their history. Every point is drawn across the whole space, the failed ones included; drag on any axis to narrow the charts and the table together. The explorer picks its own axes, every param is shown against the objective, and the objective curves of the running or ticked points sit below with the diff of two ticked points.</p>
+      <div class="tiles" v-if="sweep && sweepRows.length">
+        <div class="tile">
+          <span class="tile-label">scored</span>
+          <span class="tile-value">{{ sweepStats.scored }}</span>
+          <span class="tile-note">of {{ sweepStats.planned }} planned</span>
+        </div>
+        <div class="tile" :class="{alarm: sweepStats.failed}">
+          <span class="tile-label">failed</span>
+          <span class="tile-value">{{ sweepStats.failed }}</span>
+          <span class="tile-note">{{ sweepStats.failed ? Math.round(100 * sweepStats.failed / sweepStats.total) + '% of the points' : 'none' }}</span>
+        </div>
+        <div class="tile" v-if="sweep.best">
+          <span class="tile-label">best {{ objectiveName }}</span>
+          <span class="tile-value">{{ fmt(sweep.best.objective.value) }}</span>
+          <span class="tile-note">point {{ sweep.best.id }}, turn {{ sweep.best.objective.turn }}</span>
+        </div>
+        <div class="tile" v-if="sweepStats.spread !== null">
+          <span class="tile-label">spread</span>
+          <span class="tile-value">{{ (100 * sweepStats.spread).toFixed(1) }}%</span>
+          <span class="tile-note">{{ fmt(sweepStats.low) }} to {{ fmt(sweepStats.high) }}</span>
+        </div>
+      </div>
+      <div class="card" v-if="sweep && sweepRows.length && parallelAxes.length > 1">
+        <div class="card-label">every point across the space
+          <span class="muted">drag on an axis to narrow, click a line to open the point</span></div>
+        <parallel :axes="parallelAxes" :rows="sweepRows" :brush="brush" :height="380" @update:brush="setBrush" @pick="openPoint"></parallel>
+        <div class="ramp">
+          <span class="muted">{{ objectiveName }} by rank</span>
+          <span class="mono">best {{ fmt(scoreExtent[objectiveMode === 'min' ? 0 : 1]) }}</span>
+          <span class="ramp-bar"><i v-for="(color, index) in rampSteps" :key="index" :style="{background: color}"></i></span>
+          <span class="mono">worst {{ fmt(scoreExtent[objectiveMode === 'min' ? 1 : 0]) }}</span>
+          <span class="ramp-dash"></span><span class="muted">never scored</span>
+        </div>
+      </div>
+      <div class="toolbar sweep-tools" v-if="sweep && sweepRows.length">
+        <span class="pick-count" v-if="brushNotes.length">{{ brushed.length }} of {{ sweepRows.length }} points</span>
+        <span class="chip drop" v-for="note in brushNotes" :key="note.key" @click="dropBrush(note.key)" title="drop this range">{{ note.text }} &times;</span>
+        <button class="small" v-if="brushNotes.length" @click="clearBrush">clear</button>
+        <span class="muted" v-else>drag on an axis above to narrow everything below, and the table</span>
+        <span class="tool-gap"></span>
+        <label>x <select :value="explore.x" @change="setExplore('x', $event.target.value)">
+          <option v-for="key in axisChoices" :key="key" :value="key">{{ key }}</option></select></label>
+        <label>y <select :value="explore.y" @change="setExplore('y', $event.target.value)">
+          <option v-for="key in axisChoices" :key="key" :value="key">{{ key }}</option></select></label>
+        <label>color <select :value="explore.color" @change="setExplore('color', $event.target.value)">
+          <option v-for="key in colorChoices" :key="key" :value="key">{{ key }}</option></select></label>
+      </div>
+      <div class="card" v-if="exploreChart && exploreChart.lines.length">
+        <div class="card-label">explorer
+          <span class="muted">{{ exploreChart.shown }} points, {{ explore.y }} against {{ explore.x }}, colored by {{ explore.color }}</span></div>
+        <chart :lines="exploreChart.lines" :xlabel="exploreChart.xlabel" :ylabel="exploreChart.ylabel" kind="scatter"
+               :xlog="exploreChart.xlog" :height="360"></chart>
+      </div>
       <div v-if="sweep && sweep.best" class="card best">
         <div class="card-label">best so far</div>
         <div class="best-row">
@@ -249,10 +321,41 @@
         </div>
         <p class="empty" v-if="!sweep.points.length">no point has started yet</p>
       </div>
-      <div class="grid charts" v-if="sweepParamCharts.length">
-        <div class="card" v-for="entry in sweepParamCharts" :key="entry.name">
-          <chart :lines="entry.lines" :title="entry.name + ' against the objective'" :xlabel="entry.name" :ylabel="sweep.objective.monitor || 'objective'" kind="scatter" :xlog="entry.xlog"></chart>
+      <div class="grid charts" v-if="paramCharts.length">
+        <div class="card" v-for="entry in paramCharts" :key="entry.key">
+          <template v-if="entry.shape === 'strip'">
+            <div class="card-label">{{ entry.key }} against {{ objectiveName }}</div>
+            <strip :levels="entry.levels" :low="entry.low" :high="entry.high" :monitor="objectiveName"></strip>
+          </template>
+          <chart v-else :lines="entry.lines" :title="entry.key + ' against the objective'" :xlabel="entry.key"
+                 :ylabel="objectiveName" kind="scatter" :xlog="entry.xlog"></chart>
         </div>
+      </div>
+      <div class="card" v-if="hasFailures">
+        <div class="card-label">where the points died
+          <span class="muted">{{ sweepStats.failed }} of {{ sweepStats.total }} never finished a turn</span></div>
+        <div class="fail-map">
+          <div class="fail-row" v-for="entry in failureMap" :key="entry.key">
+            <span class="fail-key">{{ entry.key }}</span>
+            <div class="fail-levels">
+              <div class="fail-level" v-for="level in entry.levels" :key="level.label">
+                <span class="fail-name mono">{{ level.label }}</span>
+                <span class="fail-bar">
+                  <i class="failed" v-if="level.failed" :style="{flexGrow: level.failed}" :title="level.failed + ' failed'"></i>
+                  <i class="scored" v-if="level.scored" :style="{flexGrow: level.scored}" :title="level.scored + ' scored'"></i>
+                  <i class="other" v-if="level.other" :style="{flexGrow: level.other}" :title="level.other + ' pending or running'"></i>
+                </span>
+                <span class="fail-n mono">{{ level.failed }}/{{ level.total }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="muted">A level that fails about as often as every other level points at the node or the environment, not at the params.</p>
+      </div>
+      <div class="card" v-if="progressChart">
+        <div class="card-label">{{ objectiveName }} over the sweep order
+          <span class="muted">is the search still finding anything</span></div>
+        <chart :lines="progressChart.lines" xlabel="point" :ylabel="objectiveName" :height="280"></chart>
       </div>
       <div class="card" v-if="overlayLines.length">
         <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of {{ selected.length ? 'the ticked points' : 'the running points' }}</div>
@@ -929,6 +1032,36 @@
     </figure>
   </div>
 </div>
+
+<script type="text/x-template" id="parallel-template">
+  <div class="parallel">
+    <svg ref="svg" :viewBox="'0 0 ' + layout.width + ' ' + height" preserveAspectRatio="xMidYMid meet">
+      <g class="par-axis" v-for="column in layout.columns" :key="column.key">
+        <line :x1="column.x" :x2="column.x" :y1="layout.top" :y2="layout.top + layout.plot"></line>
+        <text class="par-name" :x="column.x" :y="layout.top - 12">{{ column.label }}</text>
+        <text class="par-tick" v-for="(item, index) in column.ticks" :key="index" :x="column.x - 9" :y="item.y + 3">{{ item.text }}</text>
+      </g>
+      <rect class="par-band" v-for="band in bands" :key="band.key" :x="band.x" :y="band.y" width="12" :height="band.height"></rect>
+      <polyline v-for="row in lines" :key="row.path" :points="row.polyline" fill="none"
+                :stroke="colorOf(row)" :stroke-width="widthOf(row)" :opacity="fadeOf(row)"
+                stroke-linejoin="round" :stroke-dasharray="row.scored ? '' : '4 4'"></polyline>
+      <g v-if="!hover">
+        <circle class="par-tag-dot" v-for="row in tags" :key="row.path" :cx="row.end.x" :cy="row.end.y" r="3.4" :fill="colorOf(row)"></circle>
+        <text class="par-tag" v-for="row in tags" :key="row.path" :x="row.end.x + 8" :y="row.end.y + 3" :fill="colorOf(row)">{{ row.label }}</text>
+      </g>
+      <polyline class="par-hit" v-for="row in lines" :key="row.path" :points="row.polyline" fill="none"
+                @mouseenter="hover = row" @mouseleave="hover = null" @click="$emit('pick', row.path)"></polyline>
+      <rect class="par-grab" v-for="column in layout.columns" :key="column.key" :x="column.x - 6" :y="layout.top"
+            width="12" :height="layout.plot" @mousedown.prevent="startBrush(column, $event)"></rect>
+    </svg>
+    <div class="par-detail" v-if="hover">
+      <b>{{ hover.label }}</b>
+      <span class="badge" :class="hover.state">{{ hover.state }}</span>
+      <span v-for="item in detail" :key="item.key"><span class="muted">{{ item.key }}</span> {{ item.value || '&mdash;' }}</span>
+    </div>
+    <div class="par-detail muted" v-else>hover a line for its values, drag on an axis to narrow</div>
+  </div>
+</script>
 
 <script type="text/x-template" id="diagram-template">
   <div class="diagram">
