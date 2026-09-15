@@ -35,7 +35,7 @@ def test_frame_transforms_fit_on_train_and_replay_for_new_data(workdir):
     prediction = predict(record, data=new)
     assert len(prediction.table) == 20 and Path(prediction.path).name == "predictions_frame.parquet"
     stream = framed()
-    stream["include"] = ["/alias/kalfa/lazy"]
+    stream["include"] = ["/alias/kalfa/lazy_tabular"]
     stream["data"]["split"] = {"uri": "sequential", "params": {"ratios": [0.7, 0.15, 0.15]}}
     lazy = check([str(write_config(workdir / "lazy.yaml", stream))], parse_sets([]))
     assert "lazy_frame" in [problem.kind for problem in lazy.problems]

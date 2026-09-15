@@ -242,7 +242,7 @@ A config is the union of layers, bottom to top, with leaf overriding between the
   4. --set path=value   -p name=value        the command line
   3. the config given on the command line
   2. the includes, in list order             each with its own includes below it
-  1. the alias packs                         /alias/kalfa/base, tabular, vision, text, lazy
+  1. the alias packs                         /alias/kalfa/base, tabular, vision, text, lazy_tabular
 ```
 
 That is the whole mechanism behind variants: a k fold, a sweep and the third idea you had this afternoon are the
@@ -359,9 +359,10 @@ A scaler is fitted on the **train set only**, lands in `fitted/preprocessors/`, 
 and in `predictions.parquet`, so every reported number is in the original units. `kalfa predict` reads the same
 fitted objects back from the record.
 
-Big tables: `include: [/alias/kalfa/lazy]` rebinds `parquet` and `csv` to chunked stream sources with the same
-names. Filters run per chunk, the split becomes `sequential` or `given`, shuffling goes through `batch.buffer`,
-and what a stream cannot do (`kfold`, `window`, `mask`, a random split) is a `check` error, not a surprise.
+Big tables: `include: [/alias/kalfa/lazy_tabular]` is the tabular pack with `parquet` and `csv` rebound to chunked
+stream sources, so a config turns lazy by changing its `include` line and nothing else. Filters run per chunk, the
+split becomes `sequential` or `given`, shuffling goes through `batch.buffer`, and what a stream cannot do
+(`kfold`, `window`, `mask`, a random split) is a `check` error, not a surprise.
 
 ### `model`
 

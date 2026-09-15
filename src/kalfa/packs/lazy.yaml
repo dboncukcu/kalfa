@@ -1,6 +1,0 @@
-# /alias/kalfa/lazy: the base names over a table read in chunks: parquet and csv bound to the stream sources.
-include: [/alias/kalfa/base]
-alias:
-  # source
-  parquet: /source/kalfa/parquet_stream
-  csv: /source/kalfa/csv_stream

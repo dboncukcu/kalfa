@@ -1,4 +1,4 @@
-"""The alias packs agree with the legos' alias facts; the four packs layer over the base pack."""
+"""The alias packs agree with the legos' alias facts; the packs layer over base, lazy_tabular over tabular."""
 
 from ruamel.yaml import YAML
 from cirak.registry import registry
@@ -24,13 +24,15 @@ def test_tabular_pack_is_flat_and_matches_the_facts():
     assert table["random_split"] == "/split/kalfa/random" and table["random"] == "/strategy/kalfa/random"
 
 
-def test_the_four_packs_layer_over_the_base_pack():
+def test_the_packs_layer_over_the_base_pack():
     tables = pack_tables()
     base = tables["/alias/kalfa/base"]
-    packs = {name: tables[f"/alias/kalfa/{name}"] for name in ("tabular", "vision", "text", "lazy")}
+    below = {"tabular": "/alias/kalfa/base", "vision": "/alias/kalfa/base", "text": "/alias/kalfa/base",
+             "lazy_tabular": "/alias/kalfa/tabular"}
+    packs = {name: tables[f"/alias/kalfa/{name}"] for name in below}
     for name, table in packs.items():
         own = YAML(typ="safe").load((kalfa.PACKS / f"{name}.yaml").read_text())
-        assert own["include"] == ["/alias/kalfa/base"]
+        assert own["include"] == [below[name]]
         assert not (set(own["alias"]) - set(table))
         for alias, uri in base.items():
             if alias not in own["alias"]:
@@ -38,12 +40,20 @@ def test_the_four_packs_layer_over_the_base_pack():
     shared = {alias for alias, uri in base.items()
               if all(table.get(alias) == uri for table in packs.values())}
     assert shared == set(base)
-    assert packs["lazy"]["parquet"] == "/source/kalfa/parquet_stream"
-    assert packs["tabular"]["parquet"] == "/source/kalfa/parquet"
     for name in ("cast", "table", "linear", "mse", "rmse", "adam", "supervised", "best", "loss_curve"):
         assert name in base
     assert "image_folder" not in base and "image_folder" in packs["vision"]
     assert "parquet" not in base and "random_split" not in base
+
+
+def test_lazy_tabular_is_the_tabular_pack_with_the_sources_streamed():
+    packs = {name: pack_tables()[f"/alias/kalfa/{name}"] for name in ("tabular", "lazy_tabular")}
+    assert packs["tabular"]["parquet"] == "/source/kalfa/parquet" and packs["tabular"]["csv"] == "/source/kalfa/csv"
+    assert packs["lazy_tabular"]["parquet"] == "/source/kalfa/parquet_stream"
+    assert packs["lazy_tabular"]["csv"] == "/source/kalfa/csv_stream"
+    streamed = {"parquet", "csv"}
+    assert {name for name, uri in packs["lazy_tabular"].items() if packs["tabular"].get(name) != uri} == streamed
+    assert set(packs["tabular"]) == set(packs["lazy_tabular"])
 
 
 def test_the_random_split_alias_is_the_written_out_short_form(workdir):
