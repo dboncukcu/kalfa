@@ -42,7 +42,8 @@ def test_run_predict_resume_and_collect(workdir, capsys):
 
     assert main(["collect", "runs/cv_0", "runs/cv_1"]) == 0
     out = capsys.readouterr().out
-    assert "k fold summary" in out and (workdir / "runs" / "cv.json").exists()
+    assert "CROSS VALIDATION" in out and (workdir / "runs" / "cv.json").exists()
+    assert "# k fold summary" in (workdir / "runs" / "cv.md").read_text()
     summary = json.loads((workdir / "runs" / "cv.json").read_text())
     assert [fold["fold"] for fold in summary["folds"]] == [0, 1] and "test/rmse" in summary["summary"]
 

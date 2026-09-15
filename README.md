@@ -86,7 +86,7 @@ kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep 
                      [--log info|debug] [--no-progress]            # the output options of run; the local loop hands them to every point
 kalfa sweep cfg.yaml --plan [--prepare-data] [--record root]      # write the root once: the manifest, sweep.plan, sweep.sub, sweep.sh
 kalfa prepare cfg.yaml --out DIR                                  # the data block once; kalfa run cfg.yaml --prepared DIR starts from it
-kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
+kalfa collect runs/cv_* | kalfa collect <sweep root> [--markdown]  # fold summaries (cv.json, cv.md) or the sweep table and the best point
 kalfa stop runs/x | kalfa stop <sweep root>                       # writes stop.json: the record ends after its current turn
 kalfa board <root> [--port 8080]                                  # a page over the records under a root: follows them as they change, stops one
 kalfa ls [/alias/kalfa/tabular | /criterion | ... | word]         # packs and legos with their kinds and facts; a word searches

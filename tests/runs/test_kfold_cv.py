@@ -55,5 +55,7 @@ def test_five_folds_and_collect(dataset):
     assert [fold["fold"] for fold in summary["folds"]] == [0, 1, 2, 3, 4]
     assert set(summary["summary"]) >= {"test/rmse", "test/mae", "test/loss_mse"}
     assert summary["summary"]["test/rmse"]["std"] >= 0.0
-    assert "| test/rmse |" in text and (Path("runs") / "cv.md").exists()
+    assert "── CROSS VALIDATION" in text and "test/rmse" in text and "|" not in text
+    assert "| test/rmse |" in collect([f"runs/cv_housing_{fold}" for fold in range(5)], markdown=True)[1]
+    assert "| test/rmse |" in (Path("runs") / "cv.md").read_text()
     assert main(["collect", *[f"runs/cv_housing_{fold}" for fold in range(5)]]) == 0

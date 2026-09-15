@@ -106,7 +106,11 @@ def test_local_loop_and_collect_with_a_missing_folder(housing):
     summary = json.loads((root / "sweep.json").read_text())
     assert [row["id"] for row in summary["points"]] == [0, 1, 4, 5]
     assert summary["skipped"] == [{"dir": "0003", "status": "unfinished"}]
-    assert summary["best"]["id"] in (0, 1, 4, 5) and "best: point" in text and "skipped: 0003" in text
+    assert summary["best"]["id"] in (0, 1, 4, 5)
+    assert "── SWEEP" in text and f"point {summary['best']['id']}," in text and "unfinished" in text
+    assert "val/rmse" not in text.split("objective")[-1].split("best")[0]
+    report = collect(["runs/grid"], markdown=True)[1]
+    assert "| val/rmse |" in report and "best: point" in report and "unfinished: 1 (0003)" in report
     assert {"lr", "width", "objective", "turn", "turns", "val/rmse"} <= set(summary["points"][0])
     assert main(["collect", "runs/grid"]) == 0
     assert main(["sweep", CONFIG, "-p", "epochs=1", "--record", "runs/grid"]) == 1
@@ -123,7 +127,7 @@ def test_optuna_loop_feeds_the_objective_back(housing):
     assert all(point["point"]["width"] in (64, 128) for point in points)
     assert all(point["strategy"] == "/strategy/kalfa/optuna" and point["total"] == 2 for point in points)
     kind, text, target = collect(["runs/opt"])
-    assert kind == "sweep" and "best: point" in text
+    assert kind == "sweep" and "── SWEEP" in text and "best" in text
 
 
 def test_a_stopped_root_starts_no_point(housing, capsys):

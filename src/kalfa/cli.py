@@ -307,6 +307,8 @@ def build_parser():
     collect_cmd.add_argument("runs", nargs="+", metavar="RECORD", help="record directories, or one sweep root")
     collect_cmd.add_argument("--out", metavar="DIR", help="the directory of the summary files; the runs' parent "
                              "without it")
+    collect_cmd.add_argument("--markdown", action="store_true", help="print the markdown report instead of the "
+                             "table, every metric column with it; the files are written either way")
     collect_cmd.set_defaults(handler=cmd_collect)
 
     docs_cmd = command(commands, "docs", "the lego reference generated from the registry",
@@ -670,7 +672,7 @@ def cmd_generate(args) -> int:
 def cmd_collect(args) -> int:
     from . import collect
 
-    kind, text, target = collect.collect(args.runs, args.out)
+    kind, text, target = collect.collect(args.runs, args.out, markdown=args.markdown, style=style_for(sys.stdout))
     sys.stdout.write(text)
     files = "sweep.csv, sweep.json and sweep.md" if kind == "sweep" else "cv.json and cv.md"
     print(f"wrote {files} under {target}")
