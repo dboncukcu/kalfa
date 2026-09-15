@@ -81,6 +81,27 @@ def clean(value):
     return value
 
 
+def sweep_state(states):
+    if "running" in states:
+        return "running"
+    if states and all(state == "finished" for state in states):
+        return "finished"
+    if "failed" in states:
+        return "failed"
+    return "pending"
+
+
+def settle(entries):
+    below = {}
+    for entry in entries:
+        below.setdefault(str(Path(entry["path"]).parent), []).append(entry["status"]["state"])
+    for entry in entries:
+        states = below.get(entry["path"]) if entry["kind"] == "sweep" else None
+        if states:
+            entry["status"] = {**entry["status"], "state": sweep_state(states)}
+    return entries
+
+
 def small_value(value, depth=0):
     if isinstance(value, numpy.generic):
         value = value.item()
@@ -169,7 +190,7 @@ class Board:
             found.append({"path": relative_to(self.root, path), "kind": kind, "name": manifest.get("name") or path.name,
                           "started": manifest.get("started"), "status": record.status(),
                           "unit": "epoch" if manifest.get("turn") == "epoch" else "turn"})
-        return found
+        return settle(found)
 
     def tree(self):
         groups = {}
@@ -248,9 +269,8 @@ class Board:
                 states = [point["status"]["state"] for point in sweep["points"]]
                 active = any(state in ("running", "pending") for state in states)
                 total = sweep["manifest"].get("total") or len(states)
-                note = {**entry, "status": {"state": "running" if active else entry["status"]["state"],
-                                            "last_seen": entry["status"]["last_seen"]},
-                        "finished": states.count("finished"), "running": states.count("running"), "total": total,
+                note = {**entry, "finished": states.count("finished"), "running": states.count("running"),
+                        "failed": states.count("failed"), "total": total,
                         "objective": sweep["objective"], "best": sweep["best"]}
                 (live if active else recent).append(note)
                 continue
@@ -448,6 +468,8 @@ class Board:
             if not record.is_record:
                 continue
             note = record.read_json("manifest.json") or {}
+            if (note.get("kind") or "point") != "point":
+                continue
             done = record.read_json("sweep.json")
             history = History.read(child)
             if not objective and done is not None:

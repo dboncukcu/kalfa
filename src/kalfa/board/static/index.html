@@ -73,6 +73,7 @@
             <div class="meta-row">
               <span>{{ entry.finished }} of {{ entry.total }} points finished</span>
               <span>{{ entry.running }} running</span>
+              <span class="bad" v-if="entry.failed">{{ entry.failed }} failed</span>
               <span v-if="entry.best">best {{ entry.objective.monitor }} {{ fmt(entry.best.objective.value) }} (point {{ entry.best.id }})</span>
             </div>
           </template>
@@ -106,7 +107,7 @@
               <td><span class="badge kind">{{ entry.kind }}</span></td>
               <td><span class="badge" :class="stateOf(entry)">{{ stateOf(entry) }}</span></td>
               <td class="muted">{{ entry.status.last_seen ? ago(entry.status.last_seen) : '' }}</td>
-              <td><template v-if="entry.kind === 'sweep'">{{ entry.finished }} of {{ entry.total }} points<template v-if="entry.best"> · best {{ fmt(entry.best.objective.value) }}</template></template></td>
+              <td><template v-if="entry.kind === 'sweep'">{{ entry.finished }} of {{ entry.total }} points<span class="bad" v-if="entry.failed">, {{ entry.failed }} failed</span><template v-if="entry.best"> · best {{ fmt(entry.best.objective.value) }}</template></template></td>
             </tr>
           </tbody>
         </table>
