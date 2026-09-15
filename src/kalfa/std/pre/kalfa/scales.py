@@ -12,8 +12,6 @@ class Absolute(Preprocessor):
 
 
 class Log(Scaler):
-    inverts_torch = True
-
     def __init__(self, base=10.0, norm=1.0):
         self.base = base
         self.norm = norm
@@ -48,8 +46,6 @@ class Asinh(Scaler):
 
 
 class Sinh(Scaler):
-    inverts_torch = True
-
     def __init__(self, scale=1.0, overflow=700.0):
         if scale <= 0.0:
             raise ValueError(f"sinh: scale must be positive, got {scale!r}")
@@ -87,8 +83,6 @@ class Tanh(Scaler):
 
 
 class Atanh(Scaler):
-    inverts_torch = True
-
     def __init__(self, scale=1.0):
         if scale <= 0.0:
             raise ValueError(f"atanh: scale must be positive, got {scale!r}")

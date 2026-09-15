@@ -23,7 +23,6 @@ class Preprocessor:
     fits = False
     incremental = False
     decodes = False
-    inverts_torch = False
     dtype = None
 
     def fit(self, values) -> None:
@@ -34,9 +33,6 @@ class Preprocessor:
 
     def inverse(self, values):
         return values
-
-    def inverse_torch(self, tensor, columns=None):
-        raise NotImplementedError
 
     def columns(self, name: str) -> list | None:
         return None
@@ -53,8 +49,6 @@ class Scaler(Preprocessor):
 
 
 class Affine(Scaler):
-    inverts_torch = True
-
     def affine(self):
         raise NotImplementedError
 
@@ -203,6 +197,13 @@ def fitted_object(fitted, preprocessor, name):
     return (entry or {}).get(name)
 
 
+def fitted_class(fitted, preprocessor, name):
+    entry = (fitted or {}).get(preprocessor)
+    if isinstance(entry, Grouped):
+        return entry.preprocessor if name in entry.columns else None
+    return (entry or {}).get(name)
+
+
 @dataclass
 class Prep:
     fields: list
@@ -268,8 +269,8 @@ class Prep:
             for preprocessor in self.field(name).chain:
                 if not self.applies(preprocessor, set_name):
                     continue
-                fitted = self.object_of(preprocessor, name)
-                if fitted is not None and fitted.rescales and not fitted.inverts_torch:
+                built = fitted_class(self.fitted, preprocessor, name)
+                if built is not None and built.rescales and not hasattr(built, "inverse_torch"):
                     return False
         return True
 
