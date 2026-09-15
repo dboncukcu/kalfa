@@ -176,6 +176,9 @@ class Context:
         names = self.target_fields(target, output)
         if not any(prep.rescales(name) for name in names):
             return predictions, targets
+        if prep.rescales_on_device(names, set_name):
+            return (rescale_on_device(prep, names, predictions, set_name),
+                    rescale_on_device(prep, names, targets, set_name))
         return (rescale_tensor(predictions, lambda matrix: rescale_columns(prep, names, matrix, set_name)),
                 rescale_tensor(targets, lambda matrix: rescale_columns(prep, names, matrix, set_name)))
 
@@ -197,6 +200,19 @@ def rescale_columns(prep, names, matrix, set_name):
         if position < out.shape[1]:
             out[:, position] = prep.rescale(name, out[:, position], set_name)
     return out
+
+
+def rescale_on_device(prep, names, value, set_name):
+    if not value.is_floating_point():
+        return value
+    flat = value.reshape(len(value), -1)
+    if len(names) == 1:
+        out = prep.rescale_torch(names[0], flat, set_name)
+    else:
+        out = torch.cat([prep.rescale_torch(names[position], flat[:, position:position + 1], set_name)
+                         if position < len(names) else flat[:, position:position + 1]
+                         for position in range(flat.shape[1])], dim=1)
+    return out.reshape(value.shape)
 
 
 def rescale_tensor(value, transform):

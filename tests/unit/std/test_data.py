@@ -373,3 +373,61 @@ def test_pin_memory_follows_the_device():
     assert torch_loader(dataset, "train", 4, device=Device.cpu(), pin_memory=True).pin_memory is True
     assert torch_loader(dataset, "train", 4, device=Device("cuda", "/device/kalfa/cuda"),
                         pin_memory=False).pin_memory is False
+
+
+def torch_inverse_parity(pres, chain, target, columns=1):
+    from kalfa.std.common.runtime import rescale_columns, rescale_on_device, rescale_tensor
+
+    frame = pandas.DataFrame(numpy.zeros((len(target), 1)), columns=["x0"])
+    frame["a"] = target
+    prep = fit(frame, {"x0": {}, "a": {"target": True, "preprocessors": chain}}, pres, [])
+    if not prep.rescales_on_device(["a"], "test"):
+        return None
+    block = numpy.ascontiguousarray(numpy.tile(frame["a"].to_numpy().reshape(-1, 1), (1, columns)))
+    tensor = torch.as_tensor(block, dtype=torch.float32)
+    on_cpu = rescale_tensor(tensor, lambda matrix: rescale_columns(prep, ["a"], matrix, "test"))
+    on_device = rescale_on_device(prep, ["a"], tensor, "test")
+    assert on_device.shape == tensor.shape and on_device.dtype == tensor.dtype
+    return float((on_cpu - on_device).abs().max()) / (float(on_cpu.abs().max()) or 1.0)
+
+
+def test_the_torch_inverse_agrees_with_the_numpy_one():
+    from kalfa.std.pre.kalfa.median_std_scaler import MedianStdScaler
+    from kalfa.std.pre.kalfa.scales import Atanh, Log, Sinh
+    from kalfa.std.pre.sklearn.scalers import MaxAbsScaler, MinMaxScaler, RobustScaler, StandardScaler
+
+    generator = numpy.random.default_rng(0)
+    plain = generator.normal(loc=40.0, scale=8.0, size=400)
+    positive = numpy.abs(generator.normal(loc=5.0, scale=2.0, size=400)) + 0.1
+    inside = generator.uniform(-0.9, 0.9, size=400)
+    for name, built in (("standard", StandardScaler()), ("minmax", MinMaxScaler()), ("max_abs", MaxAbsScaler()),
+                        ("robust", RobustScaler()), ("median_std", MedianStdScaler())):
+        assert torch_inverse_parity({"s": built}, ["s"], plain) < 1e-6, name
+    assert torch_inverse_parity({"l": Log()}, ["l"], positive) < 1e-5
+    assert torch_inverse_parity({"l": Log(), "s": StandardScaler()}, ["l", "s"], positive) < 1e-5
+    assert torch_inverse_parity({"p": Sinh(scale=2.0)}, ["p"], inside) < 1e-6
+    assert torch_inverse_parity({"p": Atanh(scale=2.0)}, ["p"], inside) < 1e-6
+    assert torch_inverse_parity({"s": StandardScaler()}, ["s"], plain, columns=24) < 1e-6
+
+
+def test_a_preprocessor_without_a_closed_form_keeps_the_numpy_path():
+    from kalfa.std.pre.kalfa.scales import Asinh, Tanh
+    from kalfa.std.pre.sklearn.transformers import PowerTransformer, QuantileTransformer
+
+    plain = numpy.random.default_rng(1).normal(loc=40.0, scale=8.0, size=400)
+    for name, built in (("quantile", QuantileTransformer()), ("power", PowerTransformer()),
+                        ("asinh", Asinh(scale=2.0)), ("tanh", Tanh(scale=2.0))):
+        assert torch_inverse_parity({"s": built}, ["s"], plain) is None, name
+
+
+def test_the_device_terms_are_cached_and_never_pickled():
+    import pickle
+
+    from kalfa.std.pre.sklearn.scalers import StandardScaler
+
+    scaler = StandardScaler()
+    scaler.fit(numpy.random.default_rng(2).normal(size=(200, 3)))
+    tensor = torch.ones(4, 1)
+    first = scaler.inverse_torch(tensor, columns=[1])
+    assert scaler.cached_terms and torch.equal(scaler.inverse_torch(tensor, columns=[1]), first)
+    assert "cached_terms" not in pickle.loads(pickle.dumps(scaler)).__dict__

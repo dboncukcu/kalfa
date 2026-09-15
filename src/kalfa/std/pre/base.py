@@ -23,6 +23,7 @@ class Preprocessor:
     fits = False
     incremental = False
     decodes = False
+    inverts_torch = False
     dtype = None
 
     def fit(self, values) -> None:
@@ -33,6 +34,9 @@ class Preprocessor:
 
     def inverse(self, values):
         return values
+
+    def inverse_torch(self, tensor, columns=None):
+        raise NotImplementedError
 
     def columns(self, name: str) -> list | None:
         return None
@@ -46,6 +50,39 @@ class Scaler(Preprocessor):
 
     def inverse(self, values):
         raise NotImplementedError
+
+
+class Affine(Scaler):
+    inverts_torch = True
+
+    def affine(self):
+        raise NotImplementedError
+
+    def __getstate__(self):
+        return {key: value for key, value in self.__dict__.items() if key != "cached_terms"}
+
+    def device_terms(self, tensor, columns=None):
+        cache = getattr(self, "cached_terms", None)
+        if cache is None:
+            cache = self.cached_terms = {}
+        key = (str(tensor.device), tensor.dtype, None if columns is None else tuple(columns))
+        if key not in cache:
+            shift, scale = (numpy.asarray(part, dtype="float64").reshape(-1) for part in self.affine())
+            if columns is not None:
+                picked = list(columns)
+                shift, scale = shift[picked], scale[picked]
+            if shift.size == 1:
+                cache[key] = (float(shift[0]), float(scale[0]))
+            else:
+                cache[key] = (torch.as_tensor(shift, dtype=tensor.dtype, device=tensor.device),
+                              torch.as_tensor(scale, dtype=tensor.dtype, device=tensor.device))
+        return cache[key]
+
+    def inverse_torch(self, tensor, columns=None):
+        shift, scale = self.device_terms(tensor, columns)
+        if not isinstance(shift, float) and tensor.shape[-1] != shift.numel():
+            raise ValueError(f"the scaler was fitted on {shift.numel()} columns and got {tensor.shape[-1]}")
+        return tensor * scale + shift
 
 
 class Encoder(Preprocessor):
@@ -146,6 +183,9 @@ class ColumnView:
     def inverse(self, values):
         return self.preprocessor.inverse(values, columns=[self.position])
 
+    def inverse_torch(self, tensor, columns=None):
+        return self.preprocessor.inverse_torch(tensor, columns=[self.position])
+
 
 @dataclass
 class Grouped:
@@ -212,6 +252,26 @@ class Prep:
             if fitted is not None and fitted.rescales:
                 out = numpy.asarray(fitted.inverse(out))
         return out
+
+    def rescale_torch(self, name, tensor, set_name="test"):
+        out = tensor
+        for preprocessor in reversed(self.field(name).chain):
+            if not self.applies(preprocessor, set_name):
+                continue
+            fitted = self.object_of(preprocessor, name)
+            if fitted is not None and fitted.rescales:
+                out = fitted.inverse_torch(out)
+        return out
+
+    def rescales_on_device(self, names, set_name="test"):
+        for name in names:
+            for preprocessor in self.field(name).chain:
+                if not self.applies(preprocessor, set_name):
+                    continue
+                fitted = self.object_of(preprocessor, name)
+                if fitted is not None and fitted.rescales and not fitted.inverts_torch:
+                    return False
+        return True
 
     def rescales(self, name=None):
         for item in self.fields:

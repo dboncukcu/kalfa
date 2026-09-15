@@ -77,6 +77,9 @@ class CountingPrep:
     def rescales(self, name=None):
         return True
 
+    def rescales_on_device(self, names, set_name="test"):
+        return False
+
     def rescale(self, name, values, set_name):
         self.calls += 1
         return values * 2.0

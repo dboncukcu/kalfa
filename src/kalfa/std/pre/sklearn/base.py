@@ -1,6 +1,6 @@
 import numpy
 
-from kalfa.std.pre.base import Scaler
+from kalfa.std.pre.base import Affine, Scaler
 
 
 def as_block(values):
@@ -8,7 +8,7 @@ def as_block(values):
     return matrix.reshape(-1, 1) if matrix.ndim == 1 else matrix
 
 
-class SklearnScaler(Scaler):
+class SklearnScaler(Affine):
     grouped = True
     fits = True
     incremental = True
@@ -19,6 +19,9 @@ class SklearnScaler(Scaler):
 
     def terms(self):
         raise NotImplementedError
+
+    def affine(self):
+        return self.terms()
 
     def fit(self, values):
         self.scaler = self.build().fit(as_block(values))

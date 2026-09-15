@@ -1058,7 +1058,7 @@ without building the object:
 | criterion | none, a function | `(predictions, targets, **params)` |
 | objective | none, a function | `(models, batch, **params)`, plus `step`, `epoch`, `rng`, `scaler`, `losses` if named |
 | trigger | none, a function | `(metrics, turn_index, state)` returning `(fired, state)` |
-| preprocessor | `std.pre.base.Preprocessor` (`Scaler`, `Encoder`, `Tokenizer`) | `apply`, and `fit`, `inverse`, `columns`, `decode` as its facts declare |
+| preprocessor | `std.pre.base.Preprocessor` (`Scaler`, `Affine`, `Encoder`, `Tokenizer`) | `apply`, and `fit`, `inverse`, `columns`, `decode` as its facts declare; `affine()` under `Affine`, or `inverse_torch` with `inverts_torch = True`, keeps the metrics' inversion on the device |
 | metric | `std.metric.base.Metric` | `reset()`, `update(...)` naming what it wants, `compute()` |
 | model | `std.builder.base.Model` | `inputs`, `outputs`, `initialized`, `trainable` |
 | dataset | `std.feed.base.Dataset` / `IterableDataset` | `inputs`, `targets`, `frame`, `rows()`, `labels(name)`, `size()` |

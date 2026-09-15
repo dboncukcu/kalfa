@@ -1,4 +1,7 @@
+import math
+
 import numpy
+import torch
 
 from kalfa.std.pre.base import Preprocessor, Scaler
 
@@ -9,6 +12,8 @@ class Absolute(Preprocessor):
 
 
 class Log(Scaler):
+    inverts_torch = True
+
     def __init__(self, base=10.0, norm=1.0):
         self.base = base
         self.norm = norm
@@ -19,6 +24,9 @@ class Log(Scaler):
 
     def inverse(self, values):
         return numpy.expm1(numpy.asarray(values, dtype="float64") * numpy.log(self.base)) * self.norm
+
+    def inverse_torch(self, tensor, columns=None):
+        return torch.expm1(tensor * math.log(self.base)) * self.norm
 
 
 class Asinh(Scaler):
@@ -40,6 +48,8 @@ class Asinh(Scaler):
 
 
 class Sinh(Scaler):
+    inverts_torch = True
+
     def __init__(self, scale=1.0, overflow=700.0):
         if scale <= 0.0:
             raise ValueError(f"sinh: scale must be positive, got {scale!r}")
@@ -55,6 +65,9 @@ class Sinh(Scaler):
 
     def inverse(self, values):
         return numpy.arcsinh(numpy.asarray(values, dtype="float64")) * self.scale
+
+    def inverse_torch(self, tensor, columns=None):
+        return torch.arcsinh(tensor) * self.scale
 
 
 class Tanh(Scaler):
@@ -74,6 +87,8 @@ class Tanh(Scaler):
 
 
 class Atanh(Scaler):
+    inverts_torch = True
+
     def __init__(self, scale=1.0):
         if scale <= 0.0:
             raise ValueError(f"atanh: scale must be positive, got {scale!r}")
@@ -90,3 +105,6 @@ class Atanh(Scaler):
 
     def inverse(self, values):
         return numpy.tanh(numpy.asarray(values, dtype="float64")) * self.scale
+
+    def inverse_torch(self, tensor, columns=None):
+        return torch.tanh(tensor) * self.scale

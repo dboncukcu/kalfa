@@ -1,6 +1,6 @@
 import numpy
 
-from kalfa.std.pre.base import Scaler
+from kalfa.std.pre.base import Affine
 
 
 def as_block(values):
@@ -8,9 +8,12 @@ def as_block(values):
     return matrix.reshape(-1, 1) if matrix.ndim == 1 else matrix
 
 
-class MedianStdScaler(Scaler):
+class MedianStdScaler(Affine):
     grouped = True
     fits = True
+
+    def affine(self):
+        return self.center, self.scale
 
     def __init__(self):
         self.center = None
