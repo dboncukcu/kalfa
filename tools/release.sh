@@ -71,13 +71,17 @@ else
     printf 'release: uv is not on PATH, uv.lock still says %s\n' "$OLD" >&2
 fi
 
-if [[ -f tools/regenerate.py ]] && command -v uv >/dev/null 2>&1 \
-        && ! uv run python tools/regenerate.py --check >/dev/null 2>&1; then
-    printf 'release: the generated files carry the version, so they are stale now\n' >&2
-    if confirm "regenerate DOCS.md and the golden files?"; then
-        uv run python tools/regenerate.py --all
-        REGENERATED=1
-    fi
+if [[ ! -f tools/regenerate.py ]]; then
+    printf 'release: tools/regenerate.py is gone, the generated files still say %s\n' "$OLD" >&2
+elif ! command -v uv >/dev/null 2>&1; then
+    printf 'release: uv is not on PATH, the generated files still say %s\n' "$OLD" >&2
+else
+    printf 'the generated files carry the version, so they are written again\n'
+    uv run python tools/regenerate.py --all >/dev/null
+    uv run python tools/regenerate.py --check >/dev/null \
+        || die "regenerate wrote files that are still not current, the version is set but nothing is committed"
+    REGENERATED=1
+    printf 'DOCS.md and the golden files: %s\n' "$NEW"
 fi
 
 git add pyproject.toml uv.lock
