@@ -137,9 +137,9 @@ def file_note(root, path):
 
 
 def static_path(name):
-    base = Path(__file__).parent / "static"
+    base = (Path(__file__).parent / "static").resolve()
     target = (base / (name or "")).resolve()
-    if base not in target.parents or not target.is_file():
+    if not target.is_relative_to(base) or not target.is_file():
         return None
     return target
 

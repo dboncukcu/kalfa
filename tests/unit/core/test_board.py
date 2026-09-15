@@ -3,8 +3,11 @@
 import json
 import threading
 import urllib.request
+from pathlib import Path
 
 import pandas
+
+import kalfa.board
 
 from helpers import housing_frame
 from kalfa.board import Board, serve, static_path
@@ -190,3 +193,15 @@ def test_the_server_stops_a_record_through_a_post(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_static_path_holds_when_the_install_sits_behind_a_symlink(tmp_path, monkeypatch):
+    package = Path(kalfa.board.__file__).parent
+    link = tmp_path / "linked"
+    link.symlink_to(package, target_is_directory=True)
+    assert link.resolve() != link
+    monkeypatch.setattr(kalfa.board, "__file__", str(link / "__init__.py"))
+    assert static_path("index.html").name == "index.html"
+    assert static_path("vendor/vue.global.prod.js") is not None
+    assert static_path("../__init__.py") is None and static_path("../../record.py") is None
+    assert static_path("nope.js") is None and static_path("") is None
