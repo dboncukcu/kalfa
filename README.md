@@ -872,6 +872,17 @@ pipeline stage by stage, and browses the predictions, the plots and the files. T
 the tab and the open plot, so a link is one exact view. On a batch system it runs on the login node and the
 browser reaches it through an ssh tunnel.
 
+The predictions tab takes a pandas query over the columns of the file, the targets, the `pred_` and `raw_` wires,
+the calibration flags and the `data.spectators` columns:
+
+```
+site == "b" and pred_y > 0 and price < 4
+```
+
+R², rmse, mae, the residual histogram and the largest errors are then all computed over the rows it keeps, and
+the query rides in the address bar with the rest of the view. It is evaluated server side, so `--host` beyond
+`127.0.0.1` hands that to whoever can reach the port.
+
 ```bash
 kalfa stop runs/x        # writes stop.json; the run ends after its current turn, as an early stop would
 ```

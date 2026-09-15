@@ -819,6 +819,7 @@ const app = Vue.createApp({
       logs: { name: "", lines: [], total: 0 }, texts: {}, describeText: null, showModuleText: false,
       sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] },
       tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
+      whereDraft: "",
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
       refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
       source: null, timer: null, treeTimer: null, connected: false, queue: {}, plot: defaultPlot(), busy: 0,
@@ -851,6 +852,7 @@ const app = Vue.createApp({
       return [{ name: `${pair.pred} against ${pair.target}`, color: PALETTE[0], points }, ...diagonal];
     },
     sampleAll() { return this.route.params.sample === "all"; },
+    whereFilter() { return this.route.params.where || ""; },
     histogramLines() {
       if (!this.pairInfo) return [];
       const { edges, counts } = this.pairInfo.histogram;
@@ -1379,6 +1381,10 @@ const app = Vue.createApp({
     },
     predictionFile() { if (this.tab === "predictions") this.loadPredictions(); },
     sampleAll() { if (this.tab === "predictions") this.loadPredictions(); },
+    whereFilter: { immediate: true, handler(now) {
+      this.whereDraft = now;
+      if (this.tab === "predictions" && this.predictionsData) this.loadPredictions();
+    } },
     "plot.bins"() { if (this.tab === "predictions" && this.predictionsData) this.loadPredictions(); },
     expanded(now, before) { if (now && !before) this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), bins: this.plot.bins }; },
     "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
@@ -1569,9 +1575,12 @@ const app = Vue.createApp({
     async loadPredictions() {
       if (!this.record || !this.predictionFile) { this.predictionsData = null; return; }
       const path = this.path, name = this.predictionFile;
-      const found = await this.heavy(api("/api/predictions", { path, name, sample: this.sampleAll ? "all" : 2000, bins: this.plot.bins }));
-      if (path === this.path && name === this.predictionFile) this.predictionsData = found;
+      const where = this.whereFilter;
+      const found = await this.heavy(api("/api/predictions", { path, name, sample: this.sampleAll ? "all" : 2000, bins: this.plot.bins, where }));
+      if (path === this.path && name === this.predictionFile && where === this.whereFilter) this.predictionsData = found;
     },
+    applyWhere() { this.go({ where: (this.whereDraft || "").trim() || null }); },
+    clearWhere() { this.whereDraft = ""; this.go({ where: null }); },
     async loadPrep() {
       if (this.prepData !== null) return;
       const path = this.path;

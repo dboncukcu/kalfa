@@ -19,7 +19,8 @@ def records(root):
     run.write_text("resolved.yaml",
                    "seed: 7\ntraining: {checkpoint: {uri: best, params: {monitor: val/rmse, mode: min}}}\n")
     pandas.DataFrame({"row": [0, 1, 2, 3], "price": [1.0, 2.0, 3.0, 4.0], "raw_y": [1.1, 2.2, 2.7, 4.4],
-                      "pred_y": [1.1, 2.2, 2.7, 4.4], "flag_y": [False, False, False, True]}).to_parquet(
+                      "pred_y": [1.1, 2.2, 2.7, 4.4], "flag_y": [False, False, False, True],
+                      "site": ["a", "a", "b", "b"]}).to_parquet(
         run.directory / "predictions.parquet", index=False)
     (run.directory / "checkpoints").mkdir()
     (run.directory / "checkpoints" / "best.pt").write_bytes(b"pt")
@@ -86,6 +87,13 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     coarse = board.predictions("runs/one", sample="all", bins=5)
     assert len(coarse["pairs"][0]["histogram"]["counts"]) == 5 and len(coarse["sample"]) == 4
     assert len(board.predictions("runs/one", sample=2)["sample"]) == 2
+    assert predictions["carried"] == ["site"] and "site" in predictions["sample"][0]
+    kept = board.predictions("runs/one", where="site == 'b'")
+    assert kept["rows"] == 2 and kept["total"] == 4 and kept["where"] == "site == 'b'" and kept["error"] is None
+    assert kept["pairs"][0]["points"] == 2 and [row["row"] for row in kept["sample"]] == [2, 3]
+    assert kept["pairs"][0]["rmse"] != predictions["pairs"][0]["rmse"]
+    broken = board.predictions("runs/one", where="ghost > 1")
+    assert broken["rows"] == 0 and broken["total"] == 4 and "ghost" in broken["error"]
     files = board.files("runs/one")
     assert "history.jsonl" in [item["name"] for item in files["files"]] and files["total"] > 0
     assert board.text("runs/one", "resolved.yaml")["text"].startswith("seed: 7")

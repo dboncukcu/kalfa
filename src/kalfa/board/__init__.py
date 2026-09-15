@@ -280,7 +280,7 @@ class Board:
                                   if key.startswith(("val/", "test/")) and is_number(value) and "/total" not in key}})
         return {"rows": rows}
 
-    def predictions(self, relative, sample=2000, name="predictions.parquet", bins=40):
+    def predictions(self, relative, sample=2000, name="predictions.parquet", bins=40, where=None):
         path = self.resolve(relative)
         if path is None or not name.startswith("predictions") or not name.endswith(".parquet"):
             return None
@@ -288,6 +288,13 @@ class Board:
         if not target.is_file():
             return None
         table = pandas.read_parquet(target)
+        total, failed = len(table), None
+        if where:
+            try:
+                table = table.query(where)
+            except Exception as problem:
+                failed = f"{type(problem).__name__}: {problem}"
+                table = table.iloc[:0]
         pairs = prediction_pairs(table)
         found = []
         for pred, truth in pairs:
@@ -306,10 +313,15 @@ class Board:
                           "worst": [{"row": row["row"], "target": row[truth], "pred": row[pred]}
                                     for _, row in rows[["row", truth, pred]].iterrows()]})
         flags = [column for column in table.columns if column.startswith("flag_")]
-        keep = list(dict.fromkeys(["row", *[column for pair in pairs for column in pair], *flags]))
+        named = {column for pair in pairs for column in pair}
+        carried = [column for column in table.columns
+                   if column not in named and column not in flags and column != "row"
+                   and not column.startswith(("pred_", "raw_"))]
+        keep = list(dict.fromkeys(["row", *named, *flags, *carried]))
         whole = sample == "all" or len(table) <= int(sample)
         picked = table if whole else table.sample(int(sample), random_state=0).sort_values("row")
-        return clean({"file": name, "rows": len(table), "columns": list(table.columns), "pairs": found, "flags": flags,
+        return clean({"file": name, "rows": len(table), "total": total, "where": where, "error": failed,
+                      "carried": carried, "columns": list(table.columns), "pairs": found, "flags": flags,
                       "sample": picked[keep].to_dict("records")})
 
     def files(self, relative):
@@ -548,7 +560,8 @@ def handler_for(board):
                 self.send_json(board.table())
             elif url.path == "/api/predictions":
                 self.send_json(board.predictions(path, query.get("sample", 2000),
-                                                 query.get("name", "predictions.parquet"), query.get("bins", 40)))
+                                                 query.get("name", "predictions.parquet"), query.get("bins", 40),
+                                                 query.get("where")))
             elif url.path == "/api/files":
                 self.send_json(board.files(path))
             elif url.path == "/api/text":

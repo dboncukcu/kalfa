@@ -478,7 +478,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'predictions'">
-        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
+        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. The filter is a pandas query over the columns of the file, the targets, the pred_ and raw_ wires, the flags and the data.spectators columns; R², rmse, mae, the histogram and the largest errors are all computed over the rows it keeps. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
         <div class="toolbar" v-if="record.predictions.length">
           <a v-for="name in record.predictions" :key="name" class="small" :class="{active: predictionFile === name}" :href="link({set: name, pair: null})">{{ name }}</a>
           <template v-if="predictionsData && predictionsData.pairs.length > 1">
@@ -488,9 +488,18 @@
           <span class="muted">·</span>
           <a class="small" :class="{active: !sampleAll}" :href="link({sample: null})">a sample of 2,000</a>
           <a class="small" :class="{active: sampleAll}" :href="link({sample: 'all'})">all rows</a>
-          <span class="muted" v-if="predictionsData">{{ count(predictionsData.rows) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
+          <span class="muted" v-if="predictionsData && !predictionsData.where">{{ count(predictionsData.rows) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
+          <span class="muted" v-else-if="predictionsData">{{ count(predictionsData.rows) }} of {{ count(predictionsData.total) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
           <span class="spinner" v-if="busy"></span>
         </div>
+        <div class="toolbar" v-if="record.predictions.length">
+          <input class="filter" v-model="whereDraft" type="search" spellcheck="false" @keyup.enter="applyWhere()"
+                 placeholder="a pandas query over the columns of this file, say  pred_y > 0 and price < 4">
+          <a class="small" href="#" @click.prevent="applyWhere()">filter</a>
+          <a class="small" v-if="whereFilter" href="#" @click.prevent="clearWhere()">clear</a>
+          <span class="muted" v-if="predictionsData && predictionsData.carried && predictionsData.carried.length">carried: {{ predictionsData.carried.join(", ") }}</span>
+        </div>
+        <p class="empty" v-if="predictionsData && predictionsData.error">the query did not run: {{ predictionsData.error }}</p>
         <p class="empty" v-if="!record.predictions.length">no predictions file in the record yet</p>
         <p class="empty" v-else-if="!predictionsData"><span class="spinner"></span> reading the predictions</p>
         <template v-else-if="pairInfo">

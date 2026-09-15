@@ -339,13 +339,16 @@ def build_parser():
                         "table, the curves, the architecture, the data pipeline, the predictions, the files, and a "
                         "stop button for a running record. It reads the records and writes nothing but stop.json. No "
                         "dependency beyond Python; on a batch system run it where the files are and reach it through "
-                        "an ssh tunnel.",
+                        "an ssh tunnel. The predictions tab evaluates a pandas query you type, so --host beyond "
+                        "127.0.0.1 hands that to whoever can reach the port.",
                         ["kalfa board runs",
                          "kalfa board /scratch/sweeps --port 9000",
                          "ssh -L 8080:127.0.0.1:8080 login.node    then open http://127.0.0.1:8080"])
     board_cmd.add_argument("root", metavar="ROOT", help="the directory whose records are shown, searched recursively")
     board_cmd.add_argument("--host", default="127.0.0.1", metavar="HOST",
-                           help="the address to listen on; 127.0.0.1 without it, this machine only")
+                           help="the address to listen on; 127.0.0.1 without it, this machine only. The page runs "
+                                "the predictions filter as a pandas query, so open it wider only on a network you "
+                                "trust")
     board_cmd.add_argument("--port", type=int, default=8080, metavar="PORT", help="the port; 8080 without it")
     log_option(board_cmd)
     board_cmd.set_defaults(handler=cmd_board)
