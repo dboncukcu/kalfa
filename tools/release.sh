@@ -42,7 +42,6 @@ if git rev-parse -q --verify "refs/tags/v$NEW" >/dev/null; then
     die "tag v$NEW exists already"
 fi
 
-CARRIED="$(git status --porcelain)"
 printf '%s -> %s\n' "$OLD" "$NEW"
 
 if confirm "run ruff, pytest and the golden check first?"; then
@@ -72,9 +71,21 @@ else
     printf 'release: uv is not on PATH, uv.lock still says %s\n' "$OLD" >&2
 fi
 
+if [[ -f tools/regenerate.py ]] && command -v uv >/dev/null 2>&1 \
+        && ! uv run python tools/regenerate.py --check >/dev/null 2>&1; then
+    printf 'release: the generated files carry the version, so they are stale now\n' >&2
+    if confirm "regenerate DOCS.md and the golden files?"; then
+        uv run python tools/regenerate.py --all
+        REGENERATED=1
+    fi
+fi
+
 git add pyproject.toml uv.lock
-if [[ -n "$CARRIED" ]]; then
-    printf '\nthe tree also carried:\n%s\n\n' "$CARRIED"
+[[ -z "${REGENERATED-}" ]] || git add DOCS.md tests/golden
+
+LEFT="$(git status --porcelain | grep -v '^[MARCD] ' || true)"
+if [[ -n "$LEFT" ]]; then
+    printf '\nnot staged:\n%s\n\n' "$LEFT"
     if confirm "stage these too?"; then
         git add -A
     fi
