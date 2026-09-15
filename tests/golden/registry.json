@@ -110,7 +110,7 @@
       "alias": [
         "best"
       ],
-      "description": "Write best.pt when the monitored value improves and last.pt every turn",
+      "description": "Write best.pt when the monitored value improves and last.pt every turn; last: false writes best.pt alone, for a run that is never resumed",
       "facts": {
         "writes": [
           "best",
@@ -118,7 +118,7 @@
         ]
       },
       "kind": "checkpoint",
-      "signature": "(monitor, mode='min')"
+      "signature": "(monitor, mode='min', last=True)"
     },
     "/checkpoint/kalfa/last": {
       "alias": [
@@ -1887,10 +1887,14 @@
     },
     "/loader/kalfa/torch": {
       "alias": [],
-      "description": "torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets, the whole set as one batch without a size; drop_last auto drops the last train batch only when it would hold one row; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers",
-      "facts": {},
+      "description": "torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets, the whole set as one batch without a size; drop_last auto drops the last train batch only when it would hold one row; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own and stays alive between turns unless persistent says otherwise; eval_workers is workers for the evaluation loaders when it is not written; pin_memory follows the device, on for cuda; a stream dataset shuffles through buffer rows and takes no sampler or workers",
+      "facts": {
+        "bus": {
+          "device": "device"
+        }
+      },
       "kind": "loader",
-      "signature": "(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)"
+      "signature": "(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, eval_workers=None, collate=None, balanced=False, buffer=4096, persistent=None, pin_memory=None, prefetch=None, device=None)"
     },
     "/metric/kalfa/fid": {
       "alias": [
@@ -3471,7 +3475,7 @@
       "zero_pad3d": "/layer/torch/zero_pad3d",
       "zeros": "/init/torch/zeros"
     },
-    "/alias/kalfa/lazy": {
+    "/alias/kalfa/lazy_tabular": {
       "abs": "/pre/kalfa/abs",
       "accuracy": "/metric/torchmetrics/accuracy",
       "adam": "/optimizer/torch/adam",
@@ -3488,7 +3492,9 @@
       "alternating": "/turn/kalfa/alternating",
       "architecture": "/plot/kalfa/architecture",
       "architecture_text": "/plot/kalfa/architecture_text",
+      "asinh": "/pre/kalfa/asinh",
       "astype": "/transform/kalfa/astype",
+      "atanh": "/pre/kalfa/atanh",
       "auroc": "/metric/torchmetrics/binary_auroc",
       "auto": "/device/kalfa/auto",
       "average_precision": "/metric/torchmetrics/binary_average_precision",
@@ -3508,6 +3514,7 @@
       "circular_pad1d": "/layer/torch/circular_pad1d",
       "circular_pad3d": "/layer/torch/circular_pad3d",
       "class_histogram": "/plot/kalfa/class_histogram",
+      "class_weights": "/data/kalfa/class_weights",
       "concat": "/layer/torch/concat",
       "confusion_matrix": "/plot/kalfa/confusion_matrix",
       "constant_pad": "/layer/torch/constant_pad",
@@ -3518,6 +3525,7 @@
       "conv_transpose1d": "/layer/torch/conv_transpose1d",
       "conv_transpose2d": "/layer/torch/conv_transpose2d",
       "conv_transpose3d": "/layer/torch/conv_transpose3d",
+      "correlation_heatmap": "/plot/kalfa/correlation_heatmap",
       "cosine_similarity": "/layer/torch/cosine_similarity",
       "cpu": "/device/kalfa/cpu",
       "cross_entropy": "/criterion/kalfa/cross_entropy",
@@ -3533,8 +3541,11 @@
       "dropout3d": "/layer/torch/dropout3d",
       "elu": "/layer/torch/elu",
       "embedding_bag": "/layer/torch/embedding_bag",
+      "error_map": "/plot/kalfa/error_map",
       "f1": "/metric/torchmetrics/f1",
       "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
+      "feature_distributions": "/plot/kalfa/feature_distributions",
+      "feature_width": "/data/kalfa/feature_width",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
       "flatten": "/layer/torch/flatten",
@@ -3561,7 +3572,11 @@
       "instance_norm": "/layer/torch/instance_norm",
       "kaiming": "/init/torch/kaiming",
       "kaiming_uniform": "/init/torch/kaiming_uniform",
+      "kbins_discretizer": "/pre/sklearn/kbins_discretizer",
+      "kde": "/plot/seaborn/kde",
+      "kfold": "/split/kalfa/kfold",
       "l1_distance": "/layer/kalfa/l1_distance",
+      "l2_normalize": "/layer/kalfa/l2_normalize",
       "label_encoder": "/pre/kalfa/label_encoder",
       "last": "/checkpoint/kalfa/last",
       "last_step": "/layer/torch/last_step",
@@ -3582,6 +3597,7 @@
       "lstm": "/layer/torch/lstm",
       "lstm_cell": "/layer/torch/lstm_cell",
       "mae": "/criterion/kalfa/mae",
+      "max_abs_scaler": "/pre/sklearn/max_abs_scaler",
       "max_unpool": "/layer/torch/max_unpool",
       "max_unpool1d": "/layer/torch/max_unpool1d",
       "max_unpool3d": "/layer/torch/max_unpool3d",
@@ -3600,15 +3616,21 @@
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
       "optuna": "/strategy/kalfa/optuna",
+      "pairplot": "/plot/seaborn/pairplot",
       "pairwise_distance": "/layer/torch/pairwise_distance",
       "parquet": "/source/kalfa/parquet_stream",
+      "permutation_importance": "/plot/kalfa/permutation_importance",
       "pixel_shuffle": "/layer/torch/pixel_shuffle",
       "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
+      "polynomial": "/layer/kalfa/polynomial",
+      "power_transformer": "/pre/sklearn/power_transformer",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "prelu": "/layer/torch/prelu",
       "pt2": "/export/kalfa/pt2",
+      "quantile_transformer": "/pre/sklearn/quantile_transformer",
       "random": "/strategy/kalfa/random",
+      "random_split": "/split/kalfa/random",
       "reflection_pad": "/layer/torch/reflection_pad",
       "reflection_pad1d": "/layer/torch/reflection_pad1d",
       "reflection_pad3d": "/layer/torch/reflection_pad3d",
@@ -3619,10 +3641,12 @@
       "replication_pad": "/layer/torch/replication_pad",
       "replication_pad1d": "/layer/torch/replication_pad1d",
       "replication_pad3d": "/layer/torch/replication_pad3d",
+      "residuals": "/plot/kalfa/residuals",
       "rms_norm": "/layer/torch/rms_norm",
       "rmse": "/metric/kalfa/rmse",
       "rnn": "/layer/torch/rnn",
       "rnn_cell": "/layer/torch/rnn_cell",
+      "robust_scaler": "/pre/sklearn/robust_scaler",
       "rrelu": "/layer/torch/rrelu",
       "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
@@ -3630,6 +3654,7 @@
       "sigmoid": "/layer/torch/sigmoid",
       "silu": "/layer/torch/silu",
       "simple_imputer": "/pre/kalfa/simple_imputer",
+      "sinh": "/pre/kalfa/sinh",
       "snapshot": "/checkpoint/kalfa/snapshot",
       "sobol": "/strategy/kalfa/sobol",
       "softmax": "/layer/torch/softmax",
@@ -3638,14 +3663,19 @@
       "softplus": "/layer/torch/softplus",
       "softshrink": "/layer/torch/softshrink",
       "softsign": "/layer/torch/softsign",
+      "spline_transformer": "/pre/sklearn/spline_transformer",
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
+      "tanh": "/pre/kalfa/tanh",
       "tanh_layer": "/layer/torch/tanh",
       "tanhshrink": "/layer/torch/tanhshrink",
+      "target_correlation": "/plot/kalfa/target_correlation",
       "target_encoding": "/frame/kalfa/target_encoding",
+      "target_vs_features": "/plot/kalfa/target_vs_features",
+      "target_weights": "/data/kalfa/target_weights",
       "threshold": "/calibrate/kalfa/threshold",
       "threshold_layer": "/layer/torch/threshold",
       "time_budget": "/trigger/kalfa/time_budget",
@@ -3657,9 +3687,11 @@
       "transformer_encoder_layer": "/layer/torch/transformer_encoder_layer",
       "unfold": "/layer/torch/unfold",
       "upsample": "/layer/torch/upsample",
+      "violin": "/plot/seaborn/violin",
       "warmup_cosine": "/schedule/kalfa/warmup_cosine",
       "weighted_mse": "/criterion/kalfa/weighted_mse",
       "weighted_sum": "/objective/kalfa/weighted_sum",
+      "window": "/feed/kalfa/window",
       "xavier": "/init/torch/xavier",
       "zero_pad": "/layer/torch/zero_pad",
       "zero_pad1d": "/layer/torch/zero_pad1d",

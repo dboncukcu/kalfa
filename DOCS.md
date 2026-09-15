@@ -337,7 +337,7 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
-| `/checkpoint/kalfa/best` | `best` | `(monitor, mode='min')` | writes: best, last | Write best.pt when the monitored value improves and last.pt every turn |
+| `/checkpoint/kalfa/best` | `best` | `(monitor, mode='min', last=True)` | writes: best, last | Write best.pt when the monitored value improves and last.pt every turn; last: false writes best.pt alone, for a run that is never resumed |
 | `/checkpoint/kalfa/last` | `last` | `()` | writes: last | Write last.pt every turn |
 | `/checkpoint/kalfa/snapshot` | `snapshot` | `(every)` | writes: last, snapshot | Write snapshot_<n>.pt every n turns and last.pt every turn |
 
@@ -481,7 +481,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `/lego/kalfa/select` |  | `(models, emas, which, record=None)` | returns: selected; bus: record=record | The report models: copies loaded from best.pt, or the final state for last |
 | `/lego/kalfa/text_lines_header` |  | `(path)` |  | The text field and the line count of a text file |
 | `/lego/kalfa/transform_set` |  | `(df, set, transforms)` |  | Apply the transforms that name this set, in order; the frame passes untouched without any |
-| `/loader/kalfa/torch` |  | `(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, collate=None, balanced=False, buffer=4096)` |  | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets, the whole set as one batch without a size; drop_last auto drops the last train batch only when it would hold one row; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own; a stream dataset shuffles through buffer rows and takes no sampler or workers |
+| `/loader/kalfa/torch` |  | `(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, eval_workers=None, collate=None, balanced=False, buffer=4096, persistent=None, pin_memory=None, prefetch=None, device=None)` | bus: device=device | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets, the whole set as one batch without a size; drop_last auto drops the last train batch only when it would hold one row; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own and stays alive between turns unless persistent says otherwise; eval_workers is workers for the evaluation loaders when it is not written; pin_memory follows the device, on for cuda; a stream dataset shuffles through buffer rows and takes no sampler or workers |
 | `/rule/kalfa/effects` |  | `(rules, models, optimizers, losses, loader)` | returns: effects, losses, models, optimizers; mutates: models, optimizers | The effects the fired rules left for this turn, applied once before it: a model's trainable flag and an optimizer's params in place, the models and the optimizers returned as they are, and the loss table as a copy with every loss param the rules set, which the turn and the evaluation of every set read alike |
 | `/rule/kalfa/open` |  | `(rules)` |  | Open the rule chain of a turn |
 | `/rule/kalfa/rule` |  | `(rules, name, when, set, after=None, metrics=None, turn_index=None, sticky=True)` | returns: rules; bus: metrics=metrics, turn_index=turn_index | Evaluate one rule: skipped until its after rule fired in an earlier turn; a sticky rule keeps its effects once fired and is not asked again; with sticky false it is asked every turn, its relative effects (times, plus) apply once per firing and its trigger starts over; later rules win the same key |
@@ -685,7 +685,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `indexed` | `/rng/kalfa/indexed` | rng |
 | `global` | `/rng/kalfa/global` | rng |
 
-### /alias/kalfa/lazy
+### /alias/kalfa/lazy_tabular
 
 | Alias | URI | Kind |
 |---|---|---|
@@ -882,6 +882,34 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `global` | `/rng/kalfa/global` | rng |
 | `parquet` | `/source/kalfa/parquet_stream` | source |
 | `csv` | `/source/kalfa/csv_stream` | source |
+| `random_split` | `/split/kalfa/random` | split |
+| `kfold` | `/split/kalfa/kfold` | split |
+| `max_abs_scaler` | `/pre/sklearn/max_abs_scaler` | pre |
+| `robust_scaler` | `/pre/sklearn/robust_scaler` | pre |
+| `quantile_transformer` | `/pre/sklearn/quantile_transformer` | pre |
+| `power_transformer` | `/pre/sklearn/power_transformer` | pre |
+| `asinh` | `/pre/kalfa/asinh` | pre |
+| `sinh` | `/pre/kalfa/sinh` | pre |
+| `tanh` | `/pre/kalfa/tanh` | pre |
+| `atanh` | `/pre/kalfa/atanh` | pre |
+| `kbins_discretizer` | `/pre/sklearn/kbins_discretizer` | pre |
+| `spline_transformer` | `/pre/sklearn/spline_transformer` | pre |
+| `window` | `/feed/kalfa/window` | feed |
+| `polynomial` | `/layer/kalfa/polynomial` | layer |
+| `l2_normalize` | `/layer/kalfa/l2_normalize` | layer |
+| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
+| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
+| `residuals` | `/plot/kalfa/residuals` | plot |
+| `error_map` | `/plot/kalfa/error_map` | plot |
+| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
+| `feature_distributions` | `/plot/kalfa/feature_distributions` | plot |
+| `target_correlation` | `/plot/kalfa/target_correlation` | plot |
+| `pairplot` | `/plot/seaborn/pairplot` | plot |
+| `violin` | `/plot/seaborn/violin` | plot |
+| `kde` | `/plot/seaborn/kde` | plot |
+| `class_weights` | `/data/kalfa/class_weights` | data |
+| `target_weights` | `/data/kalfa/target_weights` | data |
+| `feature_width` | `/data/kalfa/feature_width` | data |
 
 ### /alias/kalfa/tabular
 
