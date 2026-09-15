@@ -1,13 +1,9 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.diffusion import diffusion_steps, noise_schedule
 from kalfa.std.objective.base import input_of
 
 
-@lego("/objective/kalfa/ddpm", partial=True, refs={"model": "model", "schedule": "schedule"},
-      alias="ddpm", description="DDPM noise prediction loss: a random time step and noise per sample (rng), "
-                                "the model predicts the noise of the noised input")
 def ddpm(models, batch, model, schedule, rng=None):
     net = models[model]
     x0 = input_of(net, batch)

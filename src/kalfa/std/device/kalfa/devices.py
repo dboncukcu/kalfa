@@ -1,7 +1,5 @@
 import torch
 
-from kalfa.registration import lego
-
 
 def cuda_device(index):
     if not torch.cuda.is_available():
@@ -18,7 +16,6 @@ def mps_device():
     return torch.device("mps")
 
 
-@lego("/device/kalfa/auto", alias="auto", description="The first available device of cuda, mps, cpu")
 def auto():
     for candidate in (cuda_device, mps_device):
         try:
@@ -28,17 +25,13 @@ def auto():
     return torch.device("cpu")
 
 
-@lego("/device/kalfa/cpu", alias="cpu", description="The CPU")
 def cpu():
     return torch.device("cpu")
 
 
-@lego("/device/kalfa/cuda", alias="cuda", description="The cuda device with the given index; an error when cuda "
-                                                  "or that index is not available")
 def cuda(index=0):
     return cuda_device(index)
 
 
-@lego("/device/kalfa/mps", alias="mps", description="The Apple mps device; an error when it is not available")
 def mps():
     return mps_device()

@@ -372,6 +372,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cirak" },
     { name = "matplotlib" },
+    { name = "numpy" },
     { name = "optuna" },
     { name = "pandas" },
     { name = "pillow" },
@@ -395,6 +396,7 @@ dev = [
 requires-dist = [
     { name = "cirak", specifier = ">=0.2.3" },
     { name = "matplotlib", specifier = ">=3.8" },
+    { name = "numpy", specifier = ">=1.26" },
     { name = "optuna", specifier = ">=3.6" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pillow", specifier = ">=10.0" },

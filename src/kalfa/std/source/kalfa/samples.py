@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from kalfa.registration import lego
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.samples import Samples
 
@@ -64,9 +63,6 @@ class TextLines:
         raise ValueError(f"field {name!r} is not readable as a column; only text is")
 
 
-@lego("/source/kalfa/image_folder", returns="df", alias="image_folder",
-      header="/lego/kalfa/image_folder_header", samples=True,
-      description="Images under root/<class>/ as a Dataset with fields image and label")
 def image_folder(path):
     logger.info(f"reading {path}")
     folder = ImageFolder(path)
@@ -74,9 +70,6 @@ def image_folder(path):
     return Samples(folder)
 
 
-@lego("/source/kalfa/text_lines", returns="df", alias="text_lines", header="/lego/kalfa/text_lines_header",
-      samples=True,
-      description="The lines of a text file as a Dataset with the field text")
 def text_lines(path):
     logger.info(f"reading {path}")
     source = TextLines(path)

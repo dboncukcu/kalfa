@@ -1,17 +1,11 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.metric.base import Metric
 from pathlib import Path
 from kalfa.std.common.generation import write_turn_samples
 from kalfa.std.common.runtime import call_model, named_outputs, parameter_names, resolve_model
 
 
-@lego("/metric/kalfa/sample_writer", state=True, alias="sample_writer",
-      refs={"sampler": "generate"}, uses=["models"],
-      description="A metric that writes n samples per pass under samples/turn_<n> (png and pt, or txt) from "
-                  "the sampler (sampler: generate takes the generate section) or the predicts model; it "
-                  "reports no value, use every and sets to pace it")
 class SampleWriter(Metric):
     def __init__(self, n=16, sampler=None):
         self.n = int(n)

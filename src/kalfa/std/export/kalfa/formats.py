@@ -3,7 +3,6 @@ from pathlib import Path
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.optional import load
 
 
@@ -36,17 +35,12 @@ def target_path(directory, stem, suffix):
     return folder / f"{stem}.{suffix}"
 
 
-@lego("/export/kalfa/state_dict", alias="state_dict",
-      description="The model's state_dict as <stem>.pt, the plain torch weights")
 def state_dict(model, inputs, directory, stem):
     path = target_path(directory, stem, "pt")
     torch.save(model.state_dict(), path)
     return path
 
 
-@lego("/export/kalfa/pt2", alias="pt2",
-      description="The model exported with torch.export from one traced batch, the batch dimension left dynamic, "
-                  "and saved as <stem>.pt2, the archive torch.export.load reads back")
 def pt2(model, inputs, directory, stem):
     path = target_path(directory, stem, "pt2")
     model.eval()
@@ -55,9 +49,6 @@ def pt2(model, inputs, directory, stem):
     return path
 
 
-@lego("/export/kalfa/onnx", alias="onnx", requires="onnx",
-      description="The model exported to <stem>.onnx from one traced batch, the wires as the input and output "
-                  "names, at the opset given")
 def onnx(model, inputs, directory, stem, opset=17):
     if load("onnx", "the onnx export") is None:
         return None

@@ -19,6 +19,7 @@ dependencies = [
     "tezgah>=0.2.0",
     "cirak>=0.2.3",
     "ruamel.yaml>=0.18",
+    "numpy>=1.26",
     "torch>=2.2",
     "pandas>=2.2",
     "pyarrow>=15.0",

@@ -2,14 +2,10 @@ import warnings
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import turn_files
 
 
-@lego("/plot/kalfa/samples_gif", partial=True, alias="samples_gif",
-      description="The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning "
-                  "when there are none")
 def samples_gif(predictions, history, models, record, name=None, duration=400, figures=None):
     figures = figures or Figure()
     from PIL import Image
@@ -27,9 +23,6 @@ def samples_gif(predictions, history, models, record, name=None, duration=400, f
     return None
 
 
-@lego("/plot/kalfa/samples_matrix", partial=True, alias="samples_matrix",
-      description="A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; "
-                  "skipped with a warning when there are none")
 def samples_matrix(predictions, history, models, record, name=None, n=8, figures=None):
     figures = figures or Figure()
     files = turn_files(record, ".pt")

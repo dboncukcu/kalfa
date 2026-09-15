@@ -3,7 +3,6 @@ import logging
 import math
 from pathlib import Path
 
-from kalfa.registration import lego
 from kalfa.std.checkpoint.base import load, load_into, payload, save
 from kalfa.std.common.device import Device
 from kalfa.std.common.log import logger_for, number
@@ -72,9 +71,6 @@ def strip_suffix(state, suffix="_next"):
     return {key[:-len(suffix)] if key.endswith(suffix) else key: value for key, value in state.items()}
 
 
-@lego("/lego/kalfa/init_state", returns="epochs_left", mutates=["state"], bus=["resume", "device"],
-      description="Move the state to the device, load a checkpoint when resuming and restore the checkpoint "
-                  "policy from it, count the turns left")
 def init_state(state, epochs, steps, policy=None, resume=None, device=None):
     device = device or Device.cpu()
     device.place(state["models"])
@@ -96,8 +92,6 @@ def init_state(state, epochs, steps, policy=None, resume=None, device=None):
     return left
 
 
-@lego("/lego/kalfa/checkpoint", returns=None, bus=["metrics", "record"],
-      description="Write the checkpoint files the policy asks for; nothing without a policy")
 def checkpoint(state, policy, metrics=None, record=None):
     if not policy or record is None:
         return None
@@ -111,8 +105,6 @@ def checkpoint(state, policy, metrics=None, record=None):
     return None
 
 
-@lego("/lego/kalfa/save_final", returns=None, bus=["record"],
-      description="Write final/state.pt with the full state once training ends")
 def save_final(models, optimizers, emas, counters, rules, record=None):
     if record is None:
         return None
@@ -121,8 +113,6 @@ def save_final(models, optimizers, emas, counters, rules, record=None):
     return None
 
 
-@lego("/lego/kalfa/select", returns="selected", bus=["record"],
-      description="The report models: copies loaded from best.pt, or the final state for last")
 def select(models, emas, which, record=None):
     copies = copy.deepcopy(dict(models))
     ema_copies = copy.deepcopy(dict(emas or {}))

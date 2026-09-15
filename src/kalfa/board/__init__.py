@@ -459,7 +459,7 @@ class Board:
 
     def describe(self, relative):
         from kalfa.api import check
-        from kalfa.describe import report
+        from kalfa.describe.render import report
         from kalfa.style import Style
 
         path = self.resolve(relative)

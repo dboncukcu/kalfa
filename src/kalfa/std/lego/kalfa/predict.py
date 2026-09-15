@@ -2,7 +2,6 @@ from pathlib import Path
 
 import pandas
 
-from kalfa.registration import lego
 from kalfa.std.common.files import atomic
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.prediction import prediction_table
@@ -12,10 +11,6 @@ from kalfa.std.common.runtime import resolve_model
 logger_after = logger_for("after")
 
 
-@lego("/lego/kalfa/predict", returns="predictions", bus=["record", "device"],
-      description="Predict a set with the report model, invert the target chain, apply the fitted "
-                  "calibrations, write predictions.parquet for the test set and predictions_<set>.parquet for "
-                  "another")
 def predict(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None,
             device=None):
     if loader is None or loader.dataset.size() == 0 or predicts is None:

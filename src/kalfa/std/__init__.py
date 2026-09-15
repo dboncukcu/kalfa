@@ -14,9 +14,8 @@ declare_facts("uses", "needs_grad", "needs_models", "extras", "grouped", "requir
 def discover():
     before = set(registry.uris())
     root = Path(__file__).parent
-    for path in sorted(root.glob("*/*/*.py")):
-        if path.name not in ("__init__.py", "base.py"):
-            import_module(f"{__name__}.{path.parent.parent.name}.{path.parent.name}.{path.stem}")
+    for path in sorted(root.glob("*/*/__init__.py")):
+        import_module(f"{__name__}.{path.parent.parent.name}.{path.parent.name}")
     return frozenset(set(registry.uris()) - before)
 
 

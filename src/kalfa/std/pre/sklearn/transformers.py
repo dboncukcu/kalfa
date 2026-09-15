@@ -1,13 +1,9 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.pre.base import Encoder
 from kalfa.std.pre.sklearn.base import SklearnTransformer
 
 
-@lego("/pre/sklearn/quantile_transformer", state=True, alias="quantile_transformer",
-      description="Map a column onto its own quantiles, uniform or normal (sklearn QuantileTransformer); "
-                  "flattens any shape, the inverse interpolates between the stored quantiles")
 class QuantileTransformer(SklearnTransformer):
     def __init__(self, quantiles=1000, output="uniform", seed=None):
         self.quantiles = int(quantiles)
@@ -21,9 +17,6 @@ class QuantileTransformer(SklearnTransformer):
                            output_distribution=self.output, random_state=self.seed)
 
 
-@lego("/pre/sklearn/power_transformer", state=True, alias="power_transformer",
-      description="Yeo-Johnson (or Box-Cox for positive columns) with the exponent fitted per column, then "
-                  "standardized (sklearn PowerTransformer); the invertible way to a near normal column")
 class PowerTransformer(SklearnTransformer):
     def __init__(self, method="yeo-johnson", standardize=True):
         self.method = method
@@ -35,9 +28,6 @@ class PowerTransformer(SklearnTransformer):
         return preprocessing.PowerTransformer(method=self.method, standardize=self.standardize)
 
 
-@lego("/pre/sklearn/kbins_discretizer", state=True, alias="kbins_discretizer",
-      description="Cut a column into bins and write them as one hot columns <field>_bin<n> (encode: ordinal "
-                  "for one integer column); strategy quantile, uniform or kmeans (sklearn KBinsDiscretizer)")
 class KBins(Encoder):
     def __init__(self, bins=5, strategy="quantile", encode="onehot"):
         self.bins = int(bins)
@@ -61,9 +51,6 @@ class KBins(Encoder):
         return [f"{name}_bin{position}" for position in range(self.width)]
 
 
-@lego("/pre/sklearn/spline_transformer", state=True, alias="spline_transformer",
-      description="A B-spline basis of a column, <field>_spline<n>: a smooth non linear expansion of one "
-                  "feature that a linear head can use (sklearn SplineTransformer)")
 class Spline(Encoder):
     def __init__(self, knots=5, degree=3, extrapolation="constant"):
         self.knots = int(knots)

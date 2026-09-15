@@ -2,7 +2,6 @@ from pathlib import Path
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.files import write_json
 from kalfa.std.plot.base import report_loader
 from kalfa.std.plot.kalfa.architecture import (graph_layout, parameter_count, traced_shapes, trainable_count,
@@ -17,11 +16,6 @@ def layout_note(layout):
     return {"boxes": boxes, "arrows": [list(arrow) for arrow in layout.arrows], "widths": dict(layout.widths)}
 
 
-@lego("/lego/kalfa/architecture_note", returns=None, bus=["record", "device"],
-      description="The graph of every report model written to the record as architecture.json: the boxes of the "
-                  "architecture drawing with their column and row, the layers inside every node as a tree with the "
-                  "shapes one batch traced and their parameter counts, the wires as arrows; the board draws it and "
-                  "opens a box into its layers")
 def architecture_note(models, loaders, composites=None, prep=None, predicts=None, losses=None, losses_keys=None,
                       optimizers=None, record=None, device=None):
     loader = report_loader(loaders)[1]

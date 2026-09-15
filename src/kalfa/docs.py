@@ -99,7 +99,7 @@ def table(lines, uris):
     for uri in uris:
         entry = registry.lookup(uri)
         aliases = ", ".join(f"`{name}`" for name in entry.facts.alias)
-        signature = signature_text(entry.target)
+        signature = signature_text(registry.resolve_quietly(uri))
         lines.append(f"| `{uri}` | {aliases} | `{cell(signature)}` | {cell(facts_text(entry.facts))} | "
                      f"{cell(entry.description or '')} |")
     lines.append("")

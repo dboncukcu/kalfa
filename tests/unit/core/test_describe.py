@@ -6,7 +6,8 @@ import pytest
 from helpers import example, examples, write_churn
 from kalfa.api import check, probe
 from kalfa.cli import main
-from kalfa.describe import Plain, render
+from kalfa.describe import Plain
+from kalfa.describe.render import render
 
 CONFIG_01 = Path(example("01_mlp_regression"))
 

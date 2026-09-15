@@ -1,15 +1,9 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import bars, columns_of, first_set, logged, set_frame
 
 
-@lego("/plot/kalfa/target_vs_features", partial=True, alias="target_vs_features", refs={"target": "field"},
-      needs=["train_loader"],
-      description="One panel per feature: the target against it as a hexbin density with the median profile "
-                  "over equal count bins; it reads the set the definition names (train without one) and "
-                  "draws in the original units")
 def target_vs_features(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None,
                        columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None, figures=None):
     figures = figures or Figure()
@@ -48,10 +42,6 @@ def target_vs_features(predictions, history, models, record, loaders=None, prep=
     return None
 
 
-@lego("/plot/kalfa/target_correlation", partial=True, alias="target_correlation", refs={"target": "field"},
-      needs=["train_loader"],
-      description="The rank correlation of every column with the target, the strongest first; groups maps a "
-                  "column to a group name and colours the bars by it")
 def target_correlation(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None,
                        method="spearman", columns=None, top=25, groups=None, name=None, figures=None):
     figures = figures or Figure()
@@ -82,9 +72,6 @@ def target_correlation(predictions, history, models, record, loaders=None, prep=
     return None
 
 
-@lego("/plot/kalfa/correlation_heatmap", partial=True, needs=["train_loader"], alias="correlation_heatmap",
-      description="The rank correlation of every column of a set against every other, features and targets "
-                  "together; it reads the set the definition names (train without one)")
 def correlation_heatmap(predictions, history, models, record, loaders=None, prep=None, sets=None,
                         method="spearman", columns=None, sample=80000, annotate=False, name=None, figures=None):
     figures = figures or Figure()
@@ -118,9 +105,6 @@ def correlation_heatmap(predictions, history, models, record, loaders=None, prep
     return None
 
 
-@lego("/plot/kalfa/feature_distributions", partial=True, needs=["train_loader"], alias="feature_distributions",
-      description="A histogram per feature column of a set, in the original units; log names the columns to "
-                  "draw on a log10 axis")
 def feature_distributions(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None,
                           log=None, bins=80, limit=24, per_row=4, name=None, figures=None):
     figures = figures or Figure()

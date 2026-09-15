@@ -1,4 +1,3 @@
-from kalfa.registration import lego
 from kalfa.std.common.effects import effect_note, effective_loss
 from kalfa.std.common.history import History
 
@@ -13,11 +12,6 @@ def noted(effects):
             if target != "loss" and not target.endswith(".loss")}
 
 
-@lego("/lego/kalfa/history", returns=None,
-      bus=["monitor", "metrics", "turn_index", "counters_next", "optimizers_next", "rules_next", "effects", "record"],
-      description="Append the turn's line to history.jsonl: the metrics, the learning rate and the loss every "
-                  "optimizer minimized this turn (as the rules set it), every other effect of the rules in force as "
-                  "effect/<target>, the duration as seconds, the rules that fired; and hand it to the monitor")
 def history(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None,
             effects=None, record=None):
     line = History.line(metrics, counters_next, optimizers_next, rules_next,

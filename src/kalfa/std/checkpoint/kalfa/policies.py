@@ -1,11 +1,8 @@
 import math
 
-from kalfa.registration import lego
 from kalfa.std.checkpoint.base import Policy
 
 
-@lego("/checkpoint/kalfa/best", alias="best", writes=["best", "last"],
-      description="Write best.pt when the monitored value improves and last.pt every turn")
 class Best(Policy):
     def __init__(self, monitor, mode="min"):
         if mode not in ("min", "max"):
@@ -33,14 +30,11 @@ class Best(Policy):
             self.best = state["best"]
 
 
-@lego("/checkpoint/kalfa/last", alias="last", writes=["last"], description="Write last.pt every turn")
 class Last(Policy):
     def tags(self, metrics):
         return ["last"]
 
 
-@lego("/checkpoint/kalfa/snapshot", alias="snapshot", writes=["last", "snapshot"],
-      description="Write snapshot_<n>.pt every n turns and last.pt every turn")
 class Snapshot(Policy):
     def __init__(self, every):
         self.every = int(every)

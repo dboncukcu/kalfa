@@ -17,7 +17,7 @@ import kalfa
 from kalfa.api import check
 from kalfa.config import load_surface, pack_tables, parse_sets
 from kalfa.contract import Contract
-from kalfa.describe import report
+from kalfa.describe.render import report
 from kalfa.docs import render as render_docs
 from kalfa.driver import recipe
 from kalfa.recipe import recipe_text

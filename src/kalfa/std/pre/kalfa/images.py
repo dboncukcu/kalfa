@@ -1,11 +1,9 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.rng import Draws
 from kalfa.std.pre.base import ImageTensor, Preprocessor, pil_image
 
 
-@lego("/pre/kalfa/resize", alias="resize", description="Resize an image to size (int or [h, w])")
 class Resize(Preprocessor):
     def __init__(self, size):
         self.size = (int(size), int(size)) if isinstance(size, (int, float)) else (int(size[1]), int(size[0]))
@@ -14,21 +12,14 @@ class Resize(Preprocessor):
         return pil_image(value).resize(self.size)
 
 
-@lego("/pre/kalfa/to_tensor", alias="to_tensor",
-      description="Image to a float tensor in [0, 1], channels first")
 class ToTensor(ImageTensor):
     signed = False
 
 
-@lego("/pre/kalfa/to_tensor_signed", alias="to_tensor_signed",
-      description="Image to a float tensor in [-1, 1], channels first")
 class ToTensorSigned(ImageTensor):
     signed = True
 
 
-@lego("/pre/kalfa/normalize", alias="normalize",
-      description="Normalize an image tensor per channel; mean and std are numbers, lists or the presets "
-                  "imagenet and cifar10")
 class Normalize(Preprocessor):
     dtype = "float32"
     presets = {"imagenet": ([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
@@ -47,8 +38,6 @@ class Normalize(Preprocessor):
         return (value - mean) / std
 
 
-@lego("/pre/kalfa/random_crop_flip", alias="random_crop_flip",
-      description="Random crop of size after padding and a random horizontal flip")
 class RandomCropFlip(Preprocessor):
     padding = 4
 
@@ -70,8 +59,6 @@ class RandomCropFlip(Preprocessor):
         return image
 
 
-@lego("/pre/kalfa/simclr_aug", alias="simclr_aug",
-      description="SimCLR augmentation: random resized crop to size, horizontal flip, brightness jitter")
 class SimclrAug(Preprocessor):
     def __init__(self, size, scale=(0.5, 1.0)):
         self.size = int(size)
@@ -95,8 +82,6 @@ class SimclrAug(Preprocessor):
         return ImageEnhance.Brightness(image).enhance(float(draws.uniform(0.6, 1.4)))
 
 
-@lego("/pre/kalfa/two_views", alias="two_views", refs={"transform": "preprocessor"},
-      description="Two independent applications of a transform to one image, as a pair")
 class TwoViews(Preprocessor):
     def __init__(self, transform):
         self.transform = transform

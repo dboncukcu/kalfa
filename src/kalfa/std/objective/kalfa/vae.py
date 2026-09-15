@@ -1,6 +1,5 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.objective.base import input_of
 
 
@@ -8,10 +7,6 @@ def gaussian_kl(mu, logvar):
     return -0.5 * torch.mean(torch.sum(1.0 + logvar - mu.pow(2) - logvar.exp(), dim=-1))
 
 
-@lego("/objective/kalfa/vae", partial=True,
-      refs={"encoder": "model", "decoder": "model", "recon": "criterion", "kl_schedule": "schedule"},
-      alias="vae", description="VAE loss: w_rec * recon(decoder(z), x) + kl_schedule(step) * KL, z sampled from "
-                               "the encoder's mu and logvar; returns loss, recon, kl and w_kl")
 def vae(models, batch, encoder, decoder, recon, w_rec=1.0, kl_schedule=None, step=None, rng=None):
     enc = models[encoder]
     x = input_of(enc, batch)

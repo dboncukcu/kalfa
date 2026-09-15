@@ -1,7 +1,6 @@
 import numpy
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.feed.base import Dataset
 from kalfa.std.pre.base import Tokenizer
 
@@ -48,7 +47,5 @@ class TokenDataset(Dataset):
         return self.target_ids
 
 
-@lego("/feed/kalfa/next_token", alias="next_token",
-      description="input_ids and targets windows of seq_len tokens over the set's token stream")
 def next_token(frame, frames, seq_len):
     return TokenDataset(frame, seq_len)

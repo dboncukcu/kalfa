@@ -1,17 +1,13 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.pre.base import Preprocessor, Scaler
 
 
-@lego("/pre/kalfa/abs", alias="abs", description="Absolute value of a column")
 class Absolute(Preprocessor):
     def apply(self, values):
         return numpy.abs(numpy.asarray(values))
 
 
-@lego("/pre/kalfa/log", alias="log",
-      description="log1p of a column divided by norm, in the given base")
 class Log(Scaler):
     def __init__(self, base=10.0, norm=1.0):
         self.base = base
@@ -25,10 +21,6 @@ class Log(Scaler):
         return numpy.expm1(numpy.asarray(values, dtype="float64") * numpy.log(self.base)) * self.norm
 
 
-@lego("/pre/kalfa/asinh", alias="asinh",
-      description="Signed log scale of a heavy tailed column: arcsinh(x / scale), inverted by scale sinh(y); "
-                  "keeps the sign, linear near zero, logarithmic in the tails, defined at zero; the inverse "
-                  "refuses values past overflow, where sinh leaves float64")
 class Asinh(Scaler):
     def __init__(self, scale=1.0, overflow=700.0):
         if scale <= 0.0:
@@ -47,9 +39,6 @@ class Asinh(Scaler):
         return numpy.sinh(out) * self.scale
 
 
-@lego("/pre/kalfa/sinh", alias="sinh",
-      description="sinh(x / scale), the direction opposite to asinh: it stretches the tails instead of "
-                  "compressing them; a value past overflow is an error, where sinh leaves float64")
 class Sinh(Scaler):
     def __init__(self, scale=1.0, overflow=700.0):
         if scale <= 0.0:
@@ -68,9 +57,6 @@ class Sinh(Scaler):
         return numpy.arcsinh(numpy.asarray(values, dtype="float64")) * self.scale
 
 
-@lego("/pre/kalfa/tanh", alias="tanh",
-      description="tanh(x / scale) into (-1, 1); the inverse clips at 1 - eps, so a value that saturated in "
-                  "float64 (past about 19 scale) comes back at the clip instead of infinity")
 class Tanh(Scaler):
     def __init__(self, scale=1.0, eps=1e-15):
         if scale <= 0.0:
@@ -87,9 +73,6 @@ class Tanh(Scaler):
         return numpy.arctanh(clipped) * self.scale
 
 
-@lego("/pre/kalfa/atanh", alias="atanh",
-      description="artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside "
-                  "(-scale, scale) is an error that names how many and how large")
 class Atanh(Scaler):
     def __init__(self, scale=1.0):
         if scale <= 0.0:

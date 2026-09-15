@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.builder.base import Model
 from kalfa.std.common.figure import Figure
 from kalfa.std.common.log import logger_for
@@ -344,12 +343,6 @@ def draw_layout(figures, layout, label):
     return drawing
 
 
-@lego("/plot/kalfa/architecture", partial=True, alias="architecture",
-      description="kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph "
-                  "node with the name from the config, what it is (a torch layer, a lego, another model), the "
-                  "shapes one batch traced through it and the layers inside it, the wires as arrows with their "
-                  "width, the input wire with its feature columns, the boundary wires as boxes, and the losses "
-                  "and the optimizers beside the outputs they read; matplotlib only, any device")
 def architecture(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None,
                  losses_keys=None, optimizers=None, prep=None, name=None, figures=None):
     figures = figures or Figure()
@@ -369,8 +362,6 @@ def architecture(predictions, history, models, record, loaders=None, device=None
     return None
 
 
-@lego("/plot/kalfa/architecture_text", partial=True, alias="architecture_text",
-      description="The report models printed as text under plots/<name>.txt, the module repr of each")
 def architecture_text(predictions, history, models, record, name=None, figures=None):
     figures = figures or Figure()
     lines = []

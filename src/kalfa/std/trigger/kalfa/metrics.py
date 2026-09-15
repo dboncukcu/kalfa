@@ -1,7 +1,5 @@
 import math
 
-from kalfa.registration import lego
-
 
 def monitored(metrics, monitor):
     value = (metrics or {}).get(monitor)
@@ -18,8 +16,6 @@ def improved(value, best, mode, min_delta):
     return value < best - min_delta
 
 
-@lego("/trigger/kalfa/metric_above", partial=True, alias="metric_above", describe="{monitor} > {value}",
-      description="Fires when the monitored value rises above value; a missing value is not seen")
 def metric_above(metrics, turn_index, state, monitor, value):
     current = monitored(metrics, monitor)
     if current is None:
@@ -27,8 +23,6 @@ def metric_above(metrics, turn_index, state, monitor, value):
     return current > float(value), dict(state or {})
 
 
-@lego("/trigger/kalfa/metric_below", partial=True, alias="metric_below", describe="{monitor} < {value}",
-      description="Fires when the monitored value drops below value; a missing value is not seen")
 def metric_below(metrics, turn_index, state, monitor, value):
     current = monitored(metrics, monitor)
     if current is None:
@@ -36,9 +30,6 @@ def metric_below(metrics, turn_index, state, monitor, value):
     return current < float(value), dict(state or {})
 
 
-@lego("/trigger/kalfa/plateau", partial=True, alias="plateau", describe="{monitor} plateau {patience}",
-      description="Fires after patience turns without improvement of the monitored value; "
-                  "turns without the value are not counted")
 def plateau(metrics, turn_index, state, monitor, patience, mode="min", min_delta=0.0):
     state = dict(state or {})
     current = monitored(metrics, monitor)

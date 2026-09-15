@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from kalfa.registration import lego
 from kalfa.std.common.files import write_json
 from kalfa.std.common.log import logger_for
 from kalfa.std.pre.base import Grouped, columns_of_source
@@ -45,11 +44,6 @@ def calls_of(items):
     return [{"uri": item.get("lego"), "params": item.get("with") or {}} for item in items or []]
 
 
-@lego("/lego/kalfa/data_report", returns="data_report", bus=["record"],
-      description="The shape of the data at every stage of the data block, read from the bus keys the stages "
-                  "wrote: the rows and columns of the source and after every transform with the transform's call, "
-                  "the sets after the split and after their transforms, the fitted frame transforms and "
-                  "preprocessors, the features and targets, the loaders; written to the record as data.json")
 def data_report(stages, split, after, fitted, prep, frames, loaders, transforms=None, set_transforms=None,
                 record=None):
     entries = stage_entries(stages)

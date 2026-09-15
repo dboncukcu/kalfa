@@ -1,12 +1,9 @@
 import numpy
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.strategy.base import Strategy, grid_values, point_from_fractions
 
 
-@lego("/strategy/kalfa/grid", alias="grid", enumerates=True,
-      description="Every combination of the space's choices (a range needs steps); deterministic by id")
 class Grid(Strategy):
     deterministic = True
 
@@ -29,8 +26,6 @@ class Grid(Strategy):
         return {name: picks[name] for name in space}
 
 
-@lego("/strategy/kalfa/random", alias="random",
-      description="count points drawn uniformly from the space with a seed; deterministic by id")
 class RandomSearch(Strategy):
     deterministic = True
 
@@ -48,8 +43,6 @@ class RandomSearch(Strategy):
         return point_from_fractions(space, generator.random(len(space)))
 
 
-@lego("/strategy/kalfa/sobol", alias="sobol",
-      description="count points of a scrambled Sobol sequence with a seed; deterministic by id")
 class SobolSearch(Strategy):
     deterministic = True
 

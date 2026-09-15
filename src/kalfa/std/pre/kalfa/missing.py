@@ -1,7 +1,6 @@
 import numpy
 import pandas
 
-from kalfa.registration import lego
 from kalfa.std.pre.base import Preprocessor
 
 
@@ -10,9 +9,6 @@ def most_frequent(values):
     return found[int(numpy.argmax(counts))]
 
 
-@lego("/pre/kalfa/simple_imputer", alias="simple_imputer",
-      description="Fill the missing values of a column with the train mean, median, most frequent value or a "
-                  "constant; indicator adds <field>_missing, computed before the fill, as a feature of its own")
 class SimpleImputer(Preprocessor):
     fits = True
     strategies = ("mean", "median", "most_frequent", "constant")
@@ -56,9 +52,6 @@ class SimpleImputer(Preprocessor):
         return {"missing": pandas.isna(numpy.asarray(values))}
 
 
-@lego("/pre/kalfa/fill", alias="fill",
-      description="Fill the missing values of a column without a fit: a constant (a number, or a name such as "
-                  "missing that becomes its own category), or method ffill or bfill along the rows")
 class Fill(Preprocessor):
     def __init__(self, value=None, method=None):
         if method not in (None, "ffill", "bfill"):

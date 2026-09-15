@@ -2,7 +2,6 @@ import textwrap
 
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.pre.base import TableFrame
 
@@ -114,11 +113,6 @@ def draw_report(figures, report, histograms, name):
     return drawing
 
 
-@lego("/plot/kalfa/data_pipeline", partial=True, alias="data_pipeline", needs=["data_report"],
-      description="The data block as one picture: every stage with its rows and columns, the split, the fitted "
-                  "frame transforms and preprocessors, the features and targets, the loaders; under the fit, "
-                  "before and after histograms of the columns with the longest chains (columns names others) "
-                  "when the source is a table")
 def data_pipeline(predictions, history, models, record, data_report=None, train_df=None, train_frame=None, prep=None,
                   columns=None, name=None, figures=None):
     figures = figures or Figure()

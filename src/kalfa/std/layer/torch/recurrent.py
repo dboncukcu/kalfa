@@ -1,6 +1,5 @@
 from torch import nn
 
-from kalfa.registration import lego
 from kalfa.std.common.deferred import LazyLayer
 
 
@@ -25,9 +24,6 @@ class Recurrent(LazyLayer):
         return out
 
 
-@lego("/layer/torch/gru", alias="gru",
-      description="GRU over (batch, steps, features) returning every step; the input width comes from the "
-                  "first batch")
 class Gru(Recurrent):
     core_class = nn.GRU
 
@@ -35,9 +31,6 @@ class Gru(Recurrent):
         super().__init__(hidden, layers, dropout, bidirectional)
 
 
-@lego("/layer/torch/lstm", alias="lstm",
-      description="LSTM over (batch, steps, features) returning every step; the input width comes from the "
-                  "first batch")
 class Lstm(Recurrent):
     core_class = nn.LSTM
 
@@ -45,9 +38,6 @@ class Lstm(Recurrent):
         super().__init__(hidden, layers, dropout, bidirectional)
 
 
-@lego("/layer/torch/rnn", alias="rnn",
-      description="Elman RNN over (batch, steps, features) returning every step, nonlinearity tanh or relu; the "
-                  "input width comes from the first batch")
 class Rnn(Recurrent):
     core_class = nn.RNN
 
@@ -55,17 +45,13 @@ class Rnn(Recurrent):
         super().__init__(hidden, layers, dropout, bidirectional, nonlinearity=nonlinearity)
 
 
-@lego("/layer/torch/gru_cell", alias="gru_cell", description="torch.nn.GRUCell over one step; two inputs, x and h")
 def gru_cell(input_size, hidden, bias=True):
     return nn.GRUCell(int(input_size), int(hidden), bias=bool(bias))
 
 
-@lego("/layer/torch/lstm_cell", alias="lstm_cell",
-      description="torch.nn.LSTMCell over one step; inputs x and (h, c), outputs (h, c)")
 def lstm_cell(input_size, hidden, bias=True):
     return nn.LSTMCell(int(input_size), int(hidden), bias=bool(bias))
 
 
-@lego("/layer/torch/rnn_cell", alias="rnn_cell", description="torch.nn.RNNCell over one step; two inputs, x and h")
 def rnn_cell(input_size, hidden, bias=True, nonlinearity="tanh"):
     return nn.RNNCell(int(input_size), int(hidden), bias=bool(bias), nonlinearity=nonlinearity)

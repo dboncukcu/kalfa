@@ -12,7 +12,7 @@ from kalfa.std.layer.torch.recurrent import Recurrent
 
 
 def build(uri, **params):
-    return registry.lookup(uri).target(**params)
+    return registry.resolve(uri)(**params)
 
 
 def run(uri, shape, **params):

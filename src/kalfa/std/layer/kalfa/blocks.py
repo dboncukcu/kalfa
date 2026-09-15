@@ -1,6 +1,5 @@
 from torch import nn
 
-from kalfa.registration import lego
 from kalfa.std.common.deferred import later
 
 
@@ -18,21 +17,14 @@ def activation_layer(name):
     return kinds[name]()
 
 
-@lego("/layer/kalfa/linear", alias="linear",
-      description="Linear layer; without in_features the input width is taken from the first batch")
 def linear(out_features, in_features=None):
     return later(linear_layer, out_features=out_features, in_features=in_features)
 
 
-@lego("/layer/kalfa/linear_relu", alias="linear_relu",
-      description="Linear layer followed by ReLU; lazy without in_features")
 def linear_relu(out_features, in_features=None):
     return nn.Sequential(later(linear_layer, out_features=out_features, in_features=in_features), nn.ReLU())
 
 
-@lego("/layer/kalfa/mlp", alias="mlp",
-      description="A multilayer perceptron in one node: a linear layer, the activation and dropout for every width, "
-                  "then a plain linear layer of out_features when it is written; lazy without in_features")
 def mlp(widths, activation="relu", dropout=0.0, out_features=None, in_features=None):
     parts = []
     for position, width in enumerate(widths):

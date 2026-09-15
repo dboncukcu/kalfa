@@ -1,14 +1,10 @@
 import numpy
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.calibrate.base import Calibration
 from kalfa.std.common.runtime import call_model, named_outputs, resolve_model
 
 
-@lego("/calibrate/kalfa/threshold", alias="threshold",
-      description="A decision threshold read off a held out set at the end of training: the quantile of the raw "
-                  "output of the predicts model on that set; at predict time flag_<output> marks the rows above it")
 class Threshold(Calibration):
     def __init__(self, set="valid", quantile=0.95, output=None):
         if not 0.0 <= float(quantile) <= 1.0:

@@ -1,11 +1,8 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.objective.base import call_with, input_of, labels_of, latent_noise
 
 
-@lego("/objective/kalfa/wgan_g", partial=True, refs={"generator": "model", "critic": "model"},
-      alias="wgan_g", description="WGAN generator loss: minus the critic's mean score of generated samples")
 def wgan_g(models, batch, generator, critic, latent, conditional=False, rng=None):
     real = input_of(models[critic], batch)
     labels = labels_of(batch, conditional)
@@ -14,9 +11,6 @@ def wgan_g(models, batch, generator, critic, latent, conditional=False, rng=None
     return -call_with(models[critic], fake, labels).mean()
 
 
-@lego("/objective/kalfa/wgan_gp_d", partial=True, needs_grad=True,
-      refs={"generator": "model", "critic": "model"}, alias="wgan_gp_d",
-      description="WGAN critic loss with a gradient penalty on interpolates; the label conditions both models")
 def wgan_gp_d(models, batch, generator, critic, latent, gp_weight=10.0, conditional=False, rng=None, scaler=None):
     real = input_of(models[critic], batch)
     labels = labels_of(batch, conditional)

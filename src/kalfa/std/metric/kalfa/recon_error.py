@@ -1,11 +1,8 @@
 import math
 
-from kalfa.registration import lego
 from kalfa.std.metric.base import Metric
 
 
-@lego("/metric/kalfa/recon_error", state=True, alias="recon_error",
-      description="Mean per sample squared reconstruction error of the output against the target")
 class ReconError(Metric):
     def __init__(self):
         self.reset()

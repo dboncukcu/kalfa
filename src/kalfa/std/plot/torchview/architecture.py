@@ -2,7 +2,6 @@ import warnings
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.common.log import logger_for
 from kalfa.std.common.optional import load
@@ -12,10 +11,6 @@ from kalfa.std.plot.base import report_loader
 logger = logger_for("after.plots")
 
 
-@lego("/plot/torchview/architecture", partial=True, alias="torchview", requires="torchview",
-      description="torchview's drawing of every report model the batch feeds, under plots/<name>_<model>.png; it "
-                  "needs the graphviz dot binary and runs on the device of the run, so a composite keeps its "
-                  "referenced models with it")
 def architecture(predictions, history, models, record, loaders=None, device=None, name=None, figures=None):
     figures = figures or Figure()
     torchview = load("torchview", "architecture")

@@ -3,7 +3,6 @@ import math
 import numpy
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.metric.base import Metric
 
 
@@ -38,9 +37,6 @@ def covariance(values):
     return numpy.cov(values, rowvar=False) if len(values) > 1 else numpy.zeros((values.shape[1], values.shape[1]))
 
 
-@lego("/metric/kalfa/fid", state=True, refs={"model": "model"}, uses=["models", "batch"],
-      alias="fid", description="Fréchet inception distance of n samples of the model against n real images "
-                               "of the set; conditional samples use the batch labels")
 class Fid(Metric):
     def __init__(self, model, latent, conditional=False, n=1000, extractor=None):
         self.model = model

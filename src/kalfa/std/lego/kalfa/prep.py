@@ -3,7 +3,6 @@ import copy
 import numpy
 import pandas
 
-from kalfa.registration import lego
 from kalfa.std.common.log import clock, logger_for
 from kalfa.std.common.samples import is_samples
 from kalfa.std.common.stream import is_stream
@@ -94,9 +93,6 @@ def table_frame(df, prep, set, sets, mask=None):
     return TableFrame(prep.features, prep.targets, set, data=data, extra=extra, mask=kept_rows(df, mask))
 
 
-@lego("/lego/kalfa/fit", returns="prep", state=True, bus=["record"],
-      description="Resolve the field globs and fit every preprocessor chain on the train set; keys carry the "
-                  "sets a preprocessor is limited to")
 def fit(df, fields, preprocessors, drop, keys=None, record=None):
     started = clock()
     templates = dict(preprocessors or {})
@@ -122,16 +118,10 @@ def fit(df, fields, preprocessors, drop, keys=None, record=None):
     return report_fitted(prep, started)
 
 
-@lego("/lego/kalfa/read_prep", returns="prep",
-      description="The fitted preprocessing plan of a record, read from its preprocessors directory")
 def prep_of(record):
     return read_prep(record)
 
 
-@lego("/lego/kalfa/apply",
-      description="Apply the fitted chains to one set and type its columns; keys carry the sets a "
-                  "preprocessor is limited to; the rows the mask query selects stay in the frame and are not "
-                  "scored, the loader leaves them out and the plots see them as masked")
 def apply(df, prep, set, keys=None, mask=None):
     logger.debug(f"applying the chains to the {set} set")
     sets = sets_of(keys) if keys is not None else prep.sets

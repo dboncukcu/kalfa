@@ -1,6 +1,5 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.diffusion import diffusion_steps, noise_schedule
 
 
@@ -19,8 +18,6 @@ def context_of(net, context):
     return None
 
 
-@lego("/generate/kalfa/gan_sampler", partial=True, refs={"model": "model"}, alias="gan_sampler",
-      description="n samples of a generator from latent noise; conditional samples cycle through n_classes")
 def gan_sampler(models, prep, rng, model, latent, n=64, conditional=False, n_classes=None):
     generator = pick_model(models, model)
     generator.eval()
@@ -34,8 +31,6 @@ def gan_sampler(models, prep, rng, model, latent, n=64, conditional=False, n_cla
         return generator(noise).cpu()
 
 
-@lego("/generate/kalfa/ddpm_sampler", partial=True, refs={"model": "model", "schedule": "schedule"},
-      alias="ddpm_sampler", description="n samples by the reverse diffusion of the noise schedule from pure noise")
 def ddpm_sampler(models, prep, rng, model, schedule, shape, n=64):
     net = pick_model(models, model)
     net.eval()
@@ -57,10 +52,6 @@ def ddpm_sampler(models, prep, rng, model, schedule, shape, n=64):
     return x.clamp(-1.0, 1.0).cpu()
 
 
-@lego("/generate/kalfa/lm_sampler", partial=True, refs={"model": "model"}, alias="lm_sampler",
-      description="Autoregressive text from a prompt with the record's tokenizer; temperature scales the "
-                  "logits, the window is context or the model's seq_len; the model's last layer has one "
-                  "logit per vocabulary entry (vocab_size)")
 def lm_sampler(models, prep, rng, model, prompt, max_new_tokens=100, temperature=1.0, context=None):
     net = pick_model(models, model)
     net.eval()

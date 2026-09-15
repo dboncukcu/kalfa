@@ -1,24 +1,18 @@
 import copy
 
-from kalfa.registration import lego
 
-
-@lego("/lego/kalfa/const", description="A fresh copy of a constant value")
 def const(value):
     return copy.deepcopy(value)
 
 
-@lego("/lego/kalfa/identity", aliases="value", description="The value itself")
 def identity(value):
     return value
 
 
-@lego("/lego/kalfa/pack", aliases="items", description="A mapping of the given items")
 def pack(items):
     return dict(items or {})
 
 
-@lego("/lego/kalfa/merge", description="Merge the per set metrics under the prefixes of the sets (train/, val/, test/)")
 def merge(parts, prefixes):
     merged = {}
     order = list(prefixes)

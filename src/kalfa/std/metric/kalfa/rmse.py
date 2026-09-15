@@ -1,10 +1,8 @@
 import math
 
-from kalfa.registration import lego
 from kalfa.std.metric.base import Metric
 
 
-@lego("/metric/kalfa/rmse", state=True, alias="rmse", description="Root mean squared error")
 class Rmse(Metric):
     def __init__(self):
         self.reset()

@@ -3,7 +3,6 @@ from pathlib import Path
 import pandas
 from cirak.registry import registry
 
-from kalfa.registration import lego
 from kalfa.std.common.files import read_json
 
 
@@ -14,9 +13,6 @@ def manifest_of(path):
     return manifest
 
 
-@lego("/source/kalfa/prepared", returns="df", header="/lego/kalfa/prepared_header",
-      description="The data kalfa prepare wrote: the sets of a table read back into one frame marked by set, or "
-                  "the items of a Dataset source read from where they are with the split kept as positions")
 def prepared(path):
     manifest = manifest_of(path)
     folder = Path(path)

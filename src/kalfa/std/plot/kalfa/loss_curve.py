@@ -1,4 +1,3 @@
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.common.history import History
 from kalfa.std.plot.base import turn_word
@@ -13,11 +12,6 @@ def draw_series(figures, axis, found, positions, log):
     axis.legend(loc="upper right", ncols=1 if len(found) < 6 else 2)
 
 
-@lego("/plot/kalfa/loss_curve", partial=True, alias="loss_curve",
-      description="Every history series over the turns, or the named ones; the axis says epoch when the manifest "
-                  "says a turn is one, turn otherwise; x: step draws the per update series of steps.jsonl (the loss, "
-                  "the gradient norm of every optimizer) over the steps instead; rates: true adds a panel of the "
-                  "learning rates below, and a series may name lr/<optimizer>")
 def loss_curve(predictions, history, models, record, series=None, log=False, x="turn", rates=False, name=None,
                figures=None):
     figures = figures or Figure()

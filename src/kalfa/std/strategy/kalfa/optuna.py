@@ -1,12 +1,8 @@
 import math
 
-from kalfa.registration import lego
 from kalfa.std.strategy.base import Choices, Strategy
 
 
-@lego("/strategy/kalfa/optuna", alias="optuna",
-      description="trials points proposed by optuna (tpe or random sampler) from the objectives fed back; "
-                  "local loop only, no --id")
 class OptunaSearch(Strategy):
     deterministic = False
 

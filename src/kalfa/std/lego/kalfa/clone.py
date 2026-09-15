@@ -2,7 +2,6 @@ import copy
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.builder.base import Model
 
 
@@ -27,8 +26,6 @@ def frozen_copy(model):
     return copied
 
 
-@lego("/lego/kalfa/clone", state=True,
-      description="An exponential moving average copy of a model with the given decay")
 class Ema(Model):
     def __init__(self, model, decay):
         super().__init__()

@@ -1,7 +1,6 @@
 import copy
 import math
 
-from kalfa.registration import lego
 from kalfa.std.adapter.base import observed, wires
 from kalfa.std.common.runtime import Loss, Tracker, parameter_names
 from kalfa.std.metric.base import as_float
@@ -53,9 +52,6 @@ class MetricTracker(Tracker):
         return {self.name: as_float(value)}
 
 
-@lego("/adapter/kalfa/metric", uses=["predicts"],
-      description="Feed a metric the predicts model's output wire and the target field named by the "
-                  "definition's keys")
 class MetricAdapter(Loss):
     def __init__(self, metric):
         self.metric = metric

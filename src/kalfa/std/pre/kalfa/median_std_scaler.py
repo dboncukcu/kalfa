@@ -1,6 +1,5 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.pre.base import Scaler
 
 
@@ -9,9 +8,6 @@ def as_block(values):
     return matrix.reshape(-1, 1) if matrix.ndim == 1 else matrix
 
 
-@lego("/pre/kalfa/median_std_scaler", alias="median_std_scaler", grouped=True,
-      description="Center a column on its median and scale it by its standard deviation: the center an outlier "
-                  "does not move, the scale of a standard scaler")
 class MedianStdScaler(Scaler):
     grouped = True
     fits = True

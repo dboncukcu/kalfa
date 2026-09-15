@@ -1,7 +1,6 @@
 import numpy
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.common.runtime import named_outputs, resolve_model
 from kalfa.std.plot.base import bars, first_set
@@ -56,10 +55,6 @@ def importances(model, matrix, truth, wire, base, repeats, seed):
     return means, deviations
 
 
-@lego("/plot/kalfa/permutation_importance", partial=True, alias="permutation_importance", refs={"target": "field"},
-      description="The drop in R2 when one feature column is shuffled, the largest first; the model runs "
-                  "again for every feature and every repeat, so sample bounds the cost; output names the wire "
-                  "and target the field it is scored against when the model has several")
 def permutation_importance(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None,
                            device=None, repeats=3, sample=20000, top=25, output=None, target=None, groups=None,
                            seed=0, name=None, figures=None):

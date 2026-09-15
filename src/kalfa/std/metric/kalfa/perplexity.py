@@ -2,12 +2,9 @@ import math
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.metric.base import Metric
 
 
-@lego("/metric/kalfa/perplexity", state=True, alias="perplexity",
-      description="exp of the mean token cross entropy of the logits against the targets")
 class Perplexity(Metric):
     def __init__(self):
         self.reset()

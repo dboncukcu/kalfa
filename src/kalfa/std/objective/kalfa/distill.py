@@ -1,6 +1,5 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.objective.base import input_of
 
 
@@ -14,10 +13,6 @@ def target_of(batch, model, target=None):
     return batch[rest[0]]
 
 
-@lego("/objective/kalfa/distill", partial=True, refs={"student": "model", "teacher": "model"},
-      alias="distill", description="Knowledge distillation: alpha * KL(teacher || student) at temperature T "
-                                   "(times T squared) plus (1 - alpha) * cross entropy of the student; "
-                                   "returns loss, ce and kl")
 def distill(models, batch, student, teacher, temperature=1.0, alpha=0.5, target=None):
     learner = models[student]
     x = input_of(learner, batch)

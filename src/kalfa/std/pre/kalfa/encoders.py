@@ -1,10 +1,8 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.pre.base import Encoder, Preprocessor
 
 
-@lego("/pre/kalfa/cast", alias="cast", description="Cast a column to a numpy dtype")
 class Cast(Preprocessor):
     def __init__(self, dtype):
         self.dtype = dtype
@@ -13,8 +11,6 @@ class Cast(Preprocessor):
         return numpy.asarray(values).astype(self.dtype)
 
 
-@lego("/pre/kalfa/one_hot", state=True, alias="one_hot",
-      description="One hot columns <field>_<category> of a categorical column; unknown categories give zeros")
 class OneHot(Encoder):
     def fit(self, values):
         from sklearn.preprocessing import OneHotEncoder
@@ -30,9 +26,6 @@ class OneHot(Encoder):
         return [f"{name}_{category}" for category in self.categories]
 
 
-@lego("/pre/kalfa/label_encoder", state=True, alias="label_encoder",
-      description="Integer codes of a label column, sorted by label; inverted in reports and predictions, "
-                  "class scores decode to labels")
 class LabelEncoder(Encoder):
     decodes = True
 

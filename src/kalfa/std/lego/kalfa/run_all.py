@@ -3,7 +3,6 @@ import inspect
 from cirak.registry import registry
 
 from kalfa.kinds import names_of
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.common.log import logger_for
 
@@ -62,13 +61,6 @@ def draw(name, plot, definition, predictions, history, everything, predicts, fig
     plot(predictions=predictions, history=history, models=everything, record=record, **extra)
 
 
-@lego("/lego/kalfa/run_all", returns=None, bus=["record", "figures"],
-      description="Run every plot of the plots table with the predictions, the history and the models; keys "
-                  "carry the definition level keys (inputs, sets, width, height) and the lego of the plot, whose "
-                  "refs type the inputs and whose needs name the bus keys it cannot work without (skipped with a "
-                  "log line when one is missing); bus carries everything else the run has and a plot receives "
-                  "whatever its signature names, plus loaders, predicts, sets, name (with the suffix of the "
-                  "predictions it draws) and figures, the look of the run's plots sized for the definition")
 def run_all(predictions, history, models, plots, keys=None, predicts=None, bus=None, record=None, figures=None,
             suffix=""):
     keys = keys or {}

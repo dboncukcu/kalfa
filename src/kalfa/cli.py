@@ -13,9 +13,10 @@ from cirak.loader import parse_value
 from cirak.registry import registry
 from tezgah import TezgahError
 
-from . import __version__, api, board, collect, describe, docs, sweep
+from . import __version__
 from .config import import_plugins, pack_tables, parse_sets
 from .contract import Contract
+from .describe import ALL_SECTIONS, DEFAULT_SECTIONS
 from .kinds import kalfa_kind
 from .record import Record
 from .recipe import recipe_text
@@ -152,8 +153,8 @@ def build_parser():
     printing.add_argument("--measure", action="store_true",
                           help="run the data and model blocks: the set sizes after the transforms, the fitted column "
                                "widths, the tensor slots and the parameter counts")
-    printing.add_argument("--section", action="append", default=[], choices=list(describe.ALL_SECTIONS),
-                          metavar="NAME", help=f"this section only, repeatable: {', '.join(describe.ALL_SECTIONS)}")
+    printing.add_argument("--section", action="append", default=[], choices=list(ALL_SECTIONS),
+                          metavar="NAME", help=f"this section only, repeatable: {', '.join(ALL_SECTIONS)}")
     printing.add_argument("--wiring", action="store_true", help="add the implicit bindings of the compiled pipeline")
     printing.add_argument("--save", metavar="PATH",
                           help="write the analysis to this file instead of printing it, nothing clipped, no colors")
@@ -503,6 +504,9 @@ def print_problems(problems, stream):
 
 
 def cmd_check(args) -> int:
+    from . import api
+    from .describe.render import measure_text
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         prepared = api.check(args.config, layer_of(args), measure=args.measure, contract=contract_of(args),
@@ -516,7 +520,7 @@ def cmd_check(args) -> int:
     else:
         print(style.green("no problems found"))
     if prepared.measured is not None:
-        print(describe.measure_text(prepared, style))
+        print(measure_text(prepared, style))
     if args.recipe:
         if prepared.document is None:
             print(style.red("the config could not be shaped, no recipe"), file=sys.stderr)
@@ -534,6 +538,8 @@ def cmd_check(args) -> int:
 
 
 def cmd_run(args) -> int:
+    from . import api
+
     style = style_for(sys.stdout)
     with monitor_of(args) as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -547,6 +553,8 @@ def cmd_run(args) -> int:
 
 
 def cmd_resume(args) -> int:
+    from . import api
+
     style = style_for(sys.stdout)
     with monitor_of(args) as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -560,6 +568,9 @@ def cmd_resume(args) -> int:
 
 
 def cmd_describe(args) -> int:
+    from . import api
+    from .describe.render import render, report
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         prepared = api.check(args.config, layer_of(args), contract=contract_of(args), prepared=args.prepared)
@@ -579,18 +590,20 @@ def cmd_describe(args) -> int:
                 found = api.probe(prepared.document, prepared.contract)
     sections = list(args.section) if args.section else None
     if args.wiring and "wiring" not in (sections or ()):
-        sections = list(sections or describe.DEFAULT_SECTIONS) + ["wiring"]
+        sections = list(sections or DEFAULT_SECTIONS) + ["wiring"]
     if args.save:
-        Path(args.save).write_text(describe.report(prepared, Style(False), sections, found))
+        Path(args.save).write_text(report(prepared, Style(False), sections, found))
         print(f"wrote {args.save}")
     elif style.enabled:
-        sys.stdout.write(describe.render(prepared, style, sections, found))
+        sys.stdout.write(render(prepared, style, sections, found))
     else:
-        sys.stdout.write(describe.report(prepared, style, sections, found))
+        sys.stdout.write(report(prepared, style, sections, found))
     return 1 if prepared.errors else 0
 
 
 def cmd_predict(args) -> int:
+    from . import api
+
     with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = api.predict(args.run, model=args.model, which=args.which, data=args.data, sets=layer_of(args),
@@ -603,6 +616,8 @@ def cmd_predict(args) -> int:
 
 
 def cmd_prepare(args) -> int:
+    from . import api
+
     with Monitor(level_of(args.log)), warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = api.prepare_data(args.config, layer_of(args), out=args.out, contract=contract_of(args))
@@ -614,6 +629,8 @@ def cmd_prepare(args) -> int:
 
 
 def cmd_export(args) -> int:
+    from . import api
+
     with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = api.export(args.run, format=args.format, model=args.model, which=args.which, out=args.out,
@@ -627,6 +644,8 @@ def cmd_export(args) -> int:
 
 
 def cmd_plots(args) -> int:
+    from . import api
+
     with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = api.plots(args.run, only=args.only, sets=layer_of(args), device=device_value(args),
@@ -637,6 +656,8 @@ def cmd_plots(args) -> int:
 
 
 def cmd_generate(args) -> int:
+    from . import api
+
     with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = api.generate(args.run, which=args.which, sets=layer_of(args), device=device_value(args),
@@ -647,6 +668,8 @@ def cmd_generate(args) -> int:
 
 
 def cmd_collect(args) -> int:
+    from . import collect
+
     kind, text, target = collect.collect(args.runs, args.out)
     sys.stdout.write(text)
     files = "sweep.csv, sweep.json and sweep.md" if kind == "sweep" else "cv.json and cv.md"
@@ -655,6 +678,8 @@ def cmd_collect(args) -> int:
 
 
 def cmd_sweep(args) -> int:
+    from . import sweep
+
     style = style_for(sys.stdout)
     plan = sweep.plan(args.config, layer_of(args), record=args.record)
     if args.count:
@@ -691,6 +716,8 @@ def cmd_sweep(args) -> int:
 
 
 def cmd_docs(args) -> int:
+    from . import docs
+
     failed = load_plugins(args)
     text = docs.render(plugins=docs.plugin_uris() if args.plugin or args.config else None)
     if args.write:
@@ -702,6 +729,8 @@ def cmd_docs(args) -> int:
 
 
 def cmd_board(args) -> int:
+    from . import board
+
     server = board.serve(args.root, host=args.host, port=args.port)
     style = style_for(sys.stdout)
     print(f"kalfa board over {style.cyan(args.root)} at http://{args.host}:{server.server_address[1]}/ "
@@ -717,6 +746,8 @@ def cmd_board(args) -> int:
 
 
 def cmd_stop(args) -> int:
+    from . import api
+
     style = style_for(sys.stdout)
     for record in args.record:
         written = api.stop(record)
@@ -795,7 +826,7 @@ def print_pack(table, style, kind):
 
 def module_of(entry):
     if isinstance(entry.target, str):
-        return ""
+        return entry.target.partition(":")[0]
     return entry.target.__module__
 
 

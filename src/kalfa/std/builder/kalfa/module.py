@@ -3,7 +3,6 @@ import fnmatch
 import torch
 from torch import nn
 
-from kalfa.registration import lego
 from kalfa.std.builder.base import Model, weights_path
 from kalfa.std.checkpoint.base import load
 from kalfa.std.common.deferred import DeferredLayer, LazyLayer
@@ -182,10 +181,6 @@ def load_weights(spec):
     return states[spec["model"]]
 
 
-@lego("/builder/kalfa/module", bus=["prep", "train_loader"], roles=["weights", "bias", "scale"],
-      description="Build a model graph into an nn.Module in the stream the rng lego derives from the seed, the "
-                  "name and the index, apply init roles, trainable and weights; reference nodes take the models "
-                  "dict; layer params that are kind data components are built from prep and the train loader")
 def module(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None,
            prep=None, train_loader=None):
     started = clock()

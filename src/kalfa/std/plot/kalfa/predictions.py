@@ -1,6 +1,5 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import first_set, panel_title, pick_pair, prediction_pairs, r2_of, set_frame
 
@@ -9,10 +8,6 @@ def points_text(count):
     return f"{int(count)} point" + ("" if int(count) == 1 else "s")
 
 
-@lego("/plot/kalfa/pred_vs_true", partial=True, alias="pred_vs_true",
-      description="Predicted against true values of the test set, one panel per predicted field with its R2, "
-                  "as a hexbin density over many points and a scatter over few; the panel is titled with the "
-                  "field name, plus the output wire when two outputs predict the same field")
 def pred_vs_true(predictions, history, models, record, name=None, columns=4, kind="auto", gridsize=70, figures=None):
     figures = figures or Figure()
     pairs = prediction_pairs(predictions)
@@ -45,10 +40,6 @@ def pred_vs_true(predictions, history, models, record, name=None, columns=4, kin
     return None
 
 
-@lego("/plot/kalfa/residuals", partial=True, alias="residuals", refs={"target": "field"},
-      description="Three panels of one prediction's residual: the distribution with its bias and sigma, the "
-                  "residual against the truth as a density, and the mean and median error over equal count "
-                  "bins of the target range")
 def residuals(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None,
               figures=None):
     figures = figures or Figure()
@@ -85,11 +76,6 @@ def residuals(predictions, history, models, record, output=None, target=None, bi
     return None
 
 
-@lego("/plot/kalfa/error_map", partial=True, alias="error_map",
-      refs={"x": "column", "y": "column", "target": "field"},
-      description="The error of one prediction over a 2d grid of two columns: with statistic residual blue "
-                  "is a prediction below the truth and red above it, with abs the mean absolute error; bins "
-                  "holding fewer than min_count points stay empty")
 def error_map(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None,
               output=None, target=None, statistic="residual", bins=55, min_count=15, name=None, figures=None):
     figures = figures or Figure()
@@ -126,8 +112,6 @@ def error_map(predictions, history, models, record, loaders=None, prep=None, set
     return None
 
 
-@lego("/plot/kalfa/forecast_samples", partial=True, alias="forecast_samples",
-      description="n sample windows of the test set: the true horizon against the predicted one")
 def forecast_samples(predictions, history, models, record, n=6, name=None, figures=None):
     figures = figures or Figure()
     if predictions is None or len(predictions) == 0:

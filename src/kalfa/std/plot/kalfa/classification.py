@@ -1,13 +1,9 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import scores_and_labels
 
 
-@lego("/plot/kalfa/class_histogram", partial=True, alias="class_histogram", refs={"target": "field"},
-      description="Histogram of the raw scores of the test set, one series per target class; output names the "
-                  "wire and target the field when the table holds several")
 def class_histogram(predictions, history, models, record, output=None, target=None, bins=40, name=None,
                     figures=None):
     figures = figures or Figure()
@@ -26,9 +22,6 @@ def class_histogram(predictions, history, models, record, output=None, target=No
     return None
 
 
-@lego("/plot/kalfa/confusion_matrix", partial=True, alias="confusion_matrix",
-      description="Confusion matrix of the decoded test predictions against the target labels, counts and "
-                  "row shares in every cell")
 def confusion_matrix(predictions, history, models, record, name=None, figures=None):
     figures = figures or Figure()
     if predictions is None or len(predictions) == 0:

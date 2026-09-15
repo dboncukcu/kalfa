@@ -1,6 +1,5 @@
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.device import Device
 from kalfa.std.common.log import clock, logger_for, since
 from kalfa.std.common.runtime import (Context, Pass, active_entries, collect_results, observe_all, resolve_entries,
@@ -10,9 +9,6 @@ from kalfa.std.common.runtime import (Context, Pass, active_entries, collect_res
 logger = logger_for("training.eval")
 
 
-@lego("/lego/kalfa/evaluate", returns="metrics", bus=["device", "prep", "record"],
-      description="Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; "
-                  "an empty set gives an empty mapping; record reaches metrics that write files")
 def evaluate(models, emas, composites, counters, loader, set, losses, metrics, losses_keys, metrics_keys, predicts,
              device=None, prep=None, record=None):
     if loader is None or loader.dataset.size() == 0:

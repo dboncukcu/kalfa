@@ -2,7 +2,6 @@ import math
 
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.adapter.base import built, rebound
 from kalfa.std.common.runtime import Loss, LossView, Tracker, parameter_names
 
@@ -31,9 +30,6 @@ class ObjectiveTracker(Tracker):
                 for term, total in self.totals.items()}
 
 
-@lego("/adapter/kalfa/objective",
-      description="Call an objective with every model of the run and the batch, plus the step, epoch, rng, "
-                  "scaler and losses view its signature names")
 class ObjectiveAdapter(Loss):
     reads = "models"
 

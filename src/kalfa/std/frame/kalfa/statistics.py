@@ -1,13 +1,8 @@
 import numpy
 
-from kalfa.registration import lego
 from kalfa.std.frame.base import FrameTransform, table_only
 
 
-@lego("/frame/kalfa/group_statistic", alias="group_statistic", needs_table=True, refs={"by": "column"},
-      description="A statistic of a column per group, learned on the train set and mapped onto every set as a "
-                  "new column (name, or <column>_<statistic>_by_<by>); a group the train set never saw takes the "
-                  "statistic over the whole train set")
 class GroupStatistic(FrameTransform):
     statistics = ("mean", "median", "min", "max", "std", "count")
 
@@ -33,10 +28,6 @@ class GroupStatistic(FrameTransform):
         return table.assign(**{self.name: numpy.where(numpy.isnan(values), self.overall, values)})
 
 
-@lego("/frame/kalfa/target_encoding", alias="target_encoding", needs_table=True, refs={"column": "column"},
-      description="The train mean of the target per category of a column, smoothed toward the overall mean by "
-                  "smoothing pseudo counts, as a new column (name, or <column>_target); a category the train set "
-                  "never saw takes the overall mean")
 class TargetEncoding(FrameTransform):
     def __init__(self, column, target, smoothing=1.0, name=None):
         self.column = column

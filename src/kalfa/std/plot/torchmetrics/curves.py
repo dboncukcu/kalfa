@@ -1,7 +1,6 @@
 import numpy
 import torch
 
-from kalfa.registration import lego
 from kalfa.std.common.figure import Figure
 from kalfa.std.plot.base import scores_and_labels
 
@@ -38,19 +37,12 @@ def binary_curve(figures, predictions, record, kind, xlabel, ylabel, name=None, 
     return None
 
 
-@lego("/plot/torchmetrics/binary_roc", partial=True, alias="binary_roc", refs={"target": "field"},
-      description="ROC curve of the raw test scores against the binary target; output names the wire and target "
-                  "the field when the table holds several")
 def binary_roc(predictions, history, models, record, output=None, target=None, name=None, figures=None):
     figures = figures or Figure()
     return binary_curve(figures, predictions, record, "binary_roc", "false positive rate", "true positive rate",
                         name, output, target)
 
 
-@lego("/plot/torchmetrics/binary_precision_recall_curve", partial=True, alias="binary_precision_recall_curve",
-      refs={"target": "field"},
-      description="Precision recall curve of the raw test scores against the binary target; output names the wire "
-                  "and target the field when the table holds several")
 def binary_precision_recall_curve(predictions, history, models, record, output=None, target=None, name=None,
                                   figures=None):
     figures = figures or Figure()

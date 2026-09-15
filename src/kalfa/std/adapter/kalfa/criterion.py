@@ -1,6 +1,5 @@
 import math
 
-from kalfa.registration import lego
 from kalfa.std.adapter.base import built, observed, rebound, wires
 from kalfa.std.common.runtime import Loss, Tracker
 from kalfa.std.metric.base import as_float
@@ -26,9 +25,6 @@ class MeanTracker(Tracker):
         return {self.name: self.total / self.count if self.count else math.nan}
 
 
-@lego("/adapter/kalfa/criterion", uses=["predicts"],
-      description="Feed a criterion the predicts model's output wire and the target field named by the "
-                  "definition's keys")
 class CriterionAdapter(Loss):
     def __init__(self, criterion):
         self.criterion = criterion

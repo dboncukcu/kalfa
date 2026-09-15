@@ -3,13 +3,7 @@ from itertools import combinations, combinations_with_replacement
 import torch
 from torch import nn
 
-from kalfa.registration import lego
 
-
-@lego("/layer/kalfa/polynomial", alias="polynomial",
-      description="Polynomial expansion of the feature vector: the features and every product of degree of "
-                  "them (interaction_only drops the squares, bias adds a constant column, keep: false "
-                  "returns the products alone); the place for feature interactions, computed per batch")
 class Polynomial(nn.Module):
     def __init__(self, degree=2, interaction_only=False, bias=False, keep=True):
         super().__init__()
@@ -41,9 +35,6 @@ class Polynomial(nn.Module):
         return torch.cat(parts, dim=1)
 
 
-@lego("/layer/kalfa/l2_normalize", alias="l2_normalize",
-      description="Divide every sample by the L2 norm of its own feature vector (sklearn's Normalizer as a "
-                  "layer: it reads the whole vector, so it belongs to the model, not to a column chain)")
 class L2Normalize(nn.Module):
     def __init__(self, eps=1e-12):
         super().__init__()
