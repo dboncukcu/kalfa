@@ -4,8 +4,13 @@ import torch
 
 from kalfa.std.common.files import write_json
 from kalfa.std.plot.base import report_loader
-from kalfa.std.plot.kalfa.architecture import (graph_layout, parameter_count, traced_shapes, trainable_count,
-                                               training_layout)
+from kalfa.std.plot.kalfa.architecture import (
+    graph_layout,
+    parameter_count,
+    traced_shapes,
+    trainable_count,
+    training_layout,
+)
 
 
 def layout_note(layout):

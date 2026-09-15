@@ -133,9 +133,10 @@ def test_image_pairs_draws_from_the_valid_set_when_test_is_empty(folder, tmp_pat
 
 
 def test_two_views_and_simclr_aug(folder):
+    from torch import nn
+
     from kalfa.std.objective.kalfa.ntxent import ntxent
     from kalfa.std.pre.kalfa.images import SimclrAug, TwoViews
-    from torch import nn
 
     samples = image_folder(str(folder))
     image = samples[0]["image"]

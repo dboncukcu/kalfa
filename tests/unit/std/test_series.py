@@ -78,8 +78,8 @@ def test_window_never_crosses_a_group_boundary():
 
 
 def test_gru_and_last_step_are_lazy_and_seeded():
-    from helpers import linear_graph
     from cirak.build import Graph, GraphNode
+
     from kalfa.std.builder.kalfa.module import Module
 
     def build(seed):

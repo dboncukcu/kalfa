@@ -4,6 +4,7 @@ import pytest
 
 from kalfa.cli import examples_text, main
 
+
 COMMANDS = ["run", "check", "describe", "predict", "generate", "prepare", "export", "plots", "resume", "sweep",
             "collect", "docs", "ls", "board", "stop", "contract"]
 

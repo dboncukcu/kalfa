@@ -11,6 +11,8 @@ from cirak.registry import registry
 from torch import nn
 
 import kalfa  # noqa: F401
+from helpers import batch as make_batch
+from helpers import tiny_model
 from kalfa.std.adapter.kalfa.metric import MetricAdapter as metric_adapter
 from kalfa.std.common.runtime import Context, Pass
 from kalfa.std.layer.kalfa.wires import L1Distance
@@ -19,7 +21,6 @@ from kalfa.std.plot.kalfa.architecture import architecture_text
 from kalfa.std.plot.kalfa.classification import class_histogram
 from kalfa.std.plot.torchmetrics.curves import binary_precision_recall_curve, binary_roc
 from kalfa.std.plot.torchview.architecture import architecture as torchview_architecture
-from helpers import batch as make_batch, tiny_model
 
 
 class OneBatchLoader:
@@ -93,6 +94,7 @@ class Two(nn.Module):
 
 def test_myexample_objectives_register_with_facts_and_run():
     import myexample  # noqa: F401
+
     from kalfa.std.criterion.kalfa.classification import bce_logits
 
     facts = registry.facts("/objective/myexample/alad_discriminator")

@@ -5,12 +5,12 @@ import logging
 from io import StringIO
 
 import kalfa  # noqa: F401
+from helpers import tiny_model
 from kalfa.std.common.history import History
 from kalfa.std.common.log import Monitor, logger_for, node_path, turn_line
 from kalfa.std.lego.kalfa.history import history
 from kalfa.std.lego.kalfa.values import const, identity, merge, pack
 from kalfa.std.optimizer.torch.optimizers import Sgd
-from helpers import tiny_model
 
 
 def test_const_pack_identity():

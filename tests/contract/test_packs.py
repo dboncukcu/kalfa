@@ -1,7 +1,7 @@
 """The alias packs agree with the legos' alias facts; the packs layer over base, lazy_tabular over tabular."""
 
-from ruamel.yaml import YAML
 from cirak.registry import registry
+from ruamel.yaml import YAML
 
 import kalfa
 from kalfa.config import pack_tables

@@ -6,7 +6,15 @@ import torch
 
 import kalfa  # noqa: F401
 from kalfa.std.common.rng import (
-    Draws, derived_seed, forked, process_seed, restore_rng, rng_states, seed_all, seed_worker)
+    Draws,
+    derived_seed,
+    forked,
+    process_seed,
+    restore_rng,
+    rng_states,
+    seed_all,
+    seed_worker,
+)
 from kalfa.std.rng.kalfa.seeds import derived, global_stream, indexed
 
 

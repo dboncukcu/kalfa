@@ -1,6 +1,6 @@
 import pytest
-
 import regenerate
+
 from helpers import ROOT
 
 

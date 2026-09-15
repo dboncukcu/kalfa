@@ -11,6 +11,7 @@ from kalfa.config import parse_sets
 from kalfa.record import read_resolved, resume_chain
 from kalfa.std.common.history import History
 
+
 pytestmark = pytest.mark.slow
 
 FORCED_RULES = ("training.rules=[{name: to_huber, when: {uri: after_epoch, params: {at: 1}}, set: {loss: loss_huber}}, "

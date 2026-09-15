@@ -7,6 +7,7 @@ from helpers import minimal, write_config
 from kalfa.api import check, predict, run
 from kalfa.config import parse_sets
 
+
 pytestmark = pytest.mark.slow
 
 

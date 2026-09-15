@@ -15,6 +15,7 @@ from .schema import Schema
 from .std import STD_URIS
 from .std.common.log import logger_for
 
+
 logger = logger_for("config")
 
 @dataclass

@@ -12,6 +12,7 @@ from . import __version__
 from .config import written_config
 from .std.common.files import append_line, read_json, read_note, write_json, write_text
 
+
 DATETIME_TOKEN = "$datetime$"
 
 

@@ -1,7 +1,7 @@
 import inspect
 
-from torch import nn
 from cirak import Deferred
+from torch import nn
 
 
 def is_deferred(value):

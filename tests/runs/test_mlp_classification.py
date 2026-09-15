@@ -7,6 +7,7 @@ import torch
 
 from kalfa.api import check, predict
 
+
 pytestmark = pytest.mark.slow
 
 

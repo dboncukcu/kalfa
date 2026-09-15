@@ -7,6 +7,7 @@ from .contract import Contract
 from .kinds import kalfa_kind, kinds
 from .std import STD_URIS
 
+
 HEADER = """# kalfa lego reference
 
 Generated from the registry by `kalfa docs --write DOCS.md`; do not edit by hand, the test `tests/test_docs.py`

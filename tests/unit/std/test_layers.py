@@ -2,9 +2,9 @@
 
 import pytest
 import torch
+from cirak.registry import registry
 
 import kalfa  # noqa: F401
-from cirak.registry import registry
 from kalfa.std import STD_URIS
 from kalfa.std.common.deferred import LazyLayer
 from kalfa.std.layer.kalfa.blocks import mlp

@@ -13,6 +13,7 @@ from kalfa.collect import collect
 from kalfa.config import parse_sets
 from kalfa.record import Record
 
+
 CONFIG = example("14_sweep_grid")
 OPTUNA = ["sweep.strategy={uri: optuna, params: {trials: 2, seed: 1}}",
           "sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}"]

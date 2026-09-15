@@ -1,8 +1,8 @@
 from pathlib import Path
 
+from kalfa.std.common.device import Device
 from kalfa.std.common.generation import write_samples
 from kalfa.std.common.log import logger_for
-from kalfa.std.common.device import Device
 
 
 logger_after = logger_for("after")

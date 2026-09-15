@@ -144,6 +144,7 @@ def test_with_param_reaches_a_key_of_a_mapping_param_by_its_dotted_path():
 
 def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
     import numpy
+
     from helpers import scores_frame
     from kalfa.std.lego.kalfa.prep import apply, fit
     from kalfa.std.pre.sklearn.scalers import StandardScaler
@@ -184,6 +185,7 @@ def test_a_target_selector_stacks_the_fields_and_rescales_each_one():
 
 def test_metrics_report_in_the_original_scale_and_losses_in_the_model_scale():
     import numpy
+
     from helpers import housing_frame
     from kalfa.std.lego.kalfa.prep import apply, fit
     from kalfa.std.pre.sklearn.scalers import StandardScaler

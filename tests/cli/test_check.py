@@ -19,7 +19,7 @@ def test_check_reports_problems_and_exit_codes(workdir, capsys):
 
 
 def test_check_layers_prints_the_tree(workdir, capsys):
-    base = write_config(workdir / "base.yaml", minimal())
+    write_config(workdir / "base.yaml", minimal())
     top = workdir / "top.yaml"
     top.write_text("include: [base.yaml]\ntraining:\n  epochs: 2\n")
     assert main(["check", str(top), "--layers", "-p", "lr=0.5", "--set", "training.epochs=3"]) == 0

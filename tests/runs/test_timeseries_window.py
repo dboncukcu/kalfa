@@ -7,6 +7,7 @@ from kalfa.api import check
 from kalfa.config import parse_sets
 from kalfa.std.common.history import History
 
+
 pytestmark = pytest.mark.slow
 
 

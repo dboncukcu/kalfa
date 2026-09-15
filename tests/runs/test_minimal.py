@@ -5,6 +5,7 @@ import pytest
 from kalfa.api import check
 from kalfa.std.common.history import History
 
+
 pytestmark = pytest.mark.slow
 
 

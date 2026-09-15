@@ -5,10 +5,11 @@ import pandas
 import pytest
 
 from helpers import minimal, write_config
-from kalfa.api import check, prepare_data, predict, run
+from kalfa.api import check, predict, prepare_data, run
 from kalfa.config import parse_sets
 from kalfa.record import Record
 from kalfa.std.common.history import History
+
 
 pytestmark = pytest.mark.slow
 

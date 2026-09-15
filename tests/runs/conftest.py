@@ -8,6 +8,7 @@ from helpers import EXAMPLES
 from kalfa.api import run
 from kalfa.config import parse_sets
 
+
 CPU = ["device=cpu"]
 SMALL = {
     "01_mlp_regression": (["rng=indexed"], ["epochs=3"]),

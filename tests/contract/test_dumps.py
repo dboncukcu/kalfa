@@ -2,9 +2,9 @@ import json
 import warnings
 
 import pytest
+import regenerate
 from ruamel.yaml import YAML
 
-import regenerate
 from helpers import ROOT, example, examples
 
 

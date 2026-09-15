@@ -9,6 +9,7 @@ from kalfa.cli import main
 from kalfa.describe import Plain
 from kalfa.describe.render import render
 
+
 CONFIG_01 = Path(example("01_mlp_regression"))
 
 HEADS = ("── DATA ", "── MODEL ", "── TRAINING ", "── AFTER ", "── COLUMNS ")

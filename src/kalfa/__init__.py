@@ -6,6 +6,7 @@ from cirak import register_fragment
 from . import std
 from .registration import lego
 
+
 PACKS = Path(__file__).parent / "packs"
 CONTRACT = Path(__file__).parent / "contract.yaml"
 

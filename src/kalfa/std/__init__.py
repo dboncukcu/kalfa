@@ -4,6 +4,7 @@ from pathlib import Path
 from cirak import declare_facts, declare_kinds
 from cirak.registry import registry
 
+
 declare_kinds("source", "transform", "split", "frame", "pre", "feed", "loader", "layer", "init", "criterion",
               "objective", "metric", "adapter", "optimizer", "schedule", "turn", "trigger", "checkpoint", "rule",
               "generate", "plot", "strategy", "device", "rng", "export", "calibrate", "lego")

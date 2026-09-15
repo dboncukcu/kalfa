@@ -16,7 +16,6 @@ from .std.common.history import History
 from .std.strategy.base import Strategy, parse_space
 
 
-
 class SweepError(ValueError):
     pass
 

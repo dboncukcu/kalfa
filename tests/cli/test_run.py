@@ -8,6 +8,7 @@ from helpers import minimal, write_config
 from kalfa.cli import main
 from kalfa.record import Record
 
+
 pytestmark = pytest.mark.slow
 
 

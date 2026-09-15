@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy
 import pandas
+import torch
 
 from kalfa.std.common.log import logger_for, since
 from kalfa.std.common.samples import is_samples
-import torch
 
 
 logger = logger_for("data.prep")

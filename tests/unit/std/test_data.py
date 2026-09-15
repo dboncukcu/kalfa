@@ -114,6 +114,7 @@ def test_the_elementwise_scale_transforms_say_where_they_break():
 
 def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
     import sklearn.preprocessing as sklearn_pre
+
     from kalfa.std.pre.sklearn.scalers import MaxAbsScaler, RobustScaler
     from kalfa.std.pre.sklearn.transformers import PowerTransformer, QuantileTransformer
 
@@ -136,6 +137,7 @@ def test_the_sklearn_scalers_match_sklearn_and_invert(tmp_path):
 
 def test_the_widening_preprocessors_name_the_columns_they_produce():
     import sklearn.preprocessing as sklearn_pre
+
     from kalfa.std.pre.sklearn.transformers import KBins, Spline
 
     values = numpy.random.default_rng(0).normal(size=200)

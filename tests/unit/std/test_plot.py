@@ -45,7 +45,6 @@ def test_panel_title_names_the_wire_only_when_two_outputs_share_a_field():
 
 
 def test_run_all_calls_every_plot_and_resolves_inputs_by_refs(tmp_path):
-    import cirak
 
     seen = []
 

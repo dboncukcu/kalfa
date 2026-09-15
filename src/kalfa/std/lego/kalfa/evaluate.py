@@ -2,8 +2,15 @@ import torch
 
 from kalfa.std.common.device import Device
 from kalfa.std.common.log import clock, logger_for, since
-from kalfa.std.common.runtime import (Context, Pass, active_entries, collect_results, observe_all, resolve_entries,
-                                      set_modes)
+from kalfa.std.common.runtime import (
+    Context,
+    Pass,
+    active_entries,
+    collect_results,
+    observe_all,
+    resolve_entries,
+    set_modes,
+)
 
 
 logger = logger_for("training.eval")

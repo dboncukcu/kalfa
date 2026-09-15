@@ -11,6 +11,7 @@ from ruamel.yaml import YAML
 
 from .contract import Contract
 
+
 DRIVER_LABEL = "kalfa driver"
 
 

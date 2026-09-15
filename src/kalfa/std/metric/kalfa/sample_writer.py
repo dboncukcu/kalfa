@@ -1,9 +1,10 @@
+from pathlib import Path
+
 import torch
 
-from kalfa.std.metric.base import Metric
-from pathlib import Path
 from kalfa.std.common.generation import write_turn_samples
 from kalfa.std.common.runtime import call_model, named_outputs, parameter_names, resolve_model
+from kalfa.std.metric.base import Metric
 
 
 class SampleWriter(Metric):

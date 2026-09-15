@@ -13,6 +13,7 @@ from torch import nn
 from kalfa.std.builder.kalfa.module import Module
 from kalfa.std.pre.base import TableFrame
 
+
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
 

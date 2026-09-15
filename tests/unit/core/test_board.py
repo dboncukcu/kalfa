@@ -8,7 +8,6 @@ from pathlib import Path
 import pandas
 
 import kalfa.board
-
 from helpers import housing_frame
 from kalfa.board import Board, serve, static_path
 from kalfa.record import Record

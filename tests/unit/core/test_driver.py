@@ -4,9 +4,23 @@ from cirak.registry import registry
 
 from helpers import example
 from kalfa.config import load_surface
-from kalfa.driver import (blocks_of, component_of, data_params, ema_items, is_composite, keys_of, models_of,
-                          optimizers_of, predicts_of, recipe, resolve_refs, set_values, trained_and_composites,
-                          triggers_of)
+from kalfa.driver import (
+    blocks_of,
+    component_of,
+    data_params,
+    ema_items,
+    is_composite,
+    keys_of,
+    models_of,
+    optimizers_of,
+    predicts_of,
+    recipe,
+    resolve_refs,
+    set_values,
+    trained_and_composites,
+    triggers_of,
+)
+
 
 TIDY = Path(example("alad"))
 

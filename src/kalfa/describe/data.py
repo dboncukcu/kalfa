@@ -1,7 +1,20 @@
 from ..std.pre.base import matches_any
 from .document import batch_size, data_params, field_plan, owners_of, spectators_of
-from .text import (ARROW, DOT, PLAIN, call_text, columns_text, count, field_line, number, pad, params_text, short,
-                   table, width_of)
+from .text import (
+    ARROW,
+    DOT,
+    PLAIN,
+    call_text,
+    columns_text,
+    count,
+    field_line,
+    number,
+    pad,
+    params_text,
+    short,
+    table,
+    width_of,
+)
 
 
 def split_text(split, style=PLAIN):

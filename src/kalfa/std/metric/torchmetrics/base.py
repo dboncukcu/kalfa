@@ -1,9 +1,9 @@
 import math
+import warnings
 
 import torch
 
 from kalfa.std.metric.base import Metric
-import warnings
 
 
 class TorchMetric(Metric):

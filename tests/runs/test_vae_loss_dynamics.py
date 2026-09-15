@@ -7,6 +7,7 @@ from kalfa.api import check, predict, run
 from kalfa.config import parse_sets
 from kalfa.std.common.history import History
 
+
 pytestmark = pytest.mark.slow
 
 FORCED = ("training.rules=[{name: half_recon, when: {uri: after_epoch, params: {at: 1}}, set: {vae_loss.w_rec: 0.5}}, "

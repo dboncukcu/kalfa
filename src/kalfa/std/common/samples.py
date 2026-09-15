@@ -1,6 +1,7 @@
+import re
+
 import numpy
 from ruamel.yaml import YAML
-import re
 
 
 class Samples:

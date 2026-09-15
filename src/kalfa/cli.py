@@ -18,8 +18,8 @@ from .config import import_plugins, pack_tables, parse_sets
 from .contract import Contract
 from .describe import ALL_SECTIONS, DEFAULT_SECTIONS
 from .kinds import kalfa_kind
-from .record import Record
 from .recipe import recipe_text
+from .record import Record
 from .std.common.log import Monitor, level_of
 from .style import Style, style_for
 

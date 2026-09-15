@@ -2,12 +2,13 @@ from pathlib import Path
 
 import pytest
 import torch
+from runs.conftest import SMALL
 
 from kalfa.api import check, generate
 from kalfa.cli import main
 from kalfa.config import parse_sets
 from kalfa.std.common.history import History
-from runs.conftest import SMALL
+
 
 pytestmark = pytest.mark.slow
 

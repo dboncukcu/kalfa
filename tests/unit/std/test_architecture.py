@@ -16,8 +16,7 @@ from kalfa.std.feed.kalfa.table import table
 from kalfa.std.lego.kalfa.architecture_note import architecture_note
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.optimizer.torch.optimizers import Sgd
-from kalfa.std.plot.kalfa.architecture import (architecture, drawn_lines, graph_layout, traced_shapes,
-                                               training_layout)
+from kalfa.std.plot.kalfa.architecture import architecture, drawn_lines, graph_layout, traced_shapes, training_layout
 
 
 def test_the_shapes_come_from_one_traced_batch():

@@ -11,7 +11,6 @@ from pathlib import Path
 
 import cirak
 from cirak.registry import registry
-from ruamel.yaml import YAML
 
 import kalfa
 from kalfa.api import check
@@ -23,6 +22,7 @@ from kalfa.driver import recipe
 from kalfa.recipe import recipe_text
 from kalfa.std import STD_URIS
 from kalfa.style import Style
+
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples"
