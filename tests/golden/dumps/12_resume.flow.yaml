@@ -46,8 +46,8 @@ flow:
     framed_valid: {uri: /lego/kalfa/apply_frames, inputs: {df: valid_df_1, frames: frames}, outputs: [valid_df]}
     framed_test: {uri: /lego/kalfa/apply_frames, inputs: {df: test_df_1, frames: frames}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [std_scaler]}, price: {target: true, preprocessors: [target_std]}}, preprocessors: {
-            std_scaler: {uri: /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], keys: {std_scaler: {}, target_std: {}}},
-      inputs: {df: train_df}, outputs: [prep]}  # implicit: record
+            std_scaler: {uri: /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], keys: {std_scaler: {}, target_std: {}}, 
+          spectators: []}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
     frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {std_scaler: {}, target_std: {}}, mask: null}, inputs: {df: train_df, prep: prep}, outputs: [
         train_frame]}
     frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {std_scaler: {}, target_std: {}}, mask: null}, inputs: {df: valid_df, prep: prep}, outputs: [

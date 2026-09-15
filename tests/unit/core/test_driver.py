@@ -84,7 +84,11 @@ def test_split_and_batch_short_forms_and_transform_stages():
     assert params["feed"] == {"uri": "/feed/kalfa/table", "params": {}}
     assert params["prep"] == {"uri": "/lego/kalfa/fit", "inputs": {"df": "train_df"},
                               "params": {"fields": {}, "preprocessors": {"s": {"uri": "/pre/sklearn/standard_scaler"}},
-                                         "drop": [], "keys": {"s": {"sets": ["train"]}}}}
+                                         "drop": [], "keys": {"s": {"sets": ["train"]}}, "spectators": []}}
+    grouped = data_params({**data, "split": {"uri": "/split/kalfa/sequential",
+                                             "params": {"ratios": [0.8, 0.1, 0.1], "group": "site_id"}},
+                           "spectators": ["run_*"]})
+    assert grouped["prep"]["params"]["spectators"] == ["run_*", "site_id"]
     long = data_params({**data, "split": {"uri": "/split/kalfa/kfold", "params": {"k": 5}},
                         "batch": {"size": 8, "eval_size": 16}})
     assert long["split"] == {"uri": "/split/kalfa/kfold", "params": {"k": 5}}

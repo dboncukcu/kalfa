@@ -45,8 +45,8 @@ flow:
     framed_valid: {uri: /lego/kalfa/apply_frames, inputs: {df: valid_df_1, frames: frames}, outputs: [valid_df]}
     framed_test: {uri: /lego/kalfa/apply_frames, inputs: {df: test_df_1, frames: frames}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [to_tensor, normalize]}, label: {target: true}}, preprocessors: {to_tensor: {uri: 
-              /pre/kalfa/to_tensor}, normalize: {uri: /pre/kalfa/normalize, params: {mean: cifar10, std: cifar10}}}, drop: [], keys: {to_tensor: {}, normalize: {}}},
-      inputs: {df: train_df}, outputs: [prep]}  # implicit: record
+              /pre/kalfa/to_tensor}, normalize: {uri: /pre/kalfa/normalize, params: {mean: cifar10, std: cifar10}}}, drop: [], keys: {to_tensor: {}, normalize: {}},
+        spectators: []}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
     frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {to_tensor: {}, normalize: {}}, mask: null}, inputs: {df: train_df, prep: prep}, outputs: [
           train_frame]}
     frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {to_tensor: {}, normalize: {}}, mask: null}, inputs: {df: valid_df, prep: prep}, outputs: [

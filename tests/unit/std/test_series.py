@@ -31,7 +31,8 @@ def test_sequential_split_cuts_every_group_in_order():
 
 
 def frames_of(data, group="site_id"):
-    prep = fit(data, {"x*": {"preprocessors": ["s"]}, "load": {"target": True}}, {"s": StandardScaler()}, [])
+    prep = fit(data, {"x*": {"preprocessors": ["s"]}, "load": {"target": True}}, {"s": StandardScaler()}, [],
+               spectators=[group] if group else [])
     parts = sequential(data, [0.6, 0.2, 0.2], group=group)
     return prep, {name: apply(parts[name], prep, name) for name in parts}
 

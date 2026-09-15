@@ -133,7 +133,8 @@ flow:
     prep: {uri: /lego/kalfa/fit, params: {fields: {x?: {preprocessors: [abs_scaler, log_scaler, std_scaler]}, xx*: {preprocessors: [abs_scaler, log_scaler, 
                 std_scaler]}, is_anomaly: {target: true, preprocessors: [cast_int]}}, preprocessors: {abs_scaler: {uri: /pre/kalfa/abs}, log_scaler: {uri: 
               /pre/kalfa/log, params: {base: 10, norm: 1200}}, std_scaler: {uri: /pre/sklearn/standard_scaler}, cast_int: {uri: /pre/kalfa/cast, params: {dtype: 
-                int}}}, drop: [xx6, xx7], keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
+                int}}}, drop: [xx6, xx7], keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, spectators: []}, inputs: {df: train_df}, outputs: [
+        prep]}  # implicit: record
     frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, mask: null}, inputs: {df: 
           train_df, prep: prep}, outputs: [train_frame]}
     frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, mask: null}, inputs: {df: 

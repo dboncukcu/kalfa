@@ -36,9 +36,9 @@ flow:
             train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {num_*: {preprocessors: [std_scaler]}, cat_*: {
                 preprocessors: [onehot]}, churned: {target: true, preprocessors: [label]}}, preprocessors: {std_scaler: {
               uri: /pre/sklearn/standard_scaler}, onehot: {uri: /pre/kalfa/one_hot}, label: {uri: 
-                /pre/kalfa/label_encoder}}, drop: [], keys: {std_scaler: {}, onehot: {}, label: {}}}, inputs: {df: 
-            train_df}}, preprocessors_keys: {std_scaler: {}, onehot: {}, label: {}}, feed: {uri: /feed/kalfa/table, 
-          params: {}}}}
+                /pre/kalfa/label_encoder}}, drop: [], keys: {std_scaler: {}, onehot: {}, label: {}}, spectators: []}, 
+          inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, onehot: {}, label: {}}, feed: {uri: 
+          /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: net, index: 0, init: null, trainable: true, weights: null}], 
         composite_items: [], ema_items: [], trained_refs: {net: net}, composite_refs: {}, ema_refs: {}, seed: 7, rng: {
           uri: /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}

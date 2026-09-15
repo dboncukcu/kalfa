@@ -1656,7 +1656,7 @@
         "state": true
       },
       "kind": "lego",
-      "signature": "(df, fields, preprocessors, drop, keys=None, record=None)"
+      "signature": "(df, fields, preprocessors, drop, keys=None, record=None, spectators=None)"
     },
     "/lego/kalfa/fit_frames": {
       "alias": [],

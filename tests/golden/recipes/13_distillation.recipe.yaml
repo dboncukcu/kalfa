@@ -41,8 +41,8 @@ flow:
           /lego/kalfa/fit_frames, params: {frames: []}, inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {
           fields: {image: {preprocessors: [to_tensor, normalize]}, label: {target: true}}, preprocessors: {to_tensor: {
                 uri: /pre/kalfa/to_tensor}, normalize: {uri: /pre/kalfa/normalize, params: {mean: cifar10, std: cifar10}}},
-          drop: [], keys: {to_tensor: {}, normalize: {}}}, inputs: {df: train_df}}, preprocessors_keys: {to_tensor: {}, 
-          normalize: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
+          drop: [], keys: {to_tensor: {}, normalize: {}}, spectators: []}, inputs: {df: train_df}}, preprocessors_keys: {
+        to_tensor: {}, normalize: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: teacher, index: 0, init: null, trainable: false, weights: {run: 
               runs/cifar_resnet50_x, model: net, which: best}}, {name: student, index: 1, init: null, trainable: true, 
             weights: null}], composite_items: [], ema_items: [], trained_refs: {teacher: teacher, student: student}, 

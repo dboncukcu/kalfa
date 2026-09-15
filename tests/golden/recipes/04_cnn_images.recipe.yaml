@@ -46,8 +46,8 @@ flow:
                 target: true}}, preprocessors: {resize: {uri: /pre/kalfa/resize, params: {size: 224}}, to_tensor: {uri: 
                 /pre/kalfa/to_tensor}, augment: {uri: /pre/kalfa/random_crop_flip, params: {size: 224}}, normalize: {uri: 
                 /pre/kalfa/normalize, params: {mean: imagenet, std: imagenet}}}, drop: [], keys: {resize: {}, to_tensor: {},
-            augment: {sets: [train]}, normalize: {}}}, inputs: {df: train_df}}, preprocessors_keys: {resize: {}, 
-          to_tensor: {}, augment: {sets: [train]}, normalize: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
+            augment: {sets: [train]}, normalize: {}}, spectators: []}, inputs: {df: train_df}}, preprocessors_keys: {
+          resize: {}, to_tensor: {}, augment: {sets: [train]}, normalize: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: backbone, index: 0, init: null, trainable: false, weights: 
             null}, {name: head, index: 1, init: null, trainable: true, weights: null}], composite_items: [name: 
             classifier], ema_items: [], trained_refs: {backbone: backbone, head: head}, composite_refs: {classifier: 

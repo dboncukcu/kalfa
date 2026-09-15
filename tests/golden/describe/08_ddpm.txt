@@ -56,8 +56,8 @@ config.yaml                                                                     
   record      runs/ddpm_$datetime$
 
 ── COLUMNS ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  column  dtype  field  preprocessors  role         tensor
-  ────────────────────────────────────────────────────────
-  image   image  image  to_signed      feature      x
-  label   int64  —      —              not a field  —
+  column  dtype  field  preprocessors  role       tensor
+  ──────────────────────────────────────────────────────
+  image   image  image  to_signed      feature    x
+  label   int64  —      —              discarded  —
   the produced widths and the tensor slots need --measure

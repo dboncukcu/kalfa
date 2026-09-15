@@ -227,6 +227,8 @@ class DataRules:
         self.spectator_columns(data, header, columns, owners)
 
     def spectator_columns(self, data, header, columns, owners):
+        if self.fact_of(data.get("source"), "samples"):
+            return
         spectators = data.get("spectators") or []
         if not isinstance(spectators, list):
             self.error("invalid_value", "data.spectators must be a list of column names or globs",
@@ -255,8 +257,9 @@ class DataRules:
         if dropped:
             self.warning("column_unused", f"columns {dropped} match no field and no spectator; they are read and "
                                           f"discarded", ("data", "fields"),
-                         hint="write them in data.spectators to carry them to the plots and predictions.parquet, "
-                              "or in data.drop to say they are meant to go")
+                         hint="write them in data.spectators to carry them to the plots and "
+                              "predictions.parquet, in data.drop to say they are meant to go, or leave them out of "
+                              "the source's columns list so they are never read")
 
     def sizes(self):
         header = self.header if self.header is not None else self.source_header()

@@ -29,8 +29,9 @@ flow:
         inputs: {df: train_df_1}}, prep: {uri: /lego/kalfa/fit, params: {fields: {x*: {preprocessors: [std_scaler]}, 
               load: {target: true, preprocessors: [target_std]}}, preprocessors: {std_scaler: {uri: 
                 /pre/sklearn/standard_scaler}, target_std: {uri: /pre/sklearn/standard_scaler}}, drop: [], keys: {
-              std_scaler: {}, target_std: {}}}, inputs: {df: train_df}}, preprocessors_keys: {std_scaler: {}, target_std: {}},
-      feed: {uri: /feed/kalfa/window, params: {size: 168, horizon: 24, context: true, group: site_id}}}}
+              std_scaler: {}, target_std: {}}, spectators: [site_id]}, inputs: {df: train_df}}, preprocessors_keys: {
+          std_scaler: {}, target_std: {}}, feed: {uri: /feed/kalfa/window, params: {size: 168, horizon: 24, context: 
+            true, group: site_id}}}}
   models: {block: models, params: {trained_items: [{name: model, index: 0, init: null, trainable: true, weights: null}], 
         composite_items: [], ema_items: [], trained_refs: {model: model}, composite_refs: {}, ema_refs: {}, seed: 7, rng: {
         uri: /rng/kalfa/derived, params: {}}, builder: /builder/kalfa/module}}

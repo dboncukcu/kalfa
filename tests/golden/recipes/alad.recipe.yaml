@@ -130,8 +130,9 @@ flow:
                 preprocessors: [cast_int]}}, preprocessors: {abs_scaler: {uri: /pre/kalfa/abs}, log_scaler: {uri: 
                 /pre/kalfa/log, params: {base: 10, norm: 1200}}, std_scaler: {uri: /pre/sklearn/standard_scaler}, 
               cast_int: {uri: /pre/kalfa/cast, params: {dtype: int}}}, drop: [xx6, xx7], keys: {abs_scaler: {}, 
-              log_scaler: {}, std_scaler: {}, cast_int: {}}}, inputs: {df: train_df}}, preprocessors_keys: {abs_scaler: {},
-        log_scaler: {}, std_scaler: {}, cast_int: {}}, feed: {uri: /feed/kalfa/table, params: {}}}}
+              log_scaler: {}, std_scaler: {}, cast_int: {}}, spectators: []}, inputs: {df: train_df}}, 
+        preprocessors_keys: {abs_scaler: {}, log_scaler: {}, std_scaler: {}, cast_int: {}}, feed: {uri: 
+          /feed/kalfa/table, params: {}}}}
   models: {block: models, params: {trained_items: [{name: encoder, index: 0, init: null, trainable: true, weights: null},
         {name: generator, index: 1, init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}, trainable: true, 
             weights: null}, {name: dxz, index: 2, init: {weights: {uri: /init/torch/normal, params: {std: 0.02}}}, 

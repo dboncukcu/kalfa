@@ -61,8 +61,8 @@ config.yaml                                                                     
   record      runs/ae_$datetime$
 
 ── COLUMNS ────────────────────────────────────────────────────────────────────────────────
-  column  dtype  field  preprocessors  role         tensor
-  ────────────────────────────────────────────────────────
-  image   image  image  to_tensor      feature      x
-  label   int64  —      —              not a field  —
+  column  dtype  field  preprocessors  role       tensor
+  ──────────────────────────────────────────────────────
+  image   image  image  to_tensor      feature    x
+  label   int64  —      —              discarded  —
   the produced widths and the tensor slots need --measure

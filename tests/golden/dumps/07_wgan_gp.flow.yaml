@@ -55,7 +55,7 @@ flow:
     framed_valid: {uri: /lego/kalfa/apply_frames, inputs: {df: valid_df_1, frames: frames}, outputs: [valid_df]}
     framed_test: {uri: /lego/kalfa/apply_frames, inputs: {df: test_df_1, frames: frames}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [to_signed]}, label: {target: true}}, preprocessors: {to_signed: {uri: 
-              /pre/kalfa/to_tensor_signed}}, drop: [], keys: {to_signed: {}}}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
+              /pre/kalfa/to_tensor_signed}}, drop: [], keys: {to_signed: {}}, spectators: []}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
     frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {to_signed: {}}, mask: null}, inputs: {df: train_df, prep: prep}, outputs: [train_frame]}
     frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {to_signed: {}}, mask: null}, inputs: {df: valid_df, prep: prep}, outputs: [valid_frame]}
     frame_test: {uri: /lego/kalfa/apply, params: {set: test, keys: {to_signed: {}}, mask: null}, inputs: {df: test_df, prep: prep}, outputs: [test_frame]}

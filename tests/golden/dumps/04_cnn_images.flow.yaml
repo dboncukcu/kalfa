@@ -50,7 +50,7 @@ flow:
     prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [resize, augment, to_tensor, normalize]}, label: {target: true}}, preprocessors: {
             resize: {uri: /pre/kalfa/resize, params: {size: 224}}, to_tensor: {uri: /pre/kalfa/to_tensor}, augment: {uri: /pre/kalfa/random_crop_flip, params: {
                 size: 224}}, normalize: {uri: /pre/kalfa/normalize, params: {mean: imagenet, std: imagenet}}}, drop: [], keys: {resize: {}, to_tensor: {}, 
-            augment: {sets: [train]}, normalize: {}}}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
+            augment: {sets: [train]}, normalize: {}}, spectators: []}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
     frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {resize: {}, to_tensor: {}, augment: {sets: [train]}, normalize: {}}, mask: null}, inputs: {
         df: train_df, prep: prep}, outputs: [train_frame]}
     frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {resize: {}, to_tensor: {}, augment: {sets: [train]}, normalize: {}}, mask: null}, inputs: {

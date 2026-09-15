@@ -43,7 +43,7 @@ flow:
           fields: {image: {preprocessors: [two_views, to_tensor]}}, preprocessors: {simclr_aug: {uri: 
                 /pre/kalfa/simclr_aug, params: {size: 96}}, two_views: {uri: /pre/kalfa/two_views, params: {transform: {
                     uri: /pre/kalfa/simclr_aug, params: {size: 96}}}}, to_tensor: {uri: /pre/kalfa/to_tensor}}, drop: [],
-          keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}}, inputs: {df: train_df}}, 
+          keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}, spectators: []}, inputs: {df: train_df}}, 
         preprocessors_keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}, feed: {uri: /feed/kalfa/table, 
           params: {}}}}
   models: {block: models, params: {trained_items: [{name: backbone, index: 0, init: null, trainable: true, weights: null},

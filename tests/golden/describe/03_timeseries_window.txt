@@ -14,10 +14,11 @@ config.yaml                                                                     
   split       sequential  0.7 / 0.15 / 0.15  group=site_id  train 1 260  ·  valid 270  ·  test 270
   batch       64                                          feed  window size=168 horizon=24 context=true group=site_id
 
-  field  columns     preprocessors  role
-  ─────────────────────────────────────────
-  x*     x0, x1, x2  std_scaler     feature
-  load   load        target_std     target
+  field    columns     preprocessors  role
+  ─────────────────────────────────────────────
+  x*       x0, x1, x2  std_scaler     feature
+  load     load        target_std     target
+  site_id  site_id     —              spectator
 
   energy.parquet ─→ split sequential
     ├─ train    1 260  ─→ fit std_scaler, target_std ─→ window
@@ -55,11 +56,11 @@ config.yaml                                                                     
   record      runs/energy_$datetime$
 
 ── COLUMNS ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-  column   dtype         field  preprocessors  role          tensor
-  ─────────────────────────────────────────────────────────────────
-  site_id  large_string  —      —              read by feed  —
-  x0       double        x*     std_scaler     feature       x
-  x1       double        x*     std_scaler     feature       x
-  x2       double        x*     std_scaler     feature       x
-  load     double        load   target_std     target        load
+  column   dtype         field  preprocessors  role                     tensor
+  ────────────────────────────────────────────────────────────────────────────
+  site_id  large_string  —      —              spectator, read by feed  —
+  x0       double        x*     std_scaler     feature                  x
+  x1       double        x*     std_scaler     feature                  x
+  x2       double        x*     std_scaler     feature                  x
+  load     double        load   target_std     target                   load
   the produced widths and the tensor slots need --measure

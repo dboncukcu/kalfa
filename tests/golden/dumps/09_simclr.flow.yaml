@@ -46,7 +46,8 @@ flow:
     framed_test: {uri: /lego/kalfa/apply_frames, inputs: {df: test_df_1, frames: frames}, outputs: [test_df]}
     prep: {uri: /lego/kalfa/fit, params: {fields: {image: {preprocessors: [two_views, to_tensor]}}, preprocessors: {simclr_aug: {uri: /pre/kalfa/simclr_aug, 
               params: {size: 96}}, two_views: {uri: /pre/kalfa/two_views, params: {transform: {uri: /pre/kalfa/simclr_aug, params: {size: 96}}}}, to_tensor: {
-              uri: /pre/kalfa/to_tensor}}, drop: [], keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}}, inputs: {df: train_df}, outputs: [prep]}  # implicit: record
+              uri: /pre/kalfa/to_tensor}}, drop: [], keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}, spectators: []}, inputs: {df: train_df}, 
+        outputs: [prep]}  # implicit: record
     frame_train: {uri: /lego/kalfa/apply, params: {set: train, keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}, mask: null}, inputs: {df: 
           train_df, prep: prep}, outputs: [train_frame]}
     frame_valid: {uri: /lego/kalfa/apply, params: {set: valid, keys: {simclr_aug: {}, two_views: {sets: [train]}, to_tensor: {}}, mask: null}, inputs: {df: 
