@@ -531,7 +531,7 @@ def handler_for(board):
             if value is None:
                 self.send(404, json.dumps({"error": "not found"}))
                 return
-            self.send(200, json.dumps(value, default=str))
+            self.send(200, json.dumps(clean(value), default=str))
 
         def send_file(self, found):
             if found is None:
