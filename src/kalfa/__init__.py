@@ -21,6 +21,6 @@ register_packs()
 try:
     __version__ = version("kalfa")
 except PackageNotFoundError:
-    __version__ = "0.2.0"
+    __version__ = "unknown"
 
 __all__ = ["CONTRACT", "PACKS", "__version__", "lego", "std"]
