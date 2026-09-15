@@ -225,7 +225,7 @@ def run_point(paths, sets, params, plan, index, point=None, when=None, monitor=N
     return write_point(record, plan, index, point, value, turn)
 
 
-def child_command(paths, sets, params, root, index, point=None):
+def child_command(paths, sets, params, root, index, point=None, options=()):
     command = [sys.executable, "-m", "kalfa.cli", "sweep", *paths, "--id", str(index), "--record", str(root)]
     if point is not None:
         command += ["--point", json.dumps(point)]
@@ -233,7 +233,7 @@ def child_command(paths, sets, params, root, index, point=None):
         command += ["--set", text]
     for text in params or []:
         command += ["-p", text]
-    return command
+    return [*command, *options]
 
 
 def wait_for(child, root, record, log):
@@ -251,7 +251,7 @@ def wait_for(child, root, record, log):
                 "ctrl-c again aborts it")
 
 
-def local_loop(paths, sets, params, plan, log=print):
+def local_loop(paths, sets, params, plan, log=print, options=()):
     write_plan(plan, sets, params, log=log)
     entries = []
     for index in range(plan.total):
@@ -272,7 +272,7 @@ def local_loop(paths, sets, params, plan, log=print):
         trial = point = None
         if not plan.deterministic:
             trial, point = plan.strategy.ask(plan.space, plan.objective.get("mode", "min"))
-        with subprocess.Popen(child_command(paths, sets, params, plan.root, index, point)) as child:
+        with subprocess.Popen(child_command(paths, sets, params, plan.root, index, point, options)) as child:
             code = wait_for(child, plan.root, record, log)
         entry = read_point(record) if code == 0 else None
         if entry is None:

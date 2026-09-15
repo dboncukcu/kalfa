@@ -1,4 +1,5 @@
 import json
+import shlex
 import shutil
 from pathlib import Path
 
@@ -7,7 +8,7 @@ import pytest
 from helpers import example, write_housing
 from kalfa import sweep as sweeper
 from kalfa.api import check
-from kalfa.cli import main
+from kalfa.cli import build_parser, main
 from kalfa.collect import collect
 from kalfa.config import parse_sets
 from kalfa.record import Record
@@ -55,6 +56,10 @@ def test_plan_writes_the_root_once_and_prepares_the_data(housing, capsys):
     assert manifest["kind"] == "sweep" and manifest["total"] == 6 and manifest["prepared"] is False
     assert manifest["strategy"] == "/strategy/kalfa/grid" and manifest["objective"]["monitor"] == "val/rmse"
     assert "N = 6" in (root / "sweep.plan").read_text() and "queue $(N)" in (root / "sweep.sub").read_text()
+    line = next(line for line in (root / "sweep.sh").read_text().splitlines() if line.startswith("kalfa "))
+    filled = {"$CONFIG": CONFIG, "$1": "0", "$ROOT": str(root)}
+    parsed = build_parser().parse_args([filled.get(word, word) for word in shlex.split(line)[1:]])
+    assert parsed.command == "sweep" and parsed.point_id == 0 and parsed.no_progress and parsed.log == "info"
     assert "condor_submit" in capsys.readouterr().out
     (root / "sweep.sh").write_text("edited\n")
     assert main(["sweep", CONFIG, "--plan", "--prepare-data", "--record", "runs/planned"]) == 0

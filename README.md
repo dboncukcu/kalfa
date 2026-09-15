@@ -83,6 +83,7 @@ kalfa generate runs/x [--which best|last] [--device cuda]         # writes sampl
 kalfa plots runs/x [--only a,b] [--set figures.format=pdf]        # redraw the plots section from the record; nothing trains
 kalfa resume runs/x [--set training.epochs=N]                     # continues from last.pt or final/ into a new directory
 kalfa sweep cfg.yaml [--record root] [--count | --show N | --id N]  # the sweep section: the local loop or one point
+                     [--log info|debug] [--no-progress]            # the output options of run; the local loop hands them to every point
 kalfa sweep cfg.yaml --plan [--prepare-data] [--record root]      # write the root once: the manifest, sweep.plan, sweep.sub, sweep.sh
 kalfa prepare cfg.yaml --out DIR                                  # the data block once; kalfa run cfg.yaml --prepared DIR starts from it
 kalfa collect runs/cv_* | kalfa collect <sweep root>              # fold summaries (cv.json, cv.md) or the sweep table and the best point
@@ -116,9 +117,9 @@ pipeline with its time and the decisions inside the legos (which preprocessor fi
 steps each optimizer took, why a turn was not the best, which rules did not fire). A line is `time level stage
 message`, the stage naming where it comes from (`data.source`, `models`, `training.turn`, `after.predict`); at
 `debug` a node line is tagged with its path in the flow (`training.epochs[3].turn`), the same path `events.jsonl`
-uses. `resume`, `predict` and `generate` take the same option.
+uses. `resume`, `sweep`, `predict` and `generate` take the same option.
 
-`--no-progress` (on `run` and `resume`) leaves the tqdm bar out: it is never created and tqdm is never imported.
+`--no-progress` (on `run`, `resume` and `sweep`) leaves the tqdm bar out: it is never created and tqdm is never imported.
 `--log info --no-progress` is then the plain form, one line per turn carrying every loss and metric of that turn
 and the learning rates, nothing redrawing itself; `--no-progress` on its own is a silent run that says only how it
 ended. A turn with more than one step shows an inner bar over its steps as well (`--progress turns` keeps only the turn bar) and `--log-every N` prints a line every N steps under

@@ -276,6 +276,7 @@ def build_parser():
                          "kalfa sweep cfg.yaml --show 3    the params of point 3",
                          "kalfa sweep cfg.yaml --plan --prepare-data --record sweeps/lr    root, plan and data",
                          "kalfa sweep cfg.yaml --id 3 --record sweeps/lr    one point, for a queue job",
+                         "kalfa sweep cfg.yaml --no-progress --log info    a line per turn, no bar, for a job log",
                          "kalfa collect sweeps/lr    the table and the best point"])
     sweep_cmd.add_argument("config", nargs="+", metavar="CONFIG",
                            help="one or more YAML files with a sweep section")
@@ -293,6 +294,9 @@ def build_parser():
     sweep_cmd.add_argument("--id", type=int, metavar="N", dest="point_id",
                            help="run point N only, for a queue job; the record is <root>/<N>")
     sweep_cmd.add_argument("--point", help=argparse.SUPPRESS)
+    output = sweep_cmd.add_argument_group("output")
+    log_option(output)
+    progress_option(output)
     sweep_cmd.set_defaults(handler=cmd_sweep)
 
     collect_cmd = command(commands, "collect", "summarize fold runs or a sweep root",
@@ -427,6 +431,19 @@ def progress_option(command):
 def monitor_of(args):
     progress = False if args.no_progress else ("turns" if args.progress == "turns" else True)
     return Monitor(level_of(args.log), progress=progress, log_every=args.log_every, tensorboard=args.tensorboard)
+
+
+def output_flags(args):
+    flags = ["--log", args.log] if args.log else []
+    if args.no_progress:
+        flags.append("--no-progress")
+    elif args.progress != "turns":
+        flags += ["--progress", args.progress]
+    if args.log_every:
+        flags += ["--log-every", str(args.log_every)]
+    if args.tensorboard:
+        flags.append("--tensorboard")
+    return flags
 
 
 class Interrupt:
@@ -656,7 +673,7 @@ def cmd_sweep(args) -> int:
         return 0
     if args.point_id is not None:
         point = json.loads(args.point) if args.point else None
-        with Monitor() as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
+        with monitor_of(args) as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             entry = sweep.run_point(args.config, args.set, args.param, plan, args.point_id, point, monitor=monitor)
         print_warnings(caught)
@@ -666,7 +683,7 @@ def cmd_sweep(args) -> int:
         return 0
     if args.point is not None:
         raise SystemExit(usage("--point needs --id"))
-    entries = sweep.local_loop(args.config, args.set, args.param, plan, log=print)
+    entries = sweep.local_loop(args.config, args.set, args.param, plan, log=print, options=output_flags(args))
     finished = [entry for entry in entries if entry]
     print(f"{len(finished)}/{plan.total} points finished under {style.cyan(str(plan.root))}; "
           f"summarize with: kalfa collect {plan.root}")
