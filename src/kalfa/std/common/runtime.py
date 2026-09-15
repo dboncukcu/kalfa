@@ -100,6 +100,7 @@ class Context:
         self.scope = scope
         self.step = step
         self.computed = None
+        self.inverted = {}
 
     @property
     def size(self):
@@ -155,6 +156,12 @@ class Context:
                          dim=1)
 
     def rescaled(self, output=None, target=None):
+        key = (output, tuple(target) if isinstance(target, list) else target)
+        if key not in self.inverted:
+            self.inverted[key] = self.invert(output, target)
+        return self.inverted[key]
+
+    def invert(self, output=None, target=None):
         predictions = self.predictions(output)
         targets = self.target(target, output)
         prep = self.scope.prep

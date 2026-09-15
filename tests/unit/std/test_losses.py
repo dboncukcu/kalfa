@@ -70,6 +70,32 @@ def test_criterion_adapter_reads_output_and_target_from_the_definition_keys():
         adapter.loss(context)
 
 
+class CountingPrep:
+    def __init__(self):
+        self.calls = 0
+
+    def rescales(self, name=None):
+        return True
+
+    def rescale(self, name, values, set_name):
+        self.calls += 1
+        return values * 2.0
+
+
+def test_the_rescaled_pair_is_inverted_once_per_context():
+    model = tiny_model(seed=1)
+    prep = CountingPrep()
+    context = Context(batch(), Pass({"model": model}, predicts="model", targets=["price"], prep=prep,
+                                    set_name="valid"))
+    predictions, targets = context.rescaled()
+    assert prep.calls == 2
+    again = context.rescaled()
+    assert again[0] is predictions and again[1] is targets
+    assert prep.calls == 2
+    Context(batch(), context.scope).rescaled()
+    assert prep.calls == 4
+
+
 def test_activity_and_trackers():
     from kalfa.std.common.runtime import active_entries, entry_active
 
