@@ -24,10 +24,13 @@ data:
                                   # | {uri: kfold, params: {k: 5, fold: $fold$, val: 0.15, seed}} (the held out fold is test; val from the training part, without it no valid)
                                   # | {uri: given, params: {valid: b.parquet, test: c.parquet}}
                                   # ratios always has three entries (train, valid, test); 0.0 means no set; a missing set is not in the history
-  batch: null                     # [empty] 128 (size) or {size: 128, eval_size: 512, shuffle: true, drop_last: false | auto, workers: 0, collate: null, balanced: false, buffer: 4096}; not written: the whole set as one batch;
+  batch: null                     # [empty] 128 (size) or {size: 128, eval_size: 512, shuffle: true, drop_last: false | auto, workers: 0, eval_workers: null,
+                                  # collate: null, balanced: false, buffer: 4096, persistent: null, pin_memory: null, prefetch: null}; not written: the whole set as one batch;
                                   # the params of the loader lego of the contract's wiring (/loader/kalfa/torch), so its signature is the key list
                                   # the defaults of the loader lego [library]: shuffle on in training, off in evaluation; eval_size = size;
                                   # collate null = the torch default; balanced puts a class balancing sampler over the target field
+                                  # eval_workers = workers; persistent = workers > 0 (the pool stays alive between turns); pin_memory = the device is cuda
+                                  # prefetch left to torch; device comes from the bus and is not writable here
   mask: null                      # [empty] a pandas query; the rows it selects stay in the frame (masked for the plots) and are not scored (out of the loaders)
   preprocessors: {}               # [empty] name: {uri, params, sets}; those that need a fit are fitted on the filtered train set and go into the record;
                                   # sets: [train] on those sets only (predict data is treated like test); a definition used in no chain and by no refs is a warning

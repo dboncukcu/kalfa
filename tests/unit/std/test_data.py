@@ -9,6 +9,7 @@ import torch
 
 import kalfa  # noqa: F401
 from helpers import frame, housing_frame
+from kalfa.std.common.device import Device
 from kalfa.std.feed.kalfa.table import table
 from kalfa.std.lego.kalfa.data_steps import transform_set
 from kalfa.std.lego.kalfa.headers import csv_header, parquet_header
@@ -315,3 +316,26 @@ def test_loader_shuffles_the_train_set_only():
     assert len(batches) == 2 and torch.equal(batches[0]["price"], dataset.fields["price"][:10])
     assert set(batches[0]) == {"x", "price"}
     assert torch_loader(dataset, "train", 4, shuffle=False).batch_size == 4
+
+
+def test_workers_stay_alive_between_turns_and_evaluation_takes_its_own_count():
+    dataset = table(frame(rows=20, features=2))
+    alone = torch_loader(dataset, "train", 4)
+    assert alone.num_workers == 0 and alone.persistent_workers is False
+    kept = torch_loader(dataset, "train", 4, workers=2)
+    assert kept.num_workers == 2 and kept.persistent_workers is True
+    once = torch_loader(dataset, "train", 4, workers=2, persistent=False)
+    assert once.num_workers == 2 and once.persistent_workers is False
+    assert torch_loader(dataset, "valid", 4, workers=2).num_workers == 2
+    assert torch_loader(dataset, "valid", 4, workers=2, eval_workers=0).num_workers == 0
+    assert torch_loader(dataset, "train", 4, workers=2, eval_workers=0).num_workers == 2
+
+
+def test_pin_memory_follows_the_device():
+    dataset = table(frame(rows=8, features=2))
+    assert torch_loader(dataset, "train", 4).pin_memory is False
+    assert torch_loader(dataset, "train", 4, device=Device.cpu()).pin_memory is False
+    assert torch_loader(dataset, "train", 4, device=Device("cuda", "/device/kalfa/cuda")).pin_memory is True
+    assert torch_loader(dataset, "train", 4, device=Device.cpu(), pin_memory=True).pin_memory is True
+    assert torch_loader(dataset, "train", 4, device=Device("cuda", "/device/kalfa/cuda"),
+                        pin_memory=False).pin_memory is False

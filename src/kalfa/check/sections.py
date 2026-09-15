@@ -668,6 +668,7 @@ class SectionRules:
         return self.registry.resolve(uri)
 
     def batch_keys(self, batch):
+        uri = self.contract.wiring["loader"]
         target = self.wired("loader", ("data", "batch"))
         if target is None:
             return
@@ -675,7 +676,8 @@ class SectionRules:
             signature = inspect.signature(target)
         except (TypeError, ValueError):
             return
-        items = [item for name, item in signature.parameters.items() if name not in ("data", "set")]
+        skip = {"data", "set", *names_of(self.registry.facts(uri).get("bus"))}
+        items = [item for name, item in signature.parameters.items() if name not in skip]
         if any(item.kind is item.VAR_KEYWORD for item in items):
             return
         self.keys(batch, [item.name for item in items], ("data", "batch"),
