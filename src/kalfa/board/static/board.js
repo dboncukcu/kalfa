@@ -34,7 +34,34 @@ function fileKind(name) {
 }
 
 function defaultPlot() {
-  return { logy: false, width: 1.6, markers: 3, dots: 0, curve: "straight", grid: true, bins: 40 };
+  return { logy: false, logx: false, width: 1.6, markers: 3, dots: 0, curve: "straight", grid: true, legend: true, font: 11,
+           bins: 40, xmin: "", xmax: "", ymin: "", ymax: "", rmin: "", rmax: "", xlabel: "", ylabel: "", height: 0, format: "png",
+           extra: "" };
+}
+
+function bound(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function merge(target, source) {
+  for (const [key, value] of Object.entries(source || {})) {
+    const nested = value && typeof value === "object" && !Array.isArray(value);
+    if (nested && target[key] && typeof target[key] === "object" && !Array.isArray(target[key])) merge(target[key], value);
+    else target[key] = value;
+  }
+  return target;
+}
+
+function extraLayout(text) {
+  if (!text || !text.trim()) return {};
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    return {};
+  }
 }
 
 function scatterPoints(lines, kind) {
@@ -362,17 +389,37 @@ function plotConfig(name) {
            toImageButtonOptions: { format: "png", scale: 2, filename: (name || "chart").replace(/[^\w.-]+/g, "_") } };
 }
 
-function plotFrame(view, theme) {
-  return { height: view.height, margin: { l: 60, r: 18, t: 30, b: 48 }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
-           font: { family: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace", size: 11, color: theme.ink },
-           showlegend: true, legend: { orientation: "h", x: 0, y: 1, xanchor: "left", yanchor: "bottom", font: { size: 11 } },
+function plotFrame(view, theme, settings) {
+  return { height: settings.height || view.height, margin: { l: 60, r: 18, t: 30, b: 48 },
+           paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+           font: { family: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace", size: settings.font || 11, color: theme.ink },
+           showlegend: settings.legend !== false,
+           legend: { orientation: "h", x: 0, y: 1, xanchor: "left", yanchor: "bottom", font: { size: settings.font || 11 } },
            hoverlabel: { bgcolor: theme.surface, bordercolor: theme.line, font: { size: 11, color: theme.ink } },
            modebar: { color: theme.muted, activecolor: theme.ink, bgcolor: "rgba(0,0,0,0)" }, dragmode: "zoom" };
 }
 
-function axisFrame(theme, grid, title) {
-  return { title: { text: title || "", font: { size: 11 } }, showgrid: grid, gridcolor: theme.grid, zeroline: false, linecolor: theme.line,
-           ticks: "outside", tickcolor: theme.line, exponentformat: "power" };
+function logTicks(decades) {
+  return decades >= 1 ? { dtick: 1, minor: { ticks: "outside", ticklen: 3, showgrid: false } } : { dtick: "D1", minor: { ticks: "" } };
+}
+
+function axisOf(theme, settings, title, log, values, minText, maxText) {
+  const axis = { title: { text: title || "", font: { size: settings.font || 11 } }, type: log ? "log" : "linear", showgrid: settings.grid,
+                 gridcolor: theme.grid, zeroline: false, linecolor: theme.line, ticks: "outside", tickcolor: theme.line };
+  const [low, high] = extent(values.filter(value => Number.isFinite(value) && (!log || value > 0)));
+  let min = bound(minText), max = bound(maxText);
+  if (log) {
+    if (min !== null && min <= 0) min = null;
+    if (max !== null && max <= 0) max = null;
+    const from = min !== null ? min : low, to = max !== null ? max : high;
+    axis.exponentformat = "power";
+    Object.assign(axis, logTicks(from > 0 && to > from ? Math.log10(to) - Math.log10(from) : 0));
+  }
+  if (min !== null || max !== null) {
+    const from = min !== null ? min : low, to = max !== null ? max : high;
+    if (Number.isFinite(from) && Number.isFinite(to) && to > from) axis.range = log ? [Math.log10(from), Math.log10(to)] : [from, to];
+  }
+  return axis;
 }
 
 function integerStep(values) {
@@ -385,6 +432,7 @@ function chartFigure(view) {
   const theme = plotTheme();
   const settings = { ...defaultPlot(), ...(view.settings || {}) };
   const kind = view.kind || "line";
+  const logx = !!(view.xlog || settings.logx), logy = !!(view.logy || settings.logy);
   const shape = { straight: "linear", smooth: "spline", stepline: "hv" }[settings.curve] || "linear";
   const markers = markerSize(scatterPoints(view.lines, kind), view.settings);
   const marks = (view.marks || []).map(mark => (typeof mark === "number" ? { x: mark } : mark));
@@ -410,23 +458,23 @@ function chartFigure(view) {
     }
     return trace;
   });
-  const xs = data.flatMap(trace => trace.x);
-  const step = view.xlog || kind === "bar" ? null : integerStep(xs);
+  const xs = data.flatMap(trace => trace.x), ys = data.flatMap(trace => trace.y);
+  const step = logx || kind === "bar" ? null : integerStep(xs);
   const shownMarks = marks.filter((_, index) => index % (Math.ceil(marks.length / 60) || 1) === 0);
   const labelled = Math.ceil(shownMarks.length / 12) || 1;
   const layout = {
-    ...plotFrame(view, theme),
+    ...plotFrame(view, theme, settings),
     hovermode: kind === "scatter" ? "closest" : "x unified",
-    uirevision: `${view.logy}-${view.xlog}`,
-    xaxis: { ...axisFrame(theme, settings.grid, view.xlabel), type: view.xlog ? "log" : "linear",
+    uirevision: `${logy}-${logx}`,
+    xaxis: { ...axisOf(theme, settings, settings.xlabel || view.xlabel, logx, xs, settings.xmin, settings.xmax),
              ...(step ? { dtick: step, tick0: Math.floor(extent(xs)[0]) } : {}) },
-    yaxis: { ...axisFrame(theme, settings.grid, view.ylabel), type: view.logy ? "log" : "linear" },
+    yaxis: axisOf(theme, settings, settings.ylabel || view.ylabel, logy, ys, settings.ymin, settings.ymax),
     shapes: shownMarks.map(mark => ({ type: "line", xref: "x", yref: "paper", x0: mark.x, x1: mark.x, y0: 0, y1: 1, line: { color: theme.line, width: 1, dash: "dot" } })),
     annotations: shownMarks.map((mark, index) => (mark.text && index % labelled === 0
       ? { x: mark.x, y: 1, xref: "x", yref: "paper", text: mark.text, showarrow: false, yanchor: "bottom", font: { size: 10, color: theme.muted } }
       : null)).filter(Boolean),
   };
-  return { data, layout };
+  return { data, layout: merge(layout, extraLayout(settings.extra)) };
 }
 
 const Plotted = {
@@ -440,13 +488,28 @@ const Plotted = {
       if (!host) return;
       const { data, layout } = this.figure;
       const config = plotConfig(this.title || this.ylabel);
-      if (this.drawn) Plotly.react(host, data, layout, config);
-      else { Plotly.newPlot(host, data, layout, config); this.drawn = true; }
+      if (this.drawn) { Plotly.react(host, data, layout, config); return; }
+      this.drawn = true;
+      Plotly.newPlot(host, data, layout, config).then(() => host.on("plotly_relayout", () => this.retick()));
+    },
+    retick() {
+      const host = this.$refs.host;
+      const full = host && host._fullLayout;
+      if (!full) return;
+      const changes = {};
+      for (const name of ["xaxis", "yaxis", "yaxis2"]) {
+        const axis = full[name];
+        if (!axis || axis.type !== "log" || !axis.range) continue;
+        const wanted = logTicks(axis.range[1] - axis.range[0]);
+        if (axis.dtick !== wanted.dtick) { changes[`${name}.dtick`] = wanted.dtick; changes[`${name}.minor.ticks`] = wanted.minor.ticks; }
+      }
+      if (Object.keys(changes).length) Plotly.relayout(host, changes);
     },
     download() {
       const host = this.$refs.host;
       if (!host || !this.drawn) return;
-      Plotly.downloadImage(host, { format: "png", scale: 2, width: host.clientWidth || 900, height: this.height,
+      const format = (this.settings && this.settings.format) || "png";
+      Plotly.downloadImage(host, { format, scale: format === "png" ? 2 : 1, width: host.clientWidth || 900, height: this.figure.layout.height || this.height,
                                    filename: (this.title || this.ylabel || "chart").replace(/[^\w.-]+/g, "_") });
     },
   },
@@ -999,6 +1062,7 @@ function spectrumFigure(view) {
   const theme = plotTheme();
   const settings = { ...defaultPlot(), ...(view.settings || {}) };
   const { edges, data, pred, labels } = view.spec;
+  const logx = !!settings.logx, logy = !!(view.logy || settings.logy);
   const light = theme.dark ? "#3987e5" : "#6da7ec";
   const fill = theme.dark ? "rgba(47, 111, 208, 0.35)" : "rgba(158, 197, 244, 0.55)";
   const deep = theme.dark ? "#9ec5f4" : "#184f95";
@@ -1009,6 +1073,7 @@ function spectrumFigure(view) {
   const error = data.map((count, index) => (count > 0 && pred[index] > 0 ? ratio[index] * Math.sqrt(1 / pred[index] + 1 / count) : 0));
   let low = 0.5, high = 1.5;
   ratio.forEach((value, index) => { if (value !== null) { low = Math.min(low, value - error[index]); high = Math.max(high, value + error[index]); } });
+  const rmin = bound(settings.rmin), rmax = bound(settings.rmax);
   const traces = [
     { type: "scatter", mode: "lines", name: labels.data, x: stepsX, y: steps(data), line: { shape: "hv", color: light, width: 1.2 },
       fill: "tozeroy", fillcolor: fill, hovertemplate: "%{y}<extra>" + labels.data + "</extra>" },
@@ -1020,15 +1085,17 @@ function spectrumFigure(view) {
       hovertemplate: "%{y:.3f} ± %{customdata:.3f}<extra>pred / true</extra>" },
   ];
   const layout = {
-    ...plotFrame(view, theme),
+    ...plotFrame(view, theme, settings),
     hovermode: "x unified",
-    uirevision: `${view.logy}`,
-    xaxis: { ...axisFrame(theme, settings.grid, view.xlabel), anchor: "y2" },
-    yaxis: { ...axisFrame(theme, settings.grid, "points"), domain: [0.36, 1], type: view.logy ? "log" : "linear", rangemode: "tozero" },
-    yaxis2: { ...axisFrame(theme, settings.grid, "pred / true"), domain: [0, 0.3], range: [Math.max(0, low), Math.min(3, high)], anchor: "x" },
+    uirevision: `${logy}-${logx}`,
+    xaxis: { ...axisOf(theme, settings, settings.xlabel || view.xlabel, logx, edges, settings.xmin, settings.xmax), anchor: "y2" },
+    yaxis: { ...axisOf(theme, settings, settings.ylabel || "points", logy, [...data, ...pred], settings.ymin, settings.ymax), domain: [0.36, 1],
+             ...(logy ? {} : { rangemode: "tozero" }) },
+    yaxis2: { ...axisOf(theme, settings, "pred / true", false, [], "", ""), domain: [0, 0.3], anchor: "x",
+              range: [rmin !== null ? rmin : Math.max(0, low), rmax !== null ? rmax : Math.min(3, high)] },
     shapes: [{ type: "line", xref: "paper", yref: "y2", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: theme.muted, width: 1, dash: "dash" } }],
   };
-  return { data: traces, layout };
+  return { data: traces, layout: merge(layout, extraLayout(settings.extra)) };
 }
 
 const Spectrum = {
@@ -1219,6 +1286,16 @@ const app = Vue.createApp({
     compareUnit() {
       if (!this.compareData || this.compareData.missing) return "turn";
       return ["a", "b"].every(which => (this.compareData[which].record.manifest || {}).turn === "epoch") ? "epoch" : "turn";
+    },
+    extraError() {
+      const text = (this.plot.extra || "").trim();
+      if (!text) return "";
+      try {
+        const parsed = JSON.parse(text);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? "" : "the layout must be a JSON object";
+      } catch (error) {
+        return `not JSON yet: ${error.message}`;
+      }
     },
     expandedHasPoints() {
       const view = this.expanded;
@@ -1813,7 +1890,8 @@ const app = Vue.createApp({
     "plot.bins"() { if (this.tab === "predictions" && this.predictionsData) this.loadPredictions(); },
     expanded(now, before) {
       if (!now || before) return;
-      this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), bins: this.plot.bins, markers: markerSize(scatterPoints(now.lines || [], now.kind), null) };
+      this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), logx: !!now.xlog, bins: this.plot.bins, height: this.modalHeight,
+                    markers: markerSize(scatterPoints(now.lines || [], now.kind), null) };
     },
     "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
     "route.params.b"() { if (this.page === "compare") this.loadCompare(); },
@@ -2173,7 +2251,7 @@ const app = Vue.createApp({
       this.go({ item: names[(index + direction + names.length) % names.length] }, true);
     },
     downloadModal() { if (this.$refs.modal) this.$refs.modal.download(); },
-    resetPlot() { this.plot = { ...defaultPlot(), logy: this.logy }; },
+    resetPlot() { this.plot = { ...defaultPlot(), logy: this.logy, logx: !!(this.expanded && this.expanded.xlog), height: this.modalHeight }; },
     async copy(text) {
       try { await navigator.clipboard.writeText(text || ""); } catch (error) { console.warn("clipboard unavailable", error); }
     },

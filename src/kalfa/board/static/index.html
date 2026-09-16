@@ -1000,23 +1000,36 @@
             <span class="card-label">{{ expanded.name }}</span>
             <button class="small" @click="closeChart">close</button>
           </div>
-          <spectrum v-if="expanded.spectrum" ref="modal" :spec="expanded.spectrum" :title="expanded.name" :xlabel="expanded.xlabel" :logy="plot.logy" :settings="plot" :modal="true" :height="modalHeight"></spectrum>
-          <chart v-else ref="modal" :lines="expanded.lines" :kind="expanded.kind || 'line'" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel || expanded.name" :logy="plot.logy" :marks="expanded.marks" :turns="!!expanded.turns" :xlog="!!expanded.xlog" :settings="plot" :height="modalHeight"></chart>
+          <spectrum v-if="expanded.spectrum" ref="modal" :spec="expanded.spectrum" :title="expanded.name" :xlabel="expanded.xlabel" :logy="plot.logy" :settings="plot" :modal="true" :height="plot.height || modalHeight"></spectrum>
+          <chart v-else ref="modal" :lines="expanded.lines" :kind="expanded.kind || 'line'" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel || expanded.name" :logy="plot.logy" :marks="expanded.marks" :turns="!!expanded.turns" :xlog="!!expanded.xlog" :settings="plot" :height="plot.height || modalHeight"></chart>
         </div>
         <aside class="plot-panel">
-          <div class="card-label">settings</div>
+          <div class="card-label">axes</div>
           <label class="toggle"><input type="checkbox" v-model="plot.logy"> log scale on y</label>
+          <label class="toggle"><input type="checkbox" v-model="plot.logx"> log scale on x</label>
+          <div class="pair"><span>x</span><input type="number" step="any" placeholder="min" v-model="plot.xmin"><input type="number" step="any" placeholder="max" v-model="plot.xmax"></div>
+          <div class="pair"><span>y</span><input type="number" step="any" placeholder="min" v-model="plot.ymin"><input type="number" step="any" placeholder="max" v-model="plot.ymax"></div>
+          <div class="pair" v-if="expanded.spectrum"><span>ratio</span><input type="number" step="any" placeholder="min" v-model="plot.rmin"><input type="number" step="any" placeholder="max" v-model="plot.rmax"></div>
+          <div class="pair"><span>titles</span><input type="text" placeholder="x" v-model="plot.xlabel" spellcheck="false"><input type="text" placeholder="y" v-model="plot.ylabel" spellcheck="false"></div>
+          <div class="card-label">look</div>
           <label class="toggle"><input type="checkbox" v-model="plot.grid"> grid</label>
+          <label class="toggle"><input type="checkbox" v-model="plot.legend"> legend</label>
+          <label>font <input type="range" min="8" max="18" step="1" v-model.number="plot.font"><span class="mono">{{ plot.font }}</span></label>
           <label>line width <input type="range" min="0.5" max="6" step="0.5" v-model.number="plot.width"><span class="mono">{{ plot.width }}</span></label>
           <label>points on lines <input type="range" min="0" max="8" step="1" v-model.number="plot.dots"><span class="mono">{{ plot.dots }}</span></label>
           <label v-if="expandedHasPoints">point size <input type="range" min="1" max="10" step="1" v-model.number="plot.markers"><span class="mono">{{ plot.markers }}</span></label>
           <label>curve <select v-model="plot.curve"><option value="straight">straight</option><option value="smooth">smooth</option><option value="stepline">steps</option></select></label>
+          <label>height <input type="range" min="300" max="1200" step="20" v-model.number="plot.height"><span class="mono">{{ plot.height }}</span></label>
           <label v-if="expanded.bins">bins <input type="range" min="5" max="200" step="5" v-model.number="plot.bins"><span class="mono">{{ plot.bins }}</span><span class="spinner" v-if="busy"></span></label>
+          <div class="card-label">layout, as Plotly reads it</div>
+          <textarea class="extra" v-model="plot.extra" spellcheck="false" placeholder='{"yaxis": {"tickformat": ".1e"}, "margin": {"l": 80}}'></textarea>
+          <p class="muted error" v-if="extraError">{{ extraError }}</p>
           <div class="panel-actions">
-            <button class="small" @click="downloadModal">download png</button>
+            <select v-model="plot.format"><option value="png">png</option><option value="svg">svg</option></select>
+            <button class="small" @click="downloadModal">download</button>
             <button class="small" @click="resetPlot">reset</button>
           </div>
-          <p class="muted">drag a box to zoom, double click to reset, the wheel zooms too; the chart's own menu at the top right downloads it as drawn with these settings</p>
+          <p class="muted">drag a box to zoom, double click to reset, the wheel zooms too; the download writes the chart as drawn with these settings, and the JSON box reaches every layout key Plotly knows</p>
         </aside>
       </div>
     </div>

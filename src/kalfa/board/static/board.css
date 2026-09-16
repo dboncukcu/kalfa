@@ -236,13 +236,17 @@ ul.plain { margin: 0; padding-left: 18px; }
 .lightbox figure { margin: 0; max-width: 92vw; max-height: 92vh; cursor: default; text-align: center; }
 .chart-modal { width: min(96vw, 1600px); cursor: default; margin: 0; }
 .chart-modal .toolbar { margin-bottom: 4px; }
-.modal-body { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 18px; }
+.modal-body { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 18px; }
 .modal-chart { min-width: 0; }
-.plot-panel { display: flex; flex-direction: column; gap: 10px; font-size: 12px; color: var(--ink-2); border-left: 1px solid var(--line); padding-left: 18px; }
+.plot-panel { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--ink-2); border-left: 1px solid var(--line); padding-left: 18px; max-height: 82vh; overflow: auto; }
 .plot-panel label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .plot-panel input[type=range] { flex: 1; min-width: 60px; }
 .plot-panel select { font: inherit; font-size: 12px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 5px; padding: 2px 4px; }
-.plot-panel .card-label { margin-bottom: 0; }
+.plot-panel .card-label { margin-bottom: 0; margin-top: 6px; }
+.plot-panel .pair { display: grid; grid-template-columns: 42px 1fr 1fr; gap: 6px; align-items: center; }
+.plot-panel .pair span { color: var(--muted); }
+.plot-panel input[type=number], .plot-panel input[type=text] { width: 100%; min-width: 0; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--surface-2); color: var(--ink); }
+.plot-panel textarea.extra { width: 100%; min-height: 66px; resize: vertical; font-family: var(--mono); font-size: 11px; padding: 4px 6px; border: 1px solid var(--line-2); border-radius: 5px; background: var(--surface-2); color: var(--ink); }
 .panel-actions { display: flex; gap: 8px; margin-top: 6px; }
 @media (max-width: 900px) { .modal-body { grid-template-columns: 1fr; } .plot-panel { border-left: 0; padding-left: 0; } }
 .lightbox img { max-width: 92vw; max-height: 84vh; background: white; border-radius: 6px; }

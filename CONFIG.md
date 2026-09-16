@@ -1242,10 +1242,13 @@ The tabs of a run:
 | config, notes, files | `resolved.yaml`; `manifest.json`, `host.json`, `device.json`, `git.json` and the node timings of `run.json`; every file of the record with a viewer for text, images and PDFs and a download for every file |
 | timeline, events, logs, describe | the timeline of the nodes, the event tail, the tails of `stdout.txt` and `stderr.txt`, `describe` on demand |
 
-Every chart zooms with a drag (a box) or the wheel and resets with a double click; a log axis is a log axis with
-its decades. Every chart expands into a large view beside a settings panel (log scale on y, grid, line width,
-points, the point size, the curve, the bins of a histogram) whose download writes the chart as drawn, and reset
-restores the defaults. An axis of integers (turns, steps, points) gets integer ticks.
+Every chart zooms with a drag (a box) or the wheel and resets with a double click; a log axis shows its decades as
+10^n with the digits between them as small ticks, and labels the digits when less than a decade is in view. Every
+chart expands into a large view beside a settings panel: log scale on either axis, the range of every axis (the
+ratio panel of the distribution too), the axis titles, grid, legend, font size, line width, points, the point
+size, the curve, the height, the bins of a histogram, and a JSON box merged into the Plotly layout for anything
+else; the download writes the chart as drawn, as png or svg, and reset restores the defaults. An axis of integers
+(turns, steps, points) gets integer ticks.
 
 The endpoints: `/api/tree`, `/api/live`, `/api/watch`, `/api/table`, `/api/record`, `/api/predictions`,
 `/api/prep`, `/api/files`, `/api/text`, `/api/events`, `/api/history`, `/api/steps`, `/api/tail`, `/api/sweep`,

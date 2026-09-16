@@ -931,8 +931,9 @@ progress of everything running, so a background tab says how far the training is
 
 **Loss and metrics, optimizer steps.** One chart per history series with the sets as lines and the turns a rule
 fired marked; one chart per step series with the turns labelled along the top. Every chart expands into a large
-view beside a settings panel (log scale, grid, line width, points, point size, the bins of a histogram) whose
-download writes it as drawn; the axis says epochs when a turn is one.
+view beside a settings panel (log scale on either axis, the axis ranges and titles, grid, legend, font, line
+width, points, height, the bins of a histogram, and a JSON box for any other Plotly layout key) whose download
+writes it as drawn, as png or svg; the axis says epochs when a turn is one.
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_model.png" width="920" alt="the architecture drawn as a schematic"></p>
 
