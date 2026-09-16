@@ -257,7 +257,23 @@ pre.diff .del { color: var(--failed); }
 pre.diff .hunk { color: var(--accent); }
 
 .chart { position: relative; }
-.card.stacked .chart + .chart { margin-top: -6px; }
+.spectrum { position: relative; }
+.spectrum svg { width: 100%; display: block; overflow: visible; font-family: var(--mono); }
+.spectrum-grid line { stroke: var(--line); stroke-width: 1; }
+.spectrum-axis text { fill: var(--muted); font-size: 10px; }
+.spectrum-label { fill: var(--ink-2); font-size: 11px; font-weight: 600; }
+.spectrum-legend text { fill: var(--ink-2); font-size: 11px; }
+.spectrum-data { fill: #9ec5f4; fill-opacity: 0.55; stroke: #6da7ec; stroke-width: 1.2; }
+.spectrum-pred { fill: none; stroke: #184f95; stroke-width: 2; }
+.spectrum-one { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 5 4; }
+.spectrum-bar { stroke: #184f95; stroke-width: 1.3; }
+.spectrum-dot { fill: #184f95; }
+.spectrum-cursor { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; }
+@media (prefers-color-scheme: dark) {
+  .spectrum-data { fill: #2f6fd0; fill-opacity: 0.35; stroke: #3987e5; }
+  .spectrum-pred, .spectrum-bar { stroke: #9ec5f4; }
+  .spectrum-dot { fill: #9ec5f4; }
+}
 .chart .apexcharts-toolbar { z-index: 3; }
 .chart .apexcharts-menu { background: var(--surface); border-color: var(--line-2); color: var(--ink); }
 .chart .apexcharts-menu-item:hover { background: var(--surface-2); }

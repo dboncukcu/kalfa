@@ -2423,7 +2423,7 @@
       "alias": [
         "pred_histogram"
       ],
-      "description": "The distribution of every predicted field of the test set next to the distribution of its truth over the same bins, one column per field, with the ratio of predicted to true counts per bin below (a dashed line at one, a Poisson error bar per bin, a bin without true points stays empty); log draws the counts on a log axis",
+      "description": "The distribution of every predicted field of the test set over the distribution of its truth on the same bins, the truth filled light and the prediction outlined dark, one column per field, with the ratio of predicted to true counts per bin below (a dashed line at one, a Poisson error bar per bin, a bin without true points stays empty); log draws the counts on a log axis",
       "facts": {
         "partial": true
       },

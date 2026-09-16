@@ -928,7 +928,7 @@ key that is simply not there.
 |---|---|
 | `loss_curve` | every history series over the turns, or the named ones; `x: step` the per update series; `rates: true` the learning rates below |
 | `pred_vs_true` | predicted against true, one panel per predicted field with its R2, hexbin over many points |
-| `pred_histogram` | the distribution of every predicted field next to its truth over the same bins, the ratio of the counts below |
+| `pred_histogram` | the distribution of every predicted field over its truth on the same bins, the truth filled and the prediction outlined, the ratio of the counts with its Poisson error below |
 | `residuals` | the residual distribution, the residual against the truth, the error over the target range |
 | `error_map` | the error over a 2d grid of two columns |
 | `permutation_importance` | the drop in R2 when a feature is shuffled |

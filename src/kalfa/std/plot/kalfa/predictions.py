@@ -56,6 +56,13 @@ def ratio_of(pred, data):
     return ratio, spread
 
 
+def ratio_window(ratio, spread):
+    finite = numpy.isfinite(ratio)
+    low = min(0.5, float(numpy.min((ratio - spread)[finite]))) if finite.any() else 0.5
+    high = max(1.5, float(numpy.max((ratio + spread)[finite]))) if finite.any() else 1.5
+    return max(0.0, low), min(3.0, high)
+
+
 def pred_histogram(predictions, history, models, record, columns=4, bins=40, log=False, name=None, figures=None):
     figures = figures or Figure()
     pairs = prediction_pairs(predictions)
@@ -77,19 +84,20 @@ def pred_histogram(predictions, history, models, record, columns=4, bins=40, log
             continue
         edges, data, counts = shared_histograms(truth, guess, bins)
         centers = 0.5 * (edges[:-1] + edges[1:])
-        top.hist(truth, bins=edges, color=figures.categorical[0], alpha=0.4, edgecolor="none", label=target)
-        top.hist(guess, bins=edges, histtype="step", color=figures.categorical[1], linewidth=2, label=pred)
-        if log:
-            top.set_yscale("log")
+        light, dark = figures.sequential_steps[2], figures.sequential_steps[6]
+        top.hist(truth, bins=edges, histtype="stepfilled", color=light, alpha=0.55, edgecolor=light, linewidth=1.2,
+                 label=target, log=bool(log))
+        top.hist(guess, bins=edges, histtype="step", color=dark, linewidth=2, label=pred, log=bool(log))
         top.legend(loc="upper right")
         top.tick_params(labelbottom=False)
         figures.label(top, panel_title(pred, target, paired), None, "points",
                      note=f"{len(truth):,} points over {len(data)} shared bins")
         ratio, spread = ratio_of(counts, data)
-        below.axhline(1.0, color=figures.ink_muted, linewidth=1, linestyle="--")
-        below.errorbar(centers, ratio, yerr=spread, fmt="o", markersize=3, color=figures.categorical[1],
-                       ecolor=figures.ink_muted, elinewidth=1)
+        below.axhline(1.0, color=figures.ink_secondary, linewidth=1, linestyle="--")
+        below.errorbar(centers, ratio, yerr=spread, fmt="o", markersize=3.5, color=dark, ecolor=dark, elinewidth=1.2,
+                       capsize=2)
         below.set_xlim(top.get_xlim())
+        below.set_ylim(*ratio_window(ratio, spread))
         figures.label(below, None, target, "pred / true")
     for top, below in panels[len(pairs):]:
         top.axis("off")

@@ -386,7 +386,6 @@ function chartOptions(view) {
   };
   return {
     chart: { type: kinds.some(item => item !== kind) ? "line" : kind, height: view.height, background: "transparent", fontFamily: "inherit",
-             group: view.group || undefined, id: view.group ? view.uid : undefined,
              foreColor: dark ? "#b7bcc4" : "#4a4f57", animations: { enabled: false },
              zoom: { enabled: kind !== "bar", type: kind === "scatter" ? "xy" : "x", autoScaleYaxis: kind !== "scatter" },
              toolbar: { show: true, offsetY: -4, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } } },
@@ -398,16 +397,14 @@ function chartOptions(view) {
     dataLabels: { enabled: false },
     legend: { position: "top", horizontalAlign: "left", showForSingleSeries: true, onItemClick: { toggleDataSeries: true } },
     grid: { show: settings.grid, borderColor: dark ? "#2d3238" : "#e3e6ea" },
-    xaxis: { type: "numeric", ...span, title: { text: view.xlabels === false ? "" : (view.xlabel || "") }, tickAmount: ticks,
-             labels: { show: view.xlabels !== false, formatter: value => (integral ? String(Math.round(back(value))) : tick(back(value))),
-                       rotate: 0, hideOverlappingLabels: true },
+    xaxis: { type: "numeric", ...span, title: { text: view.xlabel || "" }, tickAmount: ticks,
+             labels: { formatter: value => (integral ? String(Math.round(back(value))) : tick(back(value))), rotate: 0, hideOverlappingLabels: true },
              tooltip: { enabled: false } },
-    yaxis: { title: { text: view.ylabel || "" }, labels: { formatter: value => tick(down(Number(value))), minWidth: view.ywidth || undefined },
+    yaxis: { title: { text: view.ylabel || "" }, labels: { formatter: value => tick(down(Number(value))) },
              ...(pad ? { min: bottom - pad, max: top + pad } : {}) },
     tooltip: { shared: kind !== "scatter", intersect: kind === "scatter", theme: dark ? "dark" : "light",
                x: { formatter: value => `${view.xlabel || "x"} ${fmt(back(value))}${noteOf(back(value))}` }, y: { formatter: value => fmt(down(Number(value))) } },
-    annotations: { yaxis: (view.ylines || []).filter(y => !logy || y > 0).map(y => ({ y: up(y), borderColor: dark ? "#868d97" : "#7d838d", strokeDashArray: 4 })),
-                   xaxis: shownMarks.map((mark, index) => ({
+    annotations: { xaxis: shownMarks.map((mark, index) => ({
       x: mark.x, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3,
       ...(mark.text && index % labelled === 0 ? { label: { text: mark.text, position: "top", orientation: "horizontal", borderWidth: 0, offsetY: -2,
                                                            style: { background: "transparent", color: dark ? "#868d97" : "#7d838d", fontSize: "10px", fontFamily: "inherit" } } } : {}) })) },
@@ -418,10 +415,8 @@ function chartOptions(view) {
 const Chart = {
   props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, ylabel: String, logy: Boolean,
            marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String, kind: { type: String, default: "line" },
-           xlog: Boolean, turns: Boolean, settings: { type: Object, default: () => ({}) },
-           group: { type: String, default: "" }, xlabels: { type: Boolean, default: true }, ylines: { type: Array, default: () => [] },
-           ywidth: { type: Number, default: 0 } },
-  data() { return { chart: null, uid: `chart-${Math.random().toString(36).slice(2, 10)}` }; },
+           xlog: Boolean, turns: Boolean, settings: { type: Object, default: () => ({}) } },
+  data() { return { chart: null }; },
   computed: { options() { return chartOptions(this); } },
   watch: {
     options() { if (this.chart) this.chart.updateOptions(this.options, false, false); },
@@ -934,15 +929,15 @@ const Parallel = {
   },
   methods: {
     fmt,
-    colorOf(row) { return row.share === null ? (darkMode() ? "#5a6067" : "#c8ccd2") : rampColor(row.share); },
+    colorOf(row) { return row.share === null ? (darkMode() ? "#9aa3af" : "#7d838d") : rampColor(row.share); },
     widthOf(row) {
       if (this.hover) return this.hover.path === row.path ? 3.4 : 1.3;
-      if (!row.scored) return 1.2;
+      if (!row.scored) return 1.5;
       return row.place === 1 ? 3 : 1.8;
     },
     fadeOf(row) {
       if (this.hover) return this.hover.path === row.path ? 1 : 0.12;
-      return row.scored ? 0.9 : 0.3;
+      return row.scored ? 0.9 : 0.6;
     },
     at(event) {
       const svg = this.$refs.svg;
@@ -981,6 +976,96 @@ const Parallel = {
     },
   },
   template: "#parallel-template",
+};
+
+function niceTicks(low, high, count) {
+  if (!(high > low)) return [low];
+  const raw = (high - low) / Math.max(1, count);
+  const power = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map(unit => unit * power).find(unit => (high - low) / unit <= count + 1) || raw;
+  const ticks = [];
+  for (let value = Math.ceil(low / step) * step; value <= high + step * 1e-9; value += step) ticks.push(Number(value.toFixed(10)));
+  return ticks;
+}
+
+function logTicks(low, high) {
+  const ticks = [];
+  for (let power = Math.floor(Math.log10(low)); Math.pow(10, power) <= high; power += 1) {
+    if (Math.pow(10, power) >= low) ticks.push(Math.pow(10, power));
+  }
+  return ticks;
+}
+
+const Spectrum = {
+  props: { spec: { type: Object, required: true }, title: String, xlabel: String, logy: Boolean,
+           expand: { type: String, default: "" }, modal: Boolean, height: { type: Number, default: 440 } },
+  data() { return { hover: null }; },
+  computed: {
+    layout() {
+      const { edges, data, pred, labels } = this.spec;
+      const width = 1000, left = 68, right = 18, top = 30, bottom = 46, gap = 12;
+      const plot = this.height - top - bottom - gap;
+      const upper = Math.round(plot * 0.66), lower = plot - upper;
+      const lowX = edges[0], highX = edges[edges.length - 1];
+      const spanX = highX > lowX ? highX - lowX : 1;
+      const x = value => left + (value - lowX) / spanX * (width - left - right);
+      const counts = [...data, ...pred];
+      const positive = counts.filter(value => value > 0);
+      const least = positive.length ? Math.min(...positive) : 1;
+      const floor = this.logy ? Math.max(0.5, least / 2) : 0;
+      const ceiling = Math.max(1, ...counts) * (this.logy ? 1.8 : 1.08);
+      const low = this.logy ? Math.log10(floor) : 0, high = this.logy ? Math.log10(ceiling) : ceiling;
+      const y = value => {
+        const at = this.logy ? Math.log10(Math.max(value, floor)) : value;
+        return top + upper - (at - low) / (high - low) * upper;
+      };
+      const base = top + upper;
+      const outline = values => values.map((value, index) => `${index ? "V" + y(value).toFixed(1) + " " : ""}H${x(edges[index + 1]).toFixed(1)}`).join(" ");
+      const dataFill = data.length ? `M${x(edges[0]).toFixed(1)} ${base.toFixed(1)} V${y(data[0]).toFixed(1)} ${outline(data)} V${base.toFixed(1)} Z` : "";
+      const predLine = pred.length ? `M${x(edges[0]).toFixed(1)} ${y(pred[0]).toFixed(1)} ${outline(pred)}` : "";
+      const ratios = data.map((count, index) => (count > 0 ? pred[index] / count : NaN));
+      const errors = data.map((count, index) => (count > 0 && pred[index] > 0 ? ratios[index] * Math.sqrt(1 / pred[index] + 1 / count) : 0));
+      let lowR = 0.5, highR = 1.5;
+      ratios.forEach((ratio, index) => {
+        if (Number.isFinite(ratio)) { lowR = Math.min(lowR, ratio - errors[index]); highR = Math.max(highR, ratio + errors[index]); }
+      });
+      lowR = Math.max(0, lowR);
+      highR = Math.min(3, highR);
+      const ratioTop = base + gap, bottomEdge = ratioTop + lower;
+      const r = value => ratioTop + lower - (Math.min(highR, Math.max(lowR, value)) - lowR) / (highR - lowR) * lower;
+      const points = ratios.map((ratio, index) => (Number.isFinite(ratio)
+        ? { x: x((edges[index] + edges[index + 1]) / 2), y: r(ratio), low: r(ratio - errors[index]), high: r(ratio + errors[index]) } : null)).filter(Boolean);
+      const yTicks = (this.logy ? logTicks(floor, ceiling) : niceTicks(0, ceiling, 4)).map(value => ({ y: y(value), text: tick(value) }));
+      const rTicks = niceTicks(lowR, highR, 3).map(value => ({ y: r(value), text: tick(value) }));
+      const xTicks = niceTicks(lowX, highX, 7).filter(value => value >= lowX && value <= highX).map(value => ({ x: x(value), text: tick(value) }));
+      return { width, left, right, top, bottomEdge, upperMiddle: top + upper / 2, lowerMiddle: ratioTop + lower / 2, dataFill, predLine, one: r(1),
+               points, yTicks, rTicks, xTicks, legendGap: (labels.data || "").length * 6.6 + 44, x, lowX, spanX };
+    },
+  },
+  methods: {
+    fmt,
+    onMove(event) {
+      const svg = this.$refs.svg;
+      const rect = svg.getBoundingClientRect();
+      const { edges, data, pred } = this.spec;
+      const layout = this.layout;
+      const at = (event.clientX - rect.left) * layout.width / rect.width;
+      const value = layout.lowX + (at - layout.left) / (layout.width - layout.left - layout.right) * layout.spanX;
+      const index = data.findIndex((count, position) => value >= edges[position] && value <= edges[position + 1]);
+      if (index < 0) { this.hover = null; return; }
+      const ratio = data[index] > 0 ? pred[index] / data[index] : null;
+      const error = ratio !== null && pred[index] > 0 ? ratio * Math.sqrt(1 / pred[index] + 1 / data[index]) : 0;
+      const host = this.$el.getBoundingClientRect();
+      const left = event.clientX - host.left;
+      this.hover = { x: layout.x((edges[index] + edges[index + 1]) / 2), from: edges[index], to: edges[index + 1], data: data[index], pred: pred[index],
+                     ratio, error, left: left + 220 > host.width ? left - 214 : left + 14, top: event.clientY - host.top + 14 };
+    },
+    download() {
+      const svg = this.$refs.svg;
+      downloadSvg(svg, this.title || "distribution", this.layout.width, this.height, getComputedStyle(svg).backgroundColor);
+    },
+  },
+  template: "#spectrum-template",
 };
 
 const Strip = {
@@ -1024,7 +1109,7 @@ const Strip = {
 };
 
 const app = Vue.createApp({
-  components: { chart: Chart, spark: Spark, diagram: Diagram, names: Names, parallel: Parallel, strip: Strip },
+  components: { chart: Chart, spark: Spark, diagram: Diagram, names: Names, parallel: Parallel, strip: Strip, spectrum: Spectrum },
   data() {
     return {
       route: parseHash(location.hash),
@@ -1073,16 +1158,11 @@ const app = Vue.createApp({
       const { edges, counts } = this.pairInfo.histogram;
       return [{ name: "residual", color: PALETTE[1], points: counts.map((value, index) => [(edges[index] + edges[index + 1]) / 2, value]) }];
     },
-    distributionLines() {
+    distribution() {
       const pair = this.pairInfo;
       if (!pair || !pair.distribution || !pair.distribution.edges || pair.distribution.edges.length < 2) return null;
       const { edges, data, pred } = pair.distribution;
-      const centers = data.map((value, index) => (edges[index] + edges[index + 1]) / 2);
-      const top = [{ name: pair.target, color: PALETTE[0], kind: "bar", points: centers.map((x, index) => [x, data[index]]) },
-                   { name: pair.pred, color: PALETTE[1], kind: "bar", points: centers.map((x, index) => [x, pred[index]]) }];
-      const ratio = [{ name: `${pair.pred} / ${pair.target}`, color: PALETTE[1], kind: "scatter",
-                       points: centers.map((x, index) => [x, data[index] > 0 ? pred[index] / data[index] : NaN]).filter(point => Number.isFinite(point[1])) }];
-      return { top, ratio };
+      return { edges, data, pred, labels: { data: pair.target, pred: pair.pred } };
     },
     prepPreprocessors() {
       const table = (this.prepData && this.prepData.preprocessors) || {};
@@ -1165,7 +1245,7 @@ const app = Vue.createApp({
     expandedHasPoints() {
       const view = this.expanded;
       if (!view) return false;
-      return (view.panels || [view]).some(panel => panel.kind === "scatter" || (panel.lines || []).some(line => line.kind === "scatter"));
+      return view.kind === "scatter" || (view.lines || []).some(line => line.kind === "scatter");
     },
     objectiveName() { return (this.sweep && this.sweep.objective && this.sweep.objective.monitor) || "objective"; },
     objectiveMode() { return (this.sweep && this.sweep.objective && this.sweep.objective.mode) || "min"; },
@@ -1596,10 +1676,8 @@ const app = Vue.createApp({
         const pair = this.pairInfo;
         if (name === "scatter") return { name: `${pair.pred} against ${pair.target}`, lines: this.scatterLines, kind: "scatter", xlabel: pair.target, ylabel: pair.pred, marks: [] };
         if (name === "histogram") return { name: "residual (prediction minus target)", lines: this.histogramLines, kind: "bar", xlabel: "residual", ylabel: "points", marks: [], bins: true };
-        if (name === "distribution" && this.distributionLines) {
-          return { name: `${pair.pred} and ${pair.target} over the same bins`, bins: true,
-                   panels: [{ lines: this.distributionLines.top, kind: "bar", ylabel: "points", xlabels: false, logy: true },
-                            { lines: this.distributionLines.ratio, kind: "scatter", xlabel: pair.target, ylabel: "pred / true", ylines: [1] }] };
+        if (name === "distribution" && this.distribution) {
+          return { name: `${pair.pred} and ${pair.target} over the same bins`, spectrum: this.distribution, xlabel: pair.target, bins: true, logy: this.logy };
         }
         return null;
       }
@@ -1758,8 +1836,7 @@ const app = Vue.createApp({
     "plot.bins"() { if (this.tab === "predictions" && this.predictionsData) this.loadPredictions(); },
     expanded(now, before) {
       if (!now || before) return;
-      const lines = now.panels ? now.panels.flatMap(panel => panel.lines.map(line => ({ ...line, kind: line.kind || panel.kind }))) : now.lines;
-      this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), bins: this.plot.bins, markers: markerSize(scatterPoints(lines, now.kind), null) };
+      this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), bins: this.plot.bins, markers: markerSize(scatterPoints(now.lines || [], now.kind), null) };
     },
     "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
     "route.params.b"() { if (this.page === "compare") this.loadCompare(); },
@@ -2112,10 +2189,7 @@ const app = Vue.createApp({
       if (index < 0 || !names.length) return;
       this.go({ item: names[(index + direction + names.length) % names.length] }, true);
     },
-    downloadModal() {
-      const charts = this.expanded && this.expanded.panels ? (this.$refs.panels || []) : [this.$refs.modal];
-      charts.forEach(chart => { if (chart) chart.download(); });
-    },
+    downloadModal() { if (this.$refs.modal) this.$refs.modal.download(); },
     resetPlot() { this.plot = { ...defaultPlot(), logy: this.logy }; },
     async copy(text) {
       try { await navigator.clipboard.writeText(text || ""); } catch (error) { console.warn("clipboard unavailable", error); }

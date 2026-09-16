@@ -945,9 +945,9 @@ of what every transform added or removed, what the fit learned on train and what
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_predictions.png" width="920" alt="the predictions tab with a query"></p>
 
-**Predictions.** The prediction against the truth with the y = x line, the residual histogram, the distributions
-of the prediction and the truth over the same bins with their ratio below, and the largest errors, in the original
-units. A pandas query over the columns of the file, the targets, the `pred_` and `raw_` wires, the calibration
+**Predictions.** The prediction against the truth with the y = x line, the residual histogram, the distribution of
+the prediction outlined over the distribution of the truth on the same bins with the ratio of their counts and its
+error below, and the largest errors, in the original units. A pandas query over the columns of the file, the targets, the `pred_` and `raw_` wires, the calibration
 flags and the `data.spectators` columns narrows every number on the page to the rows it keeps, and rides in the
 address bar with the rest of the view:
 

@@ -13,7 +13,7 @@ from kalfa.std.common.history import History
 from kalfa.std.lego.kalfa.run_all import run_all
 from kalfa.std.plot.base import panel_title, shared_histograms
 from kalfa.std.plot.kalfa.loss_curve import loss_curve
-from kalfa.std.plot.kalfa.predictions import pred_histogram, pred_vs_true, ratio_of
+from kalfa.std.plot.kalfa.predictions import pred_histogram, pred_vs_true, ratio_of, ratio_window
 
 
 def history():
@@ -48,6 +48,9 @@ def test_the_shared_histograms_bin_the_truth_and_the_prediction_alike():
     ratio, spread = ratio_of(numpy.array([2, 0, 4]), numpy.array([2, 3, 0]))
     assert ratio[0] == 1.0 and ratio[1] == 0.0 and numpy.isnan(ratio[2])
     assert spread[0] == pytest.approx(1.0) and spread[1] == 0.0 and spread[2] == 0.0
+    assert ratio_window(ratio, spread) == (0.0, 2.0)
+    assert ratio_window(numpy.array([numpy.nan]), numpy.array([0.0])) == (0.5, 1.5)
+    assert ratio_window(numpy.array([2.5, 0.9]), numpy.array([1.0, 0.1])) == (0.5, 3.0)
 
 
 def test_panel_title_names_the_wire_only_when_two_outputs_share_a_field():
