@@ -293,7 +293,7 @@ class Resolver:
         whole = TOKEN.fullmatch(text)
         if whole and whole.group(1):
             keep, value = lookup(whole.group(1))
-            return text if keep else value
+            return text if keep else copy.deepcopy(value)
 
         def piece(match):
             if match.group(1) is None:

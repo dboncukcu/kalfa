@@ -198,12 +198,12 @@ under `metrics`, and a lego in the wrong section is a `check` error.
 | `transform` | `data.transform` | 5 | `filter`, `derive`, `rename`, `astype`, `drop` |
 | `split` | `data.split` | 5 | `random_split`, `sequential`, `given`, `kfold` |
 | `frame` | `data.frame` | 2 | `target_encoding`, `group_statistic` |
-| `pre` | `data.preprocessors` | 28 | `standard_scaler`, `one_hot`, `resize`, `char_tokenizer` |
+| `pre` | `data.preprocessors` | 29 | `standard_scaler`, `one_hot`, `logit`, `resize`, `char_tokenizer` |
 | `feed` | `data.feed` | 3 | `table`, `window`, `next_token` |
-| `layer` | model `nodes` | 118 | `linear_relu`, `conv2d`, `embedding`, `gru`, `reparam` |
+| `layer` | model `nodes` | 125 | `linear_relu`, `conv2d`, `embedding`, `gru`, `select`, `add`, `multipliers` |
 | `init` | model `init` | 5 | `normal`, `xavier`, `kaiming`, `zeros` |
 | `criterion` | `losses`, `metrics` | 7 | `mse`, `huber`, `cross_entropy`, `bce_logits` |
-| `objective` | `losses` | 7 | `vae`, `wgan_gp_d`, `ddpm`, `ntxent`, `distill` |
+| `objective` | `losses` | 8 | `vae`, `wgan_gp_d`, `ddpm`, `ntxent`, `distill`, `mdmm` |
 | `metric` | `metrics` | 9 | `rmse`, `f1`, `auroc`, `fid`, `perplexity` |
 | `optimizer` | `optimizers` | 3 | `adam`, `adamw`, `sgd` |
 | `schedule` | optimizer `schedule` | 4 | `warmup_cosine`, `step_decay`, `linear_betas` |
@@ -217,7 +217,7 @@ under `metrics`, and a lego in the wrong section is a `check` error.
 | `device` | `device` | 4 | `auto`, `cpu`, `cuda`, `mps` |
 | `rng` | `rng` | 3 | `derived`, `indexed`, `global` |
 | `export` | `kalfa export --format` | 3 | `onnx`, `pt2`, `state_dict` |
-| `data` | any param value | 4 | `class_weights`, `vocab_size`, `feature_width` |
+| `data` | any param value | 5 | `class_weights`, `vocab_size`, `feature_width`, `feature_index` |
 
 `kalfa ls tokenizer` searches names and descriptions, `kalfa ls /alias/kalfa/tabular` prints a pack,
 [`DOCS.md`](DOCS.md) is the generated reference with every signature and fact.
@@ -433,7 +433,7 @@ a `layer_norm`. It is built once the fitted preprocessors and the train loader e
 
 `timm_backbone` and `dcgan_generator` above are not std legos: they come from the plugin modules of
 `examples/04_cnn_images` and `examples/07_wgan_gp`. A plugin lego is written exactly like a std one, which is the
-point. The 118 layer legos kalfa ships mirror `torch.nn` under `/layer/torch/` and add its own under
+point. The 125 layer legos kalfa ships mirror `torch.nn` under `/layer/torch/` and add its own under
 `/layer/kalfa/`.
 
 ### `losses`, `metrics`, `optimizers`
@@ -448,6 +448,8 @@ losses:
   ce:       {uri: cross_entropy, params: {weight: {uri: class_weights}}}   # a run time component as a param
   recon:    {uri: mse, output: x_hat, target: input}      # a named wire, and the model's own input as target
   total:    {uri: weighted_sum, params: {terms: {ce: 1.0, recon: 0.1}}}    # the keys are loss definition names
+  held:     {uri: mdmm, params: {primary: ce, multipliers: lambdas,     # ce under recon = 0.05, a multiplier
+                                 constraints: {recon: {epsilon: 0.05, lmbda_init: -1.0}}}}  # per constraint
   vae_loss:
     uri: vae
     params:

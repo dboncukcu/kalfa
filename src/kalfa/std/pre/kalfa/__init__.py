@@ -55,3 +55,7 @@ lego("/pre/kalfa/tanh", "scales:Tanh", alias="tanh",
 lego("/pre/kalfa/atanh", "scales:Atanh", alias="atanh",
      description="artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside (-scale, scale) "
                  "is an error that names how many and how large")
+lego("/pre/kalfa/logit", "scales:Logit", alias="logit",
+     description="log(x / (1 - x)) of a column inside [0, 1], the way to give a probability the whole real line, "
+                 "inverted by the sigmoid; the column is clipped to [low, 1 - high] first, so the two margins are "
+                 "what a saturated 0 and a saturated 1 come out as")

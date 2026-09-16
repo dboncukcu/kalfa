@@ -41,6 +41,25 @@ def test_groups_match_model_dot_parameter_names():
     assert dict(optimizer.named_parameters()).keys() == {"m.nodes.layer.weight", "m.nodes.layer.bias"}
 
 
+def test_a_group_with_a_negative_learning_rate_climbs_its_gradient():
+    from cirak.build import Graph, GraphNode
+
+    from kalfa.std.builder.kalfa.module import Module
+    from kalfa.std.layer.kalfa.multipliers import Multipliers
+
+    model = tiny_model()
+    layer = Multipliers({"a": {"epsilon": 1.0, "lmbda_init": -1.0}})
+    lambdas = Module(Graph(("x",), ("lmbda",), (GraphNode("lmbda", layer, ("x",), ("lmbda",)),)), name="lambdas")
+    optimizer = Adam({"m": model, "lambdas": lambdas}, {"lr": 0.1, "groups": [{"match": "lambdas.*", "lr": -0.1}]},
+                     None, "l")
+    x = torch.ones(1, 3)
+    (model(x).sum() + 3.0 * lambdas(x).sum()).backward()
+    optimizer.step()
+    assert [group["lr"] for group in optimizer.param_groups] == [0.1, -0.1]
+    assert "lambdas.nodes.lmbda.lmbda" in dict(optimizer.named_parameters())
+    assert layer.lmbda.item() > -1.0
+
+
 def test_state_dict_round_trip_with_pending_state():
     model = tiny_model()
     optimizer = Adam({"m": model}, {"lr": 0.1}, None, "l")

@@ -1,5 +1,6 @@
-"""The small gaps: normalisation layers, kaiming uniform, weighted mse, feature width, the median std scaler,
-the whole set as one batch, drop_last auto, the seconds of a turn, the git note and the final weights."""
+"""The small gaps: normalisation layers, kaiming uniform, weighted mse, feature width, the feature index, the
+arithmetic wires, select, the multipliers, logit, the median std scaler, the whole set as one batch, drop_last auto,
+the seconds of a turn, the git note and the final weights."""
 
 import json
 
@@ -13,13 +14,17 @@ from helpers import frame, tiny_model
 from kalfa.api import git_note, weights_of, write_git_note
 from kalfa.std.common.history import History
 from kalfa.std.criterion.kalfa.regression import weighted_mse
-from kalfa.std.data.kalfa.components import feature_width, target_weights
+from kalfa.std.data.kalfa.components import feature_index, feature_width, target_weights
 from kalfa.std.feed.kalfa.table import table
 from kalfa.std.init.torch.initializers import kaiming_uniform
+from kalfa.std.layer.kalfa.features import select
+from kalfa.std.layer.kalfa.multipliers import Multipliers
+from kalfa.std.layer.kalfa.wires import Add, Divide, Multiply, Negate, Subtract
 from kalfa.std.layer.torch.normalization import batch_norm, group_norm, layer_norm
 from kalfa.std.loader.kalfa.torch import torch_loader
 from kalfa.std.optimizer.torch.optimizers import Sgd
 from kalfa.std.pre.kalfa.median_std_scaler import MedianStdScaler
+from kalfa.std.pre.kalfa.scales import Logit
 
 
 def test_the_normalisation_layers_build_and_run():
@@ -46,6 +51,57 @@ def test_weighted_mse_and_the_target_weights_follow_the_target_columns():
     with pytest.raises(ValueError):
         weighted_mse(predictions, targets, [1.0])
     assert feature_width(loader) == 3
+
+
+def test_the_arithmetic_wires_combine_and_broadcast():
+    first = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+    second = torch.tensor([[10.0, 10.0], [20.0, 20.0]])
+    column = torch.tensor([[2.0], [4.0]])
+    assert Add()(first, second, column).tolist() == [[13.0, 14.0], [27.0, 28.0]]
+    assert Add()(first).tolist() == first.tolist()
+    assert Subtract()(second, first).tolist() == [[9.0, 8.0], [17.0, 16.0]]
+    assert Multiply()(first, column).tolist() == [[2.0, 4.0], [12.0, 16.0]]
+    assert Divide()(second, column).tolist() == [[5.0, 5.0], [5.0, 5.0]]
+    assert Negate()(first).tolist() == [[-1.0, -2.0], [-3.0, -4.0]]
+    assert float(Divide()(first, torch.zeros(2, 2))[0, 0]) == float("inf")
+
+
+def test_select_takes_the_named_columns_in_the_order_written():
+    loader = torch_loader(table(frame(rows=8)), "train", 4)
+    assert feature_index(loader, "x?") == [0, 1, 2]
+    assert feature_index(loader, ["x2", "x0"]) == [2, 0]
+    assert feature_index(loader, ["x1"]) == [1]
+    with pytest.raises(ValueError):
+        feature_index(loader, "ghost*")
+    values = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    assert select([2, 0])(values).tolist() == [[3.0, 1.0], [6.0, 4.0]]
+    assert select([0], dim=0)(values).tolist() == [[1.0, 2.0, 3.0]]
+    assert "index" in dict(select([1]).named_buffers())
+
+
+def test_the_multipliers_start_where_their_constraints_say_and_ignore_the_input():
+    constraints = {"a_mean": {"epsilon": 1.0, "lmbda_init": -1.0}, "b.all": {"epsilon": 0.0}}
+    layer = Multipliers(constraints, init=0.5)
+    assert layer.names == ["a_mean", "b.all"] and layer.lmbda.tolist() == [-1.0, 0.5]
+    assert layer(torch.zeros(4, 3)).tolist() == [-1.0, 0.5] and layer().tolist() == [-1.0, 0.5]
+    assert isinstance(layer.lmbda, nn.Parameter) and "lmbda" in layer.state_dict()
+    assert Multipliers(["x", "y"]).lmbda.tolist() == [0.0, 0.0]
+    with pytest.raises(ValueError, match="names"):
+        Multipliers({})
+
+
+def test_logit_spans_the_line_and_comes_back_through_the_sigmoid():
+    values = numpy.array([0.0, 0.25, 0.5, 0.75, 1.0])
+    scaler = Logit(low=1e-3, high=1e-3)
+    out = scaler.apply(values)
+    assert out[2] == pytest.approx(0.0) and out[0] < -6.0 < 6.0 < out[4]
+    assert scaler.inverse(out)[1] == pytest.approx(0.25)
+    assert scaler.inverse_torch(torch.tensor(out))[3].item() == pytest.approx(0.75, abs=1e-6)
+    saturated = scaler.inverse(numpy.array([-800.0, 800.0]))
+    assert saturated[0] == 0.0 and saturated[1] == 1.0
+    assert scaler.rescales and not scaler.fits
+    with pytest.raises(ValueError):
+        Logit(low=0.0)
 
 
 def test_the_median_std_scaler_centers_on_the_median():

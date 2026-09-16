@@ -1,4 +1,4 @@
-"""The legos no reference config uses: the given split, weighted_sum, conv2d, maxpool, image_grid, recon_error."""
+"""The legos no reference config uses: the given split, weighted_sum, mdmm, conv2d, maxpool, image_grid, recon_error."""
 
 import functools
 import warnings
@@ -12,12 +12,14 @@ from helpers import batch, frame, housing_frame, tiny_model, write_image_folder
 from kalfa.std.adapter.kalfa.criterion import CriterionAdapter as criterion_adapter
 from kalfa.std.adapter.kalfa.objective import ObjectiveAdapter
 from kalfa.std.common.device import Device
-from kalfa.std.common.runtime import Context, Pass
+from kalfa.std.common.runtime import Context, LossView, Pass
 from kalfa.std.criterion.kalfa.regression import mae, mse
+from kalfa.std.layer.kalfa.multipliers import Multipliers
 from kalfa.std.layer.torch.convolution import conv2d
 from kalfa.std.layer.torch.pooling import maxpool
 from kalfa.std.lego.kalfa.run_all import run_all
 from kalfa.std.metric.kalfa.recon_error import ReconError
+from kalfa.std.objective.kalfa.mdmm import mdmm
 from kalfa.std.objective.kalfa.weighted_sum import weighted_sum
 from kalfa.std.plot.kalfa.images import image_grid
 from kalfa.std.split.kalfa.splits import given
@@ -59,6 +61,61 @@ def test_weighted_sum_combines_other_losses_by_name():
         ObjectiveAdapter(functools.partial(weighted_sum, terms={"ghost": 1.0})).loss(context)
     with pytest.raises(ValueError, match="mapping"):
         weighted_sum(context.scope.everything(), context.batch, terms=[], losses=None)
+
+
+def multipliers_model(constraints, name="lambdas"):
+    from cirak.build import Graph, GraphNode
+
+    from kalfa.std.builder.kalfa.module import Module
+
+    layer = Multipliers(constraints)
+    return Module(Graph(("x",), ("lmbda",), (GraphNode("lmbda", layer, ("x",), ("lmbda",)),)), name=name)
+
+
+def test_mdmm_holds_a_term_at_its_epsilon_through_a_multiplier():
+    model = tiny_model(seed=1)
+    constraints = {"b": {"epsilon": 0.5, "lmbda_init": -1.0, "scale": 2.0, "damping": 0.5}, "w.a": {"epsilon": 0.1}}
+    lambdas = multipliers_model(constraints)
+    losses = {"a": criterion_adapter(mse), "b": criterion_adapter(mae),
+              "w": ObjectiveAdapter(functools.partial(weighted_sum, terms={"a": 1.0, "b": 1.0})),
+              "total": ObjectiveAdapter(functools.partial(mdmm, primary="a", multipliers="lambdas",
+                                                          constraints=constraints))}
+    context = Context(batch(), Pass({"model": model, "lambdas": lambdas}, predicts="model", targets=["price"],
+                                    losses=losses, losses_keys={"a": {}, "b": {}}))
+    value = losses["total"].loss(context)
+    a = float(losses["a"].loss(context).detach())
+    b = float(losses["b"].loss(context).detach())
+    assert set(value) == {"loss", "primary", "lambda/b", "inf/b", "lambda/w.a", "inf/w.a"}
+    inf_b, inf_a = 0.5 - b, 0.1 - a
+    assert float(value["primary"].detach()) == pytest.approx(a)
+    assert float(value["inf/b"].detach()) == pytest.approx(inf_b)
+    assert float(value["inf/w.a"].detach()) == pytest.approx(inf_a)
+    assert float(value["lambda/b"]) == -1.0 and float(value["lambda/w.a"]) == 0.0
+    expected = a + 2.0 * (-1.0 * inf_b + 0.5 * inf_b ** 2 / 2) + (0.0 * inf_a + inf_a ** 2 / 2)
+    assert float(value["loss"].detach()) == pytest.approx(expected, rel=1e-5)
+    value["loss"].backward()
+    lmbda = next(lambdas.parameters())
+    assert lmbda.grad.tolist() == pytest.approx([2.0 * inf_b, inf_a], rel=1e-5)
+    assert model.nodes["layer"].weight.grad is not None
+    tracked = losses["total"].tracker("total")
+    tracked.observe(context)
+    assert set(tracked.result()) == {"total", "total/primary", "total/lambda/b", "total/inf/b", "total/lambda/w.a",
+                                     "total/inf/w.a"}
+    view = LossView(context)
+    with pytest.raises(KeyError, match="no definition"):
+        mdmm(context.scope.everything(), context.batch, view, "ghost", "lambdas", constraints)
+    with pytest.raises(KeyError, match="no term"):
+        mdmm({"other": multipliers_model({"w.ghost": 0.0})}, context.batch, view, "a", "other", {"w.ghost": 0.0})
+    with pytest.raises(KeyError, match="no model"):
+        mdmm(context.scope.everything(), context.batch, view, "a", "ghost", constraints)
+    with pytest.raises(ValueError, match="stay in step"):
+        mdmm(context.scope.everything(), context.batch, view, "a", "lambdas", {"w.a": 0.1, "b": 0.5})
+    with pytest.raises(ValueError, match="epsilon"):
+        mdmm({}, {}, view, "a", "lambdas", {"b": {"lmbda_init": 1.0}})
+    with pytest.raises(ValueError, match="mapping"):
+        mdmm({}, {}, view, "a", "lambdas", [])
+    with pytest.raises(ValueError, match="has no"):
+        mdmm({}, {}, view, "a", "lambdas", {"b": {"epsilon": 0.0, "weight": 1.0}})
 
 
 def test_conv2d_and_maxpool_shapes():

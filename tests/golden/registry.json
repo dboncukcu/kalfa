@@ -238,6 +238,15 @@
       "kind": "data",
       "signature": "(loader, target=None)"
     },
+    "/data/kalfa/feature_index": {
+      "alias": [
+        "feature_index"
+      ],
+      "description": "The positions of the named columns in the feature tensor x, in the order the names are written; columns is a name, a glob or a list of them, and the positions follow the fitted plan, so a chain that widens a column (one_hot) is already counted; for select and for a loss that acts on part of the features",
+      "facts": {},
+      "kind": "data",
+      "signature": "(loader, columns)"
+    },
     "/data/kalfa/feature_width": {
       "alias": [
         "feature_width"
@@ -478,6 +487,24 @@
       "kind": "init",
       "signature": "()"
     },
+    "/layer/kalfa/add": {
+      "alias": [
+        "add"
+      ],
+      "description": "The elementwise sum of its input wires, the residual connection of a model graph; shapes broadcast",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(*args: Any, **kwargs: Any) -> None"
+    },
+    "/layer/kalfa/divide": {
+      "alias": [
+        "divide"
+      ],
+      "description": "The first input wire divided by the second; shapes broadcast and a zero divisor gives an infinity, as torch does",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(*args: Any, **kwargs: Any) -> None"
+    },
     "/layer/kalfa/l1_distance": {
       "alias": [
         "l1_distance"
@@ -523,6 +550,33 @@
       "kind": "layer",
       "signature": "(widths, activation='relu', dropout=0.0, out_features=None, in_features=None)"
     },
+    "/layer/kalfa/multipliers": {
+      "alias": [
+        "multipliers"
+      ],
+      "description": "The Lagrange multipliers of an mdmm loss as a model of their own: one learnable lambda per name, in the order written, started at the lmbda_init of its entry (init without one); names takes the constraints mapping of the loss (names: $constraints$) so the two stay in step, and forward ignores its input and returns the vector. A model, so an optimizer updates them (a group matching <name>.* with a negative lr, the gradient ascent of a saddle point) and the checkpoint carries them",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(names, init=0.0)"
+    },
+    "/layer/kalfa/multiply": {
+      "alias": [
+        "multiply"
+      ],
+      "description": "The elementwise product of its input wires, the gate of a model graph; shapes broadcast",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(*args: Any, **kwargs: Any) -> None"
+    },
+    "/layer/kalfa/negate": {
+      "alias": [
+        "negate"
+      ],
+      "description": "Minus the input wire",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(*args: Any, **kwargs: Any) -> None"
+    },
     "/layer/kalfa/polynomial": {
       "alias": [
         "polynomial"
@@ -540,6 +594,24 @@
       "facts": {},
       "kind": "layer",
       "signature": "()"
+    },
+    "/layer/kalfa/select": {
+      "alias": [
+        "select"
+      ],
+      "description": "The positions of the feature axis the index names, in that order; index is a list of positions or a run time component such as feature_index, and dim picks the axis (1, the features, by default). The piece a long range skip connection needs: it takes the columns the output is a correction of out of the input wire",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(index, dim=1)"
+    },
+    "/layer/kalfa/subtract": {
+      "alias": [
+        "subtract"
+      ],
+      "description": "The first input wire minus the second; shapes broadcast",
+      "facts": {},
+      "kind": "layer",
+      "signature": "(*args: Any, **kwargs: Any) -> None"
     },
     "/layer/kalfa/unflatten": {
       "alias": [
@@ -2038,6 +2110,22 @@
       "kind": "objective",
       "signature": "(models, batch, student, teacher, temperature=1.0, alpha=0.5, target=None)"
     },
+    "/objective/kalfa/mdmm": {
+      "alias": [
+        "mdmm"
+      ],
+      "description": "The modified differential method of multipliers: minimize the primary losses definition under equality constraints on other definitions (a term of one as name.term), each held at its epsilon by a Lagrange multiplier the multipliers model carries; the loss is primary + sum of scale * (lambda * inf + damping * inf^2 / 2) with inf = epsilon - value, so epsilon is the target in the unit of the term and no weight is guessed; returns loss, primary and per constraint lambda/<name> and inf/<name>. The multipliers climb when their optimizer group has a negative lr",
+      "facts": {
+        "partial": true,
+        "refs": {
+          "constraints": "loss",
+          "multipliers": "model",
+          "primary": "loss"
+        }
+      },
+      "kind": "objective",
+      "signature": "(models, batch, losses, primary, multipliers, constraints)"
+    },
     "/objective/kalfa/ntxent": {
       "alias": [
         "ntxent"
@@ -2581,6 +2669,15 @@
       "facts": {},
       "kind": "pre",
       "signature": "(base=10.0, norm=1.0)"
+    },
+    "/pre/kalfa/logit": {
+      "alias": [
+        "logit"
+      ],
+      "description": "log(x / (1 - x)) of a column inside [0, 1], the way to give a probability the whole real line, inverted by the sigmoid; the column is clipped to [low, 1 - high] first, so the two margins are what a saturated 0 and a saturated 1 come out as",
+      "facts": {},
+      "kind": "pre",
+      "signature": "(low=1e-06, high=1e-06)"
     },
     "/pre/kalfa/median_std_scaler": {
       "alias": [
@@ -3293,6 +3390,7 @@
       "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
       "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
       "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
+      "add": "/layer/kalfa/add",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
       "alpha_dropout": "/layer/torch/alpha_dropout",
@@ -3336,6 +3434,7 @@
       "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "divide": "/layer/kalfa/divide",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "dropout1d": "/layer/torch/dropout1d",
@@ -3397,6 +3496,7 @@
       "max_unpool3d": "/layer/torch/max_unpool3d",
       "maxpool1d": "/layer/torch/maxpool1d",
       "maxpool3d": "/layer/torch/maxpool3d",
+      "mdmm": "/objective/kalfa/mdmm",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
@@ -3406,6 +3506,9 @@
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
       "multihead_attention": "/layer/torch/multihead_attention",
+      "multipliers": "/layer/kalfa/multipliers",
+      "multiply": "/layer/kalfa/multiply",
+      "negate": "/layer/kalfa/negate",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
@@ -3433,6 +3536,7 @@
       "rnn": "/layer/torch/rnn",
       "rnn_cell": "/layer/torch/rnn_cell",
       "rrelu": "/layer/torch/rrelu",
+      "select": "/layer/kalfa/select",
       "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
@@ -3450,6 +3554,7 @@
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
+      "subtract": "/layer/kalfa/subtract",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "tanh_layer": "/layer/torch/tanh",
@@ -3486,6 +3591,7 @@
       "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
       "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
       "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
+      "add": "/layer/kalfa/add",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
       "alpha_dropout": "/layer/torch/alpha_dropout",
@@ -3534,6 +3640,7 @@
       "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "divide": "/layer/kalfa/divide",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "dropout1d": "/layer/torch/dropout1d",
@@ -3545,6 +3652,7 @@
       "f1": "/metric/torchmetrics/f1",
       "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
       "feature_distributions": "/plot/kalfa/feature_distributions",
+      "feature_index": "/data/kalfa/feature_index",
       "feature_width": "/data/kalfa/feature_width",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
@@ -3590,6 +3698,7 @@
       "log_cosh": "/criterion/kalfa/log_cosh",
       "log_sigmoid": "/layer/torch/log_sigmoid",
       "log_softmax": "/layer/torch/log_softmax",
+      "logit": "/pre/kalfa/logit",
       "loss_curve": "/plot/kalfa/loss_curve",
       "lppool": "/layer/torch/lppool",
       "lppool1d": "/layer/torch/lppool1d",
@@ -3603,6 +3712,7 @@
       "max_unpool3d": "/layer/torch/max_unpool3d",
       "maxpool1d": "/layer/torch/maxpool1d",
       "maxpool3d": "/layer/torch/maxpool3d",
+      "mdmm": "/objective/kalfa/mdmm",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
@@ -3612,6 +3722,9 @@
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
       "multihead_attention": "/layer/torch/multihead_attention",
+      "multipliers": "/layer/kalfa/multipliers",
+      "multiply": "/layer/kalfa/multiply",
+      "negate": "/layer/kalfa/negate",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
@@ -3648,6 +3761,7 @@
       "rnn_cell": "/layer/torch/rnn_cell",
       "robust_scaler": "/pre/sklearn/robust_scaler",
       "rrelu": "/layer/torch/rrelu",
+      "select": "/layer/kalfa/select",
       "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
@@ -3667,6 +3781,7 @@
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
+      "subtract": "/layer/kalfa/subtract",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "tanh": "/pre/kalfa/tanh",
@@ -3709,6 +3824,7 @@
       "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
       "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
       "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
+      "add": "/layer/kalfa/add",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
       "alpha_dropout": "/layer/torch/alpha_dropout",
@@ -3757,6 +3873,7 @@
       "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "divide": "/layer/kalfa/divide",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "dropout1d": "/layer/torch/dropout1d",
@@ -3768,6 +3885,7 @@
       "f1": "/metric/torchmetrics/f1",
       "feature_alpha_dropout": "/layer/torch/feature_alpha_dropout",
       "feature_distributions": "/plot/kalfa/feature_distributions",
+      "feature_index": "/data/kalfa/feature_index",
       "feature_width": "/data/kalfa/feature_width",
       "fill": "/pre/kalfa/fill",
       "filter": "/transform/kalfa/filter",
@@ -3813,6 +3931,7 @@
       "log_cosh": "/criterion/kalfa/log_cosh",
       "log_sigmoid": "/layer/torch/log_sigmoid",
       "log_softmax": "/layer/torch/log_softmax",
+      "logit": "/pre/kalfa/logit",
       "loss_curve": "/plot/kalfa/loss_curve",
       "lppool": "/layer/torch/lppool",
       "lppool1d": "/layer/torch/lppool1d",
@@ -3826,6 +3945,7 @@
       "max_unpool3d": "/layer/torch/max_unpool3d",
       "maxpool1d": "/layer/torch/maxpool1d",
       "maxpool3d": "/layer/torch/maxpool3d",
+      "mdmm": "/objective/kalfa/mdmm",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
@@ -3835,6 +3955,9 @@
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
       "multihead_attention": "/layer/torch/multihead_attention",
+      "multipliers": "/layer/kalfa/multipliers",
+      "multiply": "/layer/kalfa/multiply",
+      "negate": "/layer/kalfa/negate",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
       "onnx": "/export/kalfa/onnx",
@@ -3871,6 +3994,7 @@
       "rnn_cell": "/layer/torch/rnn_cell",
       "robust_scaler": "/pre/sklearn/robust_scaler",
       "rrelu": "/layer/torch/rrelu",
+      "select": "/layer/kalfa/select",
       "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
@@ -3890,6 +4014,7 @@
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
+      "subtract": "/layer/kalfa/subtract",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "tanh": "/pre/kalfa/tanh",
@@ -3932,6 +4057,7 @@
       "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
       "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
       "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
+      "add": "/layer/kalfa/add",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
       "alpha_dropout": "/layer/torch/alpha_dropout",
@@ -3979,6 +4105,7 @@
       "data_pipeline": "/plot/kalfa/data_pipeline",
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
+      "divide": "/layer/kalfa/divide",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "dropout1d": "/layer/torch/dropout1d",
@@ -4046,6 +4173,7 @@
       "max_unpool3d": "/layer/torch/max_unpool3d",
       "maxpool1d": "/layer/torch/maxpool1d",
       "maxpool3d": "/layer/torch/maxpool3d",
+      "mdmm": "/objective/kalfa/mdmm",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
@@ -4055,6 +4183,9 @@
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
       "multihead_attention": "/layer/torch/multihead_attention",
+      "multipliers": "/layer/kalfa/multipliers",
+      "multiply": "/layer/kalfa/multiply",
+      "negate": "/layer/kalfa/negate",
       "next_token": "/feed/kalfa/next_token",
       "normal": "/init/torch/normal",
       "one_hot": "/pre/kalfa/one_hot",
@@ -4090,6 +4221,7 @@
       "rnn_cell": "/layer/torch/rnn_cell",
       "rrelu": "/layer/torch/rrelu",
       "sample_writer": "/metric/kalfa/sample_writer",
+      "select": "/layer/kalfa/select",
       "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
@@ -4107,6 +4239,7 @@
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
+      "subtract": "/layer/kalfa/subtract",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "tanh_layer": "/layer/torch/tanh",
@@ -4149,6 +4282,7 @@
       "adaptive_maxpool": "/layer/torch/adaptive_maxpool",
       "adaptive_maxpool1d": "/layer/torch/adaptive_maxpool1d",
       "adaptive_maxpool3d": "/layer/torch/adaptive_maxpool3d",
+      "add": "/layer/kalfa/add",
       "after_epoch": "/trigger/kalfa/after_turn",
       "after_turn": "/trigger/kalfa/after_turn",
       "alpha_dropout": "/layer/torch/alpha_dropout",
@@ -4199,6 +4333,7 @@
       "derive": "/transform/kalfa/derive",
       "derived": "/rng/kalfa/derived",
       "distill": "/objective/kalfa/distill",
+      "divide": "/layer/kalfa/divide",
       "drop": "/transform/kalfa/drop",
       "dropout": "/layer/torch/dropout",
       "dropout1d": "/layer/torch/dropout1d",
@@ -4272,6 +4407,7 @@
       "maxpool": "/layer/torch/maxpool",
       "maxpool1d": "/layer/torch/maxpool1d",
       "maxpool3d": "/layer/torch/maxpool3d",
+      "mdmm": "/objective/kalfa/mdmm",
       "median_std_scaler": "/pre/kalfa/median_std_scaler",
       "metric_above": "/trigger/kalfa/metric_above",
       "metric_below": "/trigger/kalfa/metric_below",
@@ -4281,6 +4417,9 @@
       "mps": "/device/kalfa/mps",
       "mse": "/criterion/kalfa/mse",
       "multihead_attention": "/layer/torch/multihead_attention",
+      "multipliers": "/layer/kalfa/multipliers",
+      "multiply": "/layer/kalfa/multiply",
+      "negate": "/layer/kalfa/negate",
       "normal": "/init/torch/normal",
       "normalize": "/pre/kalfa/normalize",
       "ntxent": "/objective/kalfa/ntxent",
@@ -4321,6 +4460,7 @@
       "sample_writer": "/metric/kalfa/sample_writer",
       "samples_gif": "/plot/kalfa/samples_gif",
       "samples_matrix": "/plot/kalfa/samples_matrix",
+      "select": "/layer/kalfa/select",
       "selu": "/layer/torch/selu",
       "sequential": "/split/kalfa/sequential",
       "sgd": "/optimizer/torch/sgd",
@@ -4339,6 +4479,7 @@
       "standard_scaler": "/pre/sklearn/standard_scaler",
       "state_dict": "/export/kalfa/state_dict",
       "step_decay": "/schedule/kalfa/step_decay",
+      "subtract": "/layer/kalfa/subtract",
       "supervised": "/turn/kalfa/alternating",
       "table": "/feed/kalfa/table",
       "tanh_layer": "/layer/torch/tanh",

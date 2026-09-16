@@ -37,6 +37,13 @@ alias:
   group_norm: /layer/torch/group_norm
   dropout: /layer/torch/dropout
   reparam: /layer/kalfa/reparam
+  select: /layer/kalfa/select
+  add: /layer/kalfa/add
+  subtract: /layer/kalfa/subtract
+  multiply: /layer/kalfa/multiply
+  divide: /layer/kalfa/divide
+  negate: /layer/kalfa/negate
+  multipliers: /layer/kalfa/multipliers
   l1_distance: /layer/kalfa/l1_distance
   gru: /layer/torch/gru
   last_step: /layer/torch/last_step
@@ -192,6 +199,7 @@ alias:
   torchview: /plot/torchview/architecture
   # objective
   weighted_sum: /objective/kalfa/weighted_sum
+  mdmm: /objective/kalfa/mdmm
   # strategy
   grid: /strategy/kalfa/grid
   random: /strategy/kalfa/random

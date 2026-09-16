@@ -39,3 +39,14 @@ def target_weights(loader, weights, target=None):
 
 def feature_width(loader):
     return len(loader.dataset.frame.features)
+
+
+def feature_index(loader, columns):
+    names = list(loader.dataset.frame.features)
+    chosen = []
+    for pattern in [columns] if isinstance(columns, str) else list(columns):
+        hits = [name for name in names if fnmatch.fnmatchcase(name, str(pattern))]
+        if not hits:
+            raise ValueError(f"feature_index: {pattern!r} matches no feature column; the columns are {names}")
+        chosen.extend(name for name in hits if name not in chosen)
+    return [names.index(name) for name in chosen]

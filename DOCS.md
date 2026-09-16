@@ -18,12 +18,12 @@ The legos a config writes, by kind.
 | `transform` | data.transform | 5 |
 | `split` | data.split | 5 |
 | `frame` | data.frame | 2 |
-| `pre` | data.preprocessors | 28 |
+| `pre` | data.preprocessors | 29 |
 | `feed` | data.feed | 3 |
-| `layer` | model nodes | 118 |
+| `layer` | model nodes | 125 |
 | `init` | model init | 5 |
 | `criterion` | losses, metrics | 7 |
-| `objective` | losses | 7 |
+| `objective` | losses | 8 |
 | `metric` | metrics | 9 |
 | `adapter` | the driver | 3 |
 | `optimizer` | optimizers | 3 |
@@ -39,7 +39,7 @@ The legos a config writes, by kind.
 | `export` | kalfa export --format | 3 |
 | `calibrate` | calibrate | 1 |
 | `lego` | a param value, or the contract | 1 |
-| `data` | a param value ({uri: name}) | 4 |
+| `data` | a param value ({uri: name}) | 5 |
 
 ### source
 
@@ -92,6 +92,7 @@ The legos a config writes, by kind.
 | `/pre/kalfa/fill` | `fill` | `(value=None, method=None)` |  | Fill the missing values of a column without a fit: a constant (a number, or a name such as missing that becomes its own category), or method ffill or bfill along the rows |
 | `/pre/kalfa/label_encoder` | `label_encoder` | `()` | state: True | Integer codes of a label column, sorted by label; inverted in reports and predictions, class scores decode to labels |
 | `/pre/kalfa/log` | `log` | `(base=10.0, norm=1.0)` |  | log1p of a column divided by norm, in the given base |
+| `/pre/kalfa/logit` | `logit` | `(low=1e-06, high=1e-06)` |  | log(x / (1 - x)) of a column inside [0, 1], the way to give a probability the whole real line, inverted by the sigmoid; the column is clipped to [low, 1 - high] first, so the two margins are what a saturated 0 and a saturated 1 come out as |
 | `/pre/kalfa/median_std_scaler` | `median_std_scaler` | `()` | grouped: True | Center a column on its median and scale it by its standard deviation: the center an outlier does not move, the scale of a standard scaler |
 | `/pre/kalfa/normalize` | `normalize` | `(mean, std)` |  | Normalize an image tensor per channel; mean and std are numbers, lists or the presets imagenet and cifar10 |
 | `/pre/kalfa/one_hot` | `one_hot` | `()` | state: True | One hot columns <field>_<category> of a categorical column; unknown categories give zeros |
@@ -125,13 +126,20 @@ The legos a config writes, by kind.
 
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
+| `/layer/kalfa/add` | `add` | `(*args: Any, **kwargs: Any) -> None` |  | The elementwise sum of its input wires, the residual connection of a model graph; shapes broadcast |
+| `/layer/kalfa/divide` | `divide` | `(*args: Any, **kwargs: Any) -> None` |  | The first input wire divided by the second; shapes broadcast and a zero divisor gives an infinity, as torch does |
 | `/layer/kalfa/l1_distance` | `l1_distance` | `()` |  | Mean absolute difference of two wires per sample |
 | `/layer/kalfa/l2_normalize` | `l2_normalize` | `(eps=1e-12)` |  | Divide every sample by the L2 norm of its own feature vector (sklearn's Normalizer as a layer: it reads the whole vector, so it belongs to the model, not to a column chain) |
 | `/layer/kalfa/linear` | `linear` | `(out_features, in_features=None)` |  | Linear layer; without in_features the input width is taken from the first batch |
 | `/layer/kalfa/linear_relu` | `linear_relu` | `(out_features, in_features=None)` |  | Linear layer followed by ReLU; lazy without in_features |
 | `/layer/kalfa/mlp` | `mlp` | `(widths, activation='relu', dropout=0.0, out_features=None, in_features=None)` |  | A multilayer perceptron in one node: a linear layer, the activation and dropout for every width, then a plain linear layer of out_features when it is written; lazy without in_features |
+| `/layer/kalfa/multipliers` | `multipliers` | `(names, init=0.0)` |  | The Lagrange multipliers of an mdmm loss as a model of their own: one learnable lambda per name, in the order written, started at the lmbda_init of its entry (init without one); names takes the constraints mapping of the loss (names: $constraints$) so the two stay in step, and forward ignores its input and returns the vector. A model, so an optimizer updates them (a group matching <name>.* with a negative lr, the gradient ascent of a saddle point) and the checkpoint carries them |
+| `/layer/kalfa/multiply` | `multiply` | `(*args: Any, **kwargs: Any) -> None` |  | The elementwise product of its input wires, the gate of a model graph; shapes broadcast |
+| `/layer/kalfa/negate` | `negate` | `(*args: Any, **kwargs: Any) -> None` |  | Minus the input wire |
 | `/layer/kalfa/polynomial` | `polynomial` | `(degree=2, interaction_only=False, bias=False, keep=True)` |  | Polynomial expansion of the feature vector: the features and every product of degree of them (interaction_only drops the squares, bias adds a constant column, keep: false returns the products alone); the place for feature interactions, computed per batch |
 | `/layer/kalfa/reparam` | `reparam` | `()` |  | Sample z from mu and logvar in train mode, return mu in eval mode |
+| `/layer/kalfa/select` | `select` | `(index, dim=1)` |  | The positions of the feature axis the index names, in that order; index is a list of positions or a run time component such as feature_index, and dim picks the axis (1, the features, by default). The piece a long range skip connection needs: it takes the columns the output is a correction of out of the input wire |
+| `/layer/kalfa/subtract` | `subtract` | `(*args: Any, **kwargs: Any) -> None` |  | The first input wire minus the second; shapes broadcast |
 | `/layer/kalfa/unflatten` | `unflatten` | `(shape)` |  | Reshape the features of every sample to shape |
 | `/layer/torch/adaptive_avgpool` | `adaptive_avgpool` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool2d to output_size, a number or [height, width] |
 | `/layer/torch/adaptive_avgpool1d` | `adaptive_avgpool1d` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool1d |
@@ -272,6 +280,7 @@ The legos a config writes, by kind.
 |---|---|---|---|---|
 | `/objective/kalfa/ddpm` | `ddpm` | `(models, batch, model, schedule, rng=None)` | partial: True; refs: model=model, schedule=schedule | DDPM noise prediction loss: a random time step and noise per sample (rng), the model predicts the noise of the noised input |
 | `/objective/kalfa/distill` | `distill` | `(models, batch, student, teacher, temperature=1.0, alpha=0.5, target=None)` | partial: True; refs: student=model, teacher=model | Knowledge distillation: alpha * KL(teacher \|\| student) at temperature T (times T squared) plus (1 - alpha) * cross entropy of the student; returns loss, ce and kl |
+| `/objective/kalfa/mdmm` | `mdmm` | `(models, batch, losses, primary, multipliers, constraints)` | partial: True; refs: primary=loss, constraints=loss, multipliers=model | The modified differential method of multipliers: minimize the primary losses definition under equality constraints on other definitions (a term of one as name.term), each held at its epsilon by a Lagrange multiplier the multipliers model carries; the loss is primary + sum of scale * (lambda * inf + damping * inf^2 / 2) with inf = epsilon - value, so epsilon is the target in the unit of the term and no weight is guessed; returns loss, primary and per constraint lambda/<name> and inf/<name>. The multipliers climb when their optimizer group has a negative lr |
 | `/objective/kalfa/ntxent` | `ntxent` | `(models, batch, model, temperature=0.5)` | partial: True; refs: model=model | NT-Xent contrastive loss over the two views of every image in the batch |
 | `/objective/kalfa/vae` | `vae` | `(models, batch, encoder, decoder, recon, w_rec=1.0, kl_schedule=None, step=None, rng=None)` | partial: True; refs: encoder=model, decoder=model, recon=criterion, kl_schedule=schedule | VAE loss: w_rec * recon(decoder(z), x) + kl_schedule(step) * KL, z sampled from the encoder's mu and logvar; returns loss, recon, kl and w_kl |
 | `/objective/kalfa/weighted_sum` | `weighted_sum` | `(models, batch, terms, losses)` | partial: True; refs: terms=loss | The weighted sum of other losses definitions on the same batch: terms maps a losses name to its weight; returns loss and every term |
@@ -430,6 +439,7 @@ The legos a config writes, by kind.
 | URI | Alias | Signature | Facts | Description |
 |---|---|---|---|---|
 | `/data/kalfa/class_weights` | `class_weights` | `(loader, target=None)` | counts: True | Inverse frequency class weights of the train set's target field, mean one; built once the train loader exists |
+| `/data/kalfa/feature_index` | `feature_index` | `(loader, columns)` |  | The positions of the named columns in the feature tensor x, in the order the names are written; columns is a name, a glob or a list of them, and the positions follow the fitted plan, so a chain that widens a column (one_hot) is already counted; for select and for a loss that acts on part of the features |
 | `/data/kalfa/feature_width` | `feature_width` | `(loader)` |  | The width of the feature tensor x, from the fitted plan the train loader carries; for a layer whose shape follows it (layer_norm) |
 | `/data/kalfa/target_weights` | `target_weights` | `(loader, weights, target=None)` |  | A weight per target column, from names and globs resolved against the columns of the target field the dataset carries (every target field in order without target), default for the rest; built once the train loader exists |
 | `/data/kalfa/vocab_size` | `vocab_size` | `(prep)` |  | The vocabulary size of the fitted tokenizer among the preprocessors; built once prep exists |
@@ -524,6 +534,13 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
+| `select` | `/layer/kalfa/select` | layer |
+| `add` | `/layer/kalfa/add` | layer |
+| `subtract` | `/layer/kalfa/subtract` | layer |
+| `multiply` | `/layer/kalfa/multiply` | layer |
+| `divide` | `/layer/kalfa/divide` | layer |
+| `negate` | `/layer/kalfa/negate` | layer |
+| `multipliers` | `/layer/kalfa/multipliers` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
@@ -669,6 +686,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
+| `mdmm` | `/objective/kalfa/mdmm` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
 | `sobol` | `/strategy/kalfa/sobol` | strategy |
@@ -720,6 +738,13 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
+| `select` | `/layer/kalfa/select` | layer |
+| `add` | `/layer/kalfa/add` | layer |
+| `subtract` | `/layer/kalfa/subtract` | layer |
+| `multiply` | `/layer/kalfa/multiply` | layer |
+| `divide` | `/layer/kalfa/divide` | layer |
+| `negate` | `/layer/kalfa/negate` | layer |
+| `multipliers` | `/layer/kalfa/multipliers` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
@@ -865,6 +890,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
+| `mdmm` | `/objective/kalfa/mdmm` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
 | `sobol` | `/strategy/kalfa/sobol` | strategy |
@@ -892,6 +918,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `sinh` | `/pre/kalfa/sinh` | pre |
 | `tanh` | `/pre/kalfa/tanh` | pre |
 | `atanh` | `/pre/kalfa/atanh` | pre |
+| `logit` | `/pre/kalfa/logit` | pre |
 | `kbins_discretizer` | `/pre/sklearn/kbins_discretizer` | pre |
 | `spline_transformer` | `/pre/sklearn/spline_transformer` | pre |
 | `window` | `/feed/kalfa/window` | feed |
@@ -910,6 +937,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `class_weights` | `/data/kalfa/class_weights` | data |
 | `target_weights` | `/data/kalfa/target_weights` | data |
 | `feature_width` | `/data/kalfa/feature_width` | data |
+| `feature_index` | `/data/kalfa/feature_index` | data |
 
 ### /alias/kalfa/tabular
 
@@ -946,6 +974,13 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
+| `select` | `/layer/kalfa/select` | layer |
+| `add` | `/layer/kalfa/add` | layer |
+| `subtract` | `/layer/kalfa/subtract` | layer |
+| `multiply` | `/layer/kalfa/multiply` | layer |
+| `divide` | `/layer/kalfa/divide` | layer |
+| `negate` | `/layer/kalfa/negate` | layer |
+| `multipliers` | `/layer/kalfa/multipliers` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
@@ -1091,6 +1126,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
+| `mdmm` | `/objective/kalfa/mdmm` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
 | `sobol` | `/strategy/kalfa/sobol` | strategy |
@@ -1118,6 +1154,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `sinh` | `/pre/kalfa/sinh` | pre |
 | `tanh` | `/pre/kalfa/tanh` | pre |
 | `atanh` | `/pre/kalfa/atanh` | pre |
+| `logit` | `/pre/kalfa/logit` | pre |
 | `kbins_discretizer` | `/pre/sklearn/kbins_discretizer` | pre |
 | `spline_transformer` | `/pre/sklearn/spline_transformer` | pre |
 | `window` | `/feed/kalfa/window` | feed |
@@ -1136,6 +1173,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `class_weights` | `/data/kalfa/class_weights` | data |
 | `target_weights` | `/data/kalfa/target_weights` | data |
 | `feature_width` | `/data/kalfa/feature_width` | data |
+| `feature_index` | `/data/kalfa/feature_index` | data |
 
 ### /alias/kalfa/text
 
@@ -1172,6 +1210,13 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
+| `select` | `/layer/kalfa/select` | layer |
+| `add` | `/layer/kalfa/add` | layer |
+| `subtract` | `/layer/kalfa/subtract` | layer |
+| `multiply` | `/layer/kalfa/multiply` | layer |
+| `divide` | `/layer/kalfa/divide` | layer |
+| `negate` | `/layer/kalfa/negate` | layer |
+| `multipliers` | `/layer/kalfa/multipliers` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
@@ -1317,6 +1362,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
+| `mdmm` | `/objective/kalfa/mdmm` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
 | `sobol` | `/strategy/kalfa/sobol` | strategy |
@@ -1392,6 +1438,13 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `group_norm` | `/layer/torch/group_norm` | layer |
 | `dropout` | `/layer/torch/dropout` | layer |
 | `reparam` | `/layer/kalfa/reparam` | layer |
+| `select` | `/layer/kalfa/select` | layer |
+| `add` | `/layer/kalfa/add` | layer |
+| `subtract` | `/layer/kalfa/subtract` | layer |
+| `multiply` | `/layer/kalfa/multiply` | layer |
+| `divide` | `/layer/kalfa/divide` | layer |
+| `negate` | `/layer/kalfa/negate` | layer |
+| `multipliers` | `/layer/kalfa/multipliers` | layer |
 | `l1_distance` | `/layer/kalfa/l1_distance` | layer |
 | `gru` | `/layer/torch/gru` | layer |
 | `last_step` | `/layer/torch/last_step` | layer |
@@ -1537,6 +1590,7 @@ stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/k
 | `architecture_text` | `/plot/kalfa/architecture_text` | plot |
 | `torchview` | `/plot/torchview/architecture` | plot |
 | `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
+| `mdmm` | `/objective/kalfa/mdmm` | objective |
 | `grid` | `/strategy/kalfa/grid` | strategy |
 | `random` | `/strategy/kalfa/random` | strategy |
 | `sobol` | `/strategy/kalfa/sobol` | strategy |

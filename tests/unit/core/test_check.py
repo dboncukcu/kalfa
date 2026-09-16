@@ -98,6 +98,38 @@ def test_set_reaches_into_a_mapping_param_of_a_loss(workdir):
     assert kinds.count("set_value") == 5 and "set_target" not in kinds
 
 
+def with_mdmm(config, constraints):
+    config["params"]["constraints"] = constraints
+    config["model"]["models"]["lambdas"] = {"optimizer": "main", "inputs": ["x"], "outputs": ["lmbda"],
+                                            "nodes": [{"uri": "multipliers", "params": {"names": "$constraints$"}}]}
+    config["model"]["models"]["net"]["optimizer"] = "main"
+    config["optimizers"] = {"main": {"uri": "adam", "params": {"lr": 1.0e-3, "groups": [{"match": "lambdas.*",
+                                                                                          "lr": -2.0e-2}]},
+                                     "loss": "total"}}
+    config["losses"]["both"] = {"uri": "weighted_sum", "params": {"terms": {"loss_mse": 1.0, "loss_mae": 1.0}}}
+    config["losses"]["total"] = {"uri": "mdmm", "params": {"primary": "loss_mse", "multipliers": "lambdas",
+                                                           "constraints": "$constraints$"}}
+    config["training"]["predicts"] = "net"
+    del config["training"]["loss"]
+    del config["training"]["rules"]
+    return config
+
+
+def test_mdmm_refs_reach_a_term_of_a_definition_and_the_multipliers_model(workdir):
+    constraints = {"loss_mae": {"epsilon": 0.1, "lmbda_init": -1.0}, "both.loss_mae": {"epsilon": 0.0, "scale": 2.0}}
+    prepared, kinds = kinds_of(workdir, with_mdmm(minimal(), constraints))
+    assert kinds == []
+    objective = prepared.document["losses"]["total"]["params"]["objective"]
+    assert objective["params"]["constraints"] == constraints and objective["params"]["multipliers"] == "lambdas"
+    node = prepared.document["blocks"]["lambdas"]["spec"][0]
+    assert node["params"]["names"] == constraints
+    assert node["params"]["names"] is not objective["params"]["constraints"]
+    optimizers = prepared.document["flow"]["optimizers"]["params"]["optimizer_items"]
+    assert optimizers[0]["models"] == {"net": "net", "lambdas": "lambdas"} and optimizers[0]["loss"] == "total"
+    prepared, kinds = kinds_of(workdir, with_mdmm(minimal(), {"ghost.loss_mae": {"epsilon": 0.0}}), name="bad.yaml")
+    assert kinds == ["unresolved_ref"]
+
+
 def test_glob_ambiguous_and_column_missing(workdir):
     config = minimal()
     config["data"]["fields"] = {"x?": {}, "?1": {}, "price": {"target": True}, "zzz*": {}}

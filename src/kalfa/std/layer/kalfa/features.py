@@ -3,6 +3,22 @@ from itertools import combinations, combinations_with_replacement
 import torch
 from torch import nn
 
+from kalfa.std.common.deferred import later
+
+
+class Select(nn.Module):
+    def __init__(self, index, dim=1):
+        super().__init__()
+        self.dim = int(dim)
+        self.register_buffer("index", torch.as_tensor([int(position) for position in index], dtype=torch.long))
+
+    def forward(self, values):
+        return torch.index_select(values, self.dim, self.index)
+
+
+def select(index, dim=1):
+    return later(Select, index=index, dim=dim)
+
 
 class Polynomial(nn.Module):
     def __init__(self, degree=2, interaction_only=False, bias=False, keep=True):

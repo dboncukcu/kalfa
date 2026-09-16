@@ -16,3 +16,8 @@ lego("/data/kalfa/target_weights", "components:target_weights", alias="target_we
 lego("/data/kalfa/feature_width", "components:feature_width", alias="feature_width",
      description="The width of the feature tensor x, from the fitted plan the train loader carries; for a layer whose "
                  "shape follows it (layer_norm)")
+lego("/data/kalfa/feature_index", "components:feature_index", alias="feature_index",
+     description="The positions of the named columns in the feature tensor x, in the order the names are written; "
+                 "columns is a name, a glob or a list of them, and the positions follow the fitted plan, so a chain "
+                 "that widens a column (one_hot) is already counted; for select and for a loss that acts on part of "
+                 "the features")

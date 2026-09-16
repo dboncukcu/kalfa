@@ -27,6 +27,15 @@ lego("/objective/kalfa/vae", "vae:vae", partial=True,
      description="VAE loss: w_rec * recon(decoder(z), x) + kl_schedule(step) * KL, z sampled from the encoder's mu "
                  "and logvar; returns loss, recon, kl and w_kl")
 
+lego("/objective/kalfa/mdmm", "mdmm:mdmm", partial=True,
+     refs={"primary": "loss", "constraints": "loss", "multipliers": "model"}, alias="mdmm",
+     description="The modified differential method of multipliers: minimize the primary losses definition under "
+                 "equality constraints on other definitions (a term of one as name.term), each held at its epsilon "
+                 "by a Lagrange multiplier the multipliers model carries; the loss is primary + sum of scale * "
+                 "(lambda * inf + damping * inf^2 / 2) with inf = epsilon - value, so epsilon is the target in the "
+                 "unit of the term and no weight is guessed; returns loss, primary and per constraint lambda/<name> "
+                 "and inf/<name>. The multipliers climb when their optimizer group has a negative lr")
+
 lego("/objective/kalfa/weighted_sum", "weighted_sum:weighted_sum", partial=True, refs={"terms": "loss"},
      alias="weighted_sum",
      description="The weighted sum of other losses definitions on the same batch: terms maps a losses name to its "

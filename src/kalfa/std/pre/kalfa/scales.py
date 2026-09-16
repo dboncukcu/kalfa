@@ -82,6 +82,27 @@ class Tanh(Scaler):
         return numpy.arctanh(clipped) * self.scale
 
 
+class Logit(Scaler):
+    def __init__(self, low=1e-6, high=1e-6):
+        for name, value in (("low", low), ("high", high)):
+            if not 0.0 < value < 0.5:
+                raise ValueError(f"logit: {name} is a margin inside (0, 0.5), got {value!r}")
+        self.low = float(low)
+        self.high = float(high)
+
+    def apply(self, values):
+        clipped = numpy.clip(numpy.asarray(values, dtype="float64"), self.low, 1.0 - self.high)
+        return numpy.log(clipped / (1.0 - clipped))
+
+    def inverse(self, values):
+        out = numpy.asarray(values, dtype="float64")
+        damped = numpy.exp(-numpy.abs(out))
+        return numpy.where(out >= 0.0, 1.0 / (1.0 + damped), damped / (1.0 + damped))
+
+    def inverse_torch(self, tensor, columns=None):
+        return torch.sigmoid(tensor)
+
+
 class Atanh(Scaler):
     def __init__(self, scale=1.0):
         if scale <= 0.0:

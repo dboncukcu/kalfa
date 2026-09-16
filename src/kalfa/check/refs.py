@@ -6,6 +6,10 @@ from ..std.common.runtime import expand_targets
 from ..std.pre.base import assign_fields
 
 
+def loss_head(name):
+    return str(name).partition(".")[0]
+
+
 def value_kind(value):
     if isinstance(value, bool):
         return "boolean"
@@ -70,7 +74,7 @@ class RefRules:
         ref_type = self.registry.facts(uri).refs.get(head) if isinstance(uri, str) else None
         if isinstance(value, dict):
             self.mapping_effect(key, owner, head, written, value, ref_type, path)
-        elif ref_type == "loss" and isinstance(value, str) and value not in self.losses:
+        elif ref_type == "loss" and isinstance(value, str) and loss_head(value) not in self.losses:
             self.error("set_value", f"set {key} names {value!r}, which losses does not define", path)
         elif ref_type not in (None, "loss") and isinstance(value, str) \
                 and resolve_alias(value, self.surface.aliases) is None:
@@ -84,7 +88,7 @@ class RefRules:
         if ref_type != "loss":
             return
         for name in value:
-            if name not in self.losses:
+            if loss_head(name) not in self.losses:
                 self.error("set_value", f"set {key} names {name!r}, which losses does not define", path)
 
     def inner_effect(self, key, walked, written, inner, value, path):
@@ -108,7 +112,7 @@ class RefRules:
             value = params.get(param)
             if ref_type == "loss" and isinstance(value, dict):
                 for name in value:
-                    if name not in self.losses:
+                    if loss_head(name) not in self.losses:
                         self.error("unresolved_ref", f"{param}: {name!r} is no losses definition",
                                    path + ("params", param))
                 continue
@@ -119,7 +123,7 @@ class RefRules:
                 if base not in self.models:
                     self.error("unresolved_ref", f"{param}: {value!r} is no model", path + ("params", param))
             elif ref_type == "loss":
-                if value not in self.losses:
+                if loss_head(value) not in self.losses:
                     self.error("unresolved_ref", f"{param}: {value!r} is no losses definition",
                                path + ("params", param))
             elif ref_type in ("pre", "preprocessor"):

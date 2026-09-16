@@ -16,6 +16,7 @@ alias:
   sinh: /pre/kalfa/sinh
   tanh: /pre/kalfa/tanh
   atanh: /pre/kalfa/atanh
+  logit: /pre/kalfa/logit
   kbins_discretizer: /pre/sklearn/kbins_discretizer
   spline_transformer: /pre/sklearn/spline_transformer
   # feed
@@ -38,3 +39,4 @@ alias:
   class_weights: /data/kalfa/class_weights
   target_weights: /data/kalfa/target_weights
   feature_width: /data/kalfa/feature_width
+  feature_index: /data/kalfa/feature_index
