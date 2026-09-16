@@ -500,8 +500,8 @@ losses:
 optimizers:
   main:
     uri: adamw
-    params: {lr: 1.0e-3, groups: [{match: "backbone.*", lr: 1.0e-5},
-                                  {match: "lambdas.*", lr: -2.0e-4}]}   # the multipliers climb: a negative rate
+    params: {lr: 1.0e-3, groups: [{name: backbone, match: "backbone.*", lr: 1.0e-5},
+                                  {name: lambdas, match: "lambdas.*", lr: -2.0e-4}]}   # the multipliers climb
     loss: ce                                              # the name of what it minimizes
     schedule: {uri: warmup_cosine, params: {warmup: 500, total: 20000}}
 ```
@@ -561,8 +561,10 @@ training:
 
 Rules are the piece that usually lives in a hand written training loop. A rule that fired stays fired; `after:`
 chains them; among rules writing the same key the last one wins; `set:` can retarget the loss, open a frozen
-model, change a loss parameter or an optimizer learning rate. Every effect in force is written to
-`history.jsonl` as `effect/<target>`, so a curve can be read against what the run was doing at the time.
+model, change a loss parameter or an optimizer learning rate: `main.lr` is the rate of the default group,
+`main.backbone.lr` that of a named group, `main.*.lr` every group, and a relative value (`{times: 0.5}`) applies to
+each group's own rate. Every effect in force is written to `history.jsonl` as `effect/<target>`, so a curve can
+be read against what the run was doing at the time.
 
 `alternating` walks the optimizers in `order` every step; each computes its own loss `steps` times, backpropagates
 and updates only its own models, zeroing only its own gradients. That one turn lego covers supervised training,
@@ -909,13 +911,14 @@ kalfa stop runs/x        # writes stop.json; the run ends after its current turn
 ## The board
 
 ```bash
-kalfa board runs --port 8080        # http.server plus a Vue page; no network needed, no extra dependency
+kalfa board runs --port 8080        # http.server plus one page; Vue and Plotly come from jsDelivr, pinned by version and hash
 ```
 
 The board reads records; it never writes one except to ask a run to stop. It finds every record under the root,
 follows the live ones over a server sent event stream, and gives every record one page of tabs. The address bar
 carries the record, the tab, the open chart and the view options, so a link is one exact view and a reload keeps
-it. On a batch system it runs on the login node and the browser reaches it through an ssh tunnel.
+it. Every chart zooms with a drag and resets with a double click, and a log axis is a real log axis. On a batch
+system it runs on the login node and the browser reaches it through an ssh tunnel.
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_monitor.png" width="920" alt="the monitor tab of a finished run"></p>
 

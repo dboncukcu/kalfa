@@ -350,104 +350,121 @@ function buildHash(path, params) {
   return `#/${path.split("/").map(encodeURIComponent).join("/")}${text ? "?" + text : ""}`;
 }
 
-function chartOptions(view) {
+function plotTheme() {
   const dark = darkMode();
-  const settings = { ...defaultPlot(), ...(view.settings || {}) };
-  const kind = view.kind || "line";
-  const logy = !!view.logy;
-  const up = value => (logy ? Math.log10(value) : value);
-  const down = value => (logy ? Math.pow(10, value) : value);
-  const back = value => (view.xlog ? Math.pow(10, Number(value)) : Number(value));
-  const kinds = view.lines.map(line => line.kind || kind);
-  const series = view.lines.map((line, index) => ({
-    name: line.name, type: kinds[index],
-    data: line.points.filter(point => Number.isFinite(point[1]) && (!logy || point[1] > 0)).map(point => [Number(point[0]), up(point[1])]) }));
-  const xs = series.flatMap(entry => entry.data.map(point => point[0]));
-  const [low, high] = extent(xs);
-  const [bottom, top] = extent(series.flatMap(entry => entry.data.map(point => point[1])));
-  const integral = xs.length > 0 && !view.xlog && xs.every(Number.isInteger);
-  let ticks = 8;
-  let span = {};
-  if (view.xlog && Number.isFinite(high - low)) ticks = Math.max(1, Math.round(high - low));
-  else if (integral && high > low && kind !== "bar") {
-    const step = Math.max(1, Math.ceil((high - low) / 8));
-    ticks = Math.ceil((high - low) / step);
-    span = { min: low, max: low + ticks * step };
-  }
-  const markers = markerSize(scatterPoints(view.lines, kind), view.settings);
-  const pad = bottom === top && Number.isFinite(top) ? (Math.abs(top) * 0.1 || 1) : 0;
-  const marks = (view.marks || []).map(mark => (typeof mark === "number" ? { x: mark } : mark));
-  const shownMarks = marks.filter((_, index) => index % (Math.ceil(marks.length / 60) || 1) === 0);
-  const labelled = Math.ceil(shownMarks.length / 12) || 1;
-  const noteOf = value => {
-    if (!view.turns) return "";
-    const found = marks.filter(mark => mark.text && mark.x <= value).pop();
-    return found ? ` · ${found.text}` : "";
-  };
-  return {
-    chart: { type: kinds.some(item => item !== kind) ? "line" : kind, height: view.height, background: "transparent", fontFamily: "inherit",
-             foreColor: dark ? "#b7bcc4" : "#4a4f57", animations: { enabled: false },
-             zoom: { enabled: kind !== "bar", type: kind === "scatter" ? "xy" : "x", autoScaleYaxis: kind !== "scatter" },
-             toolbar: { show: true, offsetY: -4, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } } },
-    series,
-    colors: view.lines.map(line => line.color),
-    stroke: { width: kinds.map(item => (item === "scatter" ? 0 : settings.width)), curve: settings.curve, dashArray: view.lines.map(line => (line.dashed ? 5 : 0)) },
-    markers: { size: kinds.map(item => (item === "scatter" ? markers : settings.dots)), hover: { size: Math.max(4, markers) } },
-    plotOptions: { bar: { columnWidth: "90%" } },
-    dataLabels: { enabled: false },
-    legend: { position: "top", horizontalAlign: "left", showForSingleSeries: true, onItemClick: { toggleDataSeries: true } },
-    grid: { show: settings.grid, borderColor: dark ? "#2d3238" : "#e3e6ea" },
-    xaxis: { type: "numeric", ...span, title: { text: view.xlabel || "" }, tickAmount: ticks,
-             labels: { formatter: value => (integral ? String(Math.round(back(value))) : tick(back(value))), rotate: 0, hideOverlappingLabels: true },
-             tooltip: { enabled: false } },
-    yaxis: { title: { text: view.ylabel || "" }, labels: { formatter: value => tick(down(Number(value))) },
-             ...(pad ? { min: bottom - pad, max: top + pad } : {}) },
-    tooltip: { shared: kind !== "scatter", intersect: kind === "scatter", theme: dark ? "dark" : "light",
-               x: { formatter: value => `${view.xlabel || "x"} ${fmt(back(value))}${noteOf(back(value))}` }, y: { formatter: value => fmt(down(Number(value))) } },
-    annotations: { xaxis: shownMarks.map((mark, index) => ({
-      x: mark.x, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3,
-      ...(mark.text && index % labelled === 0 ? { label: { text: mark.text, position: "top", orientation: "horizontal", borderWidth: 0, offsetY: -2,
-                                                           style: { background: "transparent", color: dark ? "#868d97" : "#7d838d", fontSize: "10px", fontFamily: "inherit" } } } : {}) })) },
-    theme: { mode: dark ? "dark" : "light" },
-  };
+  return { dark, ink: dark ? "#b7bcc4" : "#4a4f57", muted: dark ? "#868d97" : "#7d838d", grid: dark ? "#2d3238" : "#e3e6ea",
+           line: dark ? "#3c424a" : "#cfd4da", surface: dark ? "#23272d" : "#ffffff" };
 }
 
+function plotConfig(name) {
+  return { displaylogo: false, responsive: true, scrollZoom: true,
+           modeBarButtonsToRemove: ["lasso2d", "select2d", "sendDataToCloud", "toggleSpikelines"],
+           toImageButtonOptions: { format: "png", scale: 2, filename: (name || "chart").replace(/[^\w.-]+/g, "_") } };
+}
+
+function plotFrame(view, theme) {
+  return { height: view.height, margin: { l: 60, r: 18, t: 30, b: 48 }, paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+           font: { family: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace", size: 11, color: theme.ink },
+           showlegend: true, legend: { orientation: "h", x: 0, y: 1, xanchor: "left", yanchor: "bottom", font: { size: 11 } },
+           hoverlabel: { bgcolor: theme.surface, bordercolor: theme.line, font: { size: 11, color: theme.ink } },
+           modebar: { color: theme.muted, activecolor: theme.ink, bgcolor: "rgba(0,0,0,0)" }, dragmode: "zoom" };
+}
+
+function axisFrame(theme, grid, title) {
+  return { title: { text: title || "", font: { size: 11 } }, showgrid: grid, gridcolor: theme.grid, zeroline: false, linecolor: theme.line,
+           ticks: "outside", tickcolor: theme.line, exponentformat: "power" };
+}
+
+function integerStep(values) {
+  if (!values.length || !values.every(Number.isInteger)) return null;
+  const [low, high] = extent(values);
+  return high > low ? Math.max(1, Math.ceil((high - low) / 8)) : 1;
+}
+
+function chartFigure(view) {
+  const theme = plotTheme();
+  const settings = { ...defaultPlot(), ...(view.settings || {}) };
+  const kind = view.kind || "line";
+  const shape = { straight: "linear", smooth: "spline", stepline: "hv" }[settings.curve] || "linear";
+  const markers = markerSize(scatterPoints(view.lines, kind), view.settings);
+  const marks = (view.marks || []).map(mark => (typeof mark === "number" ? { x: mark } : mark));
+  const turnOf = value => { const found = marks.filter(mark => mark.text && mark.x <= value).pop(); return found ? found.text : ""; };
+  const data = view.lines.map(line => {
+    const type = line.kind || kind;
+    const points = line.points.filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+    const x = points.map(point => point[0]), y = points.map(point => point[1]);
+    const trace = { name: line.name, x, y, hoverlabel: { namelength: -1 } };
+    if (type === "bar") return { ...trace, type: "bar", marker: { color: line.color }, ...(line.widths ? { width: line.widths } : {}) };
+    trace.type = "scatter";
+    if (type === "scatter") {
+      trace.mode = "markers";
+      trace.marker = { color: line.color, size: markers };
+    } else {
+      trace.mode = settings.dots > 0 ? "lines+markers" : "lines";
+      trace.line = { color: line.color, width: settings.width, shape, dash: line.dashed ? "dash" : "solid" };
+      trace.marker = { color: line.color, size: settings.dots };
+    }
+    if (view.turns) {
+      trace.customdata = x.map(turnOf);
+      trace.hovertemplate = "%{y}<br>step %{x} · %{customdata}<extra>%{fullData.name}</extra>";
+    }
+    return trace;
+  });
+  const xs = data.flatMap(trace => trace.x);
+  const step = view.xlog || kind === "bar" ? null : integerStep(xs);
+  const shownMarks = marks.filter((_, index) => index % (Math.ceil(marks.length / 60) || 1) === 0);
+  const labelled = Math.ceil(shownMarks.length / 12) || 1;
+  const layout = {
+    ...plotFrame(view, theme),
+    hovermode: kind === "scatter" ? "closest" : "x unified",
+    uirevision: `${view.logy}-${view.xlog}`,
+    xaxis: { ...axisFrame(theme, settings.grid, view.xlabel), type: view.xlog ? "log" : "linear",
+             ...(step ? { dtick: step, tick0: Math.floor(extent(xs)[0]) } : {}) },
+    yaxis: { ...axisFrame(theme, settings.grid, view.ylabel), type: view.logy ? "log" : "linear" },
+    shapes: shownMarks.map(mark => ({ type: "line", xref: "x", yref: "paper", x0: mark.x, x1: mark.x, y0: 0, y1: 1, line: { color: theme.line, width: 1, dash: "dot" } })),
+    annotations: shownMarks.map((mark, index) => (mark.text && index % labelled === 0
+      ? { x: mark.x, y: 1, xref: "x", yref: "paper", text: mark.text, showarrow: false, yanchor: "bottom", font: { size: 10, color: theme.muted } }
+      : null)).filter(Boolean),
+  };
+  return { data, layout };
+}
+
+const Plotted = {
+  data() { return { drawn: false }; },
+  watch: { figure() { this.draw(); } },
+  mounted() { this.draw(); },
+  beforeUnmount() { if (this.$refs.host && this.drawn) Plotly.purge(this.$refs.host); },
+  methods: {
+    draw() {
+      const host = this.$refs.host;
+      if (!host) return;
+      const { data, layout } = this.figure;
+      const config = plotConfig(this.title || this.ylabel);
+      if (this.drawn) Plotly.react(host, data, layout, config);
+      else { Plotly.newPlot(host, data, layout, config); this.drawn = true; }
+    },
+    download() {
+      const host = this.$refs.host;
+      if (!host || !this.drawn) return;
+      Plotly.downloadImage(host, { format: "png", scale: 2, width: host.clientWidth || 900, height: this.height,
+                                   filename: (this.title || this.ylabel || "chart").replace(/[^\w.-]+/g, "_") });
+    },
+  },
+};
+
 const Chart = {
+  mixins: [Plotted],
   props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, ylabel: String, logy: Boolean,
            marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String, kind: { type: String, default: "line" },
            xlog: Boolean, turns: Boolean, settings: { type: Object, default: () => ({}) } },
-  data() { return { chart: null }; },
-  computed: { options() { return chartOptions(this); } },
-  watch: {
-    options() { if (this.chart) this.chart.updateOptions(this.options, false, false); },
-  },
-  mounted() {
-    this.chart = new ApexCharts(this.$refs.host, this.options);
-    this.chart.render();
-  },
-  beforeUnmount() {
-    if (this.chart) this.chart.destroy();
-    this.chart = null;
-  },
-  methods: {
-    download() {
-      if (!this.chart) return;
-      const name = (this.title || this.ylabel || "chart").replace(/[^\w.-]+/g, "_");
-      this.chart.dataURI().then(({ imgURI }) => {
-        const link = document.createElement("a");
-        link.href = imgURI;
-        link.download = `${name}.png`;
-        link.click();
-      });
-    },
-  },
+  computed: { figure() { return chartFigure(this); } },
   template: `
     <div class="chart">
       <div class="chart-head" v-if="title || expand">
         <span class="chart-title">{{ title }}</span>
         <a v-if="expand" class="small chart-save" :href="expand" title="open this chart in a large view with its settings">expand</a>
       </div>
-      <div ref="host"></div>
+      <div ref="host" class="plot"></div>
     </div>`,
 };
 
@@ -978,94 +995,55 @@ const Parallel = {
   template: "#parallel-template",
 };
 
-function niceTicks(low, high, count) {
-  if (!(high > low)) return [low];
-  const raw = (high - low) / Math.max(1, count);
-  const power = Math.pow(10, Math.floor(Math.log10(raw)));
-  const step = [1, 2, 2.5, 5, 10].map(unit => unit * power).find(unit => (high - low) / unit <= count + 1) || raw;
-  const ticks = [];
-  for (let value = Math.ceil(low / step) * step; value <= high + step * 1e-9; value += step) ticks.push(Number(value.toFixed(10)));
-  return ticks;
-}
-
-function logTicks(low, high) {
-  const ticks = [];
-  for (let power = Math.floor(Math.log10(low)); Math.pow(10, power) <= high; power += 1) {
-    if (Math.pow(10, power) >= low) ticks.push(Math.pow(10, power));
-  }
-  return ticks;
+function spectrumFigure(view) {
+  const theme = plotTheme();
+  const settings = { ...defaultPlot(), ...(view.settings || {}) };
+  const { edges, data, pred, labels } = view.spec;
+  const light = theme.dark ? "#3987e5" : "#6da7ec";
+  const fill = theme.dark ? "rgba(47, 111, 208, 0.35)" : "rgba(158, 197, 244, 0.55)";
+  const deep = theme.dark ? "#9ec5f4" : "#184f95";
+  const stepsX = [...edges.slice(0, -1), edges[edges.length - 1]];
+  const steps = counts => [...counts, counts[counts.length - 1]];
+  const centers = data.map((value, index) => (edges[index] + edges[index + 1]) / 2);
+  const ratio = data.map((count, index) => (count > 0 ? pred[index] / count : null));
+  const error = data.map((count, index) => (count > 0 && pred[index] > 0 ? ratio[index] * Math.sqrt(1 / pred[index] + 1 / count) : 0));
+  let low = 0.5, high = 1.5;
+  ratio.forEach((value, index) => { if (value !== null) { low = Math.min(low, value - error[index]); high = Math.max(high, value + error[index]); } });
+  const traces = [
+    { type: "scatter", mode: "lines", name: labels.data, x: stepsX, y: steps(data), line: { shape: "hv", color: light, width: 1.2 },
+      fill: "tozeroy", fillcolor: fill, hovertemplate: "%{y}<extra>" + labels.data + "</extra>" },
+    { type: "scatter", mode: "lines", name: labels.pred, x: stepsX, y: steps(pred), line: { shape: "hv", color: deep, width: settings.width },
+      hovertemplate: "%{y}<extra>" + labels.pred + "</extra>" },
+    { type: "scatter", mode: "markers", name: "pred / true", x: centers, y: ratio, yaxis: "y2", showlegend: false, customdata: error,
+      marker: { color: deep, size: markerSize(centers.length, view.settings) },
+      error_y: { type: "data", array: error, visible: true, color: deep, thickness: 1.2, width: 3 },
+      hovertemplate: "%{y:.3f} ± %{customdata:.3f}<extra>pred / true</extra>" },
+  ];
+  const layout = {
+    ...plotFrame(view, theme),
+    hovermode: "x unified",
+    uirevision: `${view.logy}`,
+    xaxis: { ...axisFrame(theme, settings.grid, view.xlabel), anchor: "y2" },
+    yaxis: { ...axisFrame(theme, settings.grid, "points"), domain: [0.36, 1], type: view.logy ? "log" : "linear", rangemode: "tozero" },
+    yaxis2: { ...axisFrame(theme, settings.grid, "pred / true"), domain: [0, 0.3], range: [Math.max(0, low), Math.min(3, high)], anchor: "x" },
+    shapes: [{ type: "line", xref: "paper", yref: "y2", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: theme.muted, width: 1, dash: "dash" } }],
+  };
+  return { data: traces, layout };
 }
 
 const Spectrum = {
-  props: { spec: { type: Object, required: true }, title: String, xlabel: String, logy: Boolean,
-           expand: { type: String, default: "" }, modal: Boolean, height: { type: Number, default: 440 } },
-  data() { return { hover: null }; },
-  computed: {
-    layout() {
-      const { edges, data, pred, labels } = this.spec;
-      const width = 1000, left = 68, right = 18, top = 30, bottom = 46, gap = 12;
-      const plot = this.height - top - bottom - gap;
-      const upper = Math.round(plot * 0.66), lower = plot - upper;
-      const lowX = edges[0], highX = edges[edges.length - 1];
-      const spanX = highX > lowX ? highX - lowX : 1;
-      const x = value => left + (value - lowX) / spanX * (width - left - right);
-      const counts = [...data, ...pred];
-      const positive = counts.filter(value => value > 0);
-      const least = positive.length ? Math.min(...positive) : 1;
-      const floor = this.logy ? Math.max(0.5, least / 2) : 0;
-      const ceiling = Math.max(1, ...counts) * (this.logy ? 1.8 : 1.08);
-      const low = this.logy ? Math.log10(floor) : 0, high = this.logy ? Math.log10(ceiling) : ceiling;
-      const y = value => {
-        const at = this.logy ? Math.log10(Math.max(value, floor)) : value;
-        return top + upper - (at - low) / (high - low) * upper;
-      };
-      const base = top + upper;
-      const outline = values => values.map((value, index) => `${index ? "V" + y(value).toFixed(1) + " " : ""}H${x(edges[index + 1]).toFixed(1)}`).join(" ");
-      const dataFill = data.length ? `M${x(edges[0]).toFixed(1)} ${base.toFixed(1)} V${y(data[0]).toFixed(1)} ${outline(data)} V${base.toFixed(1)} Z` : "";
-      const predLine = pred.length ? `M${x(edges[0]).toFixed(1)} ${y(pred[0]).toFixed(1)} ${outline(pred)}` : "";
-      const ratios = data.map((count, index) => (count > 0 ? pred[index] / count : NaN));
-      const errors = data.map((count, index) => (count > 0 && pred[index] > 0 ? ratios[index] * Math.sqrt(1 / pred[index] + 1 / count) : 0));
-      let lowR = 0.5, highR = 1.5;
-      ratios.forEach((ratio, index) => {
-        if (Number.isFinite(ratio)) { lowR = Math.min(lowR, ratio - errors[index]); highR = Math.max(highR, ratio + errors[index]); }
-      });
-      lowR = Math.max(0, lowR);
-      highR = Math.min(3, highR);
-      const ratioTop = base + gap, bottomEdge = ratioTop + lower;
-      const r = value => ratioTop + lower - (Math.min(highR, Math.max(lowR, value)) - lowR) / (highR - lowR) * lower;
-      const points = ratios.map((ratio, index) => (Number.isFinite(ratio)
-        ? { x: x((edges[index] + edges[index + 1]) / 2), y: r(ratio), low: r(ratio - errors[index]), high: r(ratio + errors[index]) } : null)).filter(Boolean);
-      const yTicks = (this.logy ? logTicks(floor, ceiling) : niceTicks(0, ceiling, 4)).map(value => ({ y: y(value), text: tick(value) }));
-      const rTicks = niceTicks(lowR, highR, 3).map(value => ({ y: r(value), text: tick(value) }));
-      const xTicks = niceTicks(lowX, highX, 7).filter(value => value >= lowX && value <= highX).map(value => ({ x: x(value), text: tick(value) }));
-      return { width, left, right, top, bottomEdge, upperMiddle: top + upper / 2, lowerMiddle: ratioTop + lower / 2, dataFill, predLine, one: r(1),
-               points, yTicks, rTicks, xTicks, legendGap: (labels.data || "").length * 6.6 + 44, x, lowX, spanX };
-    },
-  },
-  methods: {
-    fmt,
-    onMove(event) {
-      const svg = this.$refs.svg;
-      const rect = svg.getBoundingClientRect();
-      const { edges, data, pred } = this.spec;
-      const layout = this.layout;
-      const at = (event.clientX - rect.left) * layout.width / rect.width;
-      const value = layout.lowX + (at - layout.left) / (layout.width - layout.left - layout.right) * layout.spanX;
-      const index = data.findIndex((count, position) => value >= edges[position] && value <= edges[position + 1]);
-      if (index < 0) { this.hover = null; return; }
-      const ratio = data[index] > 0 ? pred[index] / data[index] : null;
-      const error = ratio !== null && pred[index] > 0 ? ratio * Math.sqrt(1 / pred[index] + 1 / data[index]) : 0;
-      const host = this.$el.getBoundingClientRect();
-      const left = event.clientX - host.left;
-      this.hover = { x: layout.x((edges[index] + edges[index + 1]) / 2), from: edges[index], to: edges[index + 1], data: data[index], pred: pred[index],
-                     ratio, error, left: left + 220 > host.width ? left - 214 : left + 14, top: event.clientY - host.top + 14 };
-    },
-    download() {
-      const svg = this.$refs.svg;
-      downloadSvg(svg, this.title || "distribution", this.layout.width, this.height, getComputedStyle(svg).backgroundColor);
-    },
-  },
-  template: "#spectrum-template",
+  mixins: [Plotted],
+  props: { spec: { type: Object, required: true }, title: String, xlabel: String, logy: Boolean, expand: { type: String, default: "" },
+           modal: Boolean, height: { type: Number, default: 440 }, settings: { type: Object, default: () => ({}) } },
+  computed: { figure() { return spectrumFigure(this); } },
+  template: `
+    <div class="chart">
+      <div class="chart-head">
+        <span class="chart-title">{{ title }}</span>
+        <a v-if="expand && !modal" class="small chart-save" :href="expand" title="open this chart in a large view with its settings">expand</a>
+      </div>
+      <div ref="host" class="plot"></div>
+    </div>`,
 };
 
 const Strip = {
@@ -1245,7 +1223,7 @@ const app = Vue.createApp({
     expandedHasPoints() {
       const view = this.expanded;
       if (!view) return false;
-      return view.kind === "scatter" || (view.lines || []).some(line => line.kind === "scatter");
+      return !!view.spectrum || view.kind === "scatter" || (view.lines || []).some(line => line.kind === "scatter");
     },
     objectiveName() { return (this.sweep && this.sweep.objective && this.sweep.objective.monitor) || "objective"; },
     objectiveMode() { return (this.sweep && this.sweep.objective && this.sweep.objective.mode) || "min"; },
@@ -1330,7 +1308,7 @@ const app = Vue.createApp({
       const xlog = !!(axes[x] && axes[x].kind === "range" && axes[x].log);
       const lines = this.colorGroups(rows, color).map(group => ({
         name: group.name, color: group.color, kind: "scatter",
-        points: group.rows.map(row => [xlog ? Math.log10(row.values[x]) : row.values[x], row.values[y]]) }));
+        points: group.rows.map(row => [row.values[x], row.values[y]]) }));
       return { lines: lines.filter(line => line.points.length), xlog, xlabel: this.axisLabel(x), ylabel: this.axisLabel(y), shown: rows.length };
     },
     paramCharts() {
@@ -1343,8 +1321,7 @@ const app = Vue.createApp({
                    levels: axis.values.map(value => ({ label: fmt(value),
                      values: rows.filter(row => row.values[axis.key] === value).map(row => row.score) })) };
         }
-        const points = rows.filter(row => typeof row.values[axis.key] === "number")
-          .map(row => [axis.log ? Math.log10(row.values[axis.key]) : row.values[axis.key], row.score]);
+        const points = rows.filter(row => typeof row.values[axis.key] === "number").map(row => [row.values[axis.key], row.score]);
         return { key: axis.key, shape: "scatter", xlog: !!axis.log,
                  lines: [{ name: this.objectiveName, color: markColor(), kind: "scatter", points }] };
       });
@@ -1889,7 +1866,13 @@ const app = Vue.createApp({
       const loss = (config.losses || {})[owner];
       if (loss && typeof loss === "object") return rest.reduce((value, part) => (value && typeof value === "object" ? value[part] : undefined), loss.params || {});
       const optimizer = (config.optimizers || {})[owner];
-      if (optimizer && typeof optimizer === "object") return (optimizer.params || {})[rest.join(".")];
+      if (optimizer && typeof optimizer === "object") {
+        const params = optimizer.params || {};
+        if (rest.length < 2) return params[rest.join(".")];
+        const [group, ...inner] = rest;
+        const found = (params.groups || []).find(item => item && item.name === group);
+        return found ? (inner.join(".") in found ? found[inner.join(".")] : params[inner.join(".")]) : undefined;
+      }
       const model = ((config.model || {}).models || {})[owner];
       if (model && typeof model === "object" && rest.join(".") === "trainable") return model.trainable === undefined ? true : model.trainable;
       return undefined;

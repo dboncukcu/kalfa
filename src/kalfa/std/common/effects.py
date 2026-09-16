@@ -45,12 +45,8 @@ def apply_effects(effects, models, optimizers, losses):
             for parameter in model.parameters():
                 parameter.requires_grad_(bool(value))
         elif owner in optimizers:
-            if isinstance(value, dict):
-                current = optimizers[owner].params.get(param)
-                if current is None:
-                    raise KeyError(f"rule effect {key!r} is relative, but the optimizer has no {param!r} to change")
-                value = relative(float(current), value)
-            optimizers[owner].set_param(param, value)
+            target, _, name = param.rpartition(".")
+            optimizers[owner].set_param(name, value, target or None)
         elif owner in table:
             table[owner] = table[owner].with_param(param, value)
         else:

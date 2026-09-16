@@ -130,6 +130,29 @@ def test_mdmm_refs_reach_a_term_of_a_definition_and_the_multipliers_model(workdi
     assert kinds == ["unresolved_ref"]
 
 
+def test_a_rule_names_a_group_of_the_optimizer(workdir):
+    constraints = {"loss_mae": {"epsilon": 0.1, "lmbda_init": -1.0}}
+    config = with_mdmm(minimal(), constraints)
+    config["optimizers"]["main"]["params"]["groups"][0]["name"] = "lambdas"
+    when = {"uri": "after_epoch", "params": {"at": 1}}
+    config["training"]["rules"] = [
+        {"name": "a", "when": when, "set": {"main.lr": {"times": 0.5}, "main.lambdas.lr": -1.0e-4,
+                                             "main.*.lr": {"times": 0.5}, "main.lam*.lr": {"times": 2.0}}},
+        {"name": "b", "when": when, "set": {"main.ghost.lr": 0.1}},
+        {"name": "c", "when": when, "set": {"main.*.lr": 1.0e-4}},
+    ]
+    prepared, kinds = kinds_of(workdir, config)
+    assert kinds == ["set_target", "set_value"]
+    assert any("no group named 'ghost'" in problem.message for problem in prepared.problems)
+    assert [problem.severity for problem in prepared.problems] == ["error", "warning"]
+    config["training"]["rules"] = []
+    config["optimizers"]["main"]["params"]["groups"][0]["name"] = "a.b"
+    config["optimizers"]["main"]["params"]["groups"].append({"name": "twice", "match": "net.*"})
+    config["optimizers"]["main"]["params"]["groups"].append({"name": "twice", "match": "ghost.*"})
+    prepared, kinds = kinds_of(workdir, config, name="names.yaml")
+    assert kinds.count("invalid_value") == 2
+
+
 def test_glob_ambiguous_and_column_missing(workdir):
     config = minimal()
     config["data"]["fields"] = {"x?": {}, "?1": {}, "price": {"target": True}, "zzz*": {}}

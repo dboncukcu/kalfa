@@ -1000,7 +1000,7 @@
             <span class="card-label">{{ expanded.name }}</span>
             <button class="small" @click="closeChart">close</button>
           </div>
-          <spectrum v-if="expanded.spectrum" ref="modal" :spec="expanded.spectrum" :title="expanded.name" :xlabel="expanded.xlabel" :logy="plot.logy" :modal="true" :height="modalHeight"></spectrum>
+          <spectrum v-if="expanded.spectrum" ref="modal" :spec="expanded.spectrum" :title="expanded.name" :xlabel="expanded.xlabel" :logy="plot.logy" :settings="plot" :modal="true" :height="modalHeight"></spectrum>
           <chart v-else ref="modal" :lines="expanded.lines" :kind="expanded.kind || 'line'" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel || expanded.name" :logy="plot.logy" :marks="expanded.marks" :turns="!!expanded.turns" :xlog="!!expanded.xlog" :settings="plot" :height="modalHeight"></chart>
         </div>
         <aside class="plot-panel">
@@ -1016,7 +1016,7 @@
             <button class="small" @click="downloadModal">download png</button>
             <button class="small" @click="resetPlot">reset</button>
           </div>
-          <p class="muted">the chart's own menu at the top right downloads it too, as it is drawn with these settings</p>
+          <p class="muted">drag a box to zoom, double click to reset, the wheel zooms too; the chart's own menu at the top right downloads it as drawn with these settings</p>
         </aside>
       </div>
     </div>
@@ -1069,55 +1069,6 @@
       <span v-for="item in detail" :key="item.key"><span class="muted">{{ item.key }}</span> {{ item.value || '&mdash;' }}</span>
     </div>
     <div class="par-detail muted" v-else>hover a line for its values, drag on an axis to narrow</div>
-  </div>
-</script>
-
-<script type="text/x-template" id="spectrum-template">
-  <div class="spectrum" @mouseleave="hover = null">
-    <div class="chart-head">
-      <span class="chart-title">{{ title }}</span>
-      <span class="chart-tools">
-        <button class="small" @click="download" title="download this chart as a png">save</button>
-        <a v-if="expand && !modal" class="small" :href="expand" title="open this chart in a large view with its settings">expand</a>
-      </span>
-    </div>
-    <svg ref="svg" :viewBox="'0 0 ' + layout.width + ' ' + height" preserveAspectRatio="xMidYMid meet" @mousemove="onMove">
-      <g class="spectrum-grid">
-        <line v-for="(item, index) in layout.yTicks" :key="'y' + index" :x1="layout.left" :x2="layout.width - layout.right" :y1="item.y" :y2="item.y"></line>
-        <line v-for="(item, index) in layout.rTicks" :key="'r' + index" :x1="layout.left" :x2="layout.width - layout.right" :y1="item.y" :y2="item.y"></line>
-        <line v-for="(item, index) in layout.xTicks" :key="'x' + index" :x1="item.x" :x2="item.x" :y1="layout.top" :y2="layout.bottomEdge"></line>
-      </g>
-      <path class="spectrum-data" :d="layout.dataFill"></path>
-      <path class="spectrum-pred" :d="layout.predLine"></path>
-      <line class="spectrum-one" :x1="layout.left" :x2="layout.width - layout.right" :y1="layout.one" :y2="layout.one"></line>
-      <g v-for="(item, index) in layout.points" :key="'p' + index">
-        <line class="spectrum-bar" :x1="item.x" :x2="item.x" :y1="item.low" :y2="item.high"></line>
-        <line class="spectrum-bar" :x1="item.x - 3" :x2="item.x + 3" :y1="item.low" :y2="item.low"></line>
-        <line class="spectrum-bar" :x1="item.x - 3" :x2="item.x + 3" :y1="item.high" :y2="item.high"></line>
-        <circle class="spectrum-dot" :cx="item.x" :cy="item.y" r="3"></circle>
-      </g>
-      <g class="spectrum-axis">
-        <text v-for="(item, index) in layout.yTicks" :key="'yl' + index" :x="layout.left - 8" :y="item.y + 3.5" text-anchor="end">{{ item.text }}</text>
-        <text v-for="(item, index) in layout.rTicks" :key="'rl' + index" :x="layout.left - 8" :y="item.y + 3.5" text-anchor="end">{{ item.text }}</text>
-        <text v-for="(item, index) in layout.xTicks" :key="'xl' + index" :x="item.x" :y="layout.bottomEdge + 14" text-anchor="middle">{{ item.text }}</text>
-      </g>
-      <text class="spectrum-label" :transform="'rotate(-90 16 ' + layout.upperMiddle + ')'" x="16" :y="layout.upperMiddle" text-anchor="middle">points</text>
-      <text class="spectrum-label" :transform="'rotate(-90 16 ' + layout.lowerMiddle + ')'" x="16" :y="layout.lowerMiddle" text-anchor="middle">pred / true</text>
-      <text class="spectrum-label" :x="(layout.left + layout.width - layout.right) / 2" :y="height - 6" text-anchor="middle">{{ xlabel }}</text>
-      <g class="spectrum-legend">
-        <rect class="spectrum-data" :x="layout.left + 10" :y="layout.top + 8" width="14" height="10"></rect>
-        <text :x="layout.left + 30" :y="layout.top + 17">{{ spec.labels.data }}</text>
-        <line class="spectrum-pred" :x1="layout.left + 10 + layout.legendGap" :x2="layout.left + 24 + layout.legendGap" :y1="layout.top + 13" :y2="layout.top + 13"></line>
-        <text :x="layout.left + 30 + layout.legendGap" :y="layout.top + 17">{{ spec.labels.pred }}</text>
-      </g>
-      <line v-if="hover" class="spectrum-cursor" :x1="hover.x" :x2="hover.x" :y1="layout.top" :y2="layout.bottomEdge"></line>
-    </svg>
-    <div class="tooltip" v-if="hover" :style="{left: hover.left + 'px', top: hover.top + 'px', transform: 'none'}">
-      <div class="tooltip-x">{{ xlabel }} {{ fmt(hover.from) }} to {{ fmt(hover.to) }}</div>
-      <div>{{ spec.labels.data }} <b>{{ hover.data }}</b></div>
-      <div>{{ spec.labels.pred }} <b>{{ hover.pred }}</b></div>
-      <div v-if="hover.ratio !== null">ratio <b>{{ fmt(hover.ratio) }}</b> ± {{ fmt(hover.error) }}</div>
-    </div>
   </div>
 </script>
 
@@ -1179,8 +1130,10 @@
     <p class="empty" v-if="!layout.boxes.length">nothing to draw</p>
   </div>
 </script>
-<script src="/static/vendor/vue.global.prod.js"></script>
-<script src="/static/vendor/apexcharts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@3.5.42/dist/vue.global.prod.js"
+        integrity="sha384-bqTg8NKlUS8kbe8Sak41ZAg1OAW/cc4kyI+FqMhCpzsyG7B39KgZfDOKA3HnKhCV" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@4.1.1/plotly-basic.min.js"
+        integrity="sha384-N2HZsG+IG/3J8CwhGGYz/kmzZ0sprpPWwjhor9ZI4lxuf47i9DXK2/NDGxMaJiEb" crossorigin="anonymous"></script>
 <script src="/static/board.js"></script>
 </body>
 </html>

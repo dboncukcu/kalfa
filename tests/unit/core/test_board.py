@@ -128,7 +128,7 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert board.tail("runs/one", "stderr.txt") == {"lines": [], "name": "stderr.txt"}
     assert board.tail("runs/one", "resolved.yaml") is None
     assert static_path("index.html").name == "index.html" and static_path("../__init__.py") is None
-    assert static_path("vendor/vue.global.prod.js") is not None and static_path("nope.js") is None
+    assert static_path("board.css") is not None and static_path("nope.js") is None
     before = board.watched("runs/one")
     assert before["history.jsonl"][0] > 0 and before["plots"][0] == 1 and "tree" in before
     Record(tmp_path / "runs" / "one").append("history.jsonl",
@@ -151,7 +151,7 @@ def test_the_server_answers_the_page_and_the_endpoints(tmp_path):
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
         page = urllib.request.urlopen(f"{base}/").read().decode()
-        assert "kalfa board" in page and "/static/board.js" in page
+        assert "kalfa board" in page and "/static/board.js" in page and "cdn.jsdelivr.net/npm/plotly" in page
         script = urllib.request.urlopen(f"{base}/static/board.js")
         assert script.headers["Content-Type"].startswith("text/javascript") and "/api/tree" in script.read().decode()
         tail = json.loads(urllib.request.urlopen(f"{base}/api/tail?path=runs/one&name=stdout.txt&lines=1").read())
@@ -209,6 +209,6 @@ def test_static_path_holds_when_the_install_sits_behind_a_symlink(tmp_path, monk
     assert link.resolve() != link
     monkeypatch.setattr(kalfa.board, "__file__", str(link / "__init__.py"))
     assert static_path("index.html").name == "index.html"
-    assert static_path("vendor/vue.global.prod.js") is not None
+    assert static_path("board.css") is not None
     assert static_path("../__init__.py") is None and static_path("../../record.py") is None
     assert static_path("nope.js") is None and static_path("") is None

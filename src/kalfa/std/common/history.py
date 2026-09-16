@@ -27,6 +27,8 @@ class History:
         found.update(metrics or {})
         for name, optimizer in (optimizers or {}).items():
             found[f"lr/{name}"] = optimizer.lr()
+            for label, rate in optimizer.rates().items():
+                found[f"lr/{name}/{label}"] = rate
         for name, loss in (minimizes or {}).items():
             found[f"minimizes/{name}"] = loss
         for target, value in (effects or {}).items():

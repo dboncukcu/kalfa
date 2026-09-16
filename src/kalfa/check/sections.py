@@ -354,6 +354,7 @@ class SectionRules:
             if not self.keys(entry, Schema.optimizer, path, ("uri",)):
                 continue
             self.call_of(entry, path, ("optimizer",), f"optimizers.{name}")
+            self.group_names(entry, path)
             loss = entry.get("loss", training.get("loss") if len(optimizers) == 1 else None)
             if loss is None:
                 self.error("missing_key", f"optimizers.{name}.loss is required", path)
@@ -368,11 +369,27 @@ class SectionRules:
         for name, definition in self.models.items():
             optimizer = definition.get("optimizer")
             if isinstance(optimizer, dict):
+                self.group_names(optimizer, ("model", "models", name, "optimizer"))
                 self.optimizers[name] = {"uri": optimizer.get("uri"), "params": optimizer.get("params") or {},
                                          "loss": training.get("loss")}
                 if training.get("loss") is None:
                     self.error("missing_key", f"model {name!r} writes an inline optimizer; training.loss names "
                                               f"its loss", ("training",))
+
+    def group_names(self, entry, path):
+        params = entry.get("params") if isinstance(entry.get("params"), dict) else {}
+        seen = set()
+        for position, group in enumerate(params.get("groups") or []):
+            if not isinstance(group, dict) or group.get("name") is None:
+                continue
+            name = group["name"]
+            where = path + ("params", "groups", position, "name")
+            if not isinstance(name, str) or not name or any(character in name for character in ".*?["):
+                self.error("invalid_value", f"groups[{position}].name must be a plain name without . * ? or [, "
+                                            f"got {name!r}", where)
+            elif name in seen:
+                self.error("invalid_value", f"groups[{position}].name {name!r} is written twice", where)
+            seen.add(name)
 
     def training_section(self):
         training = self.data["training"]

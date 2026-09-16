@@ -1,3 +1,5 @@
+import fnmatch
+
 from ..config import resolve_alias
 from ..kinds import kalfa_kind, names_of
 from ..std.common.effects import relative_effect
@@ -8,6 +10,10 @@ from ..std.pre.base import assign_fields
 
 def loss_head(name):
     return str(name).partition(".")[0]
+
+
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def value_kind(value):
@@ -45,6 +51,9 @@ class RefRules:
                 self.error("set_value", f"set {key} needs a boolean", path)
             return
         if owner in self.optimizers:
+            group, _, name = param.rpartition(".")
+            if group:
+                self.group_effect(key, owner, group, name, value, path)
             if isinstance(value, dict) and not relative_effect(value):
                 self.error("set_value", f"set {key}: a relative effect is {{times: x}} or {{plus: x}} with a number",
                            path)
@@ -53,6 +62,22 @@ class RefRules:
             self.loss_effect(key, owner, param, value, path)
             return
         self.error("set_target", f"set target {key!r} names neither an optimizer, a loss nor a trained model", path)
+
+    def group_effect(self, key, owner, group, param, value, path):
+        entry = self.optimizers[owner]
+        params = entry.get("params") if isinstance(entry, dict) and isinstance(entry.get("params"), dict) else {}
+        groups = [item for item in (params.get("groups") or []) if isinstance(item, dict)]
+        names = [item["name"] for item in groups if isinstance(item.get("name"), str)]
+        if group != "*" and not any(fnmatch.fnmatchcase(name, group) for name in names):
+            self.error("set_target", f"set target {key!r}: optimizer {owner!r} has no group named {group!r}; the "
+                                     f"named groups are {names}", path,
+                       hint="name a group with name: beside its match, or write <opt>.*.<param> for every group")
+            return
+        climbing = any(is_number(item.get("lr")) and item["lr"] < 0 for item in groups)
+        if group == "*" and param == "lr" and is_number(value) and value > 0 and climbing:
+            self.warning("set_value", f"set {key} writes a positive rate into every group of {owner!r}, a group "
+                                      f"with a negative rate included, which turns its climb into a descent", path,
+                         hint="write the group's own target, or a relative value ({times: 0.5}) that keeps the sign")
 
     def loss_effect(self, key, owner, param, value, path):
         entry = self.losses[owner]

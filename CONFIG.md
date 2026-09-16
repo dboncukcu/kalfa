@@ -687,9 +687,10 @@ The multipliers are a model, so the optimizer updates them, a rule can reach the
 they climb through a group with a negative learning rate, the gradient ascent of the saddle point. `names:
 $constraints$` writes the mapping once, so the model and the loss stay in step (a mismatch is an error at the first
 batch). The history gets `lambda/<name>` and `inf/<name>` per constraint, and `set: {main.loss: other}` freezes
-the multipliers along with the phase. A rule on `main.lr`, absolute or relative, writes one value into every group
-of the optimizer, the multipliers' group included, and a positive rate there turns the ascent into a descent; with
-`mdmm` change the learning rate through `schedule`, which scales every group by the same factor and keeps the sign.
+the multipliers along with the phase. A rule on `main.lr` changes the default group only, so the multipliers keep
+their rate; `main.lambdas.lr` reaches them by name, `main.*.lr: {times: 0.5}` halves every group's own rate and
+keeps the sign, and an absolute `main.*.lr` would write a positive rate into their group, which `check` warns
+about.
 
 ### The metric lego
 
@@ -719,8 +720,11 @@ can be written together only when the signature has `scaler`.
 
 * `loss` is the name of the loss it minimizes; the parameters are the union of the models that pick it. With a
   single optimizer the loss is written through `training.loss`.
-* `params.groups: [{match: "backbone.*", lr: 1.0e-5}]` is a layer group; the pattern is matched against the
-  `<model>.<parameter>` name.
+* `params.groups: [{name: backbone, match: "backbone.*", lr: 1.0e-5}]` is a parameter group; the pattern is
+  matched against the `<model>.<parameter>` name, a parameter joins the first group that matches and the rest
+  form the default group, whose values are the other keys of `params`. A key a group does not write follows the
+  default group. `name` is optional and plain (no `.`, `*`, `?` or `[`), unique within the optimizer, and is how a
+  rule and the history reach the group: `set: {main.backbone.lr: ...}`, `lr/main/backbone`.
 * `schedule: {uri: warmup_cosine, params: {warmup, total}}` is a step schedule; it takes the learning rate from the
   optimizer and `total` counts the updates of its own optimizer.
 * An unused definition is an error. The writing order of the `optimizers` mapping is meaningful: it is the default
@@ -854,7 +858,9 @@ The `set` targets:
 | `<loss>.<param>` | a loss param |
 | `<loss>.<param>.<key>` | one key of a loss param that is a mapping (`loss_total.terms.loss_combined: 1.0` for a `weighted_sum`); the key is written in the definition with the value it starts with, `0.0` for a weight that begins silent, and the new value is of the same kind |
 | `<loss>.<param>: {...}` | the whole mapping |
-| `<opt>.<param>` | an optimizer param (`g.lr`) |
+| `<opt>.<param>` | an optimizer param of the default group (`main.lr`); a group that does not write the param follows it |
+| `<opt>.<group>.<param>` | the param of the group of that name, or of every group a glob matches (`main.lambdas.lr`, `main.lam*.lr`) |
+| `<opt>.*.<param>` | the param of every group, the default one included; a relative value (`{times: 0.5}`) applies to each group's own value, an absolute one is written into each |
 | `<model>.trainable` | opens or freezes a trained model |
 
 The effects are applied once, at the start of the turn, to the models, the optimizers and a copy of the loss table
@@ -1204,8 +1210,9 @@ predictions and the plots are written and `run.json` says ok. A record that has 
 #### `kalfa board`
 
 `kalfa board <root> [--host 127.0.0.1] [--port 8080]`: a reader of records. A `http.server` with JSON endpoints
-and one page, the Vue application under `src/kalfa/board/static/` served at `/static/` with its own copy of Vue and
-ApexCharts. It finds the manifests under the root (a record made before the manifest by its `resolved.yaml`),
+and one page, the Vue application under `src/kalfa/board/static/` served at `/static/`; Vue and Plotly come from
+jsDelivr at pinned versions with their hashes, so the browser needs the internet and the server does not. It
+finds the manifests under the root (a record made before the manifest by its `resolved.yaml`),
 shows the tree, and follows the records as they change: the server stats the files of the open record once a
 second and pushes the names of the changed ones over a server sent event stream (`/api/watch`), the page reloads
 only those (the growing files by offset), or polls every 3, 5 or 10 seconds when the footer says so. The page
@@ -1235,9 +1242,10 @@ The tabs of a run:
 | config, notes, files | `resolved.yaml`; `manifest.json`, `host.json`, `device.json`, `git.json` and the node timings of `run.json`; every file of the record with a viewer for text, images and PDFs and a download for every file |
 | timeline, events, logs, describe | the timeline of the nodes, the event tail, the tails of `stdout.txt` and `stderr.txt`, `describe` on demand |
 
-Every chart expands into a large view beside a settings panel (log scale on y, grid, line width, points, the point
-size, the curve, the bins of a histogram) whose download writes the chart as drawn, and reset restores the
-defaults. An axis of integers (turns, steps, points) gets integer ticks.
+Every chart zooms with a drag (a box) or the wheel and resets with a double click; a log axis is a log axis with
+its decades. Every chart expands into a large view beside a settings panel (log scale on y, grid, line width,
+points, the point size, the curve, the bins of a histogram) whose download writes the chart as drawn, and reset
+restores the defaults. An axis of integers (turns, steps, points) gets integer ticks.
 
 The endpoints: `/api/tree`, `/api/live`, `/api/watch`, `/api/table`, `/api/record`, `/api/predictions`,
 `/api/prep`, `/api/files`, `/api/text`, `/api/events`, `/api/history`, `/api/steps`, `/api/tail`, `/api/sweep`,
