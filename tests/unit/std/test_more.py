@@ -90,7 +90,7 @@ def test_mdmm_holds_a_term_at_its_epsilon_through_a_multiplier():
     assert float(value["primary"].detach()) == pytest.approx(a)
     assert float(value["inf/b"].detach()) == pytest.approx(inf_b)
     assert float(value["inf/w.a"].detach()) == pytest.approx(inf_a)
-    assert float(value["lambda/b"]) == -1.0 and float(value["lambda/w.a"]) == 0.0
+    assert float(value["lambda/b"].detach()) == -1.0 and float(value["lambda/w.a"].detach()) == 0.0
     expected = a + 2.0 * (-1.0 * inf_b + 0.5 * inf_b ** 2 / 2) + (0.0 * inf_a + inf_a ** 2 / 2)
     assert float(value["loss"].detach()) == pytest.approx(expected, rel=1e-5)
     value["loss"].backward()

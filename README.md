@@ -212,7 +212,7 @@ under `metrics`, and a lego in the wrong section is a `check` error.
 | `checkpoint` | `training.checkpoint` | 3 | `best`, `last`, `snapshot` |
 | `calibrate` | `calibrate` | 1 | `threshold` |
 | `generate` | `generate` | 3 | `gan_sampler`, `ddpm_sampler`, `lm_sampler` |
-| `plot` | `plots` | 25 | `loss_curve`, `confusion_matrix`, `correlation_heatmap` |
+| `plot` | `plots` | 26 | `loss_curve`, `pred_histogram`, `confusion_matrix`, `correlation_heatmap` |
 | `strategy` | `sweep.strategy` | 4 | `grid`, `random`, `sobol`, `optuna` |
 | `device` | `device` | 4 | `auto`, `cpu`, `cuda`, `mps` |
 | `rng` | `rng` | 3 | `derived`, `indexed`, `global` |
@@ -870,9 +870,10 @@ The board reads records, it never writes one except to ask a run to stop. It lis
 finished, follows a live record over a server sent event stream (progress, the monitored metric, the step loss,
 the log tail), tabulates a sweep with its best point, overlays the curves of two records and diffs their configs,
 draws the model as a schematic that opens into its layers with the tensor shapes on the wires, walks the data
-pipeline stage by stage, and browses the predictions, the plots and the files. The address bar carries the record,
-the tab and the open plot, so a link is one exact view. On a batch system it runs on the login node and the
-browser reaches it through an ssh tunnel.
+pipeline stage by stage, and browses the predictions (the prediction against the truth, the residuals, and the
+two distributions over the same bins with their ratio below), the plots and the files. The address bar carries
+the record, the tab and the open plot, so a link is one exact view; every chart expands into a large view with its
+own settings. On a batch system it runs on the login node and the browser reaches it through an ssh tunnel.
 
 The predictions tab takes a pandas query over the columns of the file, the targets, the `pred_` and `raw_` wires,
 the calibration flags and the `data.spectators` columns:

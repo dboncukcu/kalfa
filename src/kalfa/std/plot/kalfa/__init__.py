@@ -67,6 +67,11 @@ lego("/plot/kalfa/pred_vs_true", "predictions:pred_vs_true", partial=True, alias
      description="Predicted against true values of the test set, one panel per predicted field with its R2, as a "
                  "hexbin density over many points and a scatter over few; the panel is titled with the field name, "
                  "plus the output wire when two outputs predict the same field")
+lego("/plot/kalfa/pred_histogram", "predictions:pred_histogram", partial=True, alias="pred_histogram",
+     description="The distribution of every predicted field of the test set next to the distribution of its truth "
+                 "over the same bins, one column per field, with the ratio of predicted to true counts per bin "
+                 "below (a dashed line at one, a Poisson error bar per bin, a bin without true points stays empty); "
+                 "log draws the counts on a log axis")
 lego("/plot/kalfa/residuals", "predictions:residuals", partial=True, alias="residuals", refs={"target": "field"},
      description="Three panels of one prediction's residual: the distribution with its bias and sigma, the residual "
                  "against the truth as a density, and the mean and median error over equal count bins of the target "

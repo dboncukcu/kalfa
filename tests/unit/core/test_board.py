@@ -43,7 +43,8 @@ def records(root):
                    objective={"monitor": "val/rmse", "mode": "min", "at": "best"}, total=2)
     for index, value in enumerate((3.0, 1.0)):
         point = Record(sweep.directory / f"{index:04d}")
-        point.manifest("point", name=f"{index:04d}", id=index, values={"lr": value}, root=str(sweep.directory))
+        point.manifest("point", name=f"{index:04d}", id=index, values={"lr": value}, root=str(sweep.directory),
+                       turn="epoch")
         point.write_text("resolved.yaml", f"lr: {value}\n")
         point.append("history.jsonl", {"turn": 1, "global_step": 1, "val/rmse": value, "rules": []})
     Record(sweep.directory / "0001").write_json("sweep.json", {"id": 1, "point": {"lr": 1.0},
@@ -66,6 +67,8 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     sweep = board.sweep("sweeps/grid")
     assert [point["status"]["state"] for point in sweep["points"]] == ["running", "finished"]
     assert sweep["points"][0]["objective"] == {"value": 3.0, "turn": 1} and sweep["best"]["id"] == 1
+    assert sweep["unit"] == "epoch" and [point["unit"] for point in sweep["points"]] == ["epoch", "epoch"]
+    assert [entry["unit"] for entry in tree["groups"]["runs"]] == ["turn"]
     assert "-lr: 3.0" in board.diff("sweeps/grid/0000", "sweeps/grid/0001")["diff"]
     assert board.record("../outside") is None and board.file("../outside/resolved.yaml") is None
     assert board.file("runs/one/resolved.yaml").name == "resolved.yaml" and board.file("runs/one") is None
@@ -84,10 +87,14 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     pair = predictions["pairs"][0]
     assert predictions["rows"] == 4 and (pair["pred"], pair["target"], pair["points"]) == ("pred_y", "price", 4)
     assert pair["rmse"] > 0 and len(pair["histogram"]["counts"]) == 40 and pair["worst"][0]["row"] == 3
+    spread = pair["distribution"]
+    assert len(spread["edges"]) == 41 and sum(spread["data"]) == 4 and sum(spread["pred"]) == 4
+    assert spread["edges"][0] == 1.0 and spread["edges"][-1] == 4.4
     assert predictions["flags"] == ["flag_y"] and len(predictions["sample"]) == 4
     assert board.predictions("nowhere") is None
     coarse = board.predictions("runs/one", sample="all", bins=5)
     assert len(coarse["pairs"][0]["histogram"]["counts"]) == 5 and len(coarse["sample"]) == 4
+    assert len(coarse["pairs"][0]["distribution"]["data"]) == 5
     assert len(board.predictions("runs/one", sample=2)["sample"]) == 2
     assert predictions["carried"] == ["site"] and "site" in predictions["sample"][0]
     kept = board.predictions("runs/one", where="site == 'b'")
@@ -96,6 +103,7 @@ def test_the_board_reads_the_records_and_their_status(tmp_path):
     assert kept["pairs"][0]["rmse"] != predictions["pairs"][0]["rmse"]
     broken = board.predictions("runs/one", where="ghost > 1")
     assert broken["rows"] == 0 and broken["total"] == 4 and "ghost" in broken["error"]
+    assert broken["pairs"] == []
     files = board.files("runs/one")
     assert "history.jsonl" in [item["name"] for item in files["files"]] and files["total"] > 0
     assert board.text("runs/one", "resolved.yaml")["text"].startswith("seed: 7")

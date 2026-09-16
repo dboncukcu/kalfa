@@ -9,7 +9,8 @@
 </head>
 <body>
 <div id="app" v-cloak>
-  <aside class="sidebar" :class="{closed: !sidebar}">
+  <div class="boot" v-if="!booted"><span class="spinner big"></span><span>reading the records</span></div>
+  <aside class="sidebar" v-if="booted" :class="{closed: !sidebar}">
     <header class="brand">
       <div class="brand-row">
         <a class="logo" href="#/" v-html="logoSvg" aria-hidden="true" title="home"></a>
@@ -73,7 +74,7 @@
     </footer>
   </aside>
 
-  <main class="content">
+  <main class="content" v-if="booted">
     <section v-if="!path" class="view home">
       <header class="head">
         <div class="title-row"><h2 class="title">Live</h2><span class="muted">{{ liveBoard.live.length }} running · refreshed {{ refreshed || 'never' }}</span></div>
@@ -158,7 +159,7 @@
                 <th v-for="key in tableColumns.params" :key="'p' + key" class="sortable num" @click="sortBy('param:' + key)">{{ key }}<span class="sort" v-if="sortKey === 'param:' + key">{{ sortDesc ? '▼' : '▲' }}</span></th>
                 <th class="sortable num" @click="sortBy('best')">best<span class="sort" v-if="sortKey === 'best'">{{ sortDesc ? '▼' : '▲' }}</span></th>
                 <th v-for="key in tableColumns.metrics" :key="'m' + key" class="sortable num" @click="sortBy('last:' + key)">{{ key }}<span class="sort" v-if="sortKey === 'last:' + key">{{ sortDesc ? '▼' : '▲' }}</span></th>
-                <th class="sortable num" @click="sortBy('turns')">turns</th>
+                <th class="sortable num" @click="sortBy('turns')">{{ tableUnit }}s</th>
                 <th class="sortable num" @click="sortBy('seconds')">time</th>
                 <th>device</th>
               </tr>
@@ -198,7 +199,7 @@
         <div class="toolbar"><label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label></div>
         <div class="grid charts" v-if="compareCharts.length">
           <div class="card" v-for="entry in compareCharts" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name" xlabel="turn" :ylabel="entry.name" :logy="logy"></chart>
+            <chart :lines="entry.lines" :title="entry.name" :xlabel="compareUnit" :ylabel="entry.name" :logy="logy"></chart>
           </div>
         </div>
         <div class="card">
@@ -242,7 +243,7 @@
         <div class="tile" v-if="sweep.best">
           <span class="tile-label">best {{ objectiveName }}</span>
           <span class="tile-value">{{ fmt(sweep.best.objective.value) }}</span>
-          <span class="tile-note">point {{ sweep.best.id }}, turn {{ sweep.best.objective.turn }}</span>
+          <span class="tile-note">point {{ sweep.best.id }}, {{ sweepUnit }} {{ sweep.best.objective.turn }}</span>
         </div>
         <div class="tile" v-if="sweepStats.spread !== null">
           <span class="tile-label">spread</span>
@@ -269,23 +270,23 @@
         <span class="muted" v-else>drag on an axis above to narrow everything below, and the table</span>
         <span class="tool-gap"></span>
         <label>x <select :value="explore.x" @change="setExplore('x', $event.target.value)">
-          <option v-for="key in axisChoices" :key="key" :value="key">{{ key }}</option></select></label>
+          <option v-for="key in axisChoices" :key="key" :value="key">{{ axisLabel(key) }}</option></select></label>
         <label>y <select :value="explore.y" @change="setExplore('y', $event.target.value)">
-          <option v-for="key in axisChoices" :key="key" :value="key">{{ key }}</option></select></label>
+          <option v-for="key in axisChoices" :key="key" :value="key">{{ axisLabel(key) }}</option></select></label>
         <label>color <select :value="explore.color" @change="setExplore('color', $event.target.value)">
           <option v-for="key in colorChoices" :key="key" :value="key">{{ key }}</option></select></label>
       </div>
       <div class="card" v-if="exploreChart && exploreChart.lines.length">
         <div class="card-label">explorer
-          <span class="muted">{{ exploreChart.shown }} points, {{ explore.y }} against {{ explore.x }}, colored by {{ explore.color }}</span></div>
+          <span class="muted">{{ exploreChart.shown }} points, {{ exploreChart.ylabel }} against {{ exploreChart.xlabel }}, colored by {{ explore.color }}</span></div>
         <chart :lines="exploreChart.lines" :xlabel="exploreChart.xlabel" :ylabel="exploreChart.ylabel" kind="scatter"
-               :xlog="exploreChart.xlog" :height="360"></chart>
+               :xlog="exploreChart.xlog" :height="360" :expand="link({chart: 'explorer'})"></chart>
       </div>
       <div v-if="sweep && sweep.best" class="card best">
         <div class="card-label">best so far</div>
         <div class="best-row">
           <span class="big">{{ fmt(sweep.best.objective.value) }}</span>
-          <span class="muted">at turn {{ sweep.best.objective.turn }}</span>
+          <span class="muted">at {{ sweepUnit }} {{ sweep.best.objective.turn }}</span>
           <span class="chip" v-for="(value, key) in sweep.best.values" :key="key">{{ key }} = {{ fmt(value) }}</span>
           <a class="link" :href="recordLink(sweep.best.path)">open point {{ sweep.best.id }}</a>
         </div>
@@ -299,7 +300,7 @@
               <th class="sortable" @click="sortBy('id')">id<span class="sort" v-if="sortKey === 'id'">{{ sortDesc ? '▼' : '▲' }}</span></th>
               <th v-for="key in pointKeys" :key="key" class="sortable" @click="sortBy(key)">{{ key }}<span class="sort" v-if="sortKey === key">{{ sortDesc ? '▼' : '▲' }}</span></th>
               <th>status</th>
-              <th class="num sortable" @click="sortBy('turns')">turns<span class="sort" v-if="sortKey === 'turns'">{{ sortDesc ? '▼' : '▲' }}</span></th>
+              <th class="num sortable" @click="sortBy('turns')">{{ sweepUnit }}s<span class="sort" v-if="sortKey === 'turns'">{{ sortDesc ? '▼' : '▲' }}</span></th>
               <th class="num sortable" @click="sortBy('objective')">{{ sweep.objective.monitor || 'objective' }}<span class="sort" v-if="sortKey === 'objective'">{{ sortDesc ? '▼' : '▲' }}</span></th>
               <th></th>
             </tr>
@@ -328,7 +329,7 @@
             <strip :levels="entry.levels" :low="entry.low" :high="entry.high" :monitor="objectiveName"></strip>
           </template>
           <chart v-else :lines="entry.lines" :title="entry.key + ' against the objective'" :xlabel="entry.key"
-                 :ylabel="objectiveName" kind="scatter" :xlog="entry.xlog"></chart>
+                 :ylabel="objectiveName" kind="scatter" :xlog="entry.xlog" :expand="link({chart: 'param:' + entry.key})"></chart>
         </div>
       </div>
       <div class="card" v-if="hasFailures">
@@ -355,11 +356,11 @@
       <div class="card" v-if="progressChart">
         <div class="card-label">{{ objectiveName }} over the sweep order
           <span class="muted">is the search still finding anything</span></div>
-        <chart :lines="progressChart.lines" xlabel="point" :ylabel="objectiveName" :height="280"></chart>
+        <chart :lines="progressChart.lines" xlabel="point" :ylabel="objectiveName" :height="280" :expand="link({chart: 'progress'})"></chart>
       </div>
       <div class="card" v-if="overlayLines.length">
         <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of {{ selected.length ? 'the ticked points' : 'the running points' }}</div>
-        <chart :lines="overlayLines" xlabel="turn" :ylabel="sweep.objective.monitor" :logy="logy" :expand="link({chart: 'overlay'})"></chart>
+        <chart :lines="overlayLines" :xlabel="sweepUnit" :ylabel="sweep.objective.monitor" :logy="logy" :expand="link({chart: 'overlay'})"></chart>
         <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
       </div>
       <div class="card" v-if="selected.length >= 2">
@@ -395,14 +396,14 @@
         <div class="card objective" v-if="record.sweep || pointObjective">
           <span class="card-label">objective</span>
           <span class="big" v-if="record.sweep">{{ fmt(record.sweep.objective.value) }}</span>
-          <span class="muted" v-if="record.sweep">at turn {{ record.sweep.objective.turn }} · point {{ record.sweep.id }}</span>
+          <span class="muted" v-if="record.sweep">at {{ turnLabel }} {{ record.sweep.objective.turn }} · point {{ record.sweep.id }}</span>
           <span v-else-if="pointObjective" class="muted">{{ pointObjective }}</span>
         </div>
       </header>
 
       <nav class="tabs">
         <a v-for="name in tabNames" :key="name" :href="tabLink(name)" :class="{active: tab === name}">
-          {{ name }}<span class="tab-count" v-if="tabCount(name)">{{ tabCount(name) }}</span>
+          {{ tabLabel(name) }}<span class="tab-count" v-if="tabCount(name)">{{ tabCount(name) }}</span>
         </a>
       </nav>
 
@@ -424,13 +425,13 @@
         </div>
         <div class="grid charts">
           <div class="card" v-if="monitorChart">
-            <chart :lines="monitorChart.lines" :title="monitorChart.name + ' (checkpoint monitor)'" :xlabel="turnLabel" :ylabel="monitorChart.name" :logy="logy" :marks="ruleMarks" :expand="link({tab: 'curves', chart: monitorChart.name})"></chart>
+            <chart :lines="monitorChart.lines" :title="monitorChart.name + ' (checkpoint monitor)'" :xlabel="turnLabel" :ylabel="monitorChart.name" :logy="logy" :marks="ruleMarks" :expand="link({chart: monitorChart.name})"></chart>
           </div>
           <div class="card" v-if="activeLossChart && (!monitorChart || activeLossChart.name !== monitorChart.name)">
-            <chart :lines="activeLossChart.lines" :title="activeLossChart.name + ' (minimized)'" :xlabel="turnLabel" :ylabel="activeLossChart.name" :logy="logy" :marks="ruleMarks" :expand="link({tab: 'curves', chart: activeLossChart.name})"></chart>
+            <chart :lines="activeLossChart.lines" :title="activeLossChart.name + ' (minimized)'" :xlabel="turnLabel" :ylabel="activeLossChart.name" :logy="logy" :marks="ruleMarks" :expand="link({chart: activeLossChart.name})"></chart>
           </div>
           <div class="card" v-for="entry in stepCharts.filter(item => item.name.startsWith('loss/'))" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name + ' per step'" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :turns="true" :expand="link({tab: 'steps', chart: entry.name})"></chart>
+            <chart :lines="entry.lines" :title="entry.name + ' per step'" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :turns="true" :expand="link({chart: entry.name})"></chart>
           </div>
         </div>
         <p class="empty" v-if="!monitorChart && !activeLossChart && !stepCharts.length">nothing recorded yet, the first {{ turnLabel }} is running</p>
@@ -582,7 +583,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'predictions'">
-        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. The filter is a pandas query over the columns of the file, the targets, the pred_ and raw_ wires, the flags and the data.spectators columns; R², rmse, mae, the histogram and the largest errors are all computed over the rows it keeps. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
+        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram, the distributions of the prediction and the truth over the same bins with their ratio below, and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. The filter is a pandas query over the columns of the file, the targets, the pred_ and raw_ wires, the flags and the data.spectators columns; R², rmse, mae, the histogram and the largest errors are all computed over the rows it keeps. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
         <div class="toolbar" v-if="record.predictions.length">
           <a v-for="name in record.predictions" :key="name" class="small" :class="{active: predictionFile === name}" :href="link({set: name, pair: null})">{{ name }}</a>
           <template v-if="predictionsData && predictionsData.pairs.length > 1">
@@ -617,6 +618,15 @@
           <div class="grid charts">
             <div class="card"><chart :lines="scatterLines" :title="pairInfo.pred + ' against ' + pairInfo.target" :xlabel="pairInfo.target" :ylabel="pairInfo.pred" kind="scatter" :height="360" :expand="link({chart: 'scatter'})"></chart></div>
             <div class="card"><chart :lines="histogramLines" title="residual (prediction minus target)" xlabel="residual" ylabel="points" kind="bar" :height="360" :expand="link({chart: 'histogram'})"></chart></div>
+          </div>
+          <div class="card stacked" v-if="distributionLines">
+            <div class="chart-head">
+              <span class="chart-title">{{ pairInfo.pred }} and {{ pairInfo.target }} over the same bins</span>
+              <span class="muted">the ratio of predicted to true counts per bin below</span>
+              <a class="small chart-save" :href="link({chart: 'distribution'})" title="open this chart in a large view with its settings">expand</a>
+            </div>
+            <chart :lines="distributionLines.top" ylabel="points" kind="bar" :height="300" :group="'distribution-' + pairInfo.pred" :xlabels="false" :ywidth="56"></chart>
+            <chart :lines="distributionLines.ratio" :xlabel="pairInfo.target" ylabel="pred / true" kind="scatter" :height="170" :group="'distribution-' + pairInfo.pred" :ylines="[1]" :ywidth="56"></chart>
           </div>
           <div class="card">
             <div class="card-label">largest errors</div>
@@ -980,7 +990,7 @@
 
     <section v-else class="welcome">
       <h2>{{ path }}</h2>
-      <p class="muted">reading the record, or there is no record at this path</p>
+      <p class="muted"><span class="spinner"></span> reading the record, or there is no record at this path</p>
     </section>
   </main>
 
@@ -992,7 +1002,10 @@
             <span class="card-label">{{ expanded.name }}</span>
             <button class="small" @click="closeChart">close</button>
           </div>
-          <chart ref="modal" :lines="expanded.lines" :kind="expanded.kind || 'line'" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel || expanded.name" :logy="plot.logy" :marks="expanded.marks" :turns="!!expanded.turns" :settings="plot" :height="modalHeight"></chart>
+          <template v-if="expanded.panels">
+            <chart v-for="(panel, index) in expanded.panels" :key="index" ref="panels" :lines="panel.lines" :kind="panel.kind || 'line'" :xlabel="panel.xlabel" :ylabel="panel.ylabel" :logy="panel.logy ? plot.logy : false" :marks="[]" :settings="plot" :height="Math.round(modalHeight * (index ? 0.32 : 0.68))" :group="'modal-' + expanded.name" :xlabels="panel.xlabels !== false" :ylines="panel.ylines || []" :ywidth="56"></chart>
+          </template>
+          <chart v-else ref="modal" :lines="expanded.lines" :kind="expanded.kind || 'line'" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel || expanded.name" :logy="plot.logy" :marks="expanded.marks" :turns="!!expanded.turns" :xlog="!!expanded.xlog" :settings="plot" :height="modalHeight"></chart>
         </div>
         <aside class="plot-panel">
           <div class="card-label">settings</div>
@@ -1000,7 +1013,7 @@
           <label class="toggle"><input type="checkbox" v-model="plot.grid"> grid</label>
           <label>line width <input type="range" min="0.5" max="6" step="0.5" v-model.number="plot.width"><span class="mono">{{ plot.width }}</span></label>
           <label>points on lines <input type="range" min="0" max="8" step="1" v-model.number="plot.dots"><span class="mono">{{ plot.dots }}</span></label>
-          <label v-if="expanded.kind === 'scatter'">point size <input type="range" min="1" max="10" step="1" v-model.number="plot.markers"><span class="mono">{{ plot.markers }}</span></label>
+          <label v-if="expandedHasPoints">point size <input type="range" min="1" max="10" step="1" v-model.number="plot.markers"><span class="mono">{{ plot.markers }}</span></label>
           <label>curve <select v-model="plot.curve"><option value="straight">straight</option><option value="smooth">smooth</option><option value="stepline">steps</option></select></label>
           <label v-if="expanded.bins">bins <input type="range" min="5" max="200" step="5" v-model.number="plot.bins"><span class="mono">{{ plot.bins }}</span><span class="spinner" v-if="busy"></span></label>
           <div class="panel-actions">

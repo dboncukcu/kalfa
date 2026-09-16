@@ -75,7 +75,7 @@ def test_the_uri_is_the_path():
         assert module.startswith(f"kalfa.std.{kind}.{pack}."), (uri, module)
         registered.add(module)
     assert registered == modules, modules ^ registered
-    assert len(STD_URIS) == 313
+    assert len(STD_URIS) == 314
     packages = {path.parent for path in root.rglob("*.py")}
     for directory in packages:
         assert (directory / "__init__.py").exists(), directory

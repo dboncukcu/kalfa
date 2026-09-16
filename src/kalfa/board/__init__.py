@@ -19,7 +19,7 @@ from kalfa.record import Record, read_resolved
 from kalfa.std.common.files import read_json, read_lines
 from kalfa.std.common.history import History
 from kalfa.std.common.log import logger_for
-from kalfa.std.plot.base import prediction_pairs, r2_of
+from kalfa.std.plot.base import prediction_pairs, r2_of, shared_histograms
 from kalfa.std.pre.base import Grouped, read_prep
 
 
@@ -107,6 +107,14 @@ def axis_of(declared, seen):
         low, high = min(numbers), max(numbers)
         return {"kind": "range", "log": low > 0 and high / low >= 100, "low": low, "high": high}
     return {"kind": "choices", "values": sorted({str(value) for value in seen})}
+
+
+def unit_of(manifest):
+    return "epoch" if (manifest or {}).get("turn") == "epoch" else "turn"
+
+
+def sweep_unit(points):
+    return "epoch" if points and all(point["unit"] == "epoch" for point in points) else "turn"
 
 
 def sweep_state(states):
@@ -224,7 +232,7 @@ class Board:
                 continue
             found.append({"path": relative_to(self.root, path), "kind": kind, "name": manifest.get("name") or path.name,
                           "started": manifest.get("started"), "status": record.status(),
-                          "unit": "epoch" if manifest.get("turn") == "epoch" else "turn"})
+                          "unit": unit_of(manifest)})
         return settle(found)
 
     def tree(self):
@@ -358,6 +366,7 @@ class Board:
             mask = numpy.isfinite(actual) & numpy.isfinite(guess)
             error = guess[mask] - actual[mask]
             counts, edges = numpy.histogram(error, bins=max(2, int(bins))) if len(error) else ([], [])
+            shared = shared_histograms(actual[mask], guess[mask], bins) if len(error) else ([], [], [])
             order = numpy.argsort(-numpy.abs(error))[:15]
             rows = table.loc[table.index[mask][order]]
             found.append({"pred": pred, "target": truth, "points": int(mask.sum()),
@@ -365,6 +374,8 @@ class Board:
                           "rmse": float(numpy.sqrt(numpy.mean(error ** 2))) if len(error) else None,
                           "mae": float(numpy.mean(numpy.abs(error))) if len(error) else None,
                           "histogram": {"edges": list(edges), "counts": list(counts)},
+                          "distribution": {"edges": list(shared[0]), "data": list(shared[1]),
+                                           "pred": list(shared[2])},
                           "worst": [{"row": row["row"], "target": row[truth], "pred": row[pred]}
                                     for _, row in rows[["row", truth, pred]].iterrows()]})
         flags = [column for column in table.columns if column.startswith("flag_")]
@@ -511,14 +522,15 @@ class Board:
                 objective = {key: done["objective"].get(key) for key in ("monitor", "mode", "at")}
             points.append({"path": relative_to(self.root, child), "id": done["id"] if done else note.get("id"),
                            "values": done["point"] if done else note.get("values") or {},
-                           "status": record.status(), "turns": len(history), "started": note.get("started"),
+                           "status": record.status(), "turns": len(history), "unit": unit_of(note),
+                           "started": note.get("started"),
                            "objective": {"value": done["objective"]["value"], "turn": done["objective"]["turn"]}
                            if done else self.best_so_far(history, objective)})
         scored = [point for point in points if point["objective"] is not None]
         pick = min if objective.get("mode", "min") == "min" else max
         best = pick(scored, key=lambda point: point["objective"]["value"]) if scored else None
         return {"path": relative, "manifest": manifest, "objective": objective, "points": points, "best": best,
-                "space": read_space(manifest, points)}
+                "space": read_space(manifest, points), "unit": sweep_unit(points)}
 
     def diff(self, first, second):
         paths = [self.resolve(first), self.resolve(second)]

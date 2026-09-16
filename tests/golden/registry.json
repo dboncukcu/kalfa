@@ -2419,6 +2419,17 @@
       "kind": "plot",
       "signature": "(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, device=None, repeats=3, sample=20000, top=25, output=None, target=None, groups=None, seed=0, name=None, figures=None)"
     },
+    "/plot/kalfa/pred_histogram": {
+      "alias": [
+        "pred_histogram"
+      ],
+      "description": "The distribution of every predicted field of the test set next to the distribution of its truth over the same bins, one column per field, with the ratio of predicted to true counts per bin below (a dashed line at one, a Poisson error bar per bin, a bin without true points stays empty); log draws the counts on a log axis",
+      "facts": {
+        "partial": true
+      },
+      "kind": "plot",
+      "signature": "(predictions, history, models, record, columns=4, bins=40, log=False, name=None, figures=None)"
+    },
     "/plot/kalfa/pred_vs_true": {
       "alias": [
         "pred_vs_true"
@@ -3517,6 +3528,7 @@
       "pixel_shuffle": "/layer/torch/pixel_shuffle",
       "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
+      "pred_histogram": "/plot/kalfa/pred_histogram",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "prelu": "/layer/torch/prelu",
       "pt2": "/export/kalfa/pt2",
@@ -3738,6 +3750,7 @@
       "plateau": "/trigger/kalfa/plateau",
       "polynomial": "/layer/kalfa/polynomial",
       "power_transformer": "/pre/sklearn/power_transformer",
+      "pred_histogram": "/plot/kalfa/pred_histogram",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "prelu": "/layer/torch/prelu",
       "pt2": "/export/kalfa/pt2",
@@ -3971,6 +3984,7 @@
       "plateau": "/trigger/kalfa/plateau",
       "polynomial": "/layer/kalfa/polynomial",
       "power_transformer": "/pre/sklearn/power_transformer",
+      "pred_histogram": "/plot/kalfa/pred_histogram",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "prelu": "/layer/torch/prelu",
       "pt2": "/export/kalfa/pt2",
@@ -4199,6 +4213,7 @@
       "pixel_shuffle": "/layer/torch/pixel_shuffle",
       "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
+      "pred_histogram": "/plot/kalfa/pred_histogram",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "prelu": "/layer/torch/prelu",
       "pt2": "/export/kalfa/pt2",
@@ -4433,6 +4448,7 @@
       "pixel_shuffle": "/layer/torch/pixel_shuffle",
       "pixel_unshuffle": "/layer/torch/pixel_unshuffle",
       "plateau": "/trigger/kalfa/plateau",
+      "pred_histogram": "/plot/kalfa/pred_histogram",
       "pred_vs_true": "/plot/kalfa/pred_vs_true",
       "prelu": "/layer/torch/prelu",
       "pt2": "/export/kalfa/pt2",

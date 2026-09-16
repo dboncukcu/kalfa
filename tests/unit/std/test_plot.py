@@ -11,9 +11,9 @@ import kalfa  # noqa: F401
 from kalfa.std.common.figure import Figure
 from kalfa.std.common.history import History
 from kalfa.std.lego.kalfa.run_all import run_all
-from kalfa.std.plot.base import panel_title
+from kalfa.std.plot.base import panel_title, shared_histograms
 from kalfa.std.plot.kalfa.loss_curve import loss_curve
-from kalfa.std.plot.kalfa.predictions import pred_vs_true
+from kalfa.std.plot.kalfa.predictions import pred_histogram, pred_vs_true, ratio_of
 
 
 def history():
@@ -34,6 +34,20 @@ def test_plots_write_files(tmp_path):
     assert (tmp_path / "plots" / "loss_curve.png").exists() and (tmp_path / "plots" / "pred_vs_true.png").exists()
     assert pred_vs_true(pandas.DataFrame(), history(), {}, str(tmp_path)) is None
     assert loss_curve(predictions, [], {}, str(tmp_path)) is None
+    pred_histogram(predictions, history(), {}, str(tmp_path), bins=4, log=True)
+    assert (tmp_path / "plots" / "pred_histogram.png").exists()
+    assert pred_histogram(pandas.DataFrame(), history(), {}, str(tmp_path)) is None
+
+
+def test_the_shared_histograms_bin_the_truth_and_the_prediction_alike():
+    import numpy
+
+    edges, data, pred = shared_histograms(numpy.array([1.0, 2.0, 3.0]), numpy.array([1.1, 1.9, 3.4]), bins=4)
+    assert len(edges) == 5 and edges[0] == 1.0 and edges[-1] == 3.4
+    assert data.sum() == 3 and pred.sum() == 3 and data.tolist() == [1, 1, 0, 1]
+    ratio, spread = ratio_of(numpy.array([2, 0, 4]), numpy.array([2, 3, 0]))
+    assert ratio[0] == 1.0 and ratio[1] == 0.0 and numpy.isnan(ratio[2])
+    assert spread[0] == pytest.approx(1.0) and spread[1] == 0.0 and spread[2] == 0.0
 
 
 def test_panel_title_names_the_wire_only_when_two_outputs_share_a_field():

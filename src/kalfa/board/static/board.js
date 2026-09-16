@@ -20,6 +20,7 @@ const STATE_COLORS = { running: "#e39b12", finished: "#17a673", failed: "#d8433c
 const EXTRA_AXES = ["objective", "turns", "id", "state"];
 const SET_ORDER = ["train", "valid", "test"];
 const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "predictions", "prep", "plots", "samples", "config", "notes", "files", "timeline", "events", "logs", "describe"];
+const TAB_LABELS = { curves: "loss and metrics", steps: "optimizer steps" };
 const PAGES = ["table", "compare"];
 const IMAGE = /\.(png|jpe?g|gif|svg|webp|bmp)$/i;
 const TEXT = /\.(txt|md|json|csv|yaml|yml)$/i;
@@ -34,6 +35,15 @@ function fileKind(name) {
 
 function defaultPlot() {
   return { logy: false, width: 1.6, markers: 3, dots: 0, curve: "straight", grid: true, bins: 40 };
+}
+
+function scatterPoints(lines, kind) {
+  return (lines || []).filter(line => (line.kind || kind || "line") === "scatter").reduce((sum, line) => sum + (line.points || []).length, 0);
+}
+
+function markerSize(points, settings) {
+  if (settings && typeof settings.markers === "number") return settings.markers;
+  return points < 40 ? 6 : points < 200 ? 5 : points < 1000 ? 4 : 3;
 }
 
 async function api(route, params) {
@@ -355,8 +365,16 @@ function chartOptions(view) {
   const xs = series.flatMap(entry => entry.data.map(point => point[0]));
   const [low, high] = extent(xs);
   const [bottom, top] = extent(series.flatMap(entry => entry.data.map(point => point[1])));
-  const integral = high > low && high - low < 8 && xs.every(Number.isInteger);
-  const ticks = view.xlog && Number.isFinite(high - low) ? Math.max(1, Math.round(high - low)) : (integral ? high - low : 8);
+  const integral = xs.length > 0 && !view.xlog && xs.every(Number.isInteger);
+  let ticks = 8;
+  let span = {};
+  if (view.xlog && Number.isFinite(high - low)) ticks = Math.max(1, Math.round(high - low));
+  else if (integral && high > low && kind !== "bar") {
+    const step = Math.max(1, Math.ceil((high - low) / 8));
+    ticks = Math.ceil((high - low) / step);
+    span = { min: low, max: low + ticks * step };
+  }
+  const markers = markerSize(scatterPoints(view.lines, kind), view.settings);
   const pad = bottom === top && Number.isFinite(top) ? (Math.abs(top) * 0.1 || 1) : 0;
   const marks = (view.marks || []).map(mark => (typeof mark === "number" ? { x: mark } : mark));
   const shownMarks = marks.filter((_, index) => index % (Math.ceil(marks.length / 60) || 1) === 0);
@@ -368,24 +386,28 @@ function chartOptions(view) {
   };
   return {
     chart: { type: kinds.some(item => item !== kind) ? "line" : kind, height: view.height, background: "transparent", fontFamily: "inherit",
+             group: view.group || undefined, id: view.group ? view.uid : undefined,
              foreColor: dark ? "#b7bcc4" : "#4a4f57", animations: { enabled: false },
              zoom: { enabled: kind !== "bar", type: kind === "scatter" ? "xy" : "x", autoScaleYaxis: kind !== "scatter" },
              toolbar: { show: true, offsetY: -4, tools: { download: true, selection: true, zoom: true, zoomin: true, zoomout: true, pan: true, reset: true } } },
     series,
     colors: view.lines.map(line => line.color),
     stroke: { width: kinds.map(item => (item === "scatter" ? 0 : settings.width)), curve: settings.curve, dashArray: view.lines.map(line => (line.dashed ? 5 : 0)) },
-    markers: { size: kinds.map(item => (item === "scatter" ? settings.markers : settings.dots)), hover: { size: Math.max(4, settings.markers) } },
+    markers: { size: kinds.map(item => (item === "scatter" ? markers : settings.dots)), hover: { size: Math.max(4, markers) } },
     plotOptions: { bar: { columnWidth: "90%" } },
     dataLabels: { enabled: false },
     legend: { position: "top", horizontalAlign: "left", showForSingleSeries: true, onItemClick: { toggleDataSeries: true } },
     grid: { show: settings.grid, borderColor: dark ? "#2d3238" : "#e3e6ea" },
-    xaxis: { type: "numeric", title: { text: view.xlabel || "" }, tickAmount: ticks,
-             labels: { formatter: value => tick(back(value)), rotate: 0, hideOverlappingLabels: true }, tooltip: { enabled: false } },
-    yaxis: { title: { text: view.ylabel || "" }, labels: { formatter: value => tick(down(Number(value))) },
+    xaxis: { type: "numeric", ...span, title: { text: view.xlabels === false ? "" : (view.xlabel || "") }, tickAmount: ticks,
+             labels: { show: view.xlabels !== false, formatter: value => (integral ? String(Math.round(back(value))) : tick(back(value))),
+                       rotate: 0, hideOverlappingLabels: true },
+             tooltip: { enabled: false } },
+    yaxis: { title: { text: view.ylabel || "" }, labels: { formatter: value => tick(down(Number(value))), minWidth: view.ywidth || undefined },
              ...(pad ? { min: bottom - pad, max: top + pad } : {}) },
     tooltip: { shared: kind !== "scatter", intersect: kind === "scatter", theme: dark ? "dark" : "light",
                x: { formatter: value => `${view.xlabel || "x"} ${fmt(back(value))}${noteOf(back(value))}` }, y: { formatter: value => fmt(down(Number(value))) } },
-    annotations: { xaxis: shownMarks.map((mark, index) => ({
+    annotations: { yaxis: (view.ylines || []).filter(y => !logy || y > 0).map(y => ({ y: up(y), borderColor: dark ? "#868d97" : "#7d838d", strokeDashArray: 4 })),
+                   xaxis: shownMarks.map((mark, index) => ({
       x: mark.x, borderColor: dark ? "#4a515a" : "#cfd4da", strokeDashArray: 3,
       ...(mark.text && index % labelled === 0 ? { label: { text: mark.text, position: "top", orientation: "horizontal", borderWidth: 0, offsetY: -2,
                                                            style: { background: "transparent", color: dark ? "#868d97" : "#7d838d", fontSize: "10px", fontFamily: "inherit" } } } : {}) })) },
@@ -396,8 +418,10 @@ function chartOptions(view) {
 const Chart = {
   props: { lines: { type: Array, default: () => [] }, title: String, xlabel: String, ylabel: String, logy: Boolean,
            marks: { type: Array, default: () => [] }, height: { type: Number, default: 260 }, expand: String, kind: { type: String, default: "line" },
-           xlog: Boolean, turns: Boolean, settings: { type: Object, default: () => ({}) } },
-  data() { return { chart: null }; },
+           xlog: Boolean, turns: Boolean, settings: { type: Object, default: () => ({}) },
+           group: { type: String, default: "" }, xlabels: { type: Boolean, default: true }, ylines: { type: Array, default: () => [] },
+           ywidth: { type: Number, default: 0 } },
+  data() { return { chart: null, uid: `chart-${Math.random().toString(36).slice(2, 10)}` }; },
   computed: { options() { return chartOptions(this); } },
   watch: {
     options() { if (this.chart) this.chart.updateOptions(this.options, false, false); },
@@ -1013,6 +1037,7 @@ const app = Vue.createApp({
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
       refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
       source: null, timer: null, treeTimer: null, connected: false, queue: {}, plot: defaultPlot(), busy: 0,
+      booted: false, entering: null,
       sidebar: (() => { try { return localStorage.getItem("kalfa-board-sidebar") !== "closed"; } catch (error) { return true; } })(),
     };
   },
@@ -1047,6 +1072,17 @@ const app = Vue.createApp({
       if (!this.pairInfo) return [];
       const { edges, counts } = this.pairInfo.histogram;
       return [{ name: "residual", color: PALETTE[1], points: counts.map((value, index) => [(edges[index] + edges[index + 1]) / 2, value]) }];
+    },
+    distributionLines() {
+      const pair = this.pairInfo;
+      if (!pair || !pair.distribution || !pair.distribution.edges || pair.distribution.edges.length < 2) return null;
+      const { edges, data, pred } = pair.distribution;
+      const centers = data.map((value, index) => (edges[index] + edges[index + 1]) / 2);
+      const top = [{ name: pair.target, color: PALETTE[0], kind: "bar", points: centers.map((x, index) => [x, data[index]]) },
+                   { name: pair.pred, color: PALETTE[1], kind: "bar", points: centers.map((x, index) => [x, pred[index]]) }];
+      const ratio = [{ name: `${pair.pred} / ${pair.target}`, color: PALETTE[1], kind: "scatter",
+                       points: centers.map((x, index) => [x, data[index] > 0 ? pred[index] / data[index] : NaN]).filter(point => Number.isFinite(point[1])) }];
+      return { top, ratio };
     },
     prepPreprocessors() {
       const table = (this.prepData && this.prepData.preprocessors) || {};
@@ -1117,6 +1153,20 @@ const app = Vue.createApp({
       return rows;
     },
     sweepSpace() { return (this.sweep && this.sweep.space) || {}; },
+    sweepUnit() { return (this.sweep && this.sweep.unit) || "turn"; },
+    tableUnit() {
+      const units = new Set(this.tableRows.map(row => row.unit));
+      return units.size === 1 && units.has("epoch") ? "epoch" : "turn";
+    },
+    compareUnit() {
+      if (!this.compareData || this.compareData.missing) return "turn";
+      return ["a", "b"].every(which => (this.compareData[which].record.manifest || {}).turn === "epoch") ? "epoch" : "turn";
+    },
+    expandedHasPoints() {
+      const view = this.expanded;
+      if (!view) return false;
+      return (view.panels || [view]).some(panel => panel.kind === "scatter" || (panel.lines || []).some(line => line.kind === "scatter"));
+    },
     objectiveName() { return (this.sweep && this.sweep.objective && this.sweep.objective.monitor) || "objective"; },
     objectiveMode() { return (this.sweep && this.sweep.objective && this.sweep.objective.mode) || "min"; },
     scoreExtent() {
@@ -1201,7 +1251,7 @@ const app = Vue.createApp({
       const lines = this.colorGroups(rows, color).map(group => ({
         name: group.name, color: group.color, kind: "scatter",
         points: group.rows.map(row => [xlog ? Math.log10(row.values[x]) : row.values[x], row.values[y]]) }));
-      return { lines: lines.filter(line => line.points.length), xlog, xlabel: x, ylabel: y, shown: rows.length };
+      return { lines: lines.filter(line => line.points.length), xlog, xlabel: this.axisLabel(x), ylabel: this.axisLabel(y), shown: rows.length };
     },
     paramCharts() {
       if (!this.sweep) return [];
@@ -1537,7 +1587,7 @@ const app = Vue.createApp({
     expanded() {
       const name = this.route.params.chart;
       if (!name || !this.record) return null;
-      if (this.isSweep) return name === "overlay" && this.overlayLines.length ? { name: this.sweep.objective.monitor || "objective", lines: this.overlayLines, xlabel: "turn", marks: [] } : null;
+      if (this.isSweep) return this.expandedSweep(name);
       if (this.tab === "steps" || (this.tab === "monitor" && name.startsWith("loss/"))) {
         const found = this.stepCharts.find(entry => entry.name === name);
         return found ? { name, lines: found.lines, xlabel: "step", marks: this.turnMarks, turns: true } : null;
@@ -1546,6 +1596,11 @@ const app = Vue.createApp({
         const pair = this.pairInfo;
         if (name === "scatter") return { name: `${pair.pred} against ${pair.target}`, lines: this.scatterLines, kind: "scatter", xlabel: pair.target, ylabel: pair.pred, marks: [] };
         if (name === "histogram") return { name: "residual (prediction minus target)", lines: this.histogramLines, kind: "bar", xlabel: "residual", ylabel: "points", marks: [], bins: true };
+        if (name === "distribution" && this.distributionLines) {
+          return { name: `${pair.pred} and ${pair.target} over the same bins`, bins: true,
+                   panels: [{ lines: this.distributionLines.top, kind: "bar", ylabel: "points", xlabels: false, logy: true },
+                            { lines: this.distributionLines.ratio, kind: "scatter", xlabel: pair.target, ylabel: "pred / true", ylines: [1] }] };
+        }
         return null;
       }
       if (name === "learning rate") return this.rateLines.length ? { name, lines: this.rateLines, xlabel: this.turnLabel, marks: [], logy: true } : null;
@@ -1681,7 +1736,7 @@ const app = Vue.createApp({
     },
   },
   watch: {
-    path: { immediate: true, handler() { this.enterRecord(); } },
+    path: { immediate: true, handler() { this.entering = this.enterRecord(); } },
     chrome: {
       immediate: true,
       handler(now, before) {
@@ -1701,7 +1756,11 @@ const app = Vue.createApp({
       if (this.tab === "predictions" && this.predictionsData) this.loadPredictions();
     } },
     "plot.bins"() { if (this.tab === "predictions" && this.predictionsData) this.loadPredictions(); },
-    expanded(now, before) { if (now && !before) this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), bins: this.plot.bins }; },
+    expanded(now, before) {
+      if (!now || before) return;
+      const lines = now.panels ? now.panels.flatMap(panel => panel.lines.map(line => ({ ...line, kind: line.kind || panel.kind }))) : now.lines;
+      this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), bins: this.plot.bins, markers: markerSize(scatterPoints(lines, now.kind), null) };
+    },
     "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
     "route.params.b"() { if (this.page === "compare") this.loadCompare(); },
     tab: { immediate: true, handler() { this.enterTab(); } },
@@ -1711,6 +1770,22 @@ const app = Vue.createApp({
   },
   methods: {
     fmt, count, ms, ago, clock, setColor, shortUri, paramsText, paramCount,
+    tabLabel(name) { return TAB_LABELS[name] || name; },
+    axisLabel(key) { return key === "turns" ? `${this.sweepUnit}s` : key; },
+    expandedSweep(name) {
+      if (name === "overlay" && this.overlayLines.length) return { name: this.sweep.objective.monitor || "objective", lines: this.overlayLines, xlabel: this.sweepUnit, marks: [] };
+      if (name === "explorer" && this.exploreChart && this.exploreChart.lines.length) {
+        const chart = this.exploreChart;
+        return { name: `${chart.ylabel} against ${chart.xlabel}, colored by ${this.explore.color}`, lines: chart.lines, kind: "scatter",
+                 xlabel: chart.xlabel, ylabel: chart.ylabel, xlog: chart.xlog, marks: [] };
+      }
+      if (name.startsWith("param:")) {
+        const found = this.paramCharts.find(entry => entry.key === name.slice(6) && entry.shape === "scatter");
+        return found ? { name: `${found.key} against ${this.objectiveName}`, lines: found.lines, kind: "scatter", xlabel: found.key, ylabel: this.objectiveName, xlog: found.xlog, marks: [] } : null;
+      }
+      if (name === "progress" && this.progressChart) return { name: `${this.objectiveName} over the sweep order`, lines: this.progressChart.lines, xlabel: "point", ylabel: this.objectiveName, marks: [] };
+      return null;
+    },
     stateOf(entry) { return (entry.status && entry.status.state) || "pending"; },
     definitionOf(name) {
       const config = (this.record && this.record.config) || {};
@@ -2037,7 +2112,10 @@ const app = Vue.createApp({
       if (index < 0 || !names.length) return;
       this.go({ item: names[(index + direction + names.length) % names.length] }, true);
     },
-    downloadModal() { if (this.$refs.modal) this.$refs.modal.download(); },
+    downloadModal() {
+      const charts = this.expanded && this.expanded.panels ? (this.$refs.panels || []) : [this.$refs.modal];
+      charts.forEach(chart => { if (chart) chart.download(); });
+    },
     resetPlot() { this.plot = { ...defaultPlot(), logy: this.logy }; },
     async copy(text) {
       try { await navigator.clipboard.writeText(text || ""); } catch (error) { console.warn("clipboard unavailable", error); }
@@ -2123,8 +2201,9 @@ const app = Vue.createApp({
   },
   mounted() {
     this.modalHeight = Math.max(360, Math.round(window.innerHeight * 0.72));
-    this.loadTree();
-    this.loadLive();
+    Promise.all([this.loadTree(), this.loadLive(), this.entering])
+      .catch(error => console.warn("the first reads did not all land", error))
+      .finally(() => { this.booted = true; });
     window.addEventListener("hashchange", () => this.onHash());
     this.applyRefresh();
     window.addEventListener("keydown", event => {

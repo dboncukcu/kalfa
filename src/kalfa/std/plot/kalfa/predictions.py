@@ -1,7 +1,15 @@
 import numpy
 
 from kalfa.std.common.figure import Figure
-from kalfa.std.plot.base import first_set, panel_title, pick_pair, prediction_pairs, r2_of, set_frame
+from kalfa.std.plot.base import (
+    first_set,
+    panel_title,
+    pick_pair,
+    prediction_pairs,
+    r2_of,
+    set_frame,
+    shared_histograms,
+)
 
 
 def points_text(count):
@@ -37,6 +45,56 @@ def pred_vs_true(predictions, history, models, record, name=None, columns=4, kin
     for axis in panels[len(pairs):]:
         axis.axis("off")
     figures.save(drawing, record, name or "pred_vs_true")
+    return None
+
+
+def ratio_of(pred, data):
+    with numpy.errstate(divide="ignore", invalid="ignore"):
+        ratio = numpy.where(data > 0, pred / numpy.where(data > 0, data, 1), numpy.nan)
+        spread = numpy.where((data > 0) & (pred > 0), ratio * numpy.sqrt(1.0 / numpy.where(pred > 0, pred, 1)
+                                                                       + 1.0 / numpy.where(data > 0, data, 1)), 0.0)
+    return ratio, spread
+
+
+def pred_histogram(predictions, history, models, record, columns=4, bins=40, log=False, name=None, figures=None):
+    figures = figures or Figure()
+    pairs = prediction_pairs(predictions)
+    if not pairs:
+        return None
+    width = max(1, min(int(columns or 4), len(pairs)))
+    rows = -(-len(pairs) // width)
+    drawing, axes = figures.pyplot().subplots(2 * rows, width, squeeze=False,
+                                              figsize=(figures.width_of(5.4) * width, figures.height_of(5.4) * rows),
+                                              gridspec_kw={"height_ratios": [3.0, 1.0] * rows})
+    paired = [field for _, field in pairs]
+    panels = [(axes[2 * (position // width)][position % width], axes[2 * (position // width) + 1][position % width])
+              for position in range(rows * width)]
+    for (top, below), (pred, target) in zip(panels, pairs):
+        truth, guess = figures.finite(predictions[target].to_numpy(), predictions[pred].to_numpy())
+        if not len(truth):
+            top.axis("off")
+            below.axis("off")
+            continue
+        edges, data, counts = shared_histograms(truth, guess, bins)
+        centers = 0.5 * (edges[:-1] + edges[1:])
+        top.hist(truth, bins=edges, color=figures.categorical[0], alpha=0.4, edgecolor="none", label=target)
+        top.hist(guess, bins=edges, histtype="step", color=figures.categorical[1], linewidth=2, label=pred)
+        if log:
+            top.set_yscale("log")
+        top.legend(loc="upper right")
+        top.tick_params(labelbottom=False)
+        figures.label(top, panel_title(pred, target, paired), None, "points",
+                     note=f"{len(truth):,} points over {len(data)} shared bins")
+        ratio, spread = ratio_of(counts, data)
+        below.axhline(1.0, color=figures.ink_muted, linewidth=1, linestyle="--")
+        below.errorbar(centers, ratio, yerr=spread, fmt="o", markersize=3, color=figures.categorical[1],
+                       ecolor=figures.ink_muted, elinewidth=1)
+        below.set_xlim(top.get_xlim())
+        figures.label(below, None, target, "pred / true")
+    for top, below in panels[len(pairs):]:
+        top.axis("off")
+        below.axis("off")
+    figures.save(drawing, record, name or "pred_histogram")
     return None
 
 

@@ -40,6 +40,13 @@ def prediction_pairs(predictions):
             if predictions[pred].dtype.kind in "fiu" and predictions[true].dtype.kind in "fiu"]
 
 
+def shared_histograms(truth, guess, bins=40):
+    edges = numpy.histogram_bin_edges(numpy.concatenate([truth, guess]), bins=max(2, int(bins)))
+    data, _ = numpy.histogram(truth, bins=edges)
+    pred, _ = numpy.histogram(guess, bins=edges)
+    return edges, data, pred
+
+
 def r2_of(true, guess):
     spread = float(numpy.sum((true - numpy.mean(true)) ** 2))
     if spread <= 0:

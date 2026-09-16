@@ -188,6 +188,7 @@ alias:
   # plot
   loss_curve: /plot/kalfa/loss_curve
   pred_vs_true: /plot/kalfa/pred_vs_true
+  pred_histogram: /plot/kalfa/pred_histogram
   class_histogram: /plot/kalfa/class_histogram
   binary_roc: /plot/torchmetrics/binary_roc
   binary_precision_recall_curve: /plot/torchmetrics/binary_precision_recall_curve
