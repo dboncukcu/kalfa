@@ -25,6 +25,7 @@ No Python is needed to train a model. Python is how you add a piece kalfa does n
 | understand the machine | [How it works](#how-it-works) |
 | write a config | [The config](#the-config) · [`CONFIG.md`](CONFIG.md) |
 | copy a working setup | [Recipes](#recipes) · [`examples/`](examples/) |
+| watch a run | [The board](#the-board) |
 | find a lego | [`kalfa ls`](#commands) · [`DOCS.md`](DOCS.md) |
 | drive it from Python | [Python API](#python-api) |
 | add my own piece | [Your own legos](#your-own-legos) |
@@ -113,6 +114,21 @@ plots:
   pred_vs_true: {uri: pred_vs_true}
 
 record: runs/housing_$datetime$
+```
+
+`nodes` as a list is a chain. Written as a mapping it is a graph, keyed by the wire each node writes, and that is
+where a second input, a skip connection or a second output goes; the rest of the config stays as it is:
+
+```yaml
+model:
+  optimizer: {uri: adam, params: {lr: $lr$}}
+  inputs: [x]
+  outputs: [y]
+  nodes:
+    h1:  {uri: linear_relu, params: {out_features: 128}, inputs: [x]}
+    h2:  {uri: linear_relu, params: {out_features: 128}, inputs: [h1]}
+    sum: {uri: add, inputs: [h1, h2]}                       # a residual connection: two wires into one node
+    y:   {uri: linear, params: {out_features: 1}, inputs: [sum]}
 ```
 
 ```bash
@@ -411,6 +427,21 @@ model:                                              # a catalogue; these five wo
         zy:    {uri: concat, params: {dim: 1}, inputs: [z, y]}
         image: {uri: dcgan_generator, params: {channels: 64}, inputs: [zy]}
 
+    corrector:                                      # the output is a correction of two input columns
+      optimizer: main
+      inputs: [x]
+      outputs: [y]
+      nodes:
+        base:  {uri: select, params: {index: {uri: feature_index, params: {columns: [m1, m2]}}}, inputs: [x]}
+        delta: {uri: mlp, params: {widths: [128, 128], out_features: 2}, inputs: [x]}
+        y:     {uri: add, inputs: [base, delta]}
+
+    lambdas:                                        # the multipliers of the mdmm loss below, one per constraint
+      optimizer: main
+      inputs: [x]
+      outputs: [lmbda]
+      nodes: [{uri: multipliers, params: {names: $constraints$}}]
+
     classifier:                                     # a composite: real models as nodes, no parameters of its own
       inputs: [image]
       outputs: [logits]
@@ -429,7 +460,15 @@ model:                                              # a catalogue; these five wo
 | `{model: name}` node | a composite; it has no parameters, no checkpoint entry, and its parts keep their own modes |
 
 A layer param can be a run time value: `{uri: vocab_size}` for an `embedding`'s `num`, `{uri: feature_width}` for
-a `layer_norm`. It is built once the fitted preprocessors and the train loader exist.
+a `layer_norm`, `{uri: feature_index, params: {columns: [m1, m2]}}` for a `select`. It is built once the fitted
+preprocessors and the train loader exist.
+
+Wires meet in the arithmetic nodes: `add` and `multiply` take any number of wires, `subtract` and `divide` two,
+`negate` one, and shapes broadcast. `select` takes positions out of a wire, by index or by column name through
+`feature_index`, which follows the fitted plan (a `one_hot` that widened a column is already counted); with `add`
+it is a long range skip connection, the output as a correction of part of the input, as `corrector` above.
+`multipliers` is a model of one node that carries the Lagrange multipliers of an `mdmm` loss, so the optimizer
+updates them and the checkpoint keeps them (the `losses` section below).
 
 `timm_backbone` and `dcgan_generator` above are not std legos: they come from the plugin modules of
 `examples/04_cnn_images` and `examples/07_wgan_gp`. A plugin lego is written exactly like a std one, which is the
@@ -448,8 +487,8 @@ losses:
   ce:       {uri: cross_entropy, params: {weight: {uri: class_weights}}}   # a run time component as a param
   recon:    {uri: mse, output: x_hat, target: input}      # a named wire, and the model's own input as target
   total:    {uri: weighted_sum, params: {terms: {ce: 1.0, recon: 0.1}}}    # the keys are loss definition names
-  held:     {uri: mdmm, params: {primary: ce, multipliers: lambdas,     # ce under recon = 0.05, a multiplier
-                                 constraints: {recon: {epsilon: 0.05, lmbda_init: -1.0}}}}  # per constraint
+  held:     {uri: mdmm, params: {primary: ce, multipliers: lambdas,     # ce under the constraint recon = 0.05
+                                 constraints: $constraints$}}       # {recon: {epsilon: 0.05, lmbda_init: -1.0}}
   vae_loss:
     uri: vae
     params:
@@ -461,7 +500,8 @@ losses:
 optimizers:
   main:
     uri: adamw
-    params: {lr: 1.0e-3, groups: [{match: "backbone.*", lr: 1.0e-5}]}
+    params: {lr: 1.0e-3, groups: [{match: "backbone.*", lr: 1.0e-5},
+                                  {match: "lambdas.*", lr: -2.0e-4}]}   # the multipliers climb: a negative rate
     loss: ce                                              # the name of what it minimizes
     schedule: {uri: warmup_cosine, params: {warmup: 500, total: 20000}}
 ```
@@ -841,7 +881,7 @@ parameter name is dim, the values stay plain, so `parquet  housing.parquet` read
 Tables are fitted to the terminal width; with `--save report.txt`, or any time the output is not a terminal,
 nothing is clipped.
 
-### While it runs: `--log` and `kalfa board`
+### While it runs: `--log`
 
 ```bash
 kalfa run config.yaml --log info --no-progress
@@ -863,32 +903,88 @@ the tqdm progress bar; `--no-progress` drops the bar entirely (tqdm is never eve
 prints a line every N updates with the loss, the learning rate and the gradient norm.
 
 ```bash
+kalfa stop runs/x        # writes stop.json; the run ends after its current turn, as an early stop would
+```
+
+## The board
+
+```bash
 kalfa board runs --port 8080        # http.server plus a Vue page; no network needed, no extra dependency
 ```
 
-The board reads records, it never writes one except to ask a run to stop. It lists what is running and what
-finished, follows a live record over a server sent event stream (progress, the monitored metric, the step loss,
-the log tail), tabulates a sweep with its best point, overlays the curves of two records and diffs their configs,
-draws the model as a schematic that opens into its layers with the tensor shapes on the wires, walks the data
-pipeline stage by stage, and browses the predictions (the prediction against the truth, the residuals, and the
-two distributions over the same bins with their ratio below), the plots and the files. The address bar carries
-the record, the tab and the open plot, so a link is one exact view; every chart expands into a large view with its
-own settings. On a batch system it runs on the login node and the browser reaches it through an ssh tunnel.
+The board reads records; it never writes one except to ask a run to stop. It finds every record under the root,
+follows the live ones over a server sent event stream, and gives every record one page of tabs. The address bar
+carries the record, the tab, the open chart and the view options, so a link is one exact view and a reload keeps
+it. On a batch system it runs on the login node and the browser reaches it through an ssh tunnel.
 
-The predictions tab takes a pandas query over the columns of the file, the targets, the `pred_` and `raw_` wires,
-the calibration flags and the `data.spectators` columns:
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_monitor.png" width="920" alt="the monitor tab of a finished run"></p>
+
+**Monitor.** The turn and batch bars, the checkpoint monitor across the sets, the loss every optimizer minimizes,
+the batch loss per step, the latest values and the log tail, refreshed as the record changes. The sidebar lists
+the runs and the sweeps with their points, a dot for the state of each; the tab title of the browser carries the
+progress of everything running, so a background tab says how far the training is.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_curves.png" width="920" alt="one chart per history series, the sets as lines"></p>
+
+**Loss and metrics, optimizer steps.** One chart per history series with the sets as lines and the turns a rule
+fired marked; one chart per step series with the turns labelled along the top. Every chart expands into a large
+view beside a settings panel (log scale, grid, line width, points, point size, the bins of a histogram) whose
+download writes it as drawn; the axis says epochs when a turn is one.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_model.png" width="920" alt="the architecture drawn as a schematic"></p>
+
+**Model.** The architecture from `architecture.json` as a schematic: a block per node with its pins, every wire
+with its width, the losses and the optimizers beside the outputs they read. A block opens into its layers with the
+tensor shapes one batch traced; a model inside a model opens into its own nodes. Drag a block, bend a wire, zoom,
+save the png as arranged.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_data.png" width="920" alt="the data pipeline stage by stage"></p>
+
+**Data.** The data block as the same kind of schematic, stage by stage with the rows and columns, and the tables
+of what every transform added or removed, what the fit learned on train and what each loader yields.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_predictions.png" width="920" alt="the predictions tab with a query"></p>
+
+**Predictions.** The prediction against the truth with the y = x line, the residual histogram, the distributions
+of the prediction and the truth over the same bins with their ratio below, and the largest errors, in the original
+units. A pandas query over the columns of the file, the targets, the `pred_` and `raw_` wires, the calibration
+flags and the `data.spectators` columns narrows every number on the page to the rows it keeps, and rides in the
+address bar with the rest of the view:
 
 ```
 site == "b" and pred_y > 0 and price < 4
 ```
 
-R², rmse, mae, the residual histogram and the largest errors are then all computed over the rows it keeps, and
-the query rides in the address bar with the rest of the view. It is evaluated server side, so `--host` beyond
-`127.0.0.1` hands that to whoever can reach the port.
+It is evaluated server side, so `--host` beyond `127.0.0.1` hands that to whoever can reach the port.
 
-```bash
-kalfa stop runs/x        # writes stop.json; the run ends after its current turn, as an early stop would
-```
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_sweep_space.png" width="920" alt="every point of a sweep across the space"></p>
+
+**Sweeps.** A sweep is one record with its points below it. Its page draws every point across the whole space,
+the failed ones dashed, coloured by the rank of the objective; a drag on any axis narrows the charts and the table
+together.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_sweep_explorer.png" width="920" alt="the explorer and the table of points"></p>
+
+The explorer picks its own axes and colour, the table of points sorts by any column, and the best point so far
+stands above it with its params.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_sweep_params.png" width="920" alt="every param against the objective, and where the points died"></p>
+
+Every param against the objective, a strip per level for a choice, and where the failed points died: a level that
+fails about as often as every other level points at the node or the environment, not at the params.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_sweep_progress.png" width="920" alt="the objective over the sweep order"></p>
+
+The objective over the sweep order says whether the search is still finding anything; below it the curves of the
+ticked points overlaid and the `resolved.yaml` difference between two of them.
+
+<p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_plots.png" width="920" alt="the plots of a record as a gallery"></p>
+
+**Plots, files and the rest.** The figures under `plots/` as a gallery, the sample images as they are written,
+every file of the record with a viewer for text, images and PDFs, `resolved.yaml`, the fitted preprocessors and
+what each learned, the identity notes (`manifest.json`, `host.json`, `device.json`, `git.json`), the node
+timeline, the event and log tails, and `describe` on demand. A running record shows a stop button in its header;
+`kalfa stop` from the shell does the same.
 
 ## Python API
 
