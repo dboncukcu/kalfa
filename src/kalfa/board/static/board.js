@@ -380,7 +380,7 @@ function buildHash(path, params) {
 function plotTheme() {
   const dark = darkMode();
   return { dark, ink: dark ? "#b7bcc4" : "#4a4f57", muted: dark ? "#868d97" : "#7d838d", grid: dark ? "#2d3238" : "#e3e6ea",
-           line: dark ? "#3c424a" : "#cfd4da", surface: dark ? "#23272d" : "#ffffff" };
+           line: dark ? "#3c424a" : "#cfd4da", surface: dark ? "#23272d" : "#ffffff", card: dark ? "#1d2025" : "#ffffff" };
 }
 
 function plotConfig(name) {
@@ -391,7 +391,7 @@ function plotConfig(name) {
 
 function plotFrame(view, theme, settings) {
   return { height: settings.height || view.height, margin: { l: 60, r: 18, t: 30, b: 48 },
-           paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+           paper_bgcolor: theme.card, plot_bgcolor: theme.card,
            font: { family: "ui-monospace, 'SF Mono', Menlo, Consolas, monospace", size: settings.font || 11, color: theme.ink },
            showlegend: settings.legend !== false,
            legend: { orientation: "h", x: 0, y: 1, xanchor: "left", yanchor: "bottom", font: { size: settings.font || 11 } },
@@ -459,7 +459,8 @@ function chartFigure(view) {
     return trace;
   });
   const xs = data.flatMap(trace => trace.x), ys = data.flatMap(trace => trace.y);
-  const step = logx || kind === "bar" ? null : integerStep(xs);
+  const integral = !logx && kind !== "bar" && xs.length > 0 && xs.every(Number.isInteger);
+  const step = integral ? integerStep(xs) : null;
   const shownMarks = marks.filter((_, index) => index % (Math.ceil(marks.length / 60) || 1) === 0);
   const labelled = Math.ceil(shownMarks.length / 12) || 1;
   const layout = {
@@ -467,14 +468,14 @@ function chartFigure(view) {
     hovermode: kind === "scatter" ? "closest" : "x unified",
     uirevision: `${logy}-${logx}`,
     xaxis: { ...axisOf(theme, settings, settings.xlabel || view.xlabel, logx, xs, settings.xmin, settings.xmax),
-             ...(step ? { dtick: step, tick0: Math.floor(extent(xs)[0]) } : {}) },
+             ...(step ? { dtick: step, tick0: 0 } : {}) },
     yaxis: axisOf(theme, settings, settings.ylabel || view.ylabel, logy, ys, settings.ymin, settings.ymax),
     shapes: shownMarks.map(mark => ({ type: "line", xref: "x", yref: "paper", x0: mark.x, x1: mark.x, y0: 0, y1: 1, line: { color: theme.line, width: 1, dash: "dot" } })),
     annotations: shownMarks.map((mark, index) => (mark.text && index % labelled === 0
       ? { x: mark.x, y: 1, xref: "x", yref: "paper", text: mark.text, showarrow: false, yanchor: "bottom", font: { size: 10, color: theme.muted } }
       : null)).filter(Boolean),
   };
-  return { data, layout: merge(layout, extraLayout(settings.extra)) };
+  return { data, layout: merge(layout, extraLayout(settings.extra)), integral };
 }
 
 const Plotted = {
@@ -488,9 +489,9 @@ const Plotted = {
       if (!host) return;
       const { data, layout } = this.figure;
       const config = plotConfig(this.title || this.ylabel);
-      if (this.drawn) { Plotly.react(host, data, layout, config); return; }
+      if (this.drawn) { Plotly.react(host, data, layout, config).then(() => this.retick()); return; }
       this.drawn = true;
-      Plotly.newPlot(host, data, layout, config).then(() => host.on("plotly_relayout", () => this.retick()));
+      Plotly.newPlot(host, data, layout, config).then(() => { host.on("plotly_relayout", () => this.retick()); this.retick(); });
     },
     retick() {
       const host = this.$refs.host;
@@ -499,9 +500,14 @@ const Plotted = {
       const changes = {};
       for (const name of ["xaxis", "yaxis", "yaxis2"]) {
         const axis = full[name];
-        if (!axis || axis.type !== "log" || !axis.range) continue;
-        const wanted = logTicks(axis.range[1] - axis.range[0]);
-        if (axis.dtick !== wanted.dtick) { changes[`${name}.dtick`] = wanted.dtick; changes[`${name}.minor.ticks`] = wanted.minor.ticks; }
+        if (!axis || !axis.range) continue;
+        if (axis.type === "log") {
+          const wanted = logTicks(axis.range[1] - axis.range[0]);
+          if (axis.dtick !== wanted.dtick) { changes[`${name}.dtick`] = wanted.dtick; changes[`${name}.minor.ticks`] = wanted.minor.ticks; }
+        } else if (name === "xaxis" && this.figure.integral) {
+          const step = Math.max(1, Math.ceil((axis.range[1] - axis.range[0]) / 8));
+          if (axis.dtick !== step || axis.tick0 !== 0) { changes["xaxis.dtick"] = step; changes["xaxis.tick0"] = 0; }
+        }
       }
       if (Object.keys(changes).length) Plotly.relayout(host, changes);
     },
@@ -509,7 +515,8 @@ const Plotted = {
       const host = this.$refs.host;
       if (!host || !this.drawn) return;
       const format = (this.settings && this.settings.format) || "png";
-      Plotly.downloadImage(host, { format, scale: format === "png" ? 2 : 1, width: host.clientWidth || 900, height: this.figure.layout.height || this.height,
+      Plotly.downloadImage(host, { format, scale: format === "png" ? 2 : 1, width: host.clientWidth || 900,
+                                   height: host.clientHeight || this.figure.layout.height || this.height,
                                    filename: (this.title || this.ylabel || "chart").replace(/[^\w.-]+/g, "_") });
     },
   },
