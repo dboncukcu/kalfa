@@ -824,7 +824,7 @@ reports. `--measure` runs the data block for the real set sizes, `--dump` prints
 which is the config above plus a chain of rules that switches the loss three times, abridged in the middle:
 
 ```
-config.yaml                                                                          kalfa 0.2.6
+config.yaml                                                                          kalfa 0.4.0
   layers      config.yaml, /alias/kalfa/base, /alias/kalfa/tabular
   seed        7
   device      cpu (no device key)
@@ -1251,7 +1251,7 @@ and a `tests/runs/test_<name>.py` that finishes on a laptop CPU in seconds.
 **Releasing.** `bash tools/release.sh 0.2.7 "a one line summary"` writes the version into `pyproject.toml` and
 `uv.lock`, regenerates the golden files and `DOCS.md` (their headers carry the version), and asks before the
 commit, the annotated tag and the push. Run the suite against a reinstalled environment (`uv sync --reinstall`)
-first, then `uv build`. kalfa 0.2.6 needs tezgah 0.2.0 or later and cirak 0.2.3 or later.
+first, then `uv build`. kalfa 0.4.0 needs tezgah 0.2.0 or later and cirak 0.2.3 or later.
 
 ## License
 

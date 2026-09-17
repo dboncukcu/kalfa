@@ -1,4 +1,4 @@
-config.yaml                                                                                       kalfa 0.3.1
+config.yaml                                                                                       kalfa 0.4.0
   layers      config.yaml, /alias/kalfa/base, /alias/kalfa/vision
   params
     epochs       40       temperature  4        seed         7
