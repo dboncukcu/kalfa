@@ -463,8 +463,13 @@ function chartFigure(view) {
   const step = integral ? integerStep(xs) : null;
   const shownMarks = marks.filter((_, index) => index % (Math.ceil(marks.length / 60) || 1) === 0);
   const labelled = Math.ceil(shownMarks.length / 12) || 1;
+  const frame = plotFrame(view, theme, settings);
+  if (shownMarks.some(mark => mark.text)) {
+    frame.margin.t = 54;
+    frame.legend.y = 1 + 22 / Math.max(120, frame.height - frame.margin.t - frame.margin.b);
+  }
   const layout = {
-    ...plotFrame(view, theme, settings),
+    ...frame,
     hovermode: kind === "scatter" ? "closest" : "x unified",
     uirevision: `${logy}-${logx}`,
     xaxis: { ...axisOf(theme, settings, settings.xlabel || view.xlabel, logx, xs, settings.xmin, settings.xmax),
