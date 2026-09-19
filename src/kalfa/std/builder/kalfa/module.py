@@ -124,6 +124,8 @@ class Module(Model):
     def train(self, mode=True):
         if mode and not self.trainable:
             mode = False
+        for model in self.refs.values():
+            model.train(mode)
         return super().train(mode)
 
     def materialize(self, arguments):
