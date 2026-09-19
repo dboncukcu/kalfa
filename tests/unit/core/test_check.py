@@ -501,3 +501,20 @@ def test_figures_section_values(workdir):
     prepared, kinds = kinds_of(workdir, config, "bad.yaml")
     assert kinds == ["unknown_key", "invalid_value"]
     assert "figures.format must be one of" in prepared.problems[1].message
+
+
+def test_init_roles_are_calls_and_a_node_takes_no_init(workdir):
+    config = minimal()
+    net = config["model"]["models"]["net"]
+    net["init"] = {"weights": {"uri": "kaiming"}, "bias": {"uri": "zeros"},
+                   "patterns": [{"match": "*", "weights": {"uri": "zeros"}}]}
+    assert kinds_of(workdir, config)[1] == []
+    net["init"] = {"weights": {"uri": "kaiming"}, "bias": "zeros", "patterns": [{"match": "*", "weights": "zeros"}]}
+    prepared, kinds = kinds_of(workdir, config, "short.yaml")
+    assert kinds == ["invalid_call", "invalid_call"]
+    assert "init.bias must be {uri, params}" in prepared.problems[0].message
+    del net["init"]
+    net["nodes"][2]["init"] = {"weights": {"uri": "zeros"}}
+    prepared, kinds = kinds_of(workdir, config, "node.yaml")
+    assert kinds == ["invalid_value"]
+    assert "init on a node" in prepared.problems[0].message

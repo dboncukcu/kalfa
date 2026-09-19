@@ -10,7 +10,6 @@ from cirak.merge import describe_layers, merge_layers
 from cirak.registry import registry
 from cirak.resolve import TOKEN
 
-from .contract import Contract
 from .schema import Schema
 from .std import STD_URIS
 from .std.common.log import logger_for
@@ -124,11 +123,10 @@ def pack_tables():
     return tables
 
 
-def load_surface(paths, sets=None, contract=None) -> Surface:
+def load_surface(paths, sets=None) -> Surface:
     files = [str(path) for path in paths if not isinstance(path, dict)]
     mappings = [path for path in paths if isinstance(path, dict)]
     paths = [*files, *["<mapping>"] * len(mappings)]
-    contract = contract or Contract.load()
     logger.info(f"config {', '.join(paths)}")
     layer, problems = load(files, registry.fragments())
     for mapping in mappings:
@@ -146,7 +144,7 @@ def load_surface(paths, sets=None, contract=None) -> Surface:
     table = raw.get("alias")
     if isinstance(table, dict):
         aliases.update({name: target for name, target in table.items() if isinstance(target, str)})
-    data = resolve_surface(raw, provenance, aliases, problems, contract.roles())
+    data = resolve_surface(raw, provenance, aliases, problems)
     return Surface(data, raw, provenance, overrides, layer, aliases, problems, paths)
 
 
@@ -161,9 +159,9 @@ def resolve_alias(text, aliases):
     return current
 
 
-def resolve_surface(raw, provenance, aliases, problems, roles=()):
+def resolve_surface(raw, provenance, aliases, problems):
     globals_ = raw.get("params") if isinstance(raw.get("params"), dict) else {}
-    resolver = Resolver(aliases, globals_, provenance, problems, roles)
+    resolver = Resolver(aliases, globals_, provenance, problems)
     out = {}
     for key, value in raw.items():
         if key in Schema.unresolved:
@@ -203,12 +201,11 @@ def resolve_rule_sets(data, aliases):
 
 
 class Resolver:
-    def __init__(self, aliases, globals_, provenance, problems, roles=()):
+    def __init__(self, aliases, globals_, provenance, problems):
         self.aliases = aliases
         self.globals = globals_
         self.provenance = provenance
         self.problems = problems
-        self.roles = tuple(roles)
 
     def walk(self, value, path, block_vars=frozenset()):
         if isinstance(value, dict):
@@ -253,9 +250,7 @@ class Resolver:
         return frozenset(str(name) for name in declared)
 
     def short_call(self, path):
-        if path in Schema.short_calls:
-            return True
-        return len(path) >= 2 and path[-1] in self.roles and "init" in path[:-1]
+        return path in Schema.short_calls
 
     def uri(self, text, path, block_vars=frozenset()):
         text = self.substitute(text, path, block_vars)

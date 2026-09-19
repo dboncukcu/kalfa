@@ -263,9 +263,11 @@ class SectionRules:
                 self.error("invalid_value", "a node has exactly one of uri, template or model", node_path)
                 continue
             self.keys(item, Schema.node, node_path)
+            if "init" in item:
+                self.error("invalid_value", "init on a node is not applied; write a pattern of the model's init, "
+                                            "{match: '<node>.*', weights | bias | scale}", node_path + ("init",))
             if kinds[0] == "uri":
                 self.call_of(item, node_path, ("layer",), "a model node")
-                self.init_of(item.get("init"), node_path + ("init",))
             elif kinds[0] == "template":
                 if item["template"] not in self.templates:
                     self.error("unresolved_ref", f"template {item['template']!r} is not defined", node_path)
@@ -286,7 +288,7 @@ class SectionRules:
             return
         for role in roles:
             if role in init:
-                self.call_of(init[role], path + (role,), ("init",), f"init.{role}")
+                self.init_call(init[role], path + (role,), f"init.{role}")
         for position, entry in enumerate(init.get("patterns") or []):
             entry_path = path + ("patterns", position)
             if not (isinstance(entry, dict) and "match" in entry):
@@ -294,7 +296,13 @@ class SectionRules:
                 continue
             for role in roles:
                 if role in entry:
-                    self.call_of(entry[role], entry_path + (role,), ("init",), f"init pattern {role}")
+                    self.init_call(entry[role], entry_path + (role,), f"init pattern {role}")
+
+    def init_call(self, value, path, what):
+        if not isinstance(value, dict):
+            self.error("invalid_call", f"{what} must be {{uri, params}}; a short name is not built here", path)
+            return
+        self.call_of(value, path, ("init",), what)
 
     def definitions(self):
         losses = self.data.get("losses")

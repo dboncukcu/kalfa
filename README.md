@@ -405,7 +405,7 @@ model:                                              # a catalogue; these five wo
 
     head:
       optimizer: main
-      init: {weights: {uri: kaiming}, bias: zeros}   # roles: weights, bias, scale; also per node, or by pattern
+      init: {weights: {uri: kaiming}, bias: {uri: zeros}}   # roles: weights, bias, scale, each {uri, params}; or by pattern
       inputs: [feature]
       outputs: [logits]
       nodes: [{uri: linear, params: {out_features: 37}}]
@@ -453,7 +453,7 @@ model:                                              # a catalogue; these five wo
 | Key | Means |
 |---|---|
 | `optimizer` | which optimizer trains it; models sharing a name share one optimizer object |
-| `init` | per role, per node, or by parameter name pattern; unwritten roles keep the torch default |
+| `init` | per role or by parameter name pattern, each a `{uri, params}` call; unwritten roles keep the torch default |
 | `weights` | load another record's weights after the build (teacher, fine tune, warm start) |
 | `ema` | a moving average copy, usable everywhere as `<name>.ema` |
 | `trainable: false` | frozen and in eval mode, so BatchNorm statistics freeze too |

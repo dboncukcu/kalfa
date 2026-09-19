@@ -47,9 +47,9 @@ model:                            # [required] either several models:
   models: {}                      #   name: {optimizer, inputs, outputs, nodes, init, ema: {decay}, trainable, weights}
                                   # or the single model shorthand: model: {optimizer: {uri, params}, inputs, outputs, nodes, init, ema, trainable, weights}
                                   # nodes: a list (a chain) or a mapping (a graph: the key is the node name; without outputs it is the single output wire too)
-                                  # a node: {uri, params, inputs, outputs, init, repeat} | {template: name, params, repeat, inputs, outputs} | {model: name, inputs, outputs}
+                                  # a node: {uri, params, inputs, outputs, repeat} | {template: name, params, repeat, inputs, outputs} | {model: name, inputs, outputs}
                                   # optimizer: a name in optimizers (a string) or an inline {uri, params}; a model writing none is not trained (a warning; composites and trainable: false excepted)
-                                  # init: {weights, bias, scale: a short name | {uri, params}, patterns: [{match: "head.*", weights: ...}]} [library: torch]
+                                  # init: {weights, bias, scale: {uri, params} (a short name is a check error), patterns: [{match: "head.*", weights: ...}]} [library: torch]
                                   # trainable: false: requires_grad off and eval mode; the rule set: {<name>.trainable: true} opens both
                                   # weights: {run: runs/x, model: name, which: best | last | final}; loaded after the build; together with init on the same model a check error
                                   # a composite model (a {model: name} node): cannot write optimizer, init, ema, trainable, weights; does not enter the checkpoint

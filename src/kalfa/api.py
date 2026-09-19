@@ -115,7 +115,7 @@ def prepare(paths, sets=None, inputs=None, dry=True, contract=None, prepared=Non
     paths, contract = record_paths(paths, contract)
     contract = contract or Contract.load()
     inputs = contract.run_inputs if inputs is None else list(inputs)
-    surface = load_surface(paths, sets, contract)
+    surface = load_surface(paths, sets)
     manifest = prepared_manifest(prepared) if prepared is not None else None
     checker = Checker(surface, registry, contract, manifest["header"] if manifest is not None else None)
     problems = list(surface.problems)
@@ -502,7 +502,7 @@ class Opened:
 def open_record(run_dir, which=None, sets=None, contract=None) -> Opened:
     resolved = resolved_of(run_dir)
     contract = recorded_contract(run_dir, contract)
-    surface = load_surface([str(resolved)], sets, contract)
+    surface = load_surface([str(resolved)], sets)
     gate(surface.problems)
     config = surface.data
     document = recipe(config, registry, surface.aliases, contract, record=run_dir)
