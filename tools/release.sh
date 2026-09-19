@@ -44,11 +44,10 @@ fi
 
 printf '%s -> %s\n' "$OLD" "$NEW"
 
-if confirm "run ruff, pytest and the golden check first?"; then
+if confirm "run ruff and pytest first?"; then
     FAILED=()
     uv run ruff check src tests tools || FAILED+=("ruff")
     uv run pytest -q || FAILED+=("pytest")
-    uv run python tools/regenerate.py --check || FAILED+=("golden")
     if [[ ${#FAILED[@]} -gt 0 ]]; then
         printf 'release: %s reported problems\n' "${FAILED[*]}" >&2
         confirm "go on anyway?" || die "stopped, the version is untouched"
@@ -71,21 +70,17 @@ else
     printf 'release: uv is not on PATH, uv.lock still says %s\n' "$OLD" >&2
 fi
 
-if [[ ! -f tools/regenerate.py ]]; then
-    printf 'release: tools/regenerate.py is gone, the generated files still say %s\n' "$OLD" >&2
-elif ! command -v uv >/dev/null 2>&1; then
-    printf 'release: uv is not on PATH, the generated files still say %s\n' "$OLD" >&2
+if ! command -v uv >/dev/null 2>&1; then
+    printf 'release: uv is not on PATH, DOCS.md still says %s\n' "$OLD" >&2
 else
-    printf 'the generated files carry the version, so they are written again\n'
-    uv run python tools/regenerate.py --all >/dev/null
-    uv run python tools/regenerate.py --check >/dev/null \
-        || die "regenerate wrote files that are still not current, the version is set but nothing is committed"
+    printf 'DOCS.md carries the version, so it is written again\n'
+    uv run kalfa docs --write DOCS.md >/dev/null
     REGENERATED=1
-    printf 'DOCS.md and the golden files: %s\n' "$NEW"
+    printf 'DOCS.md: %s\n' "$NEW"
 fi
 
 git add pyproject.toml uv.lock
-[[ -z "${REGENERATED-}" ]] || git add DOCS.md tests/golden
+[[ -z "${REGENERATED-}" ]] || git add DOCS.md
 
 LEFT="$(git status --porcelain | grep -v '^[MARCD] ' || true)"
 if [[ -n "$LEFT" ]]; then

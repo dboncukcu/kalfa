@@ -51,7 +51,7 @@ To get the reference configs and the test suite:
 git clone https://github.com/dboncukcu/kalfa.git && cd kalfa
 uv sync
 uv run kalfa --help
-uv run python -m pytest -m "not slow and not subprocess"   # unit and contract tests, seconds
+uv run python -m pytest -m "not slow and not subprocess"   # the surface and lego layers, seconds
 ```
 
 ## 60 seconds
@@ -1221,35 +1221,40 @@ run stays reproducible when the default changes.
 | [`reference.yaml`](reference.yaml) | every key with its class: required, empty, derived or library default |
 | [`examples/`](examples/) | seventeen runnable configs with their data generators and commands |
 | `kalfa contract` | the wiring and the five flow blocks kalfa runs a config by |
-| `tests/golden/` | per example: the expanded graph, the driver document and the `describe` output |
+| [`tests/configs/reference.yaml`](tests/configs/reference.yaml) | the reference config of the test suite: every mechanism in one file, trained once and inspected facet by facet |
 
 ## Development
 
 ```bash
 uv sync
-uv run python -m pytest -m "not slow and not subprocess"    # unit and contract tests, seconds
-uv run python -m pytest                                      # everything, the run tests included
-uv run python tools/regenerate.py --all                      # the golden files and DOCS.md
-uv run python tools/regenerate.py --check                    # what would change, writing nothing
+uv run python -m pytest -m "not slow and not subprocess"    # the surface and lego layers, seconds
+uv run python -m pytest                                      # everything, the runs and the command line included
+uv run kalfa docs --write DOCS.md                            # the lego reference, from the registry
 ```
 
-Markers: `slow` (trains a model), `subprocess` (the sweep loop), `optional` (needs seaborn, torchview, cuda or
-mps, and skips itself without them).
+The tests sit in four layers that follow a config on its way to a run: `tests/surface/` (loading, checking and
+shaping a config, one file per module), `tests/legos/` (every std lego built by URI on hand written inputs, one
+file per kind; a contract test fails while a std URI is exercised nowhere), `tests/runs/` (one reference config,
+`tests/configs/reference.yaml`, trained once per session and inspected facet by facet, plus one small run per
+mechanism a tabular model cannot express) and `tests/cli/` (every command, on the reference record). Nothing is
+compared to a golden file: a test asserts the exact files, keys and shapes a run writes, and the seeded reference
+run is repeated to the bit. Markers: `slow` (trains a model), `subprocess` (spawns kalfa in a child process).
 
 **The std tree.** A std lego's URI is `/<kind>/<pack>/<name>` and its module is `src/kalfa/std/<kind>/<pack>/`. A
 file holds one lego with a body of its own, or a family of small ones (`std/criterion/kalfa/regression.py` holds
 `mse`, `mae`, `huber`, `log_cosh` and `weighted_mse`). Code two families of a kind share sits in the kind's
 `base.py`, code two legos of a pack share in the pack's `base.py`, code crossing kinds in `std/common/`. A
-contract test checks that every std lego is registered from a module of its own kind and pack, and that every
-module registers one.
+contract test checks that every std lego is registered from a module of its own kind and pack, that every
+module registers one, and that every std URI is exercised by a test of its kind under `tests/legos/`.
 
 **Adding an example.** `examples/<nn>_<name>/` with a `config.yaml` (a comment header, paths relative to the
 folder), a `make_data.py` carrying its own generator, the plugin module when the config names one, and an entry in
-`examples/README.md`. Then regenerate the golden files, add unit tests for the new legos under `tests/unit/std/`,
-and a `tests/runs/test_<name>.py` that finishes on a laptop CPU in seconds.
+`examples/README.md`. Every example is checked, never trained, by `tests/surface/test_examples.py`. A new lego
+gets its test in `tests/legos/test_<kind>.py`; a mechanism a tabular model cannot express gets a small config under
+`tests/configs/` and a `tests/runs/test_mechanism_<name>.py` that finishes on a laptop CPU in seconds.
 
 **Releasing.** `bash tools/release.sh 0.2.7 "a one line summary"` writes the version into `pyproject.toml` and
-`uv.lock`, regenerates the golden files and `DOCS.md` (their headers carry the version), and asks before the
+`uv.lock`, writes `DOCS.md` again (its header carries the version), and asks before the
 commit, the annotated tag and the push. Run the suite against a reinstalled environment (`uv sync --reinstall`)
 first, then `uv build`. kalfa 0.4.0 needs tezgah 0.2.0 or later and cirak 0.2.3 or later.
 

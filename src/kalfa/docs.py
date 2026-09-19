@@ -10,7 +10,7 @@ from .std import STD_URIS
 
 HEADER = """# kalfa lego reference
 
-Generated from the registry by `kalfa docs --write DOCS.md`; do not edit by hand, the test `tests/test_docs.py`
+Generated from the registry by `kalfa docs --write DOCS.md`; do not edit by hand, the test `tests/surface/test_docs.py`
 compares this file with the registry. One table per kind: the URI, the alias names, the signature with the param
 defaults, the facts a lego declares and its description. The kind of a lego is the first segment of its URI; which
 config section it may be written in follows from the kind (`CONFIG.md` section 5). Every URI of the catalog is
