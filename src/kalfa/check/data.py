@@ -188,7 +188,9 @@ class DataRules:
 
     def data_header(self):
         data = self.data.get("data") or {}
-        header = self.foreseen_header(self.source_header())
+        header = self.source_header()
+        if self.given_header is None:
+            header = self.foreseen_header(header)
         if header is None:
             return
         self.header = header
