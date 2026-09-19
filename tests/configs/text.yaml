@@ -1,0 +1,59 @@
+include: [/alias/kalfa/text]
+
+params: {total_steps: 8, turn_steps: 2, lr: 3.0e-3, seq_len: 16, seed: 5}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: text_lines, params: {path: text.txt}}
+  split: {ratios: [0.9, 0.1, 0.0], seed: $seed$}
+  batch: 4
+  preprocessors:
+    tokenizer: {uri: char_tokenizer}
+  fields:
+    text: {preprocessors: [tokenizer]}
+  feed: {uri: next_token, params: {seq_len: $seq_len$}}
+
+model:
+  models:
+    lm:
+      optimizer: main
+      inputs: [input_ids]
+      outputs: [logits]
+      nodes:
+        - {uri: embedding, params: {num: {uri: vocab_size}, dim: 8}}
+        - {uri: gru, params: {hidden: 16}}
+        - {uri: linear, params: {out_features: {uri: vocab_size}}}
+
+metrics:
+  perplexity: {uri: perplexity, target: targets}
+  samples:    {uri: sample_writer, params: {sampler: generate}, every: 2, sets: [valid]}
+
+losses:
+  lm: {uri: cross_entropy, target: targets}
+
+optimizers:
+  main:
+    uri: adamw
+    params: {lr: $lr$}
+    loss: lm
+    schedule: {uri: warmup_cosine, params: {warmup: 2, total: $total_steps$}}
+
+training:
+  turn: supervised
+  steps: {total: $total_steps$, turn: $turn_steps$}
+  accumulate: 2
+  grad_clip: 1.0
+  checkpoint: last
+  report: last
+  stop: []
+
+generate:
+  uri: lm_sampler
+  params: {model: lm, prompt: "ROMEO:", max_new_tokens: 20, temperature: 0.9}
+
+plots:
+  loss_curve: {uri: loss_curve, params: {series: [train/lm, val/perplexity]}}
+
+record: runs/text_$datetime$

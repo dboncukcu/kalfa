@@ -1,0 +1,19 @@
+include: [tiny.yaml]
+
+params:
+  epochs: 1
+  lr: 1.0e-2
+  width: 16
+
+model:
+  nodes:
+    - {uri: linear_relu, params: {out_features: $width$}}
+    - {uri: linear, params: {out_features: 1}}
+
+sweep:
+  strategy: grid
+  space:
+    lr: [1.0e-2, 1.0e-3]
+    width: [16, 32]
+  objective: {monitor: val/rmse, mode: min, at: best}
+  record: runs/grid

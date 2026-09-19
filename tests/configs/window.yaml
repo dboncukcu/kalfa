@@ -1,0 +1,47 @@
+include: [/alias/kalfa/tabular]
+
+params: {epochs: 2, lr: 1.0e-2, seed: 5}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: parquet, params: {path: energy.parquet}}
+  split: {uri: sequential, params: {ratios: [0.7, 0.15, 0.15], group: site_id}}
+  batch: 16
+  preprocessors:
+    std_scaler: {uri: standard_scaler}
+    target_std: {uri: standard_scaler}
+  fields:
+    "x*": {preprocessors: [std_scaler]}
+    load: {target: true, preprocessors: [target_std]}
+  feed: {uri: window, params: {size: 12, horizon: 4, context: true, group: site_id}}
+
+model:
+  optimizer: {uri: adam, params: {lr: $lr$}}
+  inputs: [x]
+  outputs: [y]
+  nodes:
+    - {uri: gru, params: {hidden: 16}}
+    - {uri: last_step}
+    - {uri: linear, params: {out_features: 4}}
+
+metrics:
+  rmse: {uri: rmse}
+
+losses:
+  loss_mse: {uri: mse}
+
+training:
+  turn: supervised
+  loss: loss_mse
+  epochs: $epochs$
+  checkpoint: null
+  report: last
+  stop: []
+
+plots:
+  loss_curve: {uri: loss_curve}
+  forecast:   {uri: forecast_samples, params: {n: 3}}
+
+record: runs/window_$datetime$

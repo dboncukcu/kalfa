@@ -1,0 +1,50 @@
+include: [/alias/kalfa/tabular]
+
+params: {epochs: 1, lr: 1.0e-2, seed: 3}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: parquet, params: {path: churn.parquet}}
+  split: {ratios: [0.7, 0.15, 0.15], seed: $seed$}
+  batch: 128
+  preprocessors:
+    std:    {uri: standard_scaler}
+    onehot: {uri: one_hot}
+    label:  {uri: label_encoder}
+  fields:
+    "num_*": {preprocessors: [std]}
+    "cat_*": {preprocessors: [onehot]}
+    churned: {target: true, preprocessors: [label]}
+  feed: table
+
+model:
+  models:
+    net:
+      optimizer: {uri: adam, params: {lr: $lr$}}
+      inputs: [x]
+      outputs: [logits]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 16}}
+        - {uri: linear, params: {out_features: 2}}
+
+metrics:
+  accuracy: {uri: accuracy}
+  f1:       {uri: f1}
+
+losses:
+  ce: {uri: cross_entropy, params: {weight: {uri: class_weights}}}
+
+training:
+  turn: supervised
+  loss: ce
+  epochs: $epochs$
+  checkpoint: {uri: best, params: {monitor: val/f1, mode: max}}
+  report: best
+  stop: []
+
+plots:
+  confusion: {uri: confusion_matrix}
+
+record: runs/teacher

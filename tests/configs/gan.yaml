@@ -1,0 +1,70 @@
+include: [/alias/kalfa/vision]
+
+params: {epochs: 2, lr: 1.0e-4, latent: 8, seed: 5}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: image_folder, params: {path: images}}
+  split: {ratios: [0.75, 0.25, 0.0], seed: $seed$}
+  batch: {size: 8, drop_last: true}
+  preprocessors:
+    to_signed: {uri: to_tensor_signed}
+  fields:
+    image: {preprocessors: [to_signed]}
+  feed: table
+
+model:
+  models:
+    gen:
+      optimizer: g
+      ema: {decay: 0.9}
+      init: {weights: {uri: normal, params: {std: 0.02}}}
+      inputs: [z]
+      outputs: [image]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 32}}
+        - {uri: linear, params: {out_features: 64}}
+        - {uri: /layer/torch/tanh}
+        - {uri: unflatten, params: {shape: [1, 8, 8]}}
+    critic:
+      optimizer: d
+      inputs: [image]
+      outputs: [score]
+      nodes:
+        - {uri: flatten}
+        - {uri: linear, params: {out_features: 32}}
+        - {uri: leaky_relu, params: {negative_slope: 0.2}}
+        - {uri: linear, params: {out_features: 1}}
+
+metrics:
+  fid:     {uri: fid, params: {model: gen.ema, latent: $latent$, n: 8,
+                               extractor: {uri: /lego/kalfa/pixel_features, params: {size: 2}}}, sets: [valid]}
+  samples: {uri: sample_writer, params: {sampler: generate, n: 4}, sets: [valid]}
+
+losses:
+  wgan_d: {uri: wgan_gp_d, params: {generator: gen, critic: critic, latent: $latent$, gp_weight: 10}, sets: [train]}
+  wgan_g: {uri: wgan_g, params: {generator: gen, critic: critic, latent: $latent$}}
+
+optimizers:
+  d: {uri: adam, params: {lr: $lr$, betas: [0.0, 0.9]}, loss: wgan_d}
+  g: {uri: adam, params: {lr: $lr$, betas: [0.0, 0.9]}, loss: wgan_g}
+
+training:
+  turn: {uri: alternating, params: {order: [d, g], steps: {d: 2, g: 1}, fresh_batch: true}}
+  epochs: $epochs$
+  checkpoint: {uri: best, params: {monitor: val/fid}}
+  report: best
+  stop: []
+
+generate:
+  uri: gan_sampler
+  params: {model: gen.ema, latent: $latent$, n: 4}
+
+plots:
+  loss_curve:     {uri: loss_curve, params: {series: [train/wgan_d, train/wgan_g, val/fid]}}
+  samples_gif:    {uri: samples_gif}
+  samples_matrix: {uri: samples_matrix, params: {n: 4}}
+
+record: runs/gan_$datetime$

@@ -1,0 +1,61 @@
+include: [/alias/kalfa/vision]
+
+params: {epochs: 1, lr: 3.0e-3, temperature: 0.5, seed: 5}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: image_folder, params: {path: images}}
+  split: {ratios: [1.0, 0.0, 0.0], seed: $seed$}
+  batch: {size: 8, drop_last: true}
+  preprocessors:
+    aug:       {uri: simclr_aug, params: {size: 8}}
+    two:       {uri: two_views, params: {transform: aug}, sets: [train]}
+    to_tensor: {uri: to_tensor}
+  fields:
+    image: {preprocessors: [two, to_tensor]}
+  feed: table
+
+model:
+  models:
+    backbone:
+      optimizer: main
+      inputs: [image]
+      outputs: [h]
+      nodes:
+        - {uri: flatten}
+        - {uri: linear_relu, params: {out_features: 16}}
+        - {uri: linear, params: {out_features: 4}}
+    head:
+      optimizer: main
+      inputs: [h]
+      outputs: [z]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 8}}
+        - {uri: linear, params: {out_features: 4}}
+    simclr:
+      inputs: [image]
+      outputs: [z]
+      nodes:
+        h: {model: backbone, inputs: [image]}
+        z: {model: head, inputs: [h]}
+
+losses:
+  ntx: {uri: ntxent, params: {model: simclr, temperature: $temperature$}, sets: [train]}
+
+optimizers:
+  main: {uri: adamw, params: {lr: $lr$}, loss: ntx}
+
+training:
+  turn: supervised
+  predicts: simclr
+  epochs: $epochs$
+  checkpoint: last
+  report: last
+  stop: []
+
+plots:
+  loss_curve: {uri: loss_curve}
+
+record: runs/simclr_$datetime$

@@ -1,0 +1,47 @@
+include: [/alias/kalfa/lazy_tabular]
+
+params: {epochs: 2, lr: 1.0e-2, seed: 5}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: csv, params: {path: housing.csv, chunk: 300}}
+  split: {uri: sequential, params: {ratios: [0.7, 0.15, 0.15]}}
+  transform:
+    - "price > 0"
+  batch: 64
+  preprocessors:
+    std_scaler: {uri: standard_scaler}
+    target_std: {uri: standard_scaler}
+  fields:
+    "x*":  {preprocessors: [std_scaler]}
+    price: {target: true, preprocessors: [target_std]}
+  feed: table
+
+model:
+  optimizer: {uri: adam, params: {lr: $lr$}}
+  inputs: [x]
+  outputs: [y]
+  nodes:
+    - {uri: linear_relu, params: {out_features: 16}}
+    - {uri: linear, params: {out_features: 1}}
+
+metrics:
+  rmse: {uri: rmse}
+
+losses:
+  loss: {uri: mse}
+
+training:
+  turn: supervised
+  loss: loss
+  epochs: $epochs$
+  checkpoint: {uri: best, params: {monitor: val/rmse}}
+  report: best
+  stop: []
+
+plots:
+  loss_curve: {uri: loss_curve}
+
+record: runs/stream_$datetime$

@@ -64,8 +64,7 @@ testpaths = ["tests"]
 addopts = "--strict-markers"
 markers = [
     "slow: trains a model",
-    "subprocess: spawns kalfa in a child process (the sweep loop)",
-    "optional: needs seaborn, torchview, cuda or mps and skips itself without them",
+    "subprocess: spawns kalfa in a child process",
 ]
 
 [tool.ruff]
@@ -76,5 +75,5 @@ target-version = "py313"
 select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["kalfa", "helpers"]
+known-first-party = ["kalfa", "helpers", "data"]
 lines-after-imports = 2

@@ -1,0 +1,65 @@
+include: [/alias/kalfa/tabular]
+
+params: {epochs: 2, lr: 1.0e-3, temperature: 2.0, alpha: 0.5, seed: 3}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: parquet, params: {path: churn.parquet}}
+  split: {ratios: [0.7, 0.15, 0.15], seed: $seed$}
+  batch: 128
+  preprocessors:
+    std:    {uri: standard_scaler}
+    onehot: {uri: one_hot}
+    label:  {uri: label_encoder}
+  fields:
+    "num_*": {preprocessors: [std]}
+    "cat_*": {preprocessors: [onehot]}
+    churned: {target: true, preprocessors: [label]}
+  feed: table
+
+model:
+  models:
+    teacher:
+      trainable: false
+      weights: {run: runs/teacher, model: net, which: best}
+      inputs: [x]
+      outputs: [logits]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 16}}
+        - {uri: linear, params: {out_features: 2}}
+    student:
+      optimizer: main
+      inputs: [x]
+      outputs: [logits]
+      nodes:
+        - {uri: linear_relu, params: {out_features: 8}}
+        - {uri: linear, params: {out_features: 2}}
+
+metrics:
+  accuracy: {uri: accuracy}
+
+losses:
+  kd: {uri: /objective/kalfa/distill, params: {student: student, teacher: teacher, temperature: $temperature$, alpha: $alpha$}}
+
+optimizers:
+  main: {uri: adamw, params: {lr: $lr$}, loss: kd}
+
+training:
+  turn: supervised
+  predicts: student
+  epochs: $epochs$
+  rules:
+    - name: cool
+      when: {uri: metric_above, params: {monitor: val/accuracy, value: -1.0}}
+      set: {main.lr: 1.0e-4}
+  checkpoint: {uri: best, params: {monitor: val/accuracy, mode: max}}
+  report: best
+  stop: []
+
+plots:
+  loss_curve: {uri: loss_curve, params: {series: [train/kd/ce, train/kd/kl, val/accuracy]}}
+  confusion:  {uri: confusion_matrix}
+
+record: runs/distill_$datetime$

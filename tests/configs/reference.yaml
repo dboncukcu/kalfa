@@ -1,0 +1,208 @@
+include: [/alias/kalfa/tabular]
+
+params:
+  epochs: 3
+  seed: 11
+  lr: 1.0e-3
+  constraints:
+    mae_lin:     {epsilon: 0.5, lmbda_init: 0.0, scale: 1.0, damping: 1.0}
+    ws.huber_hv: {epsilon: 0.3}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: parquet, params: {path: reference.parquet}}
+  transform:
+    - {uri: rename, params: {pattern: "^raw_(\\d)$", to: "num_\\1"}}
+    - "num_1 > -2.5"
+    - {uri: derive, params: {column: inter, expr: "num_0 * num_1"}}
+    - {uri: astype, params: {columns: {count: float64}}}
+    - {uri: drop, params: {columns: [junk]}}
+    - {uri: filter, params: {query: "y_heavy > -6 and y_heavy < 6"}, sets: [train]}
+  frame:
+    - {uri: group_statistic, params: {by: site, column: num_0, statistic: median}}
+    - {uri: target_encoding, params: {column: site, target: y_lin, smoothing: 2.0}}
+  split: {ratios: [0.7, 0.15, 0.15], seed: $seed$}
+  batch: {size: 64, eval_size: 256, drop_last: true}
+  mask: "num_0 > 1.5"
+  drop: [noise_id]
+  spectators: [sample_id]
+  preprocessors:
+    std:        {uri: standard_scaler}
+    target_std: {uri: standard_scaler}
+    robust:     {uri: robust_scaler}
+    onehot:     {uri: one_hot}
+    ordinal:    {uri: label_encoder}
+    squash:     {uri: tanh, params: {scale: 3.0}}
+    to_logit:   {uri: logit}
+    impute:     {uri: simple_imputer, params: {strategy: median, indicator: true}}
+    fill0:      {uri: fill, params: {value: 0.0}}
+    abs_train:  {uri: abs, sets: [train]}
+    to_float:   {uri: cast, params: {dtype: float32}}
+  fields:
+    "num_*":     {preprocessors: [std]}
+    inter:       {preprocessors: [std]}
+    heavy:       {preprocessors: [squash, robust]}
+    frac:        {preprocessors: [to_logit, std]}
+    late:        {preprocessors: [impute, std]}
+    gap:         {preprocessors: [fill0, abs_train, std]}
+    count:       {preprocessors: [robust]}
+    region:      {preprocessors: [onehot]}
+    tier:        {preprocessors: [ordinal]}
+    "*_by_site": {preprocessors: [std]}
+    site_target: {preprocessors: [std]}
+    "y_*":       {target: true, preprocessors: [target_std]}
+    y_heavy:     {target: true, preprocessors: [squash]}
+    y_frac:      {target: true, preprocessors: [to_logit]}
+    is_hot:      {target: true, preprocessors: [to_float]}
+  feed: table
+
+model:
+  templates:
+    res_block:
+      variables: {width: {required: true}, drop: {default: 0.1}}
+      inputs: [u]
+      outputs: [v]
+      nodes:
+        f: {uri: linear, params: {out_features: $width$}, inputs: [u]}
+        n: {uri: batch_norm, inputs: [f]}
+        a: {uri: hardtanh, params: {min_val: -3.0, max_val: 3.0}, inputs: [n]}
+        d: {uri: dropout, params: {p: $drop$}, inputs: [a]}
+        v: {uri: add, inputs: [u, d]}
+  models:
+    tower:
+      optimizer: main
+      ema: {decay: 0.9}
+      init:
+        weights: {uri: xavier}
+        bias:    {uri: zeros}
+        scale:   {uri: normal, params: {std: 0.05, mean: 1.0}}
+        patterns: [{match: "h_*", weights: {uri: normal, params: {std: 0.02}}}]
+      inputs: [x]
+      outputs: [h]
+      nodes:
+        norm: {uri: layer_norm, params: {normalized_shape: {uri: feature_width}}, inputs: [x]}
+        stem: {uri: linear, params: {out_features: 16}, inputs: [norm]}
+        h:    {template: res_block, params: {width: 16}, repeat: 2, inputs: [stem]}
+    head_lin:
+      optimizer: main
+      inputs: [h, x]
+      outputs: [y_hat]
+      nodes:
+        base:  {uri: select, params: {index: {uri: feature_index, params: {columns: [num_0, num_1]}}}, inputs: [x]}
+        delta: {uri: mlp, params: {widths: [16], dropout: 0.1, out_features: 2}, inputs: [h]}
+        y_hat: {uri: add, inputs: [base, delta]}
+    head_aux:
+      optimizer: main
+      inputs: [h]
+      outputs: [aux_hat]
+      nodes: [{uri: linear, params: {out_features: 2}}]
+    tail_stem:
+      optimizer: aux
+      trainable: false
+      inputs: [x]
+      outputs: [s]
+      nodes: [{uri: linear_relu, params: {out_features: 8}}]
+    tail_head:
+      optimizer: aux
+      inputs: [s]
+      outputs: [tail_logit]
+      nodes: [{uri: linear, params: {out_features: 1}}]
+    lambdas:
+      optimizer: main
+      inputs: [x]
+      outputs: [lmbda]
+      nodes: [{uri: multipliers, params: {names: $constraints$}}]
+    full:
+      inputs: [x]
+      outputs: [y_hat, aux_hat, tail_logit]
+      nodes:
+        h:          {model: tower, inputs: [x]}
+        y_hat:      {model: head_lin, inputs: [h, x]}
+        aux_hat:    {model: head_aux, inputs: [h]}
+        s:          {model: tail_stem, inputs: [x]}
+        tail_logit: {model: tail_head, inputs: [s]}
+
+losses:
+  mse_lin:     {uri: mse, output: y_hat}
+  huber_hv:    {uri: huber, params: {delta: 1.0}, output: aux_hat}
+  mae_lin:     {uri: mae, output: y_hat}
+  bce:         {uri: bce_logits, output: tail_logit}
+  bce_pos:     {uri: bce_logits, output: tail_logit, params: {pos_weight: 3.0}}
+  probe_heavy: {uri: mae, output: aux_hat, target: [y_heavy, y_frac], every: 2, sets: [valid, test]}
+  ws:          {uri: weighted_sum, params: {terms: {mse_lin: 1.0, huber_hv: 0.5}}}
+  total:       {uri: mdmm, params: {primary: ws, multipliers: lambdas, constraints: $constraints$}}
+
+metrics:
+  rmse_lin:  {uri: rmse, output: y_hat}
+  mae_orig:  {uri: mae, output: y_hat}
+  recon_lin: {uri: /metric/kalfa/recon_error, output: y_hat}
+  auroc:     {uri: auroc, output: tail_logit}
+  acc:       {uri: accuracy, output: tail_logit}
+  ap_every:  {uri: average_precision, output: tail_logit, every: 2, sets: [valid, test]}
+
+optimizers:
+  main:
+    uri: adam
+    params:
+      lr: $lr$
+      groups:
+        - {name: lambdas, match: "lambdas.*", lr: -1.0e-2}
+        - {name: stem, match: "tower.nodes.stem.*", lr: 5.0e-4}
+    loss: total
+  aux:
+    uri: sgd
+    params: {lr: 0.05, momentum: 0.9}
+    loss: bce
+    schedule: {uri: warmup_cosine, params: {warmup: 4, total: 200}}
+
+training:
+  turn: {uri: alternating, params: {order: [main, aux], steps: {main: 1, aux: 2}, fresh_batch: false}}
+  accumulate: 2
+  grad_clip: 5.0
+  predicts: full
+  targets: {y_hat: [y_lin, y_quad], aux_hat: [y_heavy, y_frac], tail_logit: is_hot}
+  epochs: $epochs$
+  rules:
+    - {name: unfreeze, when: {uri: after_epoch, params: {at: 1}}, set: {tail_stem.trainable: true}}
+    - {name: swap_aux, when: {uri: after_epoch, params: {at: 1}}, set: {aux.loss: bce_pos}}
+    - name: cool_stem
+      after: swap_aux
+      sticky: false
+      when: {uri: metric_below, params: {monitor: val/rmse_lin, value: 1.0e9}}
+      set: {main.stem.lr: {times: 0.5}, ws.terms.mse_lin: 2.0}
+    - name: reweight
+      after: cool_stem
+      when: {uri: plateau, params: {monitor: val/mae_orig, patience: 0}}
+      set: {total.constraints.mae_lin.scale: 2.0}
+  stop: [{uri: time_budget, params: {minutes: 1000}}]
+  checkpoint: {uri: best, params: {monitor: val/rmse_lin, mode: min}}
+  report: best
+
+calibrate:
+  hot_cut: {uri: threshold, params: {set: valid, quantile: 0.9, output: tail_logit}}
+
+plots:
+  loss_curve:   {uri: loss_curve}
+  steps:        {uri: loss_curve, params: {x: step}}
+  curves_rates: {uri: loss_curve, params: {series: [train/total, val/rmse_lin, lr/aux], rates: true}}
+  pred_vs_true:   {uri: pred_vs_true}
+  pred_histogram: {uri: pred_histogram}
+  residuals:      {uri: residuals, params: {output: aux_hat, target: y_heavy}}
+  error_map:      {uri: error_map, params: {x: num_0, y: num_1, output: y_hat, target: y_lin}}
+  correlation_heatmap:   {uri: correlation_heatmap}
+  feature_distributions: {uri: feature_distributions, params: {log: [count]}}
+  target_correlation:    {uri: target_correlation, params: {target: y_lin}}
+  target_vs_features:    {uri: target_vs_features, params: {target: y_quad, columns: ["num_*", heavy], per_row: 3}}
+  data_pipeline:     {uri: data_pipeline, params: {columns: [heavy, frac]}}
+  architecture:      {uri: architecture}
+  architecture_text: {uri: architecture_text}
+  class_histogram:   {uri: class_histogram, params: {output: tail_logit, target: is_hot}}
+  permutation_importance: {uri: permutation_importance, params: {output: y_hat, target: y_lin, sample: 200, repeats: 2}}
+  binary_roc: {uri: binary_roc, params: {output: tail_logit, target: is_hot}}
+  binary_precision_recall_curve: {uri: binary_precision_recall_curve, params: {output: tail_logit, target: is_hot}}
+
+figures: {format: png, width: 5.0, height: 3.5, dpi: 72}
+
+record: runs/ref_$datetime$

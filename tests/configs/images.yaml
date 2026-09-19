@@ -1,0 +1,55 @@
+include: [/alias/kalfa/vision]
+
+params: {epochs: 1, lr: 1.0e-3, seed: 5}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: image_folder, params: {path: images}}
+  split: {ratios: [0.6, 0.2, 0.2], seed: $seed$}
+  batch: {size: 8, balanced: true}
+  preprocessors:
+    resize:    {uri: resize, params: {size: 8}}
+    augment:   {uri: random_crop_flip, params: {size: 8}, sets: [train]}
+    to_tensor: {uri: to_tensor}
+    normalize: {uri: normalize, params: {mean: 0.5, std: 0.5}}
+  fields:
+    image: {preprocessors: [resize, augment, to_tensor, normalize]}
+    label: {target: true}
+  feed: table
+
+model:
+  models:
+    net:
+      optimizer: main
+      inputs: [image]
+      outputs: [logits]
+      nodes:
+        - {uri: conv2d, params: {out_channels: 4, kernel: 3}}
+        - {uri: relu}
+        - {uri: maxpool, params: {kernel: 2}}
+        - {uri: flatten}
+        - {uri: linear, params: {out_features: 2}}
+
+metrics:
+  accuracy: {uri: accuracy}
+  f1:       {uri: f1}
+
+losses:
+  ce: {uri: cross_entropy, params: {weight: {uri: class_weights}}}
+
+optimizers:
+  main: {uri: adam, params: {lr: $lr$}, loss: ce}
+
+training:
+  turn: supervised
+  epochs: $epochs$
+  checkpoint: {uri: best, params: {monitor: val/accuracy, mode: max}}
+  report: best
+  stop: []
+
+plots:
+  loss_curve: {uri: loss_curve}
+
+record: runs/images_$datetime$

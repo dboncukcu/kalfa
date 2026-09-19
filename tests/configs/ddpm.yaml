@@ -1,0 +1,60 @@
+include: [/alias/kalfa/vision]
+
+params: {epochs: 2, lr: 2.0e-3, diffusion_steps: 10, seed: 5}
+
+seed: $seed$
+device: cpu
+
+data:
+  source: {uri: image_folder, params: {path: images}}
+  split: {ratios: [1.0, 0.0, 0.0], seed: $seed$}
+  batch: 8
+  preprocessors:
+    to_signed: {uri: to_tensor_signed}
+  fields:
+    image: {preprocessors: [to_signed]}
+  feed: table
+
+model:
+  models:
+    net:
+      optimizer: main
+      ema: {decay: 0.9}
+      inputs: [image, t]
+      outputs: [noise]
+      nodes:
+        flat:  {uri: flatten, inputs: [image]}
+        temb:  {uri: embedding, params: {num: $diffusion_steps$, dim: 8}, inputs: [t]}
+        cat:   {uri: concat, params: {dim: 1}, inputs: [flat, temb]}
+        body:  {uri: mlp, params: {widths: [32], out_features: 64}, inputs: [cat]}
+        noise: {uri: unflatten, params: {shape: [1, 8, 8]}, inputs: [body]}
+
+metrics:
+  samples: {uri: sample_writer, params: {sampler: generate, n: 4}, sets: [train]}
+
+losses:
+  ddpm: {uri: ddpm, params: {model: net, schedule: {uri: linear_betas, params: {steps: $diffusion_steps$}}}}
+
+optimizers:
+  main:
+    uri: adamw
+    params: {lr: $lr$}
+    loss: ddpm
+    schedule: {uri: warmup_cosine, params: {warmup: 2, total: 16}}
+
+training:
+  turn: supervised
+  epochs: $epochs$
+  grad_clip: 1.0
+  checkpoint: last
+  report: last
+  stop: []
+
+generate:
+  uri: ddpm_sampler
+  params: {model: net.ema, schedule: {uri: linear_betas, params: {steps: $diffusion_steps$}}, shape: [1, 8, 8], n: 4}
+
+plots:
+  loss_curve: {uri: loss_curve}
+
+record: runs/ddpm_$datetime$
