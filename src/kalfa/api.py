@@ -428,7 +428,7 @@ def resume(run_dir, sets=None, executor="serial", workers=None, when=None, contr
                contract=recorded_contract(run_dir, contract), monitor=monitor)
 
 
-def rebuild_models(analysis, store, prep=None):
+def rebuild_models(analysis, store, prep=None, train_loader=None):
     models = {}
     composites = {}
     for name, node in (analysis.flow.get("models") or {}).items():
@@ -441,9 +441,9 @@ def rebuild_models(analysis, store, prep=None):
         inputs = node.get("inputs") or {}
         output = node["outputs"][0] if isinstance(node.get("outputs"), list) else name
         if "models" in inputs:
-            composites[output] = builder(graph, models=models, prep=prep, **params)
+            composites[output] = builder(graph, models=models, prep=prep, train_loader=train_loader, **params)
         else:
-            models[output] = builder(graph, prep=prep, **params)
+            models[output] = builder(graph, prep=prep, train_loader=train_loader, **params)
     return models, composites
 
 
@@ -480,6 +480,7 @@ class Opened:
     models: dict | None = None
     composites: dict | None = None
     payload: dict | None = None
+    loaders: dict | None = None
 
     @property
     def config(self):
@@ -491,12 +492,24 @@ class Opened:
 
     def rebuild(self):
         if self.models is None:
-            self.models, self.composites = rebuild_models(self.analysis, self.store, self.prep)
+            self.loaders = record_loaders(self.document, self.contract)
+            self.models, self.composites = rebuild_models(self.analysis, self.store, self.prep,
+                                                          self.loaders.get("train"))
             self.payload = load(weights_of(self.run_dir, self.which))
             for name, module in self.models.items():
                 if name in self.payload.get("models", {}):
                     module.load_state_dict(self.payload["models"][name])
         return self.models, self.composites
+
+    def ema_copies(self):
+        models, _ = self.rebuild()
+        copies = {}
+        for name, state in self.payload.get("emas", {}).items():
+            if name in models:
+                ema = Ema(models[name], 1.0)
+                ema.load_state_dict(state)
+                copies[name] = ema
+        return copies
 
 
 def open_record(run_dir, which=None, sets=None, contract=None) -> Opened:
@@ -578,17 +591,19 @@ def predict(run_dir, model=None, which=None, data=None, sets=None, device=None, 
             plots=None) -> Prediction:
     opened = open_record(run_dir, which, sets, contract)
     models, composites = opened.rebuild()
+    emas = opened.ema_copies()
     name = model or opened.after.get("predicts")
-    target = resolve_model(name, models, composites)
+    target = resolve_model(name, models, composites, emas)
     logger.info(f"predicting with {name} ({opened.which} weights)")
     device = build_device(device) if device is not None else Device.cpu()
     device.place(models)
     device.place(composites)
+    device.place(emas)
     if data is not None:
         loaders = {"test": new_loader(opened, data)}
         tag = "_frame" if isinstance(data, pandas.DataFrame) else f"_{Path(data).stem}"
     else:
-        loaders = record_loaders(opened.document, opened.contract)
+        loaders = opened.loaders
         tag = ""
     if model is not None:
         tag += f"_{model}"
@@ -654,12 +669,14 @@ def export(run_dir, format="state_dict", model=None, which=None, out=None, sets=
     if kalfa_kind(uri) != "export":
         raise KalfaError(f"{uri} is a {kalfa_kind(uri)} lego, not an export")
     models, composites = opened.rebuild()
+    emas = opened.ema_copies()
     name = model or opened.after.get("predicts")
-    target = resolve_model(name, models, composites)
+    target = resolve_model(name, models, composites, emas)
     device = build_device(device) if device is not None else Device.cpu()
     device.place(models)
     device.place(composites)
-    loader = record_loaders(opened.document, opened.contract)["test"]
+    device.place(emas)
+    loader = opened.loaders["test"]
     batch = device.move(next(iter(loader)))
     directory = Path(out) if out is not None else Path(run_dir) / "export"
     inputs = traced_inputs(target, batch)
@@ -685,11 +702,7 @@ def generate(run_dir, which=None, sets=None, device=None, contract=None) -> Gene
         raise KalfaError(f"{run_dir}: the config has no generate section")
     models, composites = opened.rebuild()
     everything = {**composites, **models}
-    for name, state in opened.payload.get("emas", {}).items():
-        if name in models:
-            ema = Ema(models[name], 1.0)
-            ema.load_state_dict(state)
-            everything[f"{name}.ema"] = ema
+    everything.update({f"{name}.ema": ema for name, ema in opened.ema_copies().items()})
     sampler = opened.store.resolve_params(opened.after["generate"])
     logger.info(f"generating with the {opened.which} models")
     device = build_device(device) if device is not None else Device.cpu()
