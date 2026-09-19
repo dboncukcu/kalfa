@@ -1,9 +1,11 @@
 import inspect
+from pathlib import Path
 
 from cirak.registry import registry
 
 from kalfa.kinds import names_of
 from kalfa.std.common.figure import Figure
+from kalfa.std.common.history import History
 from kalfa.std.common.log import logger_for
 
 
@@ -66,6 +68,8 @@ def run_all(predictions, history, models, plots, keys=None, predicts=None, bus=N
     keys = keys or {}
     bus = dict(bus or {})
     figures = figures or Figure()
+    if record is not None and (Path(record) / "history.jsonl").exists():
+        history = History.read(record).lines
     everything = {**dict(bus.get("composites") or {}), **dict(models or {})}
     loaders = {name[:-len("_loader")]: value for name, value in bus.items()
                if name.endswith("_loader") and value is not None}
