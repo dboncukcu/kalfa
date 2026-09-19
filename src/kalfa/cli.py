@@ -35,6 +35,10 @@ def main(argv=None) -> int:
     except (CirakError, TezgahError, ValueError, FileNotFoundError) as exception:
         print(style_for(sys.stderr).red(str(exception)), file=sys.stderr)
         return 1
+    except KeyError as exception:
+        message = str(exception.args[0]) if exception.args else str(exception)
+        print(style_for(sys.stderr).red(message), file=sys.stderr)
+        return 1
 
 
 def installed_version(name):

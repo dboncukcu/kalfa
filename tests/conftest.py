@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -15,6 +16,10 @@ from kalfa.config import parse_sets  # noqa: E402
 
 
 KEPT = (str(ROOT / "src"), str(ROOT / "tests"), sys.prefix, sys.base_prefix)
+
+os.environ["NO_COLOR"] = "1"
+for name in ("FORCE_COLOR", "CLICOLOR_FORCE", "PYTHON_COLORS"):
+    os.environ.pop(name, None)
 
 
 @pytest.fixture(autouse=True)
