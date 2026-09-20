@@ -70,9 +70,8 @@ def pred_histogram(predictions, history, models, record, columns=4, bins=40, log
         return None
     width = max(1, min(int(columns or 4), len(pairs)))
     rows = -(-len(pairs) // width)
-    drawing, axes = figures.pyplot().subplots(2 * rows, width, squeeze=False,
-                                              figsize=(figures.width_of(5.4) * width, figures.height_of(5.4) * rows),
-                                              gridspec_kw={"height_ratios": [3.0, 1.0] * rows})
+    drawing, axes = figures.sized(figures.width_of(5.4) * width, figures.height_of(5.4) * rows, 2 * rows, width,
+                                  ratios=[3.0, 1.0] * rows)
     paired = [field for _, field in pairs]
     panels = [(axes[2 * (position // width)][position % width], axes[2 * (position // width) + 1][position % width])
               for position in range(rows * width)]
@@ -137,7 +136,6 @@ def residuals(predictions, history, models, record, output=None, target=None, bi
     figures.label(right, "Error across the target range", f"true {field} (equal count bins)", "|residual|")
 
     figures.title(drawing, f"{field} residuals ({len(truth):,} test points)")
-    drawing.tight_layout(rect=(0, 0, 1, 0.94))
     figures.save(drawing, record, name or "residuals")
     return None
 

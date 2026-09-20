@@ -37,7 +37,6 @@ def target_vs_features(predictions, history, models, record, loaders=None, prep=
     for axis in panels[len(picked):]:
         axis.axis("off")
     figures.title(drawing, f"{field} against every feature ({set_name} set, {len(table):,} rows)")
-    drawing.tight_layout(rect=(0, 0, 1, 0.97))
     figures.save(drawing, record, name or "target_vs_features")
     return None
 
@@ -131,6 +130,5 @@ def feature_distributions(predictions, history, models, record, loaders=None, pr
     for axis in panels[len(picked):]:
         axis.axis("off")
     figures.title(drawing, f"Column distributions ({set_name} set, {len(table):,} rows)")
-    drawing.tight_layout(rect=(0, 0, 1, 0.97))
     figures.save(drawing, record, name or "feature_distributions")
     return None

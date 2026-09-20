@@ -3,13 +3,17 @@ from kalfa.std.common.history import History
 from kalfa.std.plot.base import turn_word
 
 
+LEGEND_LIMIT = 12
+
+
 def draw_series(figures, axis, found, positions, log):
     for label, values in found.items():
         axis.plot(positions[:len(values)] if len(positions) >= len(values) else range(1, len(values) + 1), values,
                   label=label)
     if log:
         axis.set_yscale("log")
-    axis.legend(loc="upper right", ncols=1 if len(found) < 6 else 2)
+    if len(found) <= LEGEND_LIMIT:
+        axis.legend(loc="upper right", ncols=1 if len(found) < 6 else 2)
 
 
 def loss_curve(predictions, history, models, record, series=None, log=False, x="turn", rates=False, name=None,
@@ -25,14 +29,15 @@ def loss_curve(predictions, history, models, record, series=None, log=False, x="
     positions = lines.positions(x)
     word = turn_word(record) if x == "turn" else "step"
     if learning:
-        drawing, (axis, below) = figures.pyplot().subplots(2, 1, figsize=(8.0, 6.6), sharex=True,
-                                                            gridspec_kw={"height_ratios": [3.0, 1.2]})
+        drawing, (axis, below) = figures.figure(2, 1, 8.0, 6.6, squeeze=True, ratios=[3.0, 1.2], sharex=True)
     else:
         drawing, axis = figures.single(width=8.0, height=5.0)
     draw_series(figures, axis, found, positions, log)
     last = ", ".join(f"{label} {values[-1]:.4g}" for label, values in list(found.items())[:4])
+    note = f"{len(found)} series; write series to name the ones you want" if len(found) > LEGEND_LIMIT \
+        else (f"last {word}: {last}" if last else None)
     figures.label(axis, "Training history" if x == "turn" else "Training steps", None if learning else word, "value",
-                  note=f"last {word}: {last}" if last else None)
+                  note=note)
     if learning:
         values = [value for series_values in learning.values() for value in series_values if value > 0]
         draw_series(figures, below, learning, positions, bool(values) and max(values) / min(values) > 50)

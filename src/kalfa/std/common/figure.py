@@ -45,7 +45,6 @@ class Figure:
             "figure.facecolor": self.surface,
             "axes.facecolor": self.surface,
             "savefig.facecolor": self.surface,
-            "savefig.bbox": "tight",
             "font.size": 10,
             "axes.titlesize": 12,
             "axes.titleweight": "bold",
@@ -109,15 +108,20 @@ class Figure:
     def height_of(self, default=None):
         return float(self.height or default or self.panel_height)
 
+    def figure(self, rows=1, columns=1, width=None, height=None, squeeze=False, ratios=None, sharex=False,
+               managed=True):
+        keys = {"gridspec_kw": {"height_ratios": list(ratios)}} if ratios else {}
+        return self.pyplot().subplots(rows, columns, squeeze=squeeze, sharex=sharex, figsize=(width, height),
+                                      layout="constrained" if managed else None, **keys)
+
     def single(self, width=None, height=None):
-        return self.pyplot().subplots(figsize=(self.width_of(width), self.height_of(height)))
+        return self.figure(width=self.width_of(width), height=self.height_of(height), squeeze=True)
 
     def grid(self, rows, columns, width=None, height=None):
-        return self.pyplot().subplots(rows, columns, squeeze=False,
-                                      figsize=(self.width_of(width) * columns, self.height_of(height) * rows))
+        return self.figure(rows, columns, self.width_of(width) * columns, self.height_of(height) * rows)
 
-    def sized(self, width, height, rows=1, columns=1):
-        return self.pyplot().subplots(rows, columns, squeeze=False, figsize=(width, height))
+    def sized(self, width, height, rows=1, columns=1, ratios=None, managed=True):
+        return self.figure(rows, columns, width, height, ratios=ratios, managed=managed)
 
     def tiles(self, rows, columns, side=1.6):
         return self.sized(side * columns, side * rows, rows, columns)
@@ -130,10 +134,14 @@ class Figure:
         if ylabel:
             axis.set_ylabel(ylabel)
         if note:
-            axis.text(0.0, 1.005, note, transform=axis.transAxes, ha="left", va="bottom", fontsize=9,
-                      color=self.ink_muted)
+            axis.text(0.0, 1.005, self.fitted(axis, note), transform=axis.transAxes, ha="left", va="bottom",
+                      fontsize=9, color=self.ink_muted)
         axis.set_axisbelow(True)
         return axis
+
+    def fitted(self, axis, text, per_inch=14):
+        room = max(24, int(axis.figure.get_size_inches()[0] * axis.get_position().width * per_inch))
+        return text if len(text) <= room else text[:room - 1] + "…"
 
     def title(self, drawing, text):
         drawing.suptitle(text, x=0.008, ha="left", fontsize=14, fontweight="bold", color=self.ink)
@@ -191,12 +199,11 @@ class Figure:
         directory.mkdir(parents=True, exist_ok=True)
         return directory / name
 
-    def save(self, drawing, record, name, suffix=None, tight=True):
-        if tight:
-            drawing.tight_layout()
+    def save(self, drawing, record, name, suffix=None, tight=None):
+        crop = drawing.get_layout_engine() is not None if tight is None else bool(tight)
         path = self.target(record, f"{name}.{suffix or self.format}")
         with atomic(path) as temporary:
-            drawing.savefig(temporary, format=suffix or self.format, bbox_inches="tight")
+            drawing.savefig(temporary, format=suffix or self.format, bbox_inches="tight" if crop else None)
         self.pyplot().close(drawing)
         return path
 

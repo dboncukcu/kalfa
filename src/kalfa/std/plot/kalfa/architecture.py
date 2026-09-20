@@ -278,7 +278,7 @@ def draw_layout(figures, layout, label):
     total_w = cursor - gap_x + 0.45
     tallest = max(sum(heights[box.name] for box in boxes) + gap_y * (len(boxes) - 1) for boxes in columns.values())
     total_h = tallest + 1.3
-    drawing, axes = figures.sized(total_w, total_h)
+    drawing, axes = figures.sized(total_w, total_h, managed=False)
     drawing.subplots_adjust(left=0, right=1, bottom=0, top=1)
     axis = axes[0][0]
     axis.set_xlim(0, total_w)
@@ -357,7 +357,7 @@ def architecture(predictions, history, models, record, loaders=None, device=None
         shapes = traced_shapes(model, batch, where) if batch is not None else {}
         layout, last = graph_layout(model, label, shapes, features)
         training_layout(layout, model, label, last, predicts, losses, losses_keys, optimizers)
-        figures.save(draw_layout(figures, layout, label), record, f"{stem}_{label}", tight=False)
+        figures.save(draw_layout(figures, layout, label), record, f"{stem}_{label}")
         logger.debug(f"architecture: drew {label}")
     return None
 

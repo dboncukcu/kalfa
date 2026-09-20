@@ -120,5 +120,5 @@ def data_pipeline(predictions, history, models, record, data_report=None, train_
         return None
     histograms = histogram_columns(prep, train_df, train_frame, columns)
     stem = name or "data_pipeline"
-    figures.save(draw_report(figures, data_report, histograms, stem), record, stem, tight=False)
+    figures.save(draw_report(figures, data_report, histograms, stem), record, stem)
     return None
