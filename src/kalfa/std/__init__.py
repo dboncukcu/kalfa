@@ -13,11 +13,11 @@ declare_facts("uses", "needs_grad", "needs_models", "extras", "grouped", "requir
 
 
 def discover():
-    before = set(registry.uris())
+    before = frozenset(registry.uris())
     root = Path(__file__).parent
     for path in sorted(root.glob("*/*/__init__.py")):
         import_module(f"{__name__}.{path.parent.parent.name}.{path.parent.name}")
-    return frozenset(set(registry.uris()) - before)
+    return before, frozenset(set(registry.uris()) - before)
 
 
-STD_URIS = discover()
+BASE_URIS, STD_URIS = discover()

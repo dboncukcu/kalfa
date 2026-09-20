@@ -5,7 +5,7 @@ from cirak.registry import registry
 from .config import pack_tables
 from .contract import Contract
 from .kinds import kalfa_kind, kinds
-from .std import STD_URIS
+from .std import BASE_URIS, STD_URIS
 
 
 HEADER = """# kalfa lego reference
@@ -88,7 +88,7 @@ def plugin_uris():
     found = []
     for uri in sorted(registry.uris()):
         entry = registry.lookup(uri)
-        if uri in STD_URIS or entry is None or entry.fragment:
+        if uri in STD_URIS or uri in BASE_URIS or entry is None or entry.fragment:
             continue
         found.append(uri)
     return found

@@ -1,4 +1,3 @@
-import pytest
 from cirak.registry import registry
 
 from helpers import ROOT
@@ -111,7 +110,6 @@ def test_template_uris_are_the_skeleton_steps_the_contract_names():
         "/rule/kalfa/effects", "/rule/kalfa/open", "/rule/kalfa/rule", "/rule/kalfa/stop"}
 
 
-@pytest.mark.xfail(strict=True, reason="bug: plugin_uris lists cirak's own /builder/cirak/compose as a plugin lego")
 def test_plugin_uris_is_empty_without_plugins():
     assert docs.plugin_uris() == []
 

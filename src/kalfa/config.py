@@ -11,7 +11,7 @@ from cirak.registry import registry
 from cirak.resolve import TOKEN
 
 from .schema import Schema
-from .std import STD_URIS
+from .std import BASE_URIS, STD_URIS
 from .std.common.log import logger_for
 
 
@@ -109,7 +109,7 @@ def import_plugins(paths=(), modules=()):
 
 
 def plugin_aliases():
-    return {name: uri for name, uri in registry.aliases().items() if uri not in STD_URIS}
+    return {name: uri for name, uri in registry.aliases().items() if uri not in STD_URIS | BASE_URIS}
 
 
 def pack_tables():
