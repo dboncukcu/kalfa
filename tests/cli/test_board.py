@@ -308,32 +308,35 @@ def test_server_serves_the_page_streams_the_changes_and_stops_a_record(tmp_path)
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
-        page = urllib.request.urlopen(f"{base}/")
-        assert page.headers["Content-Type"] == "text/html; charset=utf-8" and "kalfa board" in page.read().decode()
-        script = urllib.request.urlopen(f"{base}/static/board.js")
-        assert script.headers["Content-Type"] == "text/javascript; charset=utf-8"
-        assert "/api/tree" in script.read().decode()
-        live = json.loads(urllib.request.urlopen(f"{base}/api/live").read())
-        assert live["live"][0]["path"] == "runs/one"
-        watch = urllib.request.urlopen(f"{base}/api/watch?path=runs/one", timeout=10)
-        assert watch.headers["Content-Type"] == "text/event-stream; charset=utf-8"
-        assert watch.readline() == b": watching\n"
-        Record(tmp_path / "runs" / "one").append("steps.jsonl", {"step": 8, "turn": 3, "loss/m": 0.8, "lr/m": 0.1})
-        event = b""
-        while not event.startswith(b"data:"):
-            event = watch.readline()
-        assert json.loads(event[5:]) == {"changed": ["steps.jsonl"]}
-        watch.close()
-        answer = urllib.request.urlopen(urllib.request.Request(f"{base}/api/stop?path=runs/one", method="POST"))
-        assert json.loads(answer.read()) == {"stopped": ["runs/one"]}
+        with urllib.request.urlopen(f"{base}/") as page:
+            assert page.headers["Content-Type"] == "text/html; charset=utf-8"
+            assert "kalfa board" in page.read().decode()
+        with urllib.request.urlopen(f"{base}/static/board.js") as script:
+            assert script.headers["Content-Type"] == "text/javascript; charset=utf-8"
+            assert "/api/tree" in script.read().decode()
+        with urllib.request.urlopen(f"{base}/api/live") as reading:
+            assert json.loads(reading.read())["live"][0]["path"] == "runs/one"
+        with urllib.request.urlopen(f"{base}/api/watch?path=runs/one", timeout=10) as watch:
+            assert watch.headers["Content-Type"] == "text/event-stream; charset=utf-8"
+            assert watch.readline() == b": watching\n"
+            Record(tmp_path / "runs" / "one").append("steps.jsonl", {"step": 8, "turn": 3, "loss/m": 0.8, "lr/m": 0.1})
+            event = b""
+            while not event.startswith(b"data:"):
+                event = watch.readline()
+            assert json.loads(event[5:]) == {"changed": ["steps.jsonl"]}
+        with urllib.request.urlopen(urllib.request.Request(f"{base}/api/stop?path=runs/one",
+                                                           method="POST")) as answer:
+            assert json.loads(answer.read()) == {"stopped": ["runs/one"]}
         assert Record(tmp_path / "runs" / "one").stop_note()["by"] == "board"
         with pytest.raises(urllib.error.HTTPError) as refused:
             urllib.request.urlopen(urllib.request.Request(f"{base}/api/stop?path=sweeps/grid/0001", method="POST"))
-        assert refused.value.code == 409
-        assert "has ended already (finished); there is nothing to stop" in json.loads(refused.value.read())["error"]
+        with refused.value as failed:
+            assert failed.code == 409
+            assert "has ended already (finished); there is nothing to stop" in json.loads(failed.read())["error"]
         with pytest.raises(urllib.error.HTTPError) as missing:
             urllib.request.urlopen(f"{base}/api/record?path=nowhere")
-        assert missing.value.code == 404
+        with missing.value as absent:
+            assert absent.code == 404
     finally:
         server.shutdown()
         server.server_close()
