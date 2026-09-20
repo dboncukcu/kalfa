@@ -187,6 +187,9 @@ def prepare_data(paths, sets=None, out=None, contract=None) -> PreparedData:
     source = config["data"]["source"]
     if registry.facts(source["uri"]).get("stream"):
         raise KalfaError("a stream source is lazy already; there is nothing to prepare")
+    if Path(out).is_dir() and any(Path(out).iterdir()):
+        raise KalfaError(f"prepared directory {out} exists and is not empty; remove it or give --out another "
+                         f"directory")
     names = document_sets(found.document)
     wanted = ["prep", "frames", "data_report", *[f"{name}_df" for name in names]]
     outputs = flow_outputs(found.document, ("data",), wanted, found.contract)

@@ -153,8 +153,6 @@ def test_check_prepared_reads_the_sizes_of_the_manifest(workdir, capsys):
                                        "writes one\n")
 
 
-@pytest.mark.xfail(strict=True, reason="bug: prepare --out writes into a directory that exists although its help "
-                                       "says the directory must not exist")
 def test_prepare_refuses_a_directory_that_exists(workdir, capsys):
     assert main(["prepare", REFERENCE, "--out", "prepared"]) == 0
     capsys.readouterr()
