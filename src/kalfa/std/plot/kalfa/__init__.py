@@ -55,7 +55,8 @@ lego("/plot/kalfa/loss_curve", "loss_curve:loss_curve", partial=True, alias="los
      description="Every history series over the turns, or the named ones; the axis says epoch when the manifest says "
                  "a turn is one, turn otherwise; x: step draws the per update series of steps.jsonl (the loss, the "
                  "gradient norm of every optimizer) over the steps instead; rates: true adds a panel of the learning "
-                 "rates below, and a series may name lr/<optimizer>")
+                 "rates below, and a series may name lr/<optimizer>; past twelve series the legend would crowd out "
+                 "the panel, so it is dropped and the note says to name the series wanted")
 
 lego("/plot/kalfa/permutation_importance", "permutation_importance:permutation_importance", partial=True,
      alias="permutation_importance", refs={"target": "field"},

@@ -525,7 +525,9 @@ only the mapping is built. Two levels:
 | by pattern | `init: {patterns: [{match: "head.h.*", weights: {...}}]}`, a parameter name pattern, after the roles in list order |
 
 `init` on a `nodes` item is not applied, and `check` refuses it; a node's parameters are reached by a pattern on the
-node's name (`match: "delta.*"`). There is no global default: a role that is not written stays at the torch
+node's name (`match: "delta.*"`). A pattern matches the name as the config writes it, so a node of a `template`
+under `repeat: 2` is reached by `match: "h_0.f.*"` or `match: "h_*.f.*"`. There is no global default: a role that is
+not written stays at the torch
 initialization. A lazy layer builds its weights on the first batch; the build happens under the model seed and `init`
 applies at that moment.
 
