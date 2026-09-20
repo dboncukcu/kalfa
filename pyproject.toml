@@ -47,6 +47,9 @@ kalfa = "kalfa"
 dev = [
     "pytest>=8",
     "ruff>=0.6",
+    "onnx>=1.16",
+    "seaborn>=0.13",
+    "torchview>=0.2",
 ]
 
 [build-system]
