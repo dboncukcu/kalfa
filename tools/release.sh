@@ -73,7 +73,7 @@ fi
 if ! command -v uv >/dev/null 2>&1; then
     printf 'release: uv is not on PATH, DOCS.md still says %s\n' "$OLD" >&2
 else
-    printf 'DOCS.md carries the version, so it is written again\n'
+    printf 'DOCS.md is written from the registry again, in case it drifted\n'
     uv run kalfa docs --write DOCS.md >/dev/null
     REGENERATED=1
     printf 'DOCS.md: %s\n' "$NEW"
