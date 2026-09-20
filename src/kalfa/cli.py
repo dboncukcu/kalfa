@@ -530,10 +530,11 @@ def cmd_check(args) -> int:
     from . import api
     from .describe.render import measure_text
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         prepared = api.check(args.config, layer_of(args), measure=args.measure, contract=contract_of(args),
                              prepared=args.prepared)
+    print_warnings(caught)
     style = style_for(sys.stdout)
     print(style.dim(version_text()))
     if args.layers:
@@ -594,9 +595,10 @@ def cmd_describe(args) -> int:
     from . import api
     from .describe.render import render, report
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         prepared = api.check(args.config, layer_of(args), contract=contract_of(args), prepared=args.prepared)
+    print_warnings(caught)
     style = style_for(sys.stdout)
     if prepared.problems:
         print_problems(prepared.problems, sys.stdout)
@@ -608,9 +610,10 @@ def cmd_describe(args) -> int:
             print(style.yellow("--measure needs a config without errors; describing the config as written"),
                   file=sys.stderr)
         else:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
                 found = api.probe(prepared.document, prepared.contract)
+            print_warnings(caught)
     sections = list(args.section) if args.section else None
     if args.wiring and "wiring" not in (sections or ()):
         sections = list(sections or DEFAULT_SECTIONS) + ["wiring"]
@@ -627,10 +630,11 @@ def cmd_describe(args) -> int:
 def cmd_predict(args) -> int:
     from . import api
 
-    with Monitor(level_of(args.log)), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with Monitor(level_of(args.log)), warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         result = api.predict(args.run, model=args.model, which=args.which, data=args.data, sets=layer_of(args),
                              device=device_value(args), contract=contract_of(args), plots=args.plots)
+    print_warnings(caught)
     style = style_for(sys.stdout)
     print(f"predicted {len(result.table)} rows with {style.bold(result.model)}: {style.cyan(result.path)}")
     if result.plots:
@@ -654,11 +658,12 @@ def cmd_prepare(args) -> int:
 def cmd_export(args) -> int:
     from . import api
 
-    with Monitor(level_of(args.log)), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with Monitor(level_of(args.log)), warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         result = api.export(args.run, format=args.format, model=args.model, which=args.which, out=args.out,
                             params=format_params(args.format_param), sets=layer_of(args),
                             device=device_value(args), contract=contract_of(args))
+    print_warnings(caught)
     style = style_for(sys.stdout)
     if result.path is None:
         print(style.yellow(f"nothing written: {result.format} could not export {result.model}"), file=sys.stderr)
@@ -670,10 +675,11 @@ def cmd_export(args) -> int:
 def cmd_plots(args) -> int:
     from . import api
 
-    with Monitor(level_of(args.log)), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with Monitor(level_of(args.log)), warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         result = api.plots(args.run, only=args.only, sets=layer_of(args), device=device_value(args),
                            contract=contract_of(args))
+    print_warnings(caught)
     style = style_for(sys.stdout)
     print(f"plots {', '.join(result.names) or 'none'}: {style.cyan(str(Path(result.record) / 'plots'))}")
     return 0
@@ -682,10 +688,11 @@ def cmd_plots(args) -> int:
 def cmd_generate(args) -> int:
     from . import api
 
-    with Monitor(level_of(args.log)), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
+    with Monitor(level_of(args.log)), warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         result = api.generate(args.run, which=args.which, sets=layer_of(args), device=device_value(args),
                               contract=contract_of(args))
+    print_warnings(caught)
     style = style_for(sys.stdout)
     print(f"generated: {style.cyan(result.path)}")
     return 0

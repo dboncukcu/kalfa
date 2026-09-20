@@ -103,7 +103,7 @@ def test_format_param_reaches_the_export_lego(copy, capsys):
     import onnx
 
     assert main(["export", copy, "--format", "onnx", "--model", "tower", "--format-param", "opset=18"]) == 0
-    capsys.readouterr()
+    assert "legacy TorchScript-based ONNX export" in capsys.readouterr().err
     written = onnx.load(str(Path(copy) / "export" / "tower.onnx"))
     assert [item.version for item in written.opset_import if item.domain == ""] == [18]
 
@@ -130,5 +130,7 @@ def test_format_param_dynamo_says_what_the_new_exporter_needs(copy, capsys):
 def test_export_onnx_writes_the_graph(copy, capsys):
     needs("onnx")
     assert main(["export", copy, "--format", "onnx", "--model", "tower"]) == 0
-    assert capsys.readouterr().out == f"exported tower as /export/kalfa/onnx: {copy}/export/tower.onnx\n"
+    written = capsys.readouterr()
+    assert written.out == f"exported tower as /export/kalfa/onnx: {copy}/export/tower.onnx\n"
+    assert "warning: You are using the legacy TorchScript-based ONNX export" in written.err
     assert (Path(copy) / "export" / "tower.onnx").stat().st_size > 0

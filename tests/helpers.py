@@ -56,6 +56,13 @@ def needs(name):
 
 
 @contextlib.contextmanager
+def legacy_onnx():
+    with pytest.warns(DeprecationWarning) as caught:
+        yield
+    assert any("legacy TorchScript-based ONNX export" in str(item.message) for item in caught)
+
+
+@contextlib.contextmanager
 def inside(path):
     previous = os.getcwd()
     os.chdir(path)

@@ -8,7 +8,7 @@ import pytest
 import torch
 
 from data import reference_frame
-from helpers import config_path, needs
+from helpers import config_path, legacy_onnx, needs
 from kalfa.api import check, export, plots, predict, prepare_data, resume, run, stop
 from kalfa.collect import collect
 from kalfa.config import parse_sets
@@ -76,7 +76,8 @@ def test_export_writes_the_documented_formats(copy):
 
 def test_export_to_onnx_needs_the_library(copy):
     needs("onnx")
-    exported = export(copy, format="onnx", out=copy / "onnx")
+    with legacy_onnx():
+        exported = export(copy, format="onnx", out=copy / "onnx")
     assert exported.path == str(copy / "onnx" / "full.onnx") and Path(exported.path).stat().st_size > 0
 
 

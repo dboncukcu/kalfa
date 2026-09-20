@@ -4,7 +4,7 @@ import pytest
 import torch
 from cirak.registry import registry
 
-from helpers import batch, build, needs, tiny_model
+from helpers import batch, build, legacy_onnx, needs, tiny_model
 from kalfa.std import STD_URIS
 from kalfa.std.export.kalfa.formats import traced_inputs
 
@@ -69,15 +69,17 @@ def test_onnx_exports_the_wires_as_the_graph_names(tmp_path):
     onnx = needs("onnx")
     model = tiny_model()
     inputs = traced_inputs(model, batch())
-    path = build("/export/kalfa/onnx", model=model, inputs=inputs, directory=tmp_path / "exports", stem="model0")
+    with legacy_onnx():
+        path = build("/export/kalfa/onnx", model=model, inputs=inputs, directory=tmp_path / "exports", stem="model0")
     assert path == tmp_path / "exports" / "model0.onnx" and path.is_file()
     graph = onnx.load(str(path))
     onnx.checker.check_model(graph)
     assert [item.name for item in graph.graph.input] == ["x"]
     assert [item.name for item in graph.graph.output] == ["y"]
     assert graph.opset_import[0].version == 17
-    older = build("/export/kalfa/onnx", model=model, inputs=inputs, directory=tmp_path / "exports", stem="older",
-                  opset=13)
+    with legacy_onnx():
+        older = build("/export/kalfa/onnx", model=model, inputs=inputs, directory=tmp_path / "exports", stem="older",
+                      opset=13)
     assert onnx.load(str(older)).opset_import[0].version == 13
 
 
