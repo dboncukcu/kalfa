@@ -90,23 +90,24 @@ def kept_rows(df, mask):
 
 
 def table_frame(df, prep, set, sets, mask=None):
-    columns = {}
     for item in prep.fields:
         if item.name not in df.columns:
             raise ValueError(f"the {set} data lacks column {item.name!r}")
-        values, extras = run_chain(item, values_of(df, item.name), prep.fitted, {}, sets, set, fit=False)
-        if len(values):
-            values, _ = cast_values(values, item.name)
-        if values.ndim == 1:
-            columns[item.columns[0]] = values
-        else:
-            for position, column in enumerate(item.columns):
-                columns[column] = values[:, position]
-        columns.update(typed_extras(extras, prep.dtypes))
-    data = pandas.DataFrame(columns, index=df.index)
-    if len(data) == 0:
+    if len(df) == 0:
         data = pandas.DataFrame({column: numpy.zeros(0, dtype=prep.dtypes[column]) for column in prep.dtypes},
                                 index=df.index)
+    else:
+        columns = {}
+        for item in prep.fields:
+            values, extras = run_chain(item, values_of(df, item.name), prep.fitted, {}, sets, set, fit=False)
+            values, _ = cast_values(values, item.name)
+            if values.ndim == 1:
+                columns[item.columns[0]] = values
+            else:
+                for position, column in enumerate(item.columns):
+                    columns[column] = values[:, position]
+            columns.update(typed_extras(extras, prep.dtypes))
+        data = pandas.DataFrame(columns, index=df.index)
     named = {item.name for item in prep.fields}
     extra = df[[column for column in df.columns
                 if column not in named and matches_any(column, prep.spectators)]]

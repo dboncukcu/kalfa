@@ -822,9 +822,6 @@ def test_apply_types_an_empty_set_by_the_plan_and_names_a_missing_column():
         build("/lego/kalfa/apply", df=held_table().drop(columns=["late"]), prep=prep, set="test", keys=KEYS)
 
 
-@pytest.mark.xfail(strict=True, reason="bug: OneHot.apply (src/kalfa/std/pre/kalfa/encoders.py:23) hands an empty "
-                                       "set to sklearn's transform, which refuses 0 samples, so apply never reaches "
-                                       "the typed empty frame of prep.py:107")
 def test_apply_types_an_empty_set_with_a_one_hot_field():
     prep = fit_prep()
     empty = build("/lego/kalfa/apply", df=held_table().iloc[:0], prep=prep, set="test", keys=KEYS)
