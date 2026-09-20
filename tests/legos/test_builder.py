@@ -233,13 +233,11 @@ def test_init_patterns_match_the_full_parameter_name_after_the_roles_in_order():
     assert model.nodes["b"].weight.tolist() == [[5.0] * 3] and model.nodes["b"].bias.tolist() == [4.0]
     assert model.nodes["a"].bias.tolist() != [4.0] * 3 and model.nodes["a"].bias.tolist() != [9.0] * 3
     dotted = build(URI, graph=graph(node("blk.f", nn.Linear(3, 1), ("x",), ("y",))), seed=1,
-                   init={"patterns": [{"match": "blk__f.weight", "weights": constant(7.0)}]})
+                   init={"patterns": [{"match": "blk.f.weight", "weights": constant(7.0)}]})
     assert dotted.nodes["blk__f"].weight.tolist() == [[7.0] * 3]
     assert [name for name, _ in dotted.named_parameters()] == ["nodes.blk__f.weight", "nodes.blk__f.bias"]
 
 
-@pytest.mark.xfail(strict=True, reason="bug: apply_roles matches patterns against the safe node name blk__f.weight, "
-                                       "so match: 'blk.f.*' as check advises for a template node applies nothing")
 def test_init_pattern_written_with_the_dotted_node_name_reaches_its_parameters():
     dotted = build(URI, graph=graph(node("blk.f", nn.Linear(3, 1), ("x",), ("y",))), seed=1,
                    init={"patterns": [{"match": "blk.f.*", "weights": constant(8.0), "bias": constant(6.0)}]})
@@ -304,8 +302,10 @@ def test_reference_nodes_take_the_models_by_name():
                                        node("s", nn.Identity(), ("z",), ("s",)), outputs=("s",)),
                       models={"encoder": encoder}, name="full")
     x = batch()["x"]
-    assert torch.equal(composite(x), encoder(x)) and composite.refs == {"z": encoder}
-    assert list(composite.parameters()) == [] and list(composite.nodes) == ["s"]
+    assert torch.equal(composite(x), encoder(x)) and dict(composite.refs) == {"z": encoder}
+    assert list(composite.nodes) == ["s"]
+    assert [tuple(name.shape) for name in composite.parameters()] == [(2, 3), (2,)]
+    assert list(composite.state_dict()) == ["refs.z.nodes.layer.weight", "refs.z.nodes.layer.bias"]
     assert composite.node_module(composite.graph.nodes[0]) is encoder
     assert composite.initialized and composite.seed is None
 

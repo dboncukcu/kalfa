@@ -269,7 +269,7 @@ def test_architecture_note_draws_composites_as_model_boxes(tmp_path):
     assert boxes["s"] == box("s", "torch", ["s", "Identity", "2x2 -> 2x2"], 2)
     assert note["models"]["full"]["arrows"] == [["in:x", "z", "x"], ["z", "s", "z"], ["s", "out:s", "s"]]
     assert note["models"]["full"]["widths"] == {"x": "3", "z": "2", "s": "2"}
-    assert note["models"]["full"]["parameters"] == 0
+    assert note["models"]["full"]["parameters"] == note["models"]["encoder"]["parameters"] == 8
 
 
 def test_pixel_features_pool_every_image_to_size_by_size_and_flatten():

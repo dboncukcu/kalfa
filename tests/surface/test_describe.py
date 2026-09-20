@@ -335,7 +335,7 @@ def test_probe_measures_sizes_features_parameters_and_shapes(prepared):
                                    "region_west", "tier", "num_0_median_by_site", "site_target"]
     assert [item.name for item in found.prep.fields if item.target] == ["y_lin", "y_quad", "y_heavy", "y_frac",
                                                                         "is_hot"]
-    assert found.parameters == {"tower": (948, 948), "tail_stem": (152, 0), "lambdas": (2, 2), "full": (0, 0)}
+    assert found.parameters == {"tower": (948, 948), "tail_stem": (152, 0), "lambdas": (2, 2), "full": (1449, 1297)}
     assert found.shapes == {"tower": {"h": (64, 16)}, "tail_stem": {"s": (64, 8)}, "lambdas": {"lmbda": (2,)},
                             "full": {"y_hat": (64, 2), "aux_hat": (64, 2), "tail_logit": (64, 1)}}
     assert sorted(found.notes) == ["head_aux", "head_lin", "tail_head"]

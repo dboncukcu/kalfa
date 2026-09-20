@@ -31,7 +31,13 @@ def role_of(name, parameter):
     return "scale"
 
 
-def apply_roles(root, roles, patterns=()):
+def written_path(full, names):
+    head, _, rest = full.partition(".")
+    name = (names or {}).get(head, head)
+    return f"{name}.{rest}" if rest else name
+
+
+def apply_roles(root, roles, patterns=(), names=None):
     owners = {}
     for module_name, module in root.named_modules():
         for name, parameter in module.named_parameters(recurse=False):
@@ -43,7 +49,7 @@ def apply_roles(root, roles, patterns=()):
                 initializer(parameter)
     for entry in patterns or []:
         for full, (name, parameter) in owners.items():
-            if not fnmatch.fnmatchcase(full, entry.get("match")):
+            if not fnmatch.fnmatchcase(written_path(full, names), entry.get("match")):
                 continue
             initializer = entry.get(role_of(name, parameter))
             if initializer is not None:
@@ -63,12 +69,13 @@ class Module(Model):
         objects = {node.name: node.obj.build(**available) if isinstance(node.obj, DeferredLayer) else node.obj
                    for node in graph.nodes if node.ref is None}
         self.nodes = nn.ModuleDict({self.safe[name]: obj for name, obj in objects.items()})
-        object.__setattr__(self, "refs", {})
+        wired = {}
         for node in graph.nodes:
             if node.ref is not None:
                 if models is None or node.ref not in models:
                     raise KeyError(f"node {node.name!r} references model {node.ref!r}, which is not built")
-                self.refs[node.name] = models[node.ref]
+                wired[self.safe[node.name]] = models[node.ref]
+        self.refs = nn.ModuleDict(wired)
         self.name = name
         self.seed = model_seed(rng, seed, name, index)
         self.init = dict(init or {})
@@ -82,7 +89,7 @@ class Module(Model):
             self.build()
 
     def node_module(self, node):
-        return self.refs[node.name] if node.ref is not None else self.nodes[self.safe[node.name]]
+        return self.refs[self.safe[node.name]] if node.ref is not None else self.nodes[self.safe[node.name]]
 
     def seeded(self):
         return forked(self.seed)
@@ -98,7 +105,8 @@ class Module(Model):
             if self.seed is not None:
                 self.reset_parameters()
             roles = {role: function for role, function in self.init.items() if role != "patterns"}
-            apply_roles(self.nodes, roles, self.init.get("patterns"))
+            apply_roles(self.nodes, roles, self.init.get("patterns"),
+                        {safe: name for name, safe in self.safe.items()})
             for name, spec in self.node_init.items():
                 roles = {role: function for role, function in (spec or {}).items() if role != "patterns"}
                 apply_roles(self.nodes[self.safe[name]], roles, (spec or {}).get("patterns"))
@@ -124,8 +132,6 @@ class Module(Model):
     def train(self, mode=True):
         if mode and not self.trainable:
             mode = False
-        for model in self.refs.values():
-            model.train(mode)
         return super().train(mode)
 
     def materialize(self, arguments):
@@ -158,7 +164,7 @@ class Module(Model):
         for node in self.graph.nodes:
             inputs = [values[wire] for wire in node.inputs]
             if node.ref is not None:
-                result = self.refs[node.name](*inputs)
+                result = self.refs[self.safe[node.name]](*inputs)
             else:
                 result = self.nodes[self.safe[node.name]](*inputs)
             if node.unpack:

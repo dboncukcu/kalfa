@@ -155,5 +155,8 @@ def test_the_architecture_note_covers_every_model_and_the_composite(reference):
         entry = architecture["models"][name]
         assert entry["trainable"] == entry["parameters"] > 0, name
     assert architecture["models"]["lambdas"]["parameters"] == 2
-    assert architecture["models"]["full"]["parameters"] == architecture["models"]["full"]["trainable"] == 0
+    parts = [name for name in MODELS if name != "lambdas"]
+    for counted in ("parameters", "trainable"):
+        assert architecture["models"]["full"][counted] == sum(architecture["models"][name][counted]
+                                                              for name in parts)
     assert {box["name"] for box in architecture["models"]["head_lin"]["boxes"]} >= {"base", "delta", "y_hat"}

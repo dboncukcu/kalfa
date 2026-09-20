@@ -22,8 +22,6 @@ def test_export_writes_the_state_dict_of_the_predicts_model(copy, capsys):
     assert isinstance(torch.load(Path(copy) / "export" / "full.pt"), dict)
 
 
-@pytest.mark.xfail(strict=True, reason="bug: the state_dict of a composite is empty, its models live in refs outside "
-                                       "the module tree, so export writes a full.pt without a single tensor")
 def test_export_state_dict_of_a_composite_carries_its_models(copy, capsys):
     assert main(["export", copy]) == 0
     state = torch.load(Path(copy) / "export" / "full.pt")
