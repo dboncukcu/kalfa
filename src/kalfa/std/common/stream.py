@@ -1,10 +1,26 @@
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy
 import pandas
 
 
-class ParquetChunks:
+class Chunks:
+    """A chunked reader: opened() yields the frames of one pass and closes the file after them."""
+
+    def opened(self):
+        raise NotImplementedError
+
+    def chunks(self):
+        offset = 0
+        with self.opened() as frames:
+            for frame in frames:
+                frame.index = range(offset, offset + len(frame))
+                offset += len(frame)
+                yield frame
+
+
+class ParquetChunks(Chunks):
     def __init__(self, path, chunk=65536, columns=None):
         import pyarrow.parquet
 
@@ -13,23 +29,19 @@ class ParquetChunks:
         self.selected = None if columns is None else list(columns)
         if not Path(self.path).is_file():
             raise FileNotFoundError(f"parquet file {path!r} does not exist")
-        handle = pyarrow.parquet.ParquetFile(self.path)
-        self.columns = list(handle.schema_arrow.names) if self.selected is None else list(self.selected)
-        self.rows = int(handle.metadata.num_rows)
+        with pyarrow.parquet.ParquetFile(self.path) as handle:
+            self.columns = list(handle.schema_arrow.names) if self.selected is None else list(self.selected)
+            self.rows = int(handle.metadata.num_rows)
 
-    def chunks(self):
+    @contextmanager
+    def opened(self):
         import pyarrow.parquet
 
-        handle = pyarrow.parquet.ParquetFile(self.path)
-        offset = 0
-        for batch in handle.iter_batches(batch_size=self.chunk, columns=self.selected):
-            frame = batch.to_pandas()
-            frame.index = range(offset, offset + len(frame))
-            offset += len(frame)
-            yield frame
+        with pyarrow.parquet.ParquetFile(self.path) as handle:
+            yield (batch.to_pandas() for batch in handle.iter_batches(batch_size=self.chunk, columns=self.selected))
 
 
-class CsvChunks:
+class CsvChunks(Chunks):
     def __init__(self, path, chunk=65536, columns=None):
         self.path = str(path)
         self.chunk = int(chunk)
@@ -40,12 +52,10 @@ class CsvChunks:
         with open(self.path, "rb") as stream:
             self.rows = max(sum(1 for _ in stream) - 1, 0)
 
-    def chunks(self):
-        offset = 0
-        for frame in pandas.read_csv(self.path, chunksize=self.chunk, usecols=self.selected):
-            frame.index = range(offset, offset + len(frame))
-            offset += len(frame)
-            yield frame
+    @contextmanager
+    def opened(self):
+        with pandas.read_csv(self.path, chunksize=self.chunk, usecols=self.selected) as reader:
+            yield reader
 
 
 class Stream:
