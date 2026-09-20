@@ -223,6 +223,7 @@ def build_parser():
                          "lego of your own by alias or URI, under <run>/export or the directory --out names.",
                          ["kalfa export runs/x",
                           "kalfa export runs/x --format onnx --model encoder --which best",
+                          "kalfa export runs/x --format onnx --format-param opset=18",
                           "kalfa export runs/x --format /export/acme/mine --out exported"])
     export_cmd.add_argument("run", metavar="RUN", help="the record directory of a run")
     export_cmd.add_argument("--format", default="state_dict", metavar="NAME",
@@ -232,6 +233,9 @@ def build_parser():
     export_cmd.add_argument("--which", choices=["best", "last", "final"],
                             help="the weights to load; without it what training.report chose")
     export_cmd.add_argument("--out", metavar="DIR", help="the directory to write into; <run>/export without it")
+    export_cmd.add_argument("--format-param", action="append", default=[], metavar="NAME=VALUE",
+                            help="a param of the export lego, repeatable (opset=18, dynamo=true); -p names a "
+                                 "params entry of the config instead")
     device_option(export_cmd)
     overrides = export_cmd.add_argument_group("overrides")
     set_option(overrides)
@@ -409,6 +413,16 @@ def device_option(command):
     command.add_argument("--device", metavar="DEVICE",
                          help="run on this device: a short name (cuda, mps, cpu, auto) or a lego call "
                               "('{uri: cuda, params: {index: 1}}'); the cpu without it")
+
+
+def format_params(pairs):
+    found = {}
+    for text in pairs or []:
+        name, separator, value = text.partition("=")
+        if not separator or not name:
+            raise SystemExit(usage(f"--format-param expects NAME=VALUE, got {text!r}"))
+        found[name] = parse_value(value)
+    return found
 
 
 def device_value(args):
@@ -643,7 +657,8 @@ def cmd_export(args) -> int:
     with Monitor(level_of(args.log)), warnings.catch_warnings():
         warnings.simplefilter("ignore")
         result = api.export(args.run, format=args.format, model=args.model, which=args.which, out=args.out,
-                            sets=layer_of(args), device=device_value(args), contract=contract_of(args))
+                            params=format_params(args.format_param), sets=layer_of(args),
+                            device=device_value(args), contract=contract_of(args))
     style = style_for(sys.stdout)
     if result.path is None:
         print(style.yellow(f"nothing written: {result.format} could not export {result.model}"), file=sys.stderr)

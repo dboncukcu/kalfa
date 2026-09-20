@@ -787,7 +787,7 @@ kalfa check    cfg.yaml [--layers] [--dump] [--recipe] [--measure]
 kalfa describe cfg.yaml [--measure] [--section data|model|training|after|columns|wiring] [--save report.txt]
 kalfa predict  runs/x   [--model name] [--which best|last|final] [--data new.parquet] [--device cuda] [--plots]
 kalfa generate runs/x   [--which best|last] [--device cuda]
-kalfa export   runs/x   [--format onnx|pt2|state_dict] [--model name] [--out DIR]
+kalfa export   runs/x   [--format onnx|pt2|state_dict] [--format-param opset=18] [--model name] [--out DIR]
 kalfa plots    runs/x   [--only a,b] [--set figures.format=pdf]
 kalfa resume   runs/x   [--set training.epochs=N]
 kalfa prepare  cfg.yaml --out DIR                        # run the data block once; run --prepared DIR reuses it

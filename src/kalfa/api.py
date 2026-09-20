@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import json
 import shutil
 import subprocess
@@ -663,14 +664,24 @@ class Exported:
     format: str
 
 
+def export_params(uri, params):
+    given = dict(params or {})
+    names = set(inspect.signature(registry.resolve(uri)).parameters) - {"model", "inputs", "directory", "stem"}
+    unknown = sorted(set(given) - names)
+    if unknown:
+        raise KalfaError(f"{uri} has no parameter {unknown[0]!r}; it takes {sorted(names) or 'none'}")
+    return given
+
+
 def export(run_dir, format="state_dict", model=None, which=None, out=None, sets=None, device=None,
-           contract=None) -> Exported:
+           contract=None, params=None) -> Exported:
     opened = open_record(run_dir, which, sets, contract)
     uri = format if format.startswith("/") else registry.aliases().get(format)
     if uri is None or registry.lookup(uri) is None:
         raise KalfaError(f"export format {format!r} is no export lego; the std ones are onnx, pt2 and state_dict")
     if kalfa_kind(uri) != "export":
         raise KalfaError(f"{uri} is a {kalfa_kind(uri)} lego, not an export")
+    written = export_params(uri, params)
     models, composites = opened.rebuild()
     emas = opened.ema_copies()
     name = model or opened.after.get("predicts")
@@ -687,7 +698,7 @@ def export(run_dir, format="state_dict", model=None, which=None, out=None, sets=
     with torch.no_grad():
         target(*inputs)
     logger.info(f"exporting {name} ({opened.which} weights) as {uri}")
-    path = registry.resolve(uri)(target, inputs, directory, name)
+    path = registry.resolve(uri)(target, inputs, directory, name, **written)
     if path is not None:
         logger.info(f"wrote {path}")
     return Exported(str(path) if path is not None else None, name, uri)

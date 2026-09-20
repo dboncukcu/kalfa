@@ -11,4 +11,5 @@ lego("/export/kalfa/pt2", "formats:pt2", alias="pt2",
                  "saved as <stem>.pt2, the archive torch.export.load reads back")
 lego("/export/kalfa/onnx", "formats:onnx", alias="onnx", requires="onnx",
      description="The model exported to <stem>.onnx from one traced batch, the wires as the input and output names, "
-                 "at the opset given")
+                 "at the opset given; dynamo: true takes torch's newer torch.export based exporter, which needs "
+                 "onnxscript installed")

@@ -6,6 +6,7 @@ import torch
 
 from helpers import needs
 from kalfa.cli import main
+from kalfa.std.common.optional import installed
 
 
 @pytest.fixture
@@ -95,6 +96,35 @@ def test_export_says_when_a_format_writes_nothing(copy, monkeypatch, capsys):
     monkeypatch.setattr("kalfa.std.export.kalfa.formats.load", lambda name, purpose: None)
     assert main(["export", copy, "--format", "onnx"]) == 1
     assert capsys.readouterr().err == "nothing written: /export/kalfa/onnx could not export full\n"
+
+
+def test_format_param_reaches_the_export_lego(copy, capsys):
+    needs("onnx")
+    import onnx
+
+    assert main(["export", copy, "--format", "onnx", "--model", "tower", "--format-param", "opset=18"]) == 0
+    capsys.readouterr()
+    written = onnx.load(str(Path(copy) / "export" / "tower.onnx"))
+    assert [item.version for item in written.opset_import if item.domain == ""] == [18]
+
+
+def test_format_param_names_what_the_lego_takes(copy, capsys):
+    assert main(["export", copy, "--format", "onnx", "--format-param", "opsett=18"]) == 1
+    assert capsys.readouterr().err == ("/export/kalfa/onnx has no parameter 'opsett'; it takes "
+                                       "['dynamo', 'opset']\n")
+    assert main(["export", copy, "--format", "state_dict", "--format-param", "opset=18"]) == 1
+    assert capsys.readouterr().err == "/export/kalfa/state_dict has no parameter 'opset'; it takes none\n"
+    assert not (Path(copy) / "export").exists()
+
+
+def test_format_param_dynamo_says_what_the_new_exporter_needs(copy, capsys):
+    needs("onnx")
+    if installed("onnxscript"):
+        pytest.skip("onnxscript is installed, so the new exporter runs")
+    assert main(["export", copy, "--format", "onnx", "--model", "tower", "--format-param", "dynamo=true"]) == 1
+    assert capsys.readouterr().err == ("the onnx export with dynamo needs onnxscript, which is not installed; "
+                                       "pip install onnxscript, or leave dynamo false for the TorchScript "
+                                       "exporter\n")
 
 
 def test_export_onnx_writes_the_graph(copy, capsys):

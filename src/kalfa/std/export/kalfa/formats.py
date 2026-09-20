@@ -3,7 +3,7 @@ from pathlib import Path
 
 import torch
 
-from kalfa.std.common.optional import load
+from kalfa.std.common.optional import installed, load
 
 
 def traced_inputs(model, batch, rows=2):
@@ -49,12 +49,15 @@ def pt2(model, inputs, directory, stem):
     return path
 
 
-def onnx(model, inputs, directory, stem, opset=17):
+def onnx(model, inputs, directory, stem, opset=17, dynamo=False):
     if load("onnx", "the onnx export") is None:
         return None
+    if dynamo and not installed("onnxscript"):
+        raise ValueError("the onnx export with dynamo needs onnxscript, which is not installed; pip install "
+                         "onnxscript, or leave dynamo false for the TorchScript exporter")
     path = target_path(directory, stem, "onnx")
     model.eval()
     with torch.no_grad():
         torch.onnx.export(model, inputs, str(path), input_names=list(model.inputs), output_names=list(model.outputs),
-                          opset_version=int(opset), dynamo=False)
+                          opset_version=int(opset), dynamo=bool(dynamo))
     return path
