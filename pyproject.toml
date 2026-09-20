@@ -62,6 +62,7 @@ exclude = ["docs/images"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
+filterwarnings = ["error::UserWarning", "error::ResourceWarning"]
 markers = [
     "slow: trains a model",
     "subprocess: spawns kalfa in a child process",

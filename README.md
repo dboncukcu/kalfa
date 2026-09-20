@@ -1238,7 +1238,9 @@ file per kind; a contract test fails while a std URI is exercised nowhere), `tes
 `tests/configs/reference.yaml`, trained once per session and inspected facet by facet, plus one small run per
 mechanism a tabular model cannot express) and `tests/cli/` (every command, on the reference record). Nothing is
 compared to a golden file: a test asserts the exact files, keys and shapes a run writes, and the seeded reference
-run is repeated to the bit. Markers: `slow` (trains a model), `subprocess` (spawns kalfa in a child process).
+run is repeated to the bit. A `UserWarning` or a `ResourceWarning` fails the suite, so a matplotlib layout that
+does not fit or a file left open is a failure, never a line of noise. Markers: `slow` (trains a model),
+`subprocess` (spawns kalfa in a child process).
 
 **The std tree.** A std lego's URI is `/<kind>/<pack>/<name>` and its module is `src/kalfa/std/<kind>/<pack>/`. A
 file holds one lego with a body of its own, or a family of small ones (`std/criterion/kalfa/regression.py` holds
