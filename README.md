@@ -1258,7 +1258,7 @@ gets its test in `tests/legos/test_<kind>.py`; a mechanism a tabular model canno
 **Releasing.** `bash tools/release.sh 0.2.7 "a one line summary"` writes the version into `pyproject.toml` and
 `uv.lock`, writes `DOCS.md` again (its header carries the version), and asks before the
 commit, the annotated tag and the push. Run the suite against a reinstalled environment (`uv sync --reinstall`)
-first, then `uv build`. kalfa 0.4.0 needs tezgah 0.2.0 or later and cirak 0.2.3 or later.
+first, then `uv build`. kalfa needs tezgah 0.2.0 or later and cirak 0.2.3 or later.
 
 ## License
 
