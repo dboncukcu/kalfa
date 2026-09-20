@@ -169,8 +169,6 @@ def test_collect_tabulates_the_run_and_its_continuation(home, resumed, capsys):
         "runs/tiny | 1 | ")
 
 
-@pytest.mark.xfail(strict=True, reason="bug: collect of a list of runs prints that it wrote sweep.csv but writes only "
-                                       "sweep.json and sweep.md")
 def test_collect_writes_the_csv_it_announces(home, resumed, capsys):
     assert main(["collect", "runs/tiny", "runs/tiny_more", "--out", "announced"]) == 0
     assert capsys.readouterr().out.endswith("wrote sweep.csv, sweep.json and sweep.md under announced\n")

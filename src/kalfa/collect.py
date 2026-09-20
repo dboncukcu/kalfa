@@ -275,6 +275,7 @@ def collect(run_dirs, out=None, markdown=False, style=PLAIN):
         return "cv", report if markdown else fold_text(result, style), str(target)
     result = sweep_table(runs)
     (target / "sweep.json").write_text(json.dumps(result, indent=2, default=float))
+    pandas.DataFrame(result["rows"], columns=sweep_columns(result)).to_csv(target / "sweep.csv", index=False)
     report = sweep_markdown(result)
     (target / "sweep.md").write_text(report)
     return "sweep", report if markdown else sweep_text(result, style), str(target)
