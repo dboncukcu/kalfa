@@ -71,6 +71,10 @@ class Prepared:
     def warnings(self):
         return [problem for problem in self.problems if problem.severity == "warning"]
 
+    @property
+    def passed(self):
+        return not self.errors
+
     def dump(self):
         if self.analysis is None:
             return None
@@ -168,7 +172,7 @@ def gate(problems):
 
 def check(paths, sets=None, measure=False, contract=None, prepared=None) -> Prepared:
     found = prepare(paths, sets, dry=True, contract=contract, prepared=prepared)
-    if measure and found.document is not None and not found.errors:
+    if measure and found.document is not None and found.passed:
         found.measured = (dict(prepared_manifest(prepared)["sizes"]) if prepared is not None
                           else measured_sizes(found.document, found.contract))
     return found

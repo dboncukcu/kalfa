@@ -345,8 +345,7 @@ def test_field_assignment_kinds_are_reported_as_errors(kind, workdir):
 def test_reference_config_checks_clean_with_the_header_sizes(workdir):
     prepared = check([REFERENCE], parse_sets([]))
     assert prepared.problems == []
-    assert prepared.errors == []
-    assert prepared.warnings == []
+    assert prepared.errors == [] and prepared.warnings == [] and prepared.passed is True
     assert prepared.sizes == HEADER_SIZES
     assert prepared.sets == ["train", "valid", "test"]
     assert prepared.measured is None
@@ -394,6 +393,11 @@ def test_prepared_splits_errors_from_warnings(workdir):
     written = (workdir / "mutated.yaml").read_text().splitlines()
     assert prepared.errors[0].line == written.index("  epochs: -1") + 1
     assert prepared.warnings[0].file is None and prepared.warnings[0].line is None
+    assert prepared.passed is False
+    only_warned = load_config("reference")
+    drop(only_warned, ("seed",))
+    warned = check([write_config(workdir / "warned.yaml", only_warned)], parse_sets([]))
+    assert [problem.kind for problem in warned.problems] == ["no_seed"] and warned.passed is True
     assert prepared.warnings[1].file == str(workdir / "mutated.yaml")
     assert prepared.warnings[1].line == next(number for number, line in enumerate(written, 1)
                                              if line.strip().startswith("drop:"))

@@ -558,7 +558,7 @@ def cmd_check(args) -> int:
         else:
             sys.stdout.write("---\n")
             sys.stdout.write(text)
-    return 1 if prepared.errors else 0
+    return 0 if prepared.passed else 1
 
 
 def cmd_run(args) -> int:
@@ -606,7 +606,7 @@ def cmd_describe(args) -> int:
         print(style.green("no problems found"))
     found = None
     if args.measure:
-        if prepared.document is None or prepared.errors:
+        if prepared.document is None or not prepared.passed:
             print(style.yellow("--measure needs a config without errors; describing the config as written"),
                   file=sys.stderr)
         else:
@@ -624,7 +624,7 @@ def cmd_describe(args) -> int:
         sys.stdout.write(render(prepared, style, sections, found))
     else:
         sys.stdout.write(report(prepared, style, sections, found))
-    return 1 if prepared.errors else 0
+    return 0 if prepared.passed else 1
 
 
 def cmd_predict(args) -> int:
