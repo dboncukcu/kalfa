@@ -217,9 +217,6 @@ def test_stream_loader_refuses_a_missing_size_balanced_and_workers(root):
     assert build(LOADER, data=data, set="valid", size=8, workers=2, eval_workers=0).num_workers == 0
 
 
-@pytest.mark.xfail(strict=True, reason="bug: resolved_drop_last (src/kalfa/std/loader/kalfa/torch.py:31) calls len() "
-                                       "on the dataset before the stream branch, so drop_last auto raises TypeError "
-                                       "on the lazy set instead of keeping every batch")
 def test_stream_loader_with_drop_last_auto_keeps_every_batch(root):
     loader = build(LOADER, data=stream_dataset(root), set="train", size=600, drop_last="auto")
     assert loader.drop_last is False

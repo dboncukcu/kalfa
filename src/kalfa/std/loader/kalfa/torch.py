@@ -27,9 +27,11 @@ def resolved_size(size, data):
 
 
 def resolved_drop_last(drop_last, data, size):
-    if drop_last == "auto":
-        return len(data) % size == 1
-    return bool(drop_last)
+    if drop_last != "auto":
+        return bool(drop_last)
+    if isinstance(data, torch.utils.data.IterableDataset):
+        return False
+    return len(data) % size == 1
 
 
 def resolved_workers(workers, eval_workers, train):
