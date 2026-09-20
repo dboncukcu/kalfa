@@ -25,7 +25,40 @@ def test_export_writes_the_state_dict_of_the_predicts_model(copy, capsys):
 def test_export_state_dict_of_a_composite_carries_its_models(copy, capsys):
     assert main(["export", copy]) == 0
     state = torch.load(Path(copy) / "export" / "full.pt")
-    assert state and all(isinstance(value, torch.Tensor) for value in state.values())
+    assert len(state) == 29 and all(isinstance(value, torch.Tensor) for value in state.values())
+    assert {key.split(".")[1] for key in state} == {"h", "y_hat", "aux_hat", "s", "tail_logit"}
+    assert all(key.startswith("refs.") for key in state)
+
+
+def test_export_pt2_of_a_composite_names_the_weights_of_its_models(copy, capsys):
+    assert main(["export", copy, "--format", "pt2"]) == 0
+    program = torch.export.load(str(Path(copy) / "export" / "full.pt2"))
+    assert len(program.state_dict) == 29 and program.constants == {}
+    assert {key.split(".")[1] for key in program.state_dict} == {"h", "y_hat", "aux_hat", "s", "tail_logit"}
+
+
+def test_export_reaches_the_ema_copy_by_name(copy, capsys):
+    assert main(["export", copy, "--model", "tower.ema"]) == 0
+    assert capsys.readouterr().out == f"exported tower.ema as /export/kalfa/state_dict: {copy}/export/tower.ema.pt\n"
+    state = torch.load(Path(copy) / "export" / "tower.ema.pt")
+    assert len(state) == 18 and all(key.startswith("model.nodes.") for key in state)
+    assert main(["export", copy, "--model", "tower"]) == 0
+    live = torch.load(Path(copy) / "export" / "tower.pt")
+    assert not torch.equal(state["model.nodes.stem.weight"], live["nodes.stem.weight"])
+
+
+def test_export_refuses_a_model_the_batch_cannot_feed(copy, capsys):
+    assert main(["export", copy, "--model", "head_lin"]) == 1
+    assert capsys.readouterr().err.startswith("model input 'h' is not a batch field; the batch has ")
+    assert not (Path(copy) / "export").exists()
+
+
+def test_export_writes_the_same_shape_from_every_checkpoint(copy):
+    keys = {}
+    for which in ("best", "last", "final"):
+        assert main(["export", copy, "--model", "tower", "--which", which, "--out", f"{copy}/{which}"]) == 0
+        keys[which] = sorted(torch.load(Path(copy) / which / "tower.pt"))
+    assert keys["best"] == keys["last"] == keys["final"] and len(keys["best"]) == 18
 
 
 def test_export_state_dict_of_a_model_carries_its_layers(copy, capsys):
