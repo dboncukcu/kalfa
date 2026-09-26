@@ -6,7 +6,7 @@ from pathlib import Path
 
 from cirak.registry import registry
 
-from .api import gate, prepare_data, run
+from .api import gate, prepare_data, repair, run
 from .config import load_surface, parse_sets, resolve_alias
 from .errors import KalfaError
 from .kinds import kalfa_kind
@@ -222,6 +222,63 @@ def run_point(paths, sets, params, plan, index, point=None, when=None, monitor=N
         identity={"kind": "point", "id": int(index), "values": dict(point), "root": str(plan.root)})
     value, turn = objective_of(record, plan.objective)
     return write_point(record, plan, index, point, value, turn)
+
+
+def is_sweep(paths, sets=None):
+    surface = load_surface(paths, sets)
+    gate(surface.problems)
+    return surface.data.get("sweep") is not None
+
+
+def repair_point(paths, sets, params, plan, index, monitor=None):
+    if Record(plan.root).stop_requested():
+        raise KalfaError(f"{plan.root}: the sweep is stopped (stop.json in the root); remove the file to repair "
+                         "points")
+    record = point_dir(plan.root, index)
+    values = (Record(record).read_json("manifest.json") or {}).get("values")
+    if not isinstance(values, dict):
+        raise KalfaError(f"{record} holds no point values in manifest.json; it is no point of a kalfa sweep")
+    layer = parse_sets([*(sets or []), f"record={record}"], [*(params or []), *point_params(values)])
+    repaired = repair(paths, layer, record=record, prepared=prepared_dir(plan), monitor=monitor)
+    value, turn = objective_of(record, plan.objective)
+    return repaired, write_point(record, plan, index, values, value, turn)
+
+
+def repair_command(paths, sets, params, root, index, options=()):
+    command = [sys.executable, "-m", "kalfa.cli", "repair", *paths, "--id", str(index), "--record", str(root)]
+    for text in sets or []:
+        command += ["--set", text]
+    for text in params or []:
+        command += ["-p", text]
+    return [*command, *options]
+
+
+def repair_points(paths, sets, params, plan, log=print, options=()):
+    states = {}
+    for index in range(plan.total):
+        record = point_dir(plan.root, index)
+        if record.exists():
+            states[index] = Record(record).state()
+    failed = [index for index, state in states.items() if state == "failed"]
+    counts = {state: list(states.values()).count(state) for state in sorted(set(states.values()))}
+    skipped = ", ".join(f"{count} {state}" for state, count in counts.items() if state != "failed")
+    log(f"{plan.root}: {len(failed)} failed point(s) to repair" + (f"; skipped {skipped}" if skipped else "") +
+        (f"; {plan.total - len(states)} not started" if len(states) < plan.total else ""))
+    entries = []
+    for index in failed:
+        if Record(plan.root).stop_requested():
+            log(f"{plan.root}: stop requested (stop.json in the root); remove the file to go on")
+            break
+        record = point_dir(plan.root, index)
+        with subprocess.Popen(repair_command(paths, sets, params, plan.root, index, options)) as child:
+            code = wait_for(child, plan.root, record, log)
+        entry = read_point(record) if code == 0 else None
+        if entry is None:
+            log(f"{record}: not repaired (exit {code})")
+        else:
+            log(f"{record}: repaired, {entry['objective']['monitor']}={entry['objective']['value']:.6g}")
+        entries.append(entry)
+    return entries
 
 
 def child_command(paths, sets, params, root, index, point=None, options=()):

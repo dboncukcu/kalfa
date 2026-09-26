@@ -289,12 +289,13 @@ beyond the wiring's defaults, the history prefix of a set the wiring does not na
 `predictions_<set>.parquet` beside `predictions.parquet`, and a `threshold` reads it with `set: calib`. A split
 must return `train`.
 
-**K fold.** Every fold is a separate run (`-p fold=i`) and `kalfa collect` gathers them (section 7). The held out
-fold is the **test** set; the CV estimate is the `test/` metrics and exists in every fold. With `val` a `valid` set
-of that ratio is carved from the training part; without it there is no `valid`, `stop` and `checkpoint` cannot
-watch `val/` (a `check` error), and the fold runs for `epochs`. The `kfold` lego has no param that makes the held
-out fold the `valid` set: early stopping on the test fold makes the estimate optimistic, and kalfa does not let it
-be written.
+**K fold.** Every fold is a separate run (`-p fold=i`) and `kalfa collect` gathers them (section 7); inside a
+sweep, `fold` is a swept param and `kalfa collect <root> --mean-over fold` ranks the settings by their mean. The
+held out fold is the **test** set; the CV estimate is the `test/` metrics and exists in every fold. With `val` a
+`valid` set of that ratio is carved from the training part; without it there is no `valid`, `stop` and
+`checkpoint` cannot watch `val/` (a `check` error), and the fold runs for `epochs`. The `kfold` lego has no param
+that makes the held out fold the `valid` set: early stopping on the test fold makes the estimate optimistic, and
+kalfa does not let it be written.
 
 ### `batch`
 
@@ -1013,7 +1014,7 @@ The record directory; `$datetime$` is built in (`YYYYmmdd_HHMMSS`, filled once a
 | `data.json` | the shape of the data at every stage of the data block: the rows and columns of the source and after every transform, the sets after the split, the fitted objects, the features and targets, the loaders; greppable, and a diff between two runs shows what changed in the data before anything else is compared |
 | `architecture.json` | the graph of every report model with the traced shapes, laid out by column and row; the board draws it |
 | `device.json`, `git.json` | the chosen device and its lego; the commit of the config's repository and whether it was dirty |
-| `export/`, `tensorboard/`, `resume.json` | what `kalfa export` wrote; under `--tensorboard`; the source run of a resume |
+| `export/`, `resume.json` | what `kalfa export` wrote; the source run of a resume |
 | `stop.json` | a stop request, who asked and when; the loop ends after the turn that sees it |
 
 ### The commands
@@ -1026,7 +1027,7 @@ The versions of kalfa, cirak, tezgah, torch and python on one line, what to quot
 #### `kalfa run`
 
 `kalfa run cfg.yaml [--set path=value ...] [-p name=value ...] [--executor serial|thread --workers N]
-[--log info|debug] [--no-progress] [--progress turns] [--log-every N] [--tensorboard] [--contract PATH]`.
+[--log info|debug] [--no-progress] [--progress turns] [--log-every N] [--contract PATH]`.
 
 An error when `record` points at a non empty directory; nothing is overwritten. The thread executor treats the
 aliasing warning as an error. Ctrl-c while the training loop runs asks the run to stop: it writes `stop.json`
@@ -1044,7 +1045,6 @@ run is live).
 | `--no-progress` | no progress bar; `--log info --no-progress` is the plain form, one line per turn and nothing that redraws itself |
 | `--progress steps` | an inner bar over the steps of a turn |
 | `--log-every N` | a line every N steps under `--log`: the loss, the learning rate and the gradient norm of every optimizer |
-| `--tensorboard` | TensorBoard event files under `<record>/tensorboard/` (the `tensorboard` package is optional): every history and step value, and the `params` as hparams with the last turn's values, so a sweep root is a TensorBoard logdir |
 
 Without the flag the output is the progress bar and the warning summary; with it a warning also appears at the
 moment it is raised. A line is `time level stage message`, the stage being where it comes from (`data.source`,
@@ -1176,15 +1176,36 @@ and runs the points itself; a point's record is a run with `kind: point`, its va
 
 #### `kalfa collect`
 
-`kalfa collect <root>` walks the subfolders of a sweep root (it reads the root manifest for the objective), puts
-those with a `sweep.json` into the table (`sweep.csv`, `sweep.json`, `sweep.md`) and writes the best point; it
-lists and skips the unfinished or failed ones, and works on a half done sweep. The terminal carries the swept
-params, the objective and the turn of every point with the best one marked; every metric column stays in
-`sweep.csv` and `sweep.md`, and `--markdown` prints that report instead of the table.
+`kalfa collect <root>` walks the point records of a sweep root (it reads the root manifest for the objective), puts
+those with a `sweep.json` into the table (`sweep.csv`, `sweep.json`) and writes the report `sweep.md`: the counts,
+the best point with its params, its `val/` and `test/` values at its objective turn and a copy of its plots
+(`best/`), the top points with their gap to the best (`--top K`, 5 without it), every param against the objective
+(`plots/param_<name>.png`, a table per level for a choice), the objective curves of every point with the top ones in
+colour (`plots/curves.png`), the failed, lost and unfinished points with the first error of each, the
+`resolved.yaml` difference of the two best, and every finished point in a closed section. It works on a half done
+sweep; `--no-figures` skips the drawing. The terminal carries the swept params, the objective and the turn of every
+point with the best one marked, and `--markdown` prints the report instead.
+
+The parameters section opens with one number per param, also in `sweep.json` as `importance`: the Spearman rank
+correlation of a numeric param with the objective (three points or more) with the way it is better, and for a choice
+the share η² of the objective's variance its levels explain with the level of the best mean (when a level holds more
+than one point, since one point per level explains everything). Both look at one param at a time. The point records
+are read eight at a time, which is what a sweep on a network filesystem waits for.
+
+`--mean-over PARAM` names a swept param whose values the space lists, `fold` for a k fold inside the sweep. The
+points that share every other param are one setting; a setting is ranked by its mean objective over the values of
+`PARAM` once every value has a finished point with a finite objective. The report opens with the best setting (its
+mean, its deviation, its point per value and the mean of its `val/` and `test/` values at the objective turn), the
+top settings and the settings still missing a value; the param figures and level tables take the setting means,
+the curves colour the points of the best setting, and the config difference pairs the two best settings at the
+same value of `PARAM`. `groups.csv` holds every setting.
 
 `kalfa collect runs/cv_*` is the k fold summary when there is a `fold` param (the mean and deviation of every
-fold's `test/` metrics, the last values per fold, `cv.json` and `cv.md`); otherwise the sweep table of the list of
-runs, the `params` differences as columns.
+fold's `test/` metrics at its last turn, the values per fold, the same at the reported turn when
+`training.report` is `best`, the state of every fold and their curves, `cv.json` and `cv.md`); otherwise the sweep
+table of the list of runs, the `params` differences as columns. The files go to `reports/` inside the directory
+given, or inside the parent of the runs when there are several (`runs/reports/cv.md`); `--out DIR` puts them
+elsewhere.
 
 #### `kalfa ls`, `kalfa docs`, `kalfa contract`
 
@@ -1314,11 +1335,11 @@ change to kalfa.
 
 ### The monitor
 
-The command builds one `Monitor` (`kalfa.std.common.log`) from `--log`, `--no-progress`, `--progress`,
-`--log-every` and `--tensorboard` and hands it to the run as the `monitor` run input beside `device` and `record`.
+The command builds one `Monitor` (`kalfa.std.common.log`) from `--log`, `--no-progress`, `--progress` and
+`--log-every` and hands it to the run as the `monitor` run input beside `device` and `record`.
 The history step gives it every turn line (`monitor.turn(line)`), the turn every update (`monitor.step(line)`),
-and tezgah's events reach it through `monitor.sink`, so the bars, the turn and step lines, the TensorBoard files
-and the node timings are the monitor's business, never the turn's. The Python API builds the default one, a bar
+and tezgah's events reach it through `monitor.sink`, so the bars, the turn and step lines and the node
+timings are the monitor's business, never the turn's. The Python API builds the default one, a bar
 without a log, when `run` is called without `monitor=`.
 
 ### The adapters

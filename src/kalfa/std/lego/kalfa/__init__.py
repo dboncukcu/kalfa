@@ -100,13 +100,14 @@ lego("/lego/kalfa/given_sizes", "sizes:given_sizes",
 lego("/lego/kalfa/prepared_sizes", "sizes:prepared_sizes",
      description="The set sizes a prepared directory recorded in its manifest")
 
-lego("/lego/kalfa/init_state", "state:init_state", returns="epochs_left", mutates=["state"], bus=["resume", "device"],
+lego("/lego/kalfa/init_state", "state:init_state", returns="epochs_left", mutates=["state"],
+     bus=["resume", "device", "skip_training"],
      description="Move the state to the device, load a checkpoint when resuming and restore the checkpoint policy "
-                 "from it, count the turns left")
+                 "from it, count the turns left (none when a repair skips training)")
 lego("/lego/kalfa/checkpoint", "state:checkpoint", returns=None, bus=["metrics", "record"],
      description="Write the checkpoint files the policy asks for; nothing without a policy")
 lego("/lego/kalfa/save_final", "state:save_final", returns=None, bus=["record"],
-     description="Write final/state.pt with the full state once training ends")
+     description="Write final/state.pt with the full state and the checkpoint policy's state once training ends")
 lego("/lego/kalfa/select", "state:select", returns="selected", bus=["record"],
      description="The report models: copies loaded from best.pt, or the final state for last")
 

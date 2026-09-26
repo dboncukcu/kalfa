@@ -8,10 +8,10 @@ import pandas
 import pytest
 
 import kalfa.board
-from kalfa.board import Board, handler_for, serve, static_path
+from kalfa.board import Board, handler_for, serve, static_path, tail_lines
 from kalfa.cli import main
 from kalfa.errors import KalfaError
-from kalfa.record import Record
+from kalfa.record import Record, write_failure
 from kalfa.std.common.files import read_lines
 from kalfa.std.common.history import History
 
@@ -49,14 +49,14 @@ def fake_records(root):
     return root
 
 
-def call(board, path, method="GET"):
+def call(board, path, method="GET", headers=None):
     handler_class = handler_for(board)
     handler = handler_class.__new__(handler_class)
     handler.path = path
     handler.command = method
     handler.request_version = "HTTP/1.1"
     handler.requestline = f"{method} {path} HTTP/1.1"
-    handler.headers = {}
+    handler.headers = headers or {}
     handler.client_address = ("127.0.0.1", 0)
     handler.rfile = io.BytesIO()
     handler.wfile = io.BytesIO()
@@ -290,6 +290,132 @@ def test_handler_answers_the_json_endpoints_without_a_server(board, record_dir):
     assert status == 404 and headers["Content-Type"] == "text/plain" and body == b"not found"
 
 
+def test_the_filter_takes_names_comparisons_and_lists_only(board):
+    for text, needle in (("site.values > 1", "Attribute"), ("__import__('os')", "Call"), ("ghost > 1", "ghost"),
+                         ("@limit > 1", "no expression")):
+        found = board.predictions("ref_fixed", where=text)
+        assert found["rows"] == 0 and found["pairs"] == [] and needle in found["error"], text
+    assert board.predictions("ref_fixed", where="site in ['s1', 's2'] and row >= 0")["error"] is None
+
+
+def test_classify_draws_the_roc_only_for_the_score_and_the_signal_class_picked(board, record_dir):
+    table = pandas.read_parquet(record_dir / "predictions.parquet")
+    found = board.classify("ref_fixed", "pred_tail_logit_is_hot")
+    assert found["target"] == "is_hot" and found["rows"] == len(table) and found["error"] is None
+    assert found["classes"] == sorted(table["is_hot"].dropna().unique().tolist())
+    assert found["score"] is None and found["positive"] is None and "roc" not in found and "histogram" not in found
+    assert found["scores"][0] == "raw_tail_logit" and "pred_tail_logit_is_hot" in found["scores"]
+    assert len(found["counts"]) == len(found["classes"])
+    half = board.classify("ref_fixed", "pred_tail_logit_is_hot", score="raw_tail_logit")
+    assert half["score"] == "raw_tail_logit" and half["positive"] is None and "roc" not in half
+    assert board.classify("ref_fixed", "pred_tail_logit_is_hot", score="nothing", positive="1")["score"] is None
+    found = board.classify("ref_fixed", "pred_tail_logit_is_hot", score="raw_tail_logit",
+                           positive=str(found["classes"][-1]))
+    assert found["positive"] == found["classes"][-1]
+    roc = found["roc"]
+    assert 0 <= roc["auc"] <= 1 and roc["fpr"][0] == 0 and roc["tpr"][0] == 0 and roc["tpr"][-1] == 1
+    assert roc["signal"] + roc["background"] == len(table)
+    assert all(item["signal"] >= level for item, level in zip(roc["working"], (0.5, 0.8, 0.9, 0.95)))
+    assert len(found["histogram"]["classes"]) == len(found["classes"])
+    assert len(found["histogram"]["edges"]) == 41
+    picked = board.classify("ref_fixed", "pred_tail_logit_is_hot", score="pred_tail_logit_is_hot",
+                            positive=str(found["classes"][0]))
+    assert picked["score"] == "pred_tail_logit_is_hot" and picked["positive"] == found["classes"][0]
+    assert board.classify("ref_fixed", "pred_tail_logit_is_hot", where="site == 's1'")["rows"] == int(
+        (table["site"] == "s1").sum())
+    assert board.classify("ref_fixed", "pred_nothing") is None and board.classify("nowhere", "pred_y") is None
+    status, headers, body = call(board, "/api/classify?path=ref_fixed&pred=pred_tail_logit_is_hot")
+    assert status == 200 and json.loads(body)["score"] is None
+
+
+def test_a_sweep_counts_its_queued_points_and_never_ranks_a_failed_one(tmp_path):
+    root = fake_records(tmp_path)
+    grid = Record(root / "sweeps" / "grid")
+    grid.write_json("manifest.json", {**grid.read_json("manifest.json"), "total": 3})
+    Record(root / "sweeps" / "grid" / "0000").write_json("run.json", {"status": "ok"})
+    board = Board(root)
+    entry = next(item for item in board.tree()["groups"]["sweeps"] if item["path"] == "sweeps/grid")
+    assert entry["status"]["state"] == "pending"
+    note = next(item for item in board.live()["live"] if item["path"] == "sweeps/grid")
+    assert note["finished"] == 2 and note["total"] == 3 and note["best"]["id"] == 1
+    point = root / "sweeps" / "grid" / "0001"
+    Record(point).write_json("run.json", {"status": "failed"})
+    write_failure(point, ValueError("broken"))
+    sweep = board.sweep("sweeps/grid")
+    assert [item["status"]["state"] for item in sweep["points"]] == ["finished", "failed"]
+    assert sweep["points"][1]["error"] == "ValueError: broken" and sweep["points"][0]["error"] is None
+    assert sweep["best"]["id"] == 0
+
+
+def test_history_marks_the_values_that_are_not_finite_and_a_broken_file_stays_one_record(tmp_path):
+    root = fake_records(tmp_path)
+    Record(root / "runs" / "one").append("history.jsonl", {"turn": 3, "global_step": 9, "val/rmse": float("nan"),
+                                                           "train/l": float("inf"), "rules": []})
+    board = Board(root)
+    assert board.lines("runs/one", "history.jsonl", 2)["lines"] == [
+        {"turn": 3, "global_step": 9, "val/rmse": "NaN", "train/l": "Infinity", "rules": []}]
+    progress = board.progress(root / "runs" / "one")
+    assert progress["monitor_value"] == "NaN" and progress["last"] == {"val/rmse": "NaN"}
+    (root / "runs" / "one" / "run.json").write_text("{broken")
+    entry = next(item for item in board.records() if item["path"] == "runs/one")
+    assert entry["status"]["state"] == "unreadable" and entry["status"]["error"]
+    assert [item["path"] for item in board.records()] == ["runs/one", "sweeps/grid", "sweeps/grid/0000",
+                                                         "sweeps/grid/0001"]
+
+
+def test_series_draws_many_records_together_and_the_watch_is_shared(tmp_path):
+    root = fake_records(tmp_path)
+    board = Board(root)
+    found = board.series(["runs/one", "sweeps/grid/0000", "nowhere"])
+    assert sorted(found["runs"]) == ["runs/one", "sweeps/grid/0000"] and found["missing"] == ["nowhere"]
+    assert found["keys"] == ["train/l", "val/rmse"]
+    one = found["runs"]["runs/one"]
+    assert one["name"] == "one" and one["unit"] == "turn" and one["params"] == {"lr": 0.1}
+    assert one["series"] == {"train/l": [[1, 1.0], [2, 0.5]], "val/rmse": [[1, 2.0], [2, 1.5]]}
+    picked = board.series(["runs/one", "sweeps/grid/0000"], ["val/rmse", "ghost"])
+    assert picked["runs"]["sweeps/grid/0000"]["series"] == {"val/rmse": [[1, 3.0]]}
+    assert list(picked["runs"]["runs/one"]["series"]) == ["val/rmse"]
+    status, headers, body = call(board, "/api/series?paths=runs/one,sweeps/grid/0000&keys=val/rmse")
+    assert status == 200 and sorted(json.loads(body)["runs"]) == ["runs/one", "sweeps/grid/0000"]
+    common = board.common_stamps()
+    assert board.watched("runs/one", common) == board.watched("runs/one")
+    assert "runs/one/history.jsonl" in common and "runs/one/history.jsonl" not in board.watched("runs/one", common)
+    board.watcher.join()
+    try:
+        assert board.watcher.thread is not None and board.watcher.viewers == 1
+    finally:
+        board.watcher.leave()
+    assert board.watcher.viewers == 0
+
+
+def test_the_log_tail_and_the_line_count_read_only_what_is_new(tmp_path):
+    root = fake_records(tmp_path)
+    board = Board(root)
+    stdout = root / "runs" / "one" / "stdout.txt"
+    assert board.tail("runs/one", "stdout.txt", 2) == {"lines": ["line two", "line three"], "name": "stdout.txt",
+                                                        "total": 3}
+    with stdout.open("a") as stream:
+        stream.write("line four\nline fi")
+    assert board.tail("runs/one", "stdout.txt", 2) == {"lines": ["line four", "line fi"], "name": "stdout.txt",
+                                                        "total": 5}
+    Record(root / "runs" / "one").append("history.jsonl", {"turn": 3, "global_step": 9, "val/rmse": 1.2,
+                                                           "rules": []})
+    assert [line["turn"] for line in board.lines("runs/one", "history.jsonl")["lines"]] == [1, 2, 3]
+    history = root / "runs" / "one" / "history.jsonl"
+    history.write_text(history.read_text().splitlines()[0] + "\n")
+    assert [line["turn"] for line in board.lines("runs/one", "history.jsonl")["lines"]] == [1]
+
+
+def test_files_carry_an_etag_and_a_failing_endpoint_answers_500(board):
+    status, headers, body = call(board, "/file?path=ref_fixed/plots/loss_curve.png")
+    assert status == 200 and headers["ETag"].startswith('"') and headers["Content-Length"] == str(len(body))
+    status, headers, body = call(board, "/file?path=ref_fixed/plots/loss_curve.png",
+                                 headers={"If-None-Match": headers["ETag"]})
+    assert status == 304 and body == b""
+    status, headers, body = call(board, "/api/predictions?path=ref_fixed&sample=many")
+    assert status == 500 and json.loads(body)["error"].startswith("ValueError")
+
+
 def test_post_stop_answers_409_on_the_finished_record(board, record_dir):
     status, headers, body = call(board, "/api/stop?path=ref_fixed", "POST")
     assert status == 409 and headers["Content-Type"] == "application/json"
@@ -376,3 +502,31 @@ def test_board_command_serves_the_root_on_the_host_and_port(monkeypatch, capsys,
     assert main(["board", str(tmp_path)]) == 0
     assert calls == [(str(tmp_path), "127.0.0.1", 8080), "served", "closed"]
     assert capsys.readouterr().out == f"kalfa board over {tmp_path} at http://127.0.0.1:8080/ (ctrl-c stops it)\n"
+
+
+def test_the_log_tail_keeps_the_last_frame_of_a_progress_bar_and_reads_back_far_enough(tmp_path):
+    log = tmp_path / "stderr.txt"
+    log.write_text("start\n 10%|#\r 50%|###\r100%|#####\nend\r\n")
+    assert tail_lines(log, 10) == ["start", "100%|#####", "end"]
+    many = tmp_path / "stdout.txt"
+    many.write_text("".join(f"line {index}\n" for index in range(5000)))
+    assert tail_lines(many, 3000, window=1024) == [f"line {index}" for index in range(2000, 5000)]
+    assert tail_lines(many, 2, window=1024) == ["line 4998", "line 4999"]
+    assert tail_lines(many, 9000, window=1024) == [f"line {index}" for index in range(5000)]
+
+
+def test_the_prediction_frames_are_read_once_until_the_file_changes(tmp_path, monkeypatch):
+    first = tmp_path / "a.parquet"
+    pandas.DataFrame({"x": [1, 2]}).to_parquet(first)
+    reads, original = [], pandas.read_parquet
+    monkeypatch.setattr(kalfa.board.pandas, "read_parquet", lambda path: reads.append(path) or original(path))
+    frames = kalfa.board.Frames(room=2)
+    assert frames.read(first) is frames.read(first) and reads == [first]
+    pandas.DataFrame({"x": [1, 2, 3]}).to_parquet(first)
+    assert len(frames.read(first)) == 3 and len(reads) == 2
+    for name in ("b", "c"):
+        pandas.DataFrame({"x": [0]}).to_parquet(tmp_path / f"{name}.parquet")
+        frames.read(tmp_path / f"{name}.parquet")
+    assert list(frames.kept) == [tmp_path / "b.parquet", tmp_path / "c.parquet"]
+    tight = kalfa.board.Frames(budget=1)
+    assert len(tight.read(first)) == 3 and not tight.kept

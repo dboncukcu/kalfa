@@ -276,6 +276,39 @@ def build_parser():
     progress_option(output)
     resume_cmd.set_defaults(handler=cmd_resume)
 
+    repair_cmd = command(commands, "repair", "continue a failed run, or the failed points of a sweep, in place",
+                         "Continue a failed run in its own record directory with the config and the code it is "
+                         "started with, after a fix to a lego or a plot: a run that failed after training runs the "
+                         "after block again from final/state.pt, one that failed while training goes on from "
+                         "checkpoints/last.pt (history.jsonl and steps.jsonl are cut back to that turn). The config "
+                         "may differ from the recorded one only under the plots, figures, device, calibrate, "
+                         "generate, params and training.report; the files of the failed attempt move to "
+                         "attempts/<n>/ and repair.json lists the attempts. A run that failed before its first "
+                         "checkpoint has nothing to continue from and is refused. With a sweep config it takes the "
+                         "arguments of kalfa sweep: --id N repairs point N, without --id every failed point is "
+                         "repaired one after the other and the others are skipped.",
+                         ["kalfa repair cfg.yaml --record runs/x_20260916_115459",
+                          "kalfa repair cfg.yaml    the record the config names, when it has no $datetime$",
+                          "kalfa repair sweep.yaml --id 12 --record sweeps/lr    one point, for a queue job",
+                          "kalfa repair sweep.yaml --record sweeps/lr    every failed point, one after the other"])
+    repair_cmd.add_argument("config", nargs="+", metavar="CONFIG",
+                            help="the YAML files the run was started with; the plugins next to them are the fixed "
+                                 "code")
+    overrides = repair_cmd.add_argument_group("overrides")
+    set_option(overrides)
+    contract_option(overrides)
+    repair_cmd.add_argument("--record", metavar="DIR",
+                            help="the run to repair; with a sweep config the root of the points (overrides "
+                                 "sweep.record)")
+    repair_cmd.add_argument("--id", type=int, metavar="N", dest="point_id",
+                            help="with a sweep config, repair point N only; the record is <root>/<N>")
+    running = repair_cmd.add_argument_group("running")
+    executor_options(running)
+    output = repair_cmd.add_argument_group("output")
+    log_option(output)
+    progress_option(output)
+    repair_cmd.set_defaults(handler=cmd_repair)
+
     sweep_cmd = command(commands, "sweep", "run the points of the sweep section, locally or one point per job",
                         "Run the sweep section of the config: the strategy draws the points and each one is an "
                         "ordinary run under <root>/<id>/. The local loop runs every point in a subprocess; on a queue "
@@ -310,13 +343,30 @@ def build_parser():
 
     collect_cmd = command(commands, "collect", "summarize fold runs or a sweep root",
                           "Summarize a list of runs or the fold runs of a cross validation (cv.json, cv.md), or a "
-                          "sweep root (sweep.csv, sweep.json, sweep.md and the best point), from the records alone.",
-                          ["kalfa collect runs/cv_*", "kalfa collect sweeps/lr --out reports"])
+                          "sweep root (sweep.csv, sweep.json and the report sweep.md: the best point with its metrics "
+                          "at its objective turn and a copy of its plots, the top points, every param against the "
+                          "objective, the curves, the failed points with their errors and the config difference of "
+                          "the two best), from the records alone. With --mean-over a swept param such as fold, the "
+                          "report ranks the settings of the other params by their mean objective over the values of "
+                          "that param (groups.csv). The files go to reports/ inside the directory given, or inside "
+                          "the parent of the runs when there are several.",
+                          ["kalfa collect runs/cv_*    runs/reports/cv.md",
+                           "kalfa collect sweeps/lr    sweeps/lr/reports/sweep.md",
+                           "kalfa collect sweeps/lr --out my_report --top 10",
+                           "kalfa collect sweeps/lr_cv --mean-over fold"])
     collect_cmd.add_argument("runs", nargs="+", metavar="RECORD", help="record directories, or one sweep root")
-    collect_cmd.add_argument("--out", metavar="DIR", help="the directory of the summary files; the runs' parent "
-                             "without it")
+    collect_cmd.add_argument("--out", metavar="DIR", help="the directory of the summary files; reports/ inside the "
+                             "directory given, or inside the parent of the runs when there are several, without it")
     collect_cmd.add_argument("--markdown", action="store_true", help="print the markdown report instead of the "
                              "table, every metric column with it; the files are written either way")
+    collect_cmd.add_argument("--top", type=int, default=5, metavar="K",
+                             help="how many points the report ranks and colours in the curves; 5 without it")
+    collect_cmd.add_argument("--no-figures", action="store_true", dest="no_figures",
+                             help="write the tables without drawing the figures")
+    collect_cmd.add_argument("--mean-over", metavar="PARAM", dest="mean_over",
+                             help="for a sweep root: a swept param whose values the space lists, fold for a k fold "
+                                  "inside the sweep; the points that share every other param are one setting, ranked "
+                                  "by the mean objective over the values of PARAM once it has every one of them")
     collect_cmd.set_defaults(handler=cmd_collect)
 
     docs_cmd = command(commands, "docs", "the lego reference generated from the registry",
@@ -447,14 +497,11 @@ def progress_option(command):
     command.add_argument("--log-every", type=int, metavar="N",
                          help="under --log, a line every N steps with the loss, the learning rate and the "
                               "gradient norm of every optimizer")
-    command.add_argument("--tensorboard", action="store_true",
-                         help="write TensorBoard event files under <record>/tensorboard (the tensorboard package "
-                              "is optional): every history and step value, the params as hparams")
 
 
 def monitor_of(args):
     progress = False if args.no_progress else ("turns" if args.progress == "turns" else True)
-    return Monitor(level_of(args.log), progress=progress, log_every=args.log_every, tensorboard=args.tensorboard)
+    return Monitor(level_of(args.log), progress=progress, log_every=args.log_every)
 
 
 def output_flags(args):
@@ -465,8 +512,6 @@ def output_flags(args):
         flags += ["--progress", args.progress]
     if args.log_every:
         flags += ["--log-every", str(args.log_every)]
-    if args.tensorboard:
-        flags.append("--tensorboard")
     return flags
 
 
@@ -591,6 +636,45 @@ def cmd_resume(args) -> int:
     return 0
 
 
+def cmd_repair(args) -> int:
+    from . import api, sweep
+
+    style = style_for(sys.stdout)
+    layer = layer_of(args)
+    api.refuse_record_dirs(args.config)
+    if sweep.is_sweep(args.config, layer):
+        plan = sweep.plan(args.config, layer, record=args.record)
+        if args.point_id is None:
+            entries = sweep.repair_points(args.config, args.set, args.param, plan, log=print,
+                                          options=output_flags(args))
+            repaired = [entry for entry in entries if entry]
+            print(f"{len(repaired)}/{len(entries)} failed points repaired under {style.cyan(str(plan.root))}; "
+                  f"summarize with: kalfa collect {plan.root}")
+            return 0 if len(repaired) == len(entries) else 1
+        with monitor_of(args) as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            repaired, entry = sweep.repair_point(args.config, args.set, args.param, plan, args.point_id,
+                                                 monitor=monitor)
+        print_warnings(caught)
+        objective = entry["objective"]
+        print(f"point {entry['id']} repaired ({repaired.stage}, attempt {repaired.attempt}): "
+              f"{objective['monitor']}={objective['value']:.6g} at turn {objective['turn']}; record "
+              f"{style.cyan(entry['record'])}")
+        return 0
+    if args.point_id is not None:
+        raise SystemExit(usage("--id needs a config with a sweep section"))
+    with monitor_of(args) as monitor, Interrupt(monitor), warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        monitor.echo_warnings(caught)
+        repaired = api.repair(args.config, layer, record=args.record, executor=args.executor,
+                              workers=args.workers, contract=contract_of(args), monitor=monitor)
+    print_warnings(caught)
+    result = repaired.result
+    print(f"repaired {style.bold(result.report.run)} ({repaired.stage} from turn {repaired.turn}, attempt "
+          f"{repaired.attempt}): {style.green('ok')}; device {result.device}; record {style.cyan(result.record)}")
+    return 0
+
+
 def cmd_describe(args) -> int:
     from . import api
     from .describe.render import render, report
@@ -701,10 +785,16 @@ def cmd_generate(args) -> int:
 def cmd_collect(args) -> int:
     from . import collect
 
-    kind, text, target = collect.collect(args.runs, args.out, markdown=args.markdown, style=style_for(sys.stdout))
+    kind, text, target, written = collect.collect(args.runs, args.out, markdown=args.markdown,
+                                                  style=style_for(sys.stdout), top=args.top,
+                                                  figures=not args.no_figures, mean_over=args.mean_over)
     sys.stdout.write(text)
-    files = "sweep.csv, sweep.json and sweep.md" if kind == "sweep" else "cv.json and cv.md"
-    print(f"wrote {files} under {target}")
+    files = [name for name in written if "/" not in name]
+    drawn = sum(1 for name in written if name.startswith("plots/"))
+    copied = sum(1 for name in written if name.startswith("best/"))
+    extra = [f"{drawn} figure{'s' if drawn != 1 else ''}"] if drawn else []
+    extra += [f"{copied} plot{'s' if copied != 1 else ''} of the best point"] if copied else []
+    print(f"wrote {collect.joined(files)}{' with ' + collect.joined(extra) if extra else ''} under {target}")
     return 0
 
 

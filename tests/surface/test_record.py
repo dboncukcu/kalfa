@@ -1,16 +1,20 @@
 import json
 import os
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 
 import pytest
+from tezgah import RunError
 
 from helpers import config_path
 from kalfa import __version__
 from kalfa.config import load_surface, parse_sets, written_config
 from kalfa.record import (
     DATETIME_TOKEN,
+    LOST_AFTER,
+    Heartbeat,
     Record,
     read_resolved,
     record_dir,
@@ -18,6 +22,7 @@ from kalfa.record import (
     resume_chain,
     resume_source,
     stamp,
+    write_failure,
     write_flow,
     write_resolved,
     write_resume_note,
@@ -125,6 +130,51 @@ def test_status_reports_state_last_seen_and_stop(tmp_path):
     assert status["state"] == "pending"
     assert status["stop"] is None
     assert datetime.fromisoformat(status["last_seen"]) <= datetime.now()
+
+
+def test_failure_json_keeps_the_traceback_of_every_failed_node(tmp_path):
+    record = Record(tmp_path)
+    record.manifest("run")
+    try:
+        raise ValueError("the metric broke")
+    except ValueError as caught:
+        failure = RunError([("run.training.epochs[1].body.turn", caught)])
+    write_failure(tmp_path, failure)
+    note = record.read_json("failure.json")
+    assert datetime.fromisoformat(note["at"]) <= datetime.now()
+    [entry] = note["failures"]
+    assert entry["path"] == "run.training.epochs[1].body.turn" and entry["node"] == "turn"
+    assert entry["type"] == "ValueError" and entry["message"] == "the metric broke"
+    assert entry["traceback"].startswith("Traceback") and "ValueError: the metric broke" in entry["traceback"]
+    assert record.state() == "failed"
+    write_failure(tmp_path, KeyError("device"))
+    assert [(entry["path"], entry["node"], entry["type"]) for entry in record.read_json("failure.json")["failures"]] \
+        == [(None, None, "KeyError")]
+    record.write_json("run.json", {"status": "ok"})
+    assert record.state() == "finished"
+
+
+def test_a_heartbeat_older_than_lost_after_marks_the_record_lost(tmp_path):
+    record = Record(tmp_path)
+    record.manifest("run")
+    record.append("history.jsonl", {"turn": 1})
+    beat = tmp_path / "heartbeat"
+    beat.write_text("now")
+    assert record.state() == "running"
+    old = time.time() - LOST_AFTER - 5
+    os.utime(beat, (old, old))
+    assert record.state() == "lost"
+    record.write_json("run.json", {"status": "failed"})
+    assert record.state() == "failed"
+
+
+def test_heartbeat_beats_while_the_run_runs_and_leaves_no_file(tmp_path):
+    with Heartbeat(tmp_path, every=0.01) as heartbeat:
+        deadline = time.time() + 5
+        while not heartbeat.path.exists() and time.time() < deadline:
+            time.sleep(0.01)
+        assert heartbeat.path.exists()
+    assert not heartbeat.path.exists()
 
 
 def test_a_resolved_yaml_alone_makes_a_record(tmp_path):

@@ -110,18 +110,16 @@ def step_line(line):
 
 
 class Monitor:
-    def __init__(self, level=None, progress=True, stream=None, log_every=None, tensorboard=False):
+    def __init__(self, level=None, progress=True, stream=None, log_every=None):
         self.level = level
         self.progress = progress
         self.stream = stream
         self.log_every = int(log_every) if log_every else None
-        self.tensorboard = bool(tensorboard)
         self.handler = None
         self.bar = None
         self.inner = None
         self.total = None
         self.turn_started = None
-        self.writer = None
         self.record = None
         self.training = False
         self.flow = logger_for("flow")
@@ -156,23 +154,6 @@ class Monitor:
 
     def open(self, record):
         self.record = Path(record)
-        if not self.tensorboard:
-            return
-        from kalfa.std.common.optional import load
-
-        package = load("torch.utils.tensorboard", "the TensorBoard sink")
-        if package is None:
-            return
-        self.writer = package.SummaryWriter(log_dir=str(Path(record) / "tensorboard"))
-
-    def summary(self, params=None, last=None):
-        if self.writer is None:
-            return
-        flat = {key: value for key, value in (params or {}).items() if isinstance(value, (int, float, str, bool))}
-        values = {key: value for key, value in (last or {}).items()
-                  if isinstance(value, (int, float)) and not isinstance(value, bool)}
-        if flat and values:
-            self.writer.add_hparams(flat, values)
 
     def finish(self):
         for bar in (self.inner, self.bar):
@@ -184,9 +165,6 @@ class Monitor:
         self.turn_started = None
         self.record = None
         self.training = False
-        if self.writer is not None:
-            self.writer.close()
-            self.writer = None
 
     def say(self, text):
         line = style_for(sys.stderr).yellow(text)
@@ -237,10 +215,6 @@ class Monitor:
     def step(self, line):
         if self.log_every and int(line.get("step", 0)) % self.log_every == 0:
             self.steps.info(step_line(line))
-        if self.writer is not None:
-            for key, value in line.items():
-                if key not in ("step", "turn") and isinstance(value, (int, float)):
-                    self.writer.add_scalar(key, value, int(line.get("step", 0)))
         if self.inner is not None:
             losses = {key: value for key, value in line.items() if key.startswith("loss/")}
             self.inner.set_postfix({key: f"{value:.4g}" for key, value in list(losses.items())[:3]}, refresh=False)
@@ -252,10 +226,6 @@ class Monitor:
             self.inner = None
         if self.turns.isEnabledFor(logging.INFO):
             self.turns.info(turn_line(line, self.elapsed()))
-        if self.writer is not None:
-            for key, value in line.items():
-                if key not in ("turn", "global_step", "rules") and isinstance(value, (int, float)):
-                    self.writer.add_scalar(key, value, int(line.get("turn", 0)))
         if not self.progress:
             return
         from tqdm.auto import tqdm

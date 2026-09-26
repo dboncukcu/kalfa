@@ -70,7 +70,7 @@ def strip_suffix(state, suffix="_next"):
     return {key[:-len(suffix)] if key.endswith(suffix) else key: value for key, value in state.items()}
 
 
-def init_state(state, epochs, steps, policy=None, resume=None, device=None):
+def init_state(state, epochs, steps, policy=None, resume=None, device=None, skip_training=False):
     device = device or Device.cpu()
     device.place(state["models"])
     device.place(state["emas"])
@@ -87,6 +87,10 @@ def init_state(state, epochs, steps, policy=None, resume=None, device=None):
     else:
         raise ValueError("training needs epochs or steps")
     left = max(total - int(state["counters"].get("turn", 0)), 0)
+    if skip_training:
+        logger_training.info(f"training skipped at turn {int(state['counters'].get('turn', 0))}: only the after block "
+                             f"runs")
+        left = 0
     describe_state(state, total, left, steps)
     return left
 
@@ -104,10 +108,11 @@ def checkpoint(state, policy, metrics=None, record=None):
     return None
 
 
-def save_final(models, optimizers, emas, counters, rules, record=None):
+def save_final(models, optimizers, emas, counters, rules, record=None, policy=None):
     if record is None:
         return None
-    save(Path(record) / "final" / "state.pt", payload(models, optimizers, emas, counters, rules))
+    save(Path(record) / "final" / "state.pt",
+         payload(models, optimizers, emas, counters, rules, policy.state() if policy else None))
     logger_after.debug("final/state.pt written")
     return None
 

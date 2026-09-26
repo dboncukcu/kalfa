@@ -195,23 +195,29 @@ def test_local_loop_runs_every_point_and_collect_summarizes_the_root(housing, ca
     out = capsys.readouterr().out
     assert out.startswith("── SWEEP ")
     assert "  objective  val/rmse (min, best)\n" in out and "  points     4 of 4 finished\n" in out
-    assert out.endswith("wrote sweep.csv, sweep.json and sweep.md under runs/grid\n")
-    summary = json.loads((root / "sweep.json").read_text())
+    assert out.endswith("wrote sweep.csv, sweep.json and sweep.md with 3 figures and 1 plot of the best point under "
+                        "runs/grid/reports\n")
+    reports = root / "reports"
+    assert sorted(path.name for path in (reports / "plots").iterdir()) == ["curves.png", "param_lr.png",
+                                                                           "param_width.png"]
+    summary = json.loads((reports / "sweep.json").read_text())
     best = min(entries, key=lambda entry: entry["objective"]["value"])
     assert summary["best"] == {"id": best["id"], "point": best["point"], "value": best["objective"]["value"],
                                "turn": 1, "dir": f"runs/grid/{best['id']:04d}"}
     assert [row["id"] for row in summary["points"]] == [0, 1, 2, 3] and summary["skipped"] == []
     assert f"  best       point {best['id']}, val/rmse = " in out
-    assert (root / "sweep.csv").read_text().splitlines()[0] == ("id,lr,width,objective,turn,turns,val/mse,val/rmse,"
-                                                                 "test/mse,test/rmse")
-    assert (root / "sweep.md").read_text().startswith("# sweep: val/rmse (min, best)\n\n4 of 4 points finished.\n")
+    assert (reports / "sweep.csv").read_text().splitlines()[0] == ("id,lr,width,objective,turn,turns,val/mse,"
+                                                                    "val/rmse,test/mse,test/rmse")
+    report = (reports / "sweep.md").read_text()
+    assert report.startswith("# sweep: val/rmse (min, best)\n\n4 of 4 points finished.\n")
+    assert "\n| width | points | best | median |\n|---|---|---|---|\n| 16 | 2 | " in report
     shutil.rmtree(root / "0002")
     (root / "0003" / "sweep.json").unlink()
-    assert main(["collect", "runs/grid"]) == 0
+    assert main(["collect", "runs/grid", "--no-figures"]) == 0
     out = capsys.readouterr().out
-    summary = json.loads((root / "sweep.json").read_text())
+    summary = json.loads((reports / "sweep.json").read_text())
     assert [row["id"] for row in summary["points"]] == [0, 1]
-    assert summary["skipped"] == [{"dir": "0003", "status": "unfinished"}]
+    assert summary["skipped"] == [{"dir": "0003", "status": "unfinished", "reason": None}]
     assert "  points     2 of 3 finished\n" in out and re.search(r"^  unfinished\s+1: 0003$", out, re.M)
     assert main(["sweep", CONFIG, "--record", "runs/grid", "--no-progress"]) == 1
     out = capsys.readouterr().out

@@ -227,7 +227,9 @@ blocks:
       extra_sets: {default: []}         # the sets beyond the wiring's, predicted into predictions_<set>.parquet
       # "@plots" is a group reference to the plots section of the driver document, not a block variable
     flow:
-      final:   {uri: /lego/kalfa/save_final, inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final, rules: rules_final}}
+      final:   {uri: /lego/kalfa/save_final, params: {policy: "@checkpoint"},
+                inputs: {models: models_final, optimizers: optimizers_final, emas: emas_final, counters: counters_final,
+                         rules: rules_final}}
       report:  {uri: /lego/kalfa/select, params: {which: $report$}, inputs: {models: models_final, emas: emas_final}, outputs: [selected]}
       # "@calibrate" is the calibrate section of the driver document: what the run learns at the end that is neither
       # weights nor a column transform, fitted on the report models and the sets, kept under fitted/calibrate

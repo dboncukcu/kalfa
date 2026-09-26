@@ -1,11 +1,14 @@
+import contextlib
 import hashlib
 import inspect
 import json
 import shutil
+import socket
 import subprocess
 import sys
 import warnings
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import pandas
@@ -24,11 +27,23 @@ from .driver import call_with_params, recipe
 from .errors import KalfaError
 from .kinds import kalfa_kind
 from .recipe import analyze, compile, dump, implicit_bindings
-from .record import Record, read_resolved, record_dir, resume_source, write_flow, write_resolved, write_resume_note
+from .record import (
+    DATETIME_TOKEN,
+    Heartbeat,
+    Record,
+    read_resolved,
+    record_dir,
+    resolved_data,
+    resume_source,
+    write_failure,
+    write_flow,
+    write_resolved,
+    write_resume_note,
+)
 from .std.calibrate.base import read_calibrations
 from .std.checkpoint.base import load, load_into
 from .std.common.device import Device
-from .std.common.files import atomic
+from .std.common.files import atomic, read_lines, write_text
 from .std.common.generation import write_samples
 from .std.common.history import History
 from .std.common.log import Monitor, clock, logger_for, since
@@ -115,7 +130,7 @@ def prepared_manifest(directory):
     return manifest
 
 
-def prepare(paths, sets=None, inputs=None, dry=True, contract=None, prepared=None) -> Prepared:
+def prepare(paths, sets=None, inputs=None, dry=True, contract=None, prepared=None, record=None) -> Prepared:
     started = clock()
     paths, contract = record_paths(paths, contract)
     contract = contract or Contract.load()
@@ -140,7 +155,7 @@ def prepare(paths, sets=None, inputs=None, dry=True, contract=None, prepared=Non
                                                    f"it again from this config"))
         return found
     try:
-        found.document = recipe(surface.data, registry, surface.aliases, contract, prepared=prepared)
+        found.document = recipe(surface.data, registry, surface.aliases, contract, record=record, prepared=prepared)
     except (KeyError, TypeError, ValueError, AttributeError) as exception:
         problems.append(error("driver_failed", f"the driver cannot shape this config: {exception!r}"))
         return found
@@ -334,7 +349,6 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
     started = clock()
     paths, contract = record_paths(paths, contract)
     contract = contract or Contract.load()
-    monitor = monitor or Monitor()
     inputs = contract.run_inputs + (["resume"] if resume is not None else [])
     found = prepare(paths, sets, inputs=inputs, dry=False, contract=contract, prepared=prepared)
     gate(found.problems)
@@ -350,38 +364,56 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
         logger.debug(f"seed {config['seed']}")
     logger.info(f"record {record}")
     target.mkdir(parents=True, exist_ok=True)
-    note = Record(record)
-    note.manifest(**{"kind": "run", "name": target.name, "config": [str(path) for path in paths
-                                                                    if not isinstance(path, dict)],
-                     "params": dict(config.get("params") or {}), "contract": contract.digest(),
-                     "turn": "steps" if (config.get("training") or {}).get("steps") is not None else "epoch",
-                     "prepared": str(prepared) if prepared is not None else None, **(identity or {})})
-    note.host()
-    write_resolved(record, found.surface)
-    contract.write(target / "contract.yaml")
-    copy_plugins(config.get("plugins"), target)
-    write_flow(record, found.dump())
-    if prepared is not None:
-        shutil.copytree(Path(prepared) / "fitted", target / "fitted", dirs_exist_ok=True)
-    if resume_from is not None:
-        old = Path(resume_from) / "checkpoints"
-        if old.is_dir():
-            shutil.copytree(old, target / "checkpoints", dirs_exist_ok=True)
-        write_resume_note(record, resume_from, resume)
-        logger.info(f"resuming {resume_from} from {Path(resume).name}")
+    with failure_noted(record):
+        note = Record(record)
+        note.manifest(**{"kind": "run", "name": target.name, "config": [str(path) for path in paths
+                                                                        if not isinstance(path, dict)],
+                         "params": dict(config.get("params") or {}), "contract": contract.digest(),
+                         "turn": "steps" if (config.get("training") or {}).get("steps") is not None else "epoch",
+                         "prepared": str(prepared) if prepared is not None else None, **(identity or {})})
+        note.host()
+        write_resolved(record, found.surface)
+        contract.write(target / "contract.yaml")
+        copy_plugins(config.get("plugins"), target)
+        write_flow(record, found.dump())
+        if prepared is not None:
+            shutil.copytree(Path(prepared) / "fitted", target / "fitted", dirs_exist_ok=True)
+        if resume_from is not None:
+            old = Path(resume_from) / "checkpoints"
+            if old.is_dir():
+                shutil.copytree(old, target / "checkpoints", dirs_exist_ok=True)
+            write_resume_note(record, resume_from, resume)
+            logger.info(f"resuming {resume_from} from {Path(resume).name}")
+        values = {"resume": str(resume)} if resume is not None else {}
+        return launch(found, record, paths, contract, monitor, executor, workers, values, started)
+
+
+@contextlib.contextmanager
+def failure_noted(record):
+    try:
+        yield
+    except Exception as exception:
+        try:
+            write_failure(record, exception)
+        except OSError as problem:
+            logger.warning(f"{record}: failure.json not written ({problem})")
+        raise
+
+
+def launch(found, record, paths, contract, monitor, executor, workers, values, started) -> RunResult:
+    config = found.surface.data
+    monitor = monitor or Monitor()
     device = device_of(config, contract)
     logger.info(f"device {device} ({device.uri})")
     write_device_note(record, device)
     write_git_note(record, paths)
     monitor.open(record)
-    values = {"device": device, "record": record, "monitor": monitor}
-    if resume is not None:
-        values["resume"] = str(resume)
+    values = {"device": device, "record": record, "monitor": monitor, **values}
     tezgah.subscribe(found.pipeline, monitor.sink)
     try:
-        report = tezgah.run(found.pipeline, inputs=values, executor=executor, workers=workers, record_dir=record)
-        history = report.outputs.get("history") or []
-        monitor.summary(config.get("params"), history[-1] if history else None)
+        with Heartbeat(record):
+            report = tezgah.run(found.pipeline, inputs=values, executor=executor, workers=workers,
+                                record_dir=record)
     finally:
         monitor.finish()
     logger.info(f"finished in {since(started)}")
@@ -393,7 +425,7 @@ def stop(record, by="cli"):
     if not note.is_record:
         raise KalfaError(f"{record} is no record directory; a record holds manifest.json or resolved.yaml")
     state = note.state()
-    if state in ("finished", "failed"):
+    if state in ("finished", "failed", "lost"):
         raise KalfaError(f"{record} has ended already ({state}); there is nothing to stop")
     targets = [note]
     if (note.read_json("manifest.json") or {}).get("kind") == "sweep":
@@ -434,6 +466,183 @@ def resume(run_dir, sets=None, executor="serial", workers=None, when=None, contr
     resolved = resolved_of(run_dir)
     return run([str(resolved)], sets, executor, workers, resume=source, resume_from=str(run_dir), when=when,
                contract=recorded_contract(run_dir, contract), monitor=monitor)
+
+
+REPAIRABLE = ("plots", "figures", "device", "calibrate", "generate", "record", "include", "plugins", "params", "sweep",
+              "training.report")
+ATTEMPT_FILES = ("run.json", "failure.json", "events.jsonl", "stdout.txt", "stderr.txt", "flow.yaml", "resolved.yaml",
+                 "device.json", "git.json", "host.json", "stop.json", "heartbeat", "plugins")
+UNSET = object()
+
+
+@dataclass
+class Diagnosis:
+    record: Path
+    state: str
+    stage: str | None
+    source: Path | None
+
+
+@dataclass
+class Repaired:
+    result: RunResult
+    stage: str
+    turn: int
+    attempt: int
+
+
+def diagnose(record) -> Diagnosis:
+    note = Record(record)
+    if not note.is_record:
+        raise KalfaError(f"{record} is no record directory; a record holds manifest.json or resolved.yaml")
+    final = Path(record) / "final" / "state.pt"
+    last = Path(record) / "checkpoints" / "last.pt"
+    if final.exists():
+        return Diagnosis(Path(record), note.state(), "after", final)
+    if last.exists():
+        return Diagnosis(Path(record), note.state(), "training", last)
+    return Diagnosis(Path(record), note.state(), None, None)
+
+
+def named_record(paths, sets=None):
+    surface = load_surface(paths, sets)
+    gate(surface.problems)
+    named = surface.data.get("record")
+    if not isinstance(named, str):
+        raise KalfaError("the config names no record directory; give the run to repair with --record")
+    if DATETIME_TOKEN in named:
+        raise KalfaError(f"the config writes a new record directory every run ({named}); give the run to repair "
+                         f"with --record")
+    return Path(named)
+
+
+def no_checkpoint_text(record):
+    return (f"{record} failed before its first checkpoint, so there is nothing to continue from; start it again: "
+            f"remove {record} and run the config with kalfa run (a sweep point with kalfa sweep CONFIG --id N). "
+            f"A failed run is repairable when it writes a checkpoint every turn: training.checkpoint: last, or best "
+            f"(it writes last.pt too)")
+
+
+def flattened(value, prefix=""):
+    if isinstance(value, dict) and value:
+        for key, item in value.items():
+            yield from flattened(item, f"{prefix}.{key}" if prefix else str(key))
+    else:
+        yield prefix, value
+
+
+def refused_changes(before, after):
+    old, new = dict(flattened(before or {})), dict(flattened(after or {}))
+    changed = sorted(key for key in old.keys() | new.keys() if old.get(key, UNSET) != new.get(key, UNSET))
+    return [key for key in changed
+            if not any(key == allowed or key.startswith(f"{allowed}.") for allowed in REPAIRABLE)]
+
+
+def checkpoint_counters(source):
+    counters = load(source).get("counters") or {}
+    step = counters.get("global_step")
+    return int(counters.get("turn", 0)), int(step) if step is not None else None
+
+
+def cut_lines(path, key, limit):
+    if limit is None or not path.exists():
+        return
+    kept = [line for line in read_lines(path) if isinstance(line.get(key), (int, float)) and line[key] <= limit]
+    write_text(path, "".join(json.dumps(line, default=float) + "\n" for line in kept))
+
+
+def open_attempt(record, stage, source, turn, paths):
+    target = Path(record)
+    note = Record(target)
+    attempts = list((note.read_json("repair.json") or {}).get("attempts") or [])
+    number = len(attempts) + 1
+    folder = target / "attempts" / str(number)
+    folder.mkdir(parents=True, exist_ok=True)
+    for name in ATTEMPT_FILES:
+        if (target / name).exists():
+            shutil.move(str(target / name), str(folder / name))
+    if stage == "training":
+        for name in ("history.jsonl", "steps.jsonl"):
+            if (target / name).exists():
+                shutil.copy2(target / name, folder / name)
+    attempts.append({"attempt": number, "started": datetime.now().isoformat(timespec="seconds"), "stage": stage,
+                     "from": str(Path(source).relative_to(target)), "turn": turn, "host": socket.gethostname(),
+                     "config": [str(path) for path in paths if not isinstance(path, dict)], "status": "running"})
+    note.write_json("repair.json", {"attempts": attempts})
+    return number
+
+
+def close_attempt(record, number, status):
+    note = Record(record)
+    try:
+        attempts = list((note.read_json("repair.json") or {}).get("attempts") or [])
+        for entry in attempts:
+            if entry.get("attempt") == number:
+                entry.update({"status": status, "ended": datetime.now().isoformat(timespec="seconds")})
+        note.write_json("repair.json", {"attempts": attempts})
+    except (OSError, ValueError) as problem:
+        logger.warning(f"{record}: repair.json not updated ({problem})")
+
+
+def refuse_record_dirs(paths):
+    if any(not isinstance(path, dict) and Path(path).is_dir() for path in paths):
+        raise KalfaError("repair takes the config files the run was started with, not a record directory; name the "
+                         "record with --record")
+
+
+def repair(paths, sets=None, record=None, prepared=None, executor="serial", workers=None, contract=None,
+           monitor=None) -> Repaired:
+    started = clock()
+    refuse_record_dirs(paths)
+    target = Path(record) if record is not None else named_record(paths, sets)
+    diagnosis = diagnose(target)
+    if diagnosis.state != "failed":
+        raise KalfaError(f"{target} is {diagnosis.state}, not failed; repair continues failed runs only")
+    if diagnosis.source is None:
+        raise KalfaError(no_checkpoint_text(target))
+    contract = recorded_contract(target, contract)
+    if prepared is None:
+        prepared = (Record(target).read_json("manifest.json") or {}).get("prepared")
+    inputs = contract.run_inputs + ["resume"] + (["skip_training"] if diagnosis.stage == "after" else [])
+    found = prepare(paths, sets, inputs=inputs, dry=False, contract=contract, prepared=prepared, record=target)
+    gate(found.problems)
+    if executor != "serial" and found.aliasing:
+        gate([error(problem.kind, problem.message, hint=problem.hint) for problem in found.aliasing])
+    refused = refused_changes(read_resolved(target), resolved_data(found.surface))
+    if refused:
+        shown = ", ".join(refused[:12]) + (f" and {len(refused) - 12} more" if len(refused) > 12 else "")
+        raise KalfaError(f"{target}: the config differs from the one the run trained with at {shown}; repair "
+                         f"continues the same run and takes changes only under {', '.join(REPAIRABLE)}; kalfa "
+                         f"resume --set training.epochs=N trains more turns, kalfa run starts a new run")
+    config = found.surface.data
+    seed_all(config.get("seed"))
+    turn, step = checkpoint_counters(diagnosis.source)
+    number = open_attempt(target, diagnosis.stage, diagnosis.source, turn, paths)
+    if diagnosis.stage == "after":
+        logger.info(f"repairing {target} (attempt {number}): the after block from final/state.pt, turn {turn}")
+    else:
+        logger.info(f"repairing {target} (attempt {number}): training from turn {turn} of checkpoints/last.pt")
+    values = {"resume": str(diagnosis.source)}
+    if diagnosis.stage == "after":
+        values["skip_training"] = True
+    try:
+        with failure_noted(target):
+            if diagnosis.stage == "training":
+                cut_lines(target / "history.jsonl", "turn", turn)
+                cut_lines(target / "steps.jsonl", "step", step)
+            Record(target).host()
+            write_resolved(target, found.surface)
+            copy_plugins(config.get("plugins"), target)
+            write_flow(target, found.dump())
+            result = launch(found, str(target), paths, contract, monitor, executor, workers, values, started)
+    except KeyboardInterrupt:
+        close_attempt(target, number, "interrupted")
+        raise
+    except Exception:
+        close_attempt(target, number, "failed")
+        raise
+    close_attempt(target, number, "ok")
+    return Repaired(result, diagnosis.stage, turn, number)
 
 
 def rebuild_models(analysis, store, prep=None, train_loader=None):
@@ -751,6 +960,7 @@ def flow_outputs(document, blocks, names, contract=None):
     return report.outputs
 
 
-__all__ = ["Exported", "Generated", "KalfaError", "Opened", "Plots", "Prepared", "PreparedData", "Prediction",
-           "Probe", "RunResult", "check", "export", "generate", "open_record", "plots", "predict", "prepare",
-           "prepare_data", "probe", "read_resolved", "resume", "run", "seed_all", "stop"]
+__all__ = ["Diagnosis", "Exported", "Generated", "KalfaError", "Opened", "Plots", "Prepared", "PreparedData",
+           "Prediction", "Probe", "Repaired", "RunResult", "check", "diagnose", "export", "generate", "open_record",
+           "plots", "predict", "prepare", "prepare_data", "probe", "read_resolved", "repair", "resume", "run",
+           "seed_all", "stop"]

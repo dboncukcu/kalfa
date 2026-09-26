@@ -16,7 +16,22 @@ const BANDS_LIGHT = ["#0d366b", "#256abf", "#3987e5", "#5598e7", "#86b6ef"];
 const BANDS_DARK = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#184f95"];
 const MARK_LIGHT = "#5f6672";
 const MARK_DARK = "#9aa3af";
-const STATE_COLORS = { running: "#e39b12", finished: "#17a673", failed: "#d8433c", pending: "#9aa0a8" };
+const STATE_COLORS = { running: "#e39b12", finished: "#17a673", failed: "#d8433c", pending: "#9aa0a8", lost: "#8e5bd8",
+                       unreadable: "#7a7a7a" };
+const ENDED_BADLY = new Set(["failed", "lost", "unreadable"]);
+const NONFINITE = new Set(["NaN", "Infinity", "-Infinity"]);
+const TASKS = ["regression", "classification"];
+const STEP_SETTINGS = Object.freeze({ curve: "stepline" });
+const DASHES = ["solid", "dash", "dot", "dashdot"];
+const DASH_ARRAYS = { solid: "", dash: "6,3", dot: "2,3", dashdot: "6,3,2,3" };
+
+function lineStyle(index) {
+  return { color: PALETTE[index % PALETTE.length], dash: DASHES[Math.floor(index / PALETTE.length) % DASHES.length] };
+}
+
+function seriesPoints(points) {
+  return points.map(([turn, value]) => [turn, typeof value === "number" ? value : null]);
+}
 const EXTRA_AXES = ["objective", "turns", "id", "state"];
 const SET_ORDER = ["train", "valid", "test"];
 const TABS = ["monitor", "overview", "curves", "steps", "model", "data", "predictions", "prep", "plots", "samples", "config", "notes", "files", "timeline", "events", "logs", "describe"];
@@ -73,11 +88,123 @@ function markerSize(points, settings) {
   return points < 40 ? 6 : points < 200 ? 5 : points < 1000 ? 4 : 3;
 }
 
+const connection = Vue.reactive({ lost: false });
+
 async function api(route, params) {
-  const query = new URLSearchParams(params || {}).toString();
-  const response = await fetch(route + (query ? "?" + query : ""));
+  const query = new URLSearchParams(Object.entries(params || {}).filter(([, value]) => value !== null && value !== undefined)).toString();
+  let response;
+  try {
+    response = await fetch(route + (query ? "?" + query : ""));
+  } catch (error) {
+    connection.lost = true;
+    return null;
+  }
+  if (response.status === 401 || response.status === 403) { connection.lost = true; return null; }
   if (!response.ok) return null;
-  return response.json();
+  const kind = response.headers.get("Content-Type") || "";
+  if (!kind.includes("application/json")) { connection.lost = true; return null; }
+  try {
+    const body = await response.json();
+    connection.lost = false;
+    return body;
+  } catch (error) {
+    connection.lost = true;
+    return null;
+  }
+}
+
+function firstError(node) {
+  if (!node || typeof node !== "object") return null;
+  if (node.error) return { path: node.path || "", node: node.node || "", type: "", message: node.error, traceback: "" };
+  for (const child of [...(node.nodes || []), ...(node.turns || [])]) {
+    const found = firstError(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+function taskOf(target) {
+  try { return localStorage.getItem(`kalfa-board-task:${target}`) === "classification" ? "classification" : "regression"; } catch (error) { return "regression"; }
+}
+
+function storeTask(target, task) {
+  try { localStorage.setItem(`kalfa-board-task:${target}`, task); } catch (error) { console.warn("storage unavailable", error); }
+}
+
+function choiceOf(target) {
+  try { return JSON.parse(localStorage.getItem(`kalfa-board-classify:${target}`) || "{}") || {}; } catch (error) { return {}; }
+}
+
+function storeChoice(target, choice) {
+  try { localStorage.setItem(`kalfa-board-classify:${target}`, JSON.stringify(choice)); } catch (error) { console.warn("storage unavailable", error); }
+}
+
+function columnsOf(root) {
+  try { return JSON.parse(localStorage.getItem(`kalfa-board-columns:${root}`) || "null"); } catch (error) { return null; }
+}
+
+function storeColumns(root, columns) {
+  try {
+    if (columns) localStorage.setItem(`kalfa-board-columns:${root}`, JSON.stringify(columns));
+    else localStorage.removeItem(`kalfa-board-columns:${root}`);
+  } catch (error) { console.warn("storage unavailable", error); }
+}
+
+const STATES = ["running", "pending", "finished", "failed", "lost", "unreadable"];
+const SINCE = [["", "any time"], ["1", "the last day"], ["7", "the last 7 days"], ["30", "the last 30 days"]];
+const COMPARISON = /^([^<>=!\s]+)(<=|>=|!=|<|>|=)(.+)$/;
+
+function startedWithin(entry, days) {
+  if (!days) return true;
+  const when = Date.parse(entry.started || "");
+  return Number.isFinite(when) && Date.now() - when <= Number(days) * 86400000;
+}
+
+function compared(value, operator, wanted) {
+  const number = Number(wanted);
+  const numeric = typeof value === "number" && Number.isFinite(number);
+  const a = numeric ? value : String(value), b = numeric ? number : wanted;
+  return { "=": a === b, "!=": a !== b, "<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b }[operator];
+}
+
+function rowValue(row, key) {
+  if (row.params && key in row.params) return row.params[key];
+  if (row.last && key in row.last) return row.last[key];
+  if (key === "best") return row.best ? row.best.value : undefined;
+  if (key === "turns" || key === "seconds") return row[key];
+  return undefined;
+}
+
+function rowMatches(row, text) {
+  return text.split(/\s+/).filter(Boolean).every(term => {
+    const found = term.match(COMPARISON);
+    const value = found ? rowValue(row, found[1]) : undefined;
+    if (value !== undefined && value !== null) return compared(value, found[2], found[3]);
+    const needle = term.toLowerCase();
+    return row.name.toLowerCase().includes(needle) || row.path.toLowerCase().includes(needle)
+      || Object.entries(row.params || {}).some(([key, item]) => `${key}=${item}`.toLowerCase().includes(needle));
+  });
+}
+
+function csvCell(value) {
+  const text = value === null || value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function saveCsv(name, headers, rows) {
+  const text = [headers, ...rows].map(row => row.map(csvCell).join(",")).join("\n") + "\n";
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function baseName(path) {
+  return String(path || "").split("/").filter(Boolean).pop() || "kalfa";
 }
 
 async function post(route, params) {
@@ -439,7 +566,7 @@ function chartFigure(view) {
   const turnOf = value => { const found = marks.filter(mark => mark.text && mark.x <= value).pop(); return found ? found.text : ""; };
   const data = view.lines.map(line => {
     const type = line.kind || kind;
-    const points = line.points.filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+    const points = line.points.filter(point => Number.isFinite(point[0]) && (Number.isFinite(point[1]) || point[1] === null));
     const x = points.map(point => point[0]), y = points.map(point => point[1]);
     const trace = { name: line.name, x, y, hoverlabel: { namelength: -1 } };
     if (type === "bar") return { ...trace, type: "bar", marker: { color: line.color }, ...(line.widths ? { width: line.widths } : {}) };
@@ -449,7 +576,7 @@ function chartFigure(view) {
       trace.marker = { color: line.color, size: markers };
     } else {
       trace.mode = settings.dots > 0 ? "lines+markers" : "lines";
-      trace.line = { color: line.color, width: settings.width, shape, dash: line.dashed ? "dash" : "solid" };
+      trace.line = { color: line.color, width: settings.width, shape, dash: line.dash || (line.dashed ? "dash" : "solid") };
       trace.marker = { color: line.color, size: settings.dots };
     }
     if (view.turns) {
@@ -1170,12 +1297,12 @@ const app = Vue.createApp({
   data() {
     return {
       route: parseHash(location.hash),
-      tree: { root: "", groups: {} }, filter: "", collapsed: {}, opened: {}, refreshed: "",
+      tree: { root: "", groups: {} }, filter: "", sideStates: [], sideSince: "", columns: undefined, collapsed: {}, opened: {}, refreshed: "",
       record: null, history: { lines: [], offset: 0 }, steps: { lines: [], offset: 0 },
-      logs: { name: "", lines: [], total: 0 }, texts: {}, describeText: null, showModuleText: false,
+      logs: { name: "", lines: [], total: 0 }, logFollow: true, texts: {}, describeText: null, showModuleText: false,
       sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] }, brush: {},
       tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
-      whereDraft: "",
+      whereDraft: "", classifyData: null, tasks: {}, connection, changing: false, pendingChanges: null, overlayKeys: [],
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
       refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
       source: null, timer: null, treeTimer: null, connected: false, queue: {}, plot: defaultPlot(), busy: 0,
@@ -1196,9 +1323,37 @@ const app = Vue.createApp({
       const names = (this.record && this.record.predictions) || [];
       return names.includes(this.route.params.set) ? this.route.params.set : (names[0] || "");
     },
+    pairChoices() {
+      const data = this.predictionsData;
+      if (!data) return [];
+      return data.named || (data.pairs || []).map(pair => ({ pred: pair.pred, target: pair.target }));
+    },
+    currentPair() {
+      return this.pairChoices.find(pair => pair.pred === this.route.params.pair) || this.pairChoices[0] || null;
+    },
     pairInfo() {
       const pairs = (this.predictionsData && this.predictionsData.pairs) || [];
-      return pairs.find(pair => pair.pred === this.route.params.pair) || pairs[0] || null;
+      return this.currentPair ? pairs.find(pair => pair.pred === this.currentPair.pred) || null : null;
+    },
+    pairKey() { return this.currentPair ? this.currentPair.pred : ""; },
+    stepSettings() { return STEP_SETTINGS; },
+    task() {
+      if (!this.currentPair) return "regression";
+      const target = this.currentPair.target;
+      return this.tasks[target] || taskOf(target);
+    },
+    rocLines() {
+      const roc = this.classifyData && this.classifyData.roc;
+      if (!roc) return [];
+      return [{ name: `ROC, AUC ${fmt(roc.auc)}`, color: PALETTE[0], points: roc.fpr.map((x, index) => [x, roc.tpr[index]]) },
+              { name: "chance", color: "#9aa0a8", dashed: true, points: [[0, 0], [1, 1]] }];
+    },
+    scoreLines() {
+      const histogram = this.classifyData && this.classifyData.histogram;
+      if (!histogram) return [];
+      const middles = histogram.edges.slice(0, -1).map((edge, index) => (edge + histogram.edges[index + 1]) / 2);
+      return histogram.classes.map((entry, index) => ({ name: String(entry.label), color: PALETTE[index % PALETTE.length],
+                                                        points: entry.counts.map((value, position) => [middles[position], value]) }));
     },
     scatterLines() {
       if (!this.pairInfo || !this.predictionsData) return [];
@@ -1233,11 +1388,40 @@ const app = Vue.createApp({
     },
     timeline() {
       const events = (this.eventsData && this.eventsData.events) || [];
+      const every = this.route.params.iterations === "all";
       const rows = [];
-      const open = {};
+      const open = {}, loops = {}, inside = {};
       for (const event of events) {
         const when = Date.parse(event.t);
         if (!Number.isFinite(when)) continue;
+        const template = (event.path || "").replace(/\[\d+\]/g, "[*]");
+        const nesting = (template.match(/\[\*\]/g) || []).length;
+        const iteration = event.kind.startsWith("iter");
+        if (!every && nesting > (iteration ? 1 : 0)) {
+          if (!iteration && event.kind !== "started") {
+            const entry = inside[template] || (inside[template] = { path: template, node: event.node, count: 0, total: 0, longest: 0, failed: 0 });
+            entry.count += 1;
+            entry.total += event.ms || 0;
+            entry.longest = Math.max(entry.longest, event.ms || 0);
+            if (event.status && !["ok", "skipped"].includes(event.status)) entry.failed += 1;
+          }
+          continue;
+        }
+        if (!every && iteration) {
+          let loop = loops[template];
+          if (!loop) {
+            loop = { key: template, node: event.node, path: template, start: when, end: null, status: "", depth: template.split(".").length - 1, count: 0, ms: 0, loop: true };
+            loops[template] = loop;
+            rows.push(loop);
+          }
+          if (event.kind === "iter_started") { loop.count += 1; loop.end = null; }
+          else {
+            loop.end = when;
+            loop.ms += event.ms || 0;
+            if (event.status && event.status !== "ok") loop.status = event.status;
+          }
+          continue;
+        }
         const key = event.kind.startsWith("iter") ? `${event.path} #${event.index ?? event.iteration ?? ""}` : event.path;
         if (event.kind === "started" || event.kind === "iter_started") {
           const row = { key, node: event.kind === "started" ? event.node : `${event.node} iteration`, path: event.path, start: when, end: null, status: "", depth: (event.path || "").split(".").length - 1 };
@@ -1250,11 +1434,16 @@ const app = Vue.createApp({
           delete open[key];
         }
       }
-      if (!rows.length) return { rows: [], total: 0 };
+      const profile = Object.values(inside).map(entry => {
+        const loop = Object.values(loops).find(item => entry.path.startsWith(`${item.key}.`));
+        return { ...entry, loop: loop ? loop.node : "", name: loop ? entry.path.slice(loop.key.length + 1) : entry.path,
+                 mean: entry.count ? entry.total / entry.count : 0, share: loop && loop.ms ? entry.total / loop.ms : null };
+      }).sort((first, second) => second.total - first.total);
+      if (!rows.length) return { rows: [], total: 0, profile };
       const first = Math.min(...rows.map(row => row.start));
       const last = Math.max(...rows.map(row => row.end || row.start));
       const total = Math.max(1, last - first);
-      return { rows: rows.map(row => ({ ...row, left: 100 * (row.start - first) / total, width: Math.max(0.3, 100 * ((row.end || last) - row.start) / total) })), total };
+      return { rows: rows.map(row => ({ ...row, left: 100 * (row.start - first) / total, width: Math.max(0.3, 100 * ((row.end || last) - row.start) / total) })), total, profile };
     },
     tableColumns() {
       const params = new Set(), metrics = new Set();
@@ -1262,12 +1451,27 @@ const app = Vue.createApp({
         Object.keys(row.params || {}).forEach(key => params.add(key));
         Object.keys(row.last || {}).forEach(key => metrics.add(key));
       }
-      return { params: [...params], metrics: [...metrics].slice(0, 8) };
+      const allParams = [...params], allMetrics = [...metrics];
+      const chosen = this.columns === undefined ? columnsOf(this.tree.root) : this.columns;
+      return { allParams, allMetrics,
+               params: chosen ? allParams.filter(key => chosen.params.includes(key)) : allParams,
+               metrics: chosen ? allMetrics.filter(key => chosen.metrics.includes(key)) : allMetrics.slice(0, 8) };
+    },
+    sinceChoices() { return SINCE; },
+    tableStates() { return this.route.params.states ? this.route.params.states.split(",").filter(Boolean) : []; },
+    tableSince() { return this.route.params.since || ""; },
+    tableStatesPresent() {
+      const found = new Set(this.tableRows.map(row => this.stateOf(row)));
+      return STATES.filter(state => found.has(state));
+    },
+    sideStatesPresent() {
+      const found = new Set(Object.values(this.tree.groups).flat().map(entry => this.stateOf(entry)));
+      return STATES.filter(state => found.has(state));
     },
     tableSorted() {
-      const needle = this.tableFilter.toLowerCase();
-      let rows = this.tableRows.filter(row => !needle || row.name.toLowerCase().includes(needle) || row.path.toLowerCase().includes(needle)
-        || Object.entries(row.params || {}).some(([key, value]) => `${key}=${value}`.toLowerCase().includes(needle)));
+      const states = this.tableStates, since = this.tableSince;
+      let rows = this.tableRows.filter(row => rowMatches(row, this.tableFilter)
+        && (!states.length || states.includes(this.stateOf(row))) && startedWithin(row, since));
       const key = this.sortKey;
       if (!key) return rows;
       const value = row => {
@@ -1295,9 +1499,26 @@ const app = Vue.createApp({
       const units = new Set(this.tableRows.map(row => row.unit));
       return units.size === 1 && units.has("epoch") ? "epoch" : "turn";
     },
+    comparePaths() {
+      const listed = (this.route.params.runs || "").split(",").filter(Boolean);
+      return listed.length ? listed : [this.route.params.a, this.route.params.b].filter(Boolean);
+    },
+    compareRuns() {
+      const runs = (this.compareData && this.compareData.runs) || {};
+      return this.comparePaths.filter(path => runs[path]).map((path, index) => ({ path, ...runs[path], ...lineStyle(index) }));
+    },
     compareUnit() {
-      if (!this.compareData || this.compareData.missing) return "turn";
-      return ["a", "b"].every(which => (this.compareData[which].record.manifest || {}).turn === "epoch") ? "epoch" : "turn";
+      const runs = this.compareRuns;
+      return runs.length && runs.every(run => run.unit === "epoch") ? "epoch" : "turn";
+    },
+    compareSets() {
+      const keys = (this.compareData && this.compareData.keys) || [];
+      return [...new Set(keys.filter(key => key.includes("/")).map(key => key.split("/")[0]))].sort();
+    },
+    compareParams() {
+      const runs = this.compareRuns;
+      const keys = [...new Set(runs.flatMap(run => Object.keys(run.params || {})))];
+      return keys.filter(key => new Set(runs.map(run => JSON.stringify((run.params || {})[key] ?? null))).size > 1);
     },
     extraError() {
       const text = (this.plot.extra || "").trim();
@@ -1376,7 +1597,8 @@ const app = Vue.createApp({
       const [low, high] = scores.length ? extent(scores) : [null, null];
       const count = name => rows.filter(row => row.state === name).length;
       return { total: rows.length, planned: (this.sweep && this.sweep.manifest.total) || rows.length,
-               scored: scores.length, failed: count("failed"), running: count("running"), pending: count("pending"),
+               scored: scores.length, failed: rows.filter(row => ENDED_BADLY.has(row.state)).length, lost: count("lost"),
+               running: count("running"), pending: count("pending"),
                low, high, spread: low && high && low !== 0 ? (high - low) / Math.abs(low) : null };
     },
     axisChoices() { return [...this.paramAxes.map(axis => axis.key), "objective", "turns", "id"]; },
@@ -1415,15 +1637,15 @@ const app = Vue.createApp({
                  lines: [{ name: this.objectiveName, color: markColor(), kind: "scatter", points }] };
       });
     },
-    hasFailures() { return this.sweepRows.some(row => row.state === "failed"); },
+    hasFailures() { return this.sweepRows.some(row => ENDED_BADLY.has(row.state)); },
     failureMap() {
       const rows = this.sweepRows;
       return this.paramAxes.filter(axis => axis.kind === "choices").map(axis => ({
         key: axis.key,
         levels: axis.values.map(value => {
           const here = rows.filter(row => row.values[axis.key] === value);
-          const failed = here.filter(row => row.state === "failed").length;
-          const scored = here.filter(row => row.scored).length;
+          const failed = here.filter(row => ENDED_BADLY.has(row.state)).length;
+          const scored = here.filter(row => row.scored && !ENDED_BADLY.has(row.state)).length;
           return { label: fmt(value), total: here.length, failed, scored, other: here.length - failed - scored };
         }) }));
     },
@@ -1442,22 +1664,14 @@ const app = Vue.createApp({
     },
     compareCharts() {
       if (!this.compareData) return [];
-      const byName = {};
-      const label = which => (this.compareData[which].record.manifest && this.compareData[which].record.manifest.name) || this.compareData[which].path;
-      for (const which of ["a", "b"]) {
-        const series = {};
-        for (const line of this.compareData[which].history) {
-          for (const [key, value] of Object.entries(line)) {
-            if (SKIP_KEYS.has(key) || typeof value !== "number" || key.startsWith("lr/") || key.startsWith("minimizes/") || key.startsWith("effect/")) continue;
-            (series[key] = series[key] || []).push([line.turn, value]);
-          }
-        }
-        for (const [key, points] of Object.entries(series)) {
-          const { set, name } = splitKey(key);
-          (byName[name] = byName[name] || []).push({ name: `${label(which)} ${set}`, color: setColor(set), dashed: which === "b", points });
-        }
-      }
-      return Object.entries(byName).map(([name, lines]) => ({ name, lines }));
+      const needle = this.metricFilter.toLowerCase();
+      const only = this.route.params.only || "";
+      const hidden = key => !only && (key.startsWith("lr/") || key.startsWith("effect/"));
+      return (this.compareData.keys || [])
+        .filter(key => !hidden(key) && (!only || key.startsWith(`${only}/`)) && (!needle || key.toLowerCase().includes(needle)))
+        .map(key => ({ name: key, lines: this.compareRuns.filter(run => run.series[key])
+          .map(run => ({ name: run.name, color: run.color, dash: run.dash, points: seriesPoints(run.series[key]) })) }))
+        .filter(chart => chart.lines.length);
     },
     item() { return this.route.params.item || null; },
     expandedDiagram() {
@@ -1471,26 +1685,30 @@ const app = Vue.createApp({
     metricFilter() { return this.route.params.q || ""; },
     logName() {
       const names = (this.record && this.record.logs) || [];
-      return names.includes(this.route.params.file) ? this.route.params.file : (names[0] || "");
+      if (names.includes(this.route.params.file)) return this.route.params.file;
+      return names.includes("stderr.txt") ? "stderr.txt" : (names[0] || "");
     },
     selected() { return this.route.params.pick ? this.route.params.pick.split(",").filter(Boolean) : []; },
     overlayPaths() {
-      if (this.selected.length) return this.selected;
+      if (this.selected.length) return this.selected.slice(0, 200);
       if (!this.sweep) return [];
       return this.sweep.points.filter(point => this.stateOf(point) === "running").slice(0, 8).map(point => point.path);
     },
+    overlayKey() { return this.route.params.metric || (this.sweep && this.sweep.objective && this.sweep.objective.monitor) || ""; },
+    overlayKeyChoices() { return [...new Set([this.overlayKey, ...this.overlayKeys])].filter(Boolean); },
     sortKey() { return this.route.params.sort || null; },
     sortDesc() { return this.route.params.desc === "1"; },
     groups() {
       const needle = this.filter.toLowerCase();
       const all = this.tree.groups;
+      const states = this.sideStates, since = this.sideSince;
       const hit = entry => !needle || entry.name.toLowerCase().includes(needle) || entry.path.toLowerCase().includes(needle);
+      const facet = entry => (!states.length || states.includes(this.stateOf(entry))) && startedWithin(entry, since);
       const held = new Set(Object.values(all).flat().map(entry => entry.path));
       const attach = (entry, forced) => {
-        const mine = forced || hit(entry);
-        const children = (all[entry.path] || []).map(child => attach(child, mine));
-        return { ...entry, children: mine ? children : children.filter(child => child.keep),
-                 keep: mine || children.some(child => child.keep) };
+        const named = forced || hit(entry);
+        const children = (all[entry.path] || []).map(child => attach(child, named)).filter(child => child.keep);
+        return { ...entry, children, keep: (named && facet(entry)) || children.length > 0 };
       };
       return Object.entries(all).filter(([name]) => !held.has(name))
         .map(([name, entries]) => ({ name, entries: entries.map(entry => attach(entry, false)).filter(entry => entry.keep) }))
@@ -1504,10 +1722,10 @@ const app = Vue.createApp({
       return { running: this.liveBoard.live.length, done, planned, share: planned ? done / planned : null };
     },
     badge() {
-      if (this.record && !this.isSweep && this.state === "failed") return "failed";
+      if (this.record && !this.isSweep && ENDED_BADLY.has(this.state)) return "failed";
       if (this.record && !this.isSweep && ["running", "pending"].includes(this.state)) return "running";
       const live = this.liveBoard.live, latest = this.liveBoard.recent[0];
-      const failedAt = latest && this.stateOf(latest) === "failed" ? Date.parse(latest.status.last_seen || "") : NaN;
+      const failedAt = latest && ENDED_BADLY.has(this.stateOf(latest)) ? Date.parse(latest.status.last_seen || "") : NaN;
       const started = Math.max(-Infinity, ...live.map(entry => Date.parse(entry.started || "")).filter(Number.isFinite));
       if (Number.isFinite(failedAt) && (!live.length || failedAt > started)) return "failed";
       return live.length ? "running" : "idle";
@@ -1520,16 +1738,34 @@ const app = Vue.createApp({
     logoSvg() { return iconSvg(this.chrome.badge, this.chrome.share); },
     live() {
       if (!this.path) return false;
-      if (this.isSweep) return !!(this.sweep && this.sweep.points.some(point => this.stateOf(point) === "running"));
+      if (this.isSweep) return !!this.sweep && ["running", "pending"].includes(this.sweepState);
       return ["running", "pending"].includes(this.state);
     },
-    sweepState() {
-      if (!this.sweep) return "pending";
+    sweepStates() {
+      if (!this.sweep) return [];
       const states = this.sweep.points.map(point => this.stateOf(point));
+      const planned = typeof this.sweep.manifest.total === "number" ? this.sweep.manifest.total : 0;
+      return [...states, ...Array(Math.max(planned - states.length, 0)).fill("pending")];
+    },
+    sweepState() {
+      const states = this.sweepStates;
+      if (!states.length) return "pending";
       if (states.includes("running")) return "running";
-      if (states.length && states.every(state => state === "finished")) return "finished";
-      if (states.includes("failed")) return "failed";
-      return "pending";
+      if (states.includes("pending")) return "pending";
+      if (states.some(state => ENDED_BADLY.has(state))) return "failed";
+      return "finished";
+    },
+    failureGroups() {
+      if (!this.sweep) return [];
+      const groups = {};
+      for (const point of this.sweep.points) {
+        const state = this.stateOf(point);
+        if (!ENDED_BADLY.has(state)) continue;
+        const reason = state === "lost" ? "lost: the process stopped without a word (killed by the batch system, or the machine went away)"
+          : (point.error || (state === "unreadable" ? "a file of the point could not be read" : "no failure note in the record"));
+        (groups[reason] = groups[reason] || []).push(point);
+      }
+      return Object.entries(groups).map(([reason, points]) => ({ reason, points })).sort((first, second) => second.points.length - first.points.length);
     },
     progress() {
       if (!this.sweep) return 0;
@@ -1555,11 +1791,25 @@ const app = Vue.createApp({
       const found = {};
       for (const line of this.history.lines) {
         for (const [key, value] of Object.entries(line)) {
-          if (SKIP_KEYS.has(key) || typeof value !== "number") continue;
-          (found[key] = found[key] || []).push([line.turn, value]);
+          if (SKIP_KEYS.has(key)) continue;
+          if (typeof value === "number") (found[key] = found[key] || []).push([line.turn, value]);
+          else if (NONFINITE.has(value)) (found[key] = found[key] || []).push([line.turn, null]);
         }
       }
       return found;
+    },
+    failures() {
+      const note = this.record && this.record.failure;
+      if (note && (note.failures || []).length) return note.failures;
+      const found = this.record && this.record.run ? firstError(this.record.run.tree) : null;
+      return found ? [found] : [];
+    },
+    divergence() {
+      for (const line of this.history.lines) {
+        const key = Object.keys(line).find(name => !SKIP_KEYS.has(name) && !name.startsWith("lr/") && NONFINITE.has(line[name]));
+        if (key) return { key, turn: line.turn, value: line[key] };
+      }
+      return null;
     },
     metricCharts() {
       const needle = this.metricFilter.toLowerCase();
@@ -1591,10 +1841,14 @@ const app = Vue.createApp({
     latest() {
       return Object.entries(this.series).filter(([key]) => !key.startsWith("lr/") && !key.startsWith("effect/")).map(([key, points]) => {
         const { set, name } = splitKey(key);
-        let low = points[0], high = points[0];
-        for (const point of points) { if (point[1] < low[1]) low = point; if (point[1] > high[1]) high = point; }
+        const finite = points.filter(point => point[1] !== null);
+        let low = finite[0] || [null, null], high = finite[0] || [null, null];
+        for (const point of finite) { if (point[1] < low[1]) low = point; if (point[1] > high[1]) high = point; }
         const definition = this.definitionOf(name);
-        return { key, set, name, ...definition, last: points[points.length - 1][1], min: low[1], minTurn: low[0], max: high[1], maxTurn: high[0], tail: points.slice(-60) };
+        const final = points[points.length - 1];
+        const lastLine = this.history.lines.find(line => line.turn === final[0]) || {};
+        return { key, set, name, ...definition, last: final[1] === null ? lastLine[key] : final[1], diverged: final[1] === null,
+                 min: low[1], minTurn: low[0], max: high[1], maxTurn: high[0], tail: finite.slice(-60) };
       });
     },
     rulesFired() {
@@ -1732,11 +1986,28 @@ const app = Vue.createApp({
     },
     expanded() {
       const name = this.route.params.chart;
+      if (name && this.page === "compare") {
+        const found = this.compareCharts.find(entry => entry.name === name);
+        return found ? { name, lines: found.lines, xlabel: this.compareUnit, marks: [] } : null;
+      }
       if (!name || !this.record) return null;
       if (this.isSweep) return this.expandedSweep(name);
       if (this.tab === "steps" || (this.tab === "monitor" && name.startsWith("loss/"))) {
         const found = this.stepCharts.find(entry => entry.name === name);
         return found ? { name, lines: found.lines, xlabel: "step", marks: this.turnMarks, turns: true } : null;
+      }
+      if (this.tab === "predictions" && this.task === "classification") {
+        const found = this.classifyData;
+        if (!found) return null;
+        if (name === "roc" && this.rocLines.length) {
+          return { name: `ROC of ${found.score}, ${found.target} = ${found.positive} as signal`, lines: this.rocLines,
+                   xlabel: "background efficiency", ylabel: "signal efficiency", marks: [] };
+        }
+        if (name === "scores" && this.scoreLines.length) {
+          return { name: `${found.score} by class of ${found.target}`, lines: this.scoreLines, xlabel: found.score,
+                   ylabel: "points", marks: [], bins: true };
+        }
+        return null;
       }
       if (this.tab === "predictions" && this.pairInfo) {
         const pair = this.pairInfo;
@@ -1842,8 +2113,16 @@ const app = Vue.createApp({
       const total = tree.ms || 1;
       const rows = [];
       const walk = (node, depth) => {
-        rows.push({ path: node.path, node: node.node, ms: node.ms, status: node.status, depth, share: Math.max(0.5, 100 * (node.ms || 0) / total) });
+        rows.push({ path: node.path, node: node.node, ms: node.ms, status: node.status, error: node.error || "", depth,
+                    share: Math.max(0.5, 100 * (node.ms || 0) / total) });
         for (const child of node.nodes || []) walk(child, depth + 1);
+        const turns = node.turns || [];
+        if (!turns.length) return;
+        const bad = turns.filter(turn => turn.status !== "ok");
+        const spent = turns.reduce((sum, turn) => sum + (turn.ms || 0), 0);
+        rows.push({ path: `${node.path} turns`, node: `${turns.length} ${this.turnLabel}s, ${turns.length - bad.length} ok`, ms: spent,
+                    status: bad.length ? "failed" : "ok", error: "", depth: depth + 1, share: Math.max(0.5, 100 * spent / total) });
+        for (const turn of bad) walk(turn, depth + 2);
       };
       walk(tree, 0);
       return rows;
@@ -1872,11 +2151,10 @@ const app = Vue.createApp({
       return points;
     },
     overlayLines() {
-      const monitor = this.sweep && this.sweep.objective.monitor;
-      if (!monitor) return [];
-      return this.overlayPaths.filter(path => this.overlay[path]).map((path, index) => ({
-        name: path.split("/").pop(), color: PALETTE[index % PALETTE.length],
-        points: this.overlay[path].filter(line => typeof line[monitor] === "number").map(line => [line.turn, line[monitor]]) }));
+      const key = this.overlayKey;
+      if (!key) return [];
+      return this.overlayPaths.filter(path => this.overlay[path] && this.overlay[path].series[key]).map((path, index) => ({
+        name: path.split("/").pop(), ...lineStyle(index), points: seriesPoints(this.overlay[path].series[key]) }));
     },
   },
   watch: {
@@ -1894,6 +2172,10 @@ const app = Vue.createApp({
       this.applyRefresh();
     },
     predictionFile() { if (this.tab === "predictions") this.loadPredictions(); },
+    pairKey() { if (this.tab === "predictions") this.loadClassify(); },
+    "route.params.score"() { if (this.tab === "predictions") this.loadClassify(); },
+    "route.params.lines"() { if (this.tab === "logs") this.loadLogs(); },
+    "route.params.positive"() { if (this.tab === "predictions") this.loadClassify(); },
     sampleAll() { if (this.tab === "predictions") this.loadPredictions(); },
     whereFilter: { immediate: true, handler(now) {
       this.whereDraft = now;
@@ -1905,8 +2187,10 @@ const app = Vue.createApp({
       this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), logx: !!now.xlog, bins: this.plot.bins, height: this.modalHeight,
                     markers: markerSize(scatterPoints(now.lines || [], now.kind), null) };
     },
-    "route.params.a"() { if (this.page === "compare") this.loadCompare(); },
-    "route.params.b"() { if (this.page === "compare") this.loadCompare(); },
+    comparePaths(now, before) {
+      if (this.page === "compare" && JSON.stringify(now) !== JSON.stringify(before)) this.loadCompare();
+    },
+    overlayKey() { this.loadOverlay(); },
     tab: { immediate: true, handler() { this.enterTab(); } },
     item() { this.enterItem(); },
     overlayPaths() { this.loadOverlay(); },
@@ -1914,10 +2198,11 @@ const app = Vue.createApp({
   },
   methods: {
     fmt, count, ms, ago, clock, setColor, shortUri, paramsText, paramCount,
+    reloadPage() { window.location.reload(); },
     tabLabel(name) { return TAB_LABELS[name] || name; },
     axisLabel(key) { return key === "turns" ? `${this.sweepUnit}s` : key; },
     expandedSweep(name) {
-      if (name === "overlay" && this.overlayLines.length) return { name: this.sweep.objective.monitor || "objective", lines: this.overlayLines, xlabel: this.sweepUnit, marks: [] };
+      if (name === "overlay" && this.overlayLines.length) return { name: this.overlayKey, lines: this.overlayLines, xlabel: this.sweepUnit, marks: [] };
       if (name === "explorer" && this.exploreChart && this.exploreChart.lines.length) {
         const chart = this.exploreChart;
         return { name: `${chart.ylabel} against ${chart.xlabel}, colored by ${this.explore.color}`, lines: chart.lines, kind: "scatter",
@@ -1945,7 +2230,7 @@ const app = Vue.createApp({
     text(value) { return typeof value === "object" && value !== null ? JSON.stringify(value) : String(value); },
     chainText(value) { return typeof value === "number" ? fmt(value) : this.text(value); },
     pairLabel(pair) {
-      const pairs = (this.predictionsData && this.predictionsData.pairs) || [];
+      const pairs = this.pairChoices;
       const suffix = `_${pair.target}`;
       if (pairs.filter(item => item.target === pair.target).length < 2 || pair.pred === `pred_${pair.target}` || !pair.pred.endsWith(suffix)) return pair.target;
       return `${pair.target} (${pair.pred.slice("pred_".length, -suffix.length)})`;
@@ -2081,8 +2366,9 @@ const app = Vue.createApp({
     async enterRecord() {
       this.record = null; this.sweep = null; this.brush = {}; this.history = { lines: [], offset: 0 }; this.steps = { lines: [], offset: 0 };
       this.overlay = {}; this.diff = null; this.describeText = null; this.showModuleText = false;
-      this.logs = { name: "", lines: [], total: 0 };
-      this.predictionsData = null; this.prepData = null; this.filesData = null; this.fileView = null; this.eventsData = null;
+      this.logs = { name: "", lines: [], total: 0 }; this.logFollow = true;
+      this.predictionsData = null; this.classifyData = null; this.prepData = null; this.filesData = null; this.fileView = null;
+      this.eventsData = null;
       this.stopPlaying();
       if (this.refresh === "realtime") this.connectWatch();
       if (this.page === "table") { await this.loadTable(); return; }
@@ -2112,8 +2398,15 @@ const app = Vue.createApp({
     async loadLogs() {
       if (!this.record || !this.logName) return;
       const path = this.path, name = this.logName;
-      const found = await api("/api/tail", { path, name, lines: 300 });
-      if (found && path === this.path) this.logs = { name, lines: found.lines, total: found.total || 0 };
+      const lines = this.tab === "logs" ? Number(this.route.params.lines) || 300 : 300;
+      const found = await api("/api/tail", { path, name, lines });
+      if (!found || path !== this.path) return;
+      this.logs = { name, lines: found.lines, total: found.total || 0 };
+      if (this.tab === "logs" && this.logFollow) this.$nextTick(() => { const box = this.$refs.log; if (box) box.scrollTop = box.scrollHeight; });
+    },
+    logScrolled(event) {
+      const box = event.target;
+      this.logFollow = box.scrollTop + box.clientHeight >= box.scrollHeight - 16;
     },
     async loadTexts() {
       if (!this.record) return;
@@ -2139,15 +2432,24 @@ const app = Vue.createApp({
       if (found) { this.tableRows = found.rows; this.tableLoaded = true; }
     },
     async loadCompare() {
-      const { a, b } = this.route.params;
-      if (!a || !b) { this.compareData = null; return; }
-      const [recordA, recordB, historyA, historyB, diff] = await this.heavy(Promise.all([
-        api("/api/record", { path: a }), api("/api/record", { path: b }), api("/api/history", { path: a }), api("/api/history", { path: b }),
-        api("/api/diff", { a, b })]));
-      if (!recordA || !recordB) { this.compareData = { missing: true }; return; }
-      this.compareData = { a: { path: a, record: recordA, history: historyA ? historyA.lines : [] },
-                           b: { path: b, record: recordB, history: historyB ? historyB.lines : [] },
-                           diff: diff ? (diff.diff.length ? diff.diff : ["no difference"]) : ["no resolved.yaml to compare"] };
+      const paths = this.comparePaths;
+      if (paths.length < 2) { this.compareData = null; return; }
+      const two = paths.length === 2;
+      const [series, diff] = await this.heavy(Promise.all([
+        api("/api/series", { paths: paths.join(",") }),
+        two ? api("/api/diff", { a: paths[0], b: paths[1] }) : Promise.resolve(null)]));
+      if (JSON.stringify(paths) !== JSON.stringify(this.comparePaths)) return;
+      this.compareData = { runs: series ? series.runs : {}, keys: series ? series.keys : [], missing: series ? series.missing : paths,
+                           diff: two ? (diff ? (diff.diff.length ? diff.diff : ["no difference"]) : ["no resolved.yaml to compare"]) : null };
+    },
+    compareLink(paths) { return buildHash("compare", { runs: paths.join(",") }); },
+    dashArray(dash) { return DASH_ARRAYS[dash] || ""; },
+    tickShown() { this.go({ pick: this.tableSorted.slice(0, 50).map(row => row.path).join(",") }, true); },
+    tickTop(count) {
+      if (!count) return;
+      const sign = this.objectiveMode === "min" ? 1 : -1;
+      const ranked = this.sweepRows.filter(row => row.scored && !ENDED_BADLY.has(row.state)).sort((first, second) => sign * (first.score - second.score));
+      this.go({ pick: ranked.slice(0, count).map(row => row.path).join(",") }, true);
     },
     heavy(promise) {
       this.busy += 1;
@@ -2159,6 +2461,63 @@ const app = Vue.createApp({
       const where = this.whereFilter;
       const found = await this.heavy(api("/api/predictions", { path, name, sample: this.sampleAll ? "all" : 2000, bins: this.plot.bins, where }));
       if (path === this.path && name === this.predictionFile && where === this.whereFilter) this.predictionsData = found;
+      await this.loadClassify();
+    },
+    async loadClassify() {
+      if (!this.record || !this.predictionFile || !this.currentPair || this.task !== "classification") { this.classifyData = null; return; }
+      const path = this.path, name = this.predictionFile, pred = this.currentPair.pred, where = this.whereFilter;
+      if (this.classifyData && this.classifyData.pred !== pred) this.classifyData = null;
+      const kept = choiceOf(this.currentPair.target);
+      const params = { path, name, pred, score: this.route.params.score || kept.score || null, positive: this.route.params.positive || kept.positive || null, bins: this.plot.bins, where };
+      const found = await this.heavy(api("/api/classify", params));
+      if (path !== this.path || name !== this.predictionFile || this.pairKey !== pred || where !== this.whereFilter) return;
+      this.classifyData = found || { pred, error: `the classification view of ${pred} could not be computed` };
+    },
+    pickClassify(key, value) {
+      if (!this.currentPair) return;
+      const target = this.currentPair.target;
+      storeChoice(target, { ...choiceOf(target), [key]: value || null });
+      const same = (this.route.params[key] || null) === (value || null);
+      this.go({ [key]: value || null }, true);
+      if (same) this.loadClassify();
+    },
+    toggleSideState(state) {
+      this.sideStates = this.sideStates.includes(state) ? this.sideStates.filter(item => item !== state) : [...this.sideStates, state];
+    },
+    toggleTableState(state) {
+      const now = this.tableStates.includes(state) ? this.tableStates.filter(item => item !== state) : [...this.tableStates, state];
+      this.go({ states: now.length ? now.join(",") : null }, true);
+    },
+    toggleColumn(kind, key) {
+      const now = { params: [...this.tableColumns.params], metrics: [...this.tableColumns.metrics] };
+      now[kind] = now[kind].includes(key) ? now[kind].filter(item => item !== key) : [...now[kind], key];
+      this.columns = now;
+      storeColumns(this.tree.root, now);
+    },
+    resetColumns() {
+      this.columns = null;
+      storeColumns(this.tree.root, null);
+    },
+    saveTableCsv() {
+      const { params, metrics } = this.tableColumns;
+      const headers = ["record", "path", "state", ...params, "best", "best turn", ...metrics, `${this.tableUnit}s`, "seconds", "device"];
+      const rows = this.tableSorted.map(row => [row.name, row.path, this.stateOf(row), ...params.map(key => (row.params || {})[key]),
+        row.best ? row.best.value : "", row.best ? row.best.turn : "", ...metrics.map(key => (row.last || {})[key]),
+        row.turns, row.seconds, row.device]);
+      saveCsv(`${baseName(this.tree.root)}_runs.csv`, headers, rows);
+    },
+    saveSweepCsv() {
+      const keys = this.pointKeys, monitor = this.sweep.objective.monitor || "objective";
+      const headers = ["id", ...keys, "state", `${this.sweepUnit}s`, monitor, `${monitor} turn`, "path"];
+      const rows = this.sortedPoints.map(point => [point.id, ...keys.map(key => point.values[key]), this.stateOf(point), point.turns,
+        point.objective ? point.objective.value : "", point.objective ? point.objective.turn : "", point.path]);
+      saveCsv(`${baseName(this.path)}_points.csv`, headers, rows);
+    },
+    setTask(task) {
+      if (!this.currentPair || !TASKS.includes(task)) return;
+      storeTask(this.currentPair.target, task);
+      this.tasks = { ...this.tasks, [this.currentPair.target]: task };
+      this.loadClassify();
     },
     applyWhere() { this.go({ where: (this.whereDraft || "").trim() || null }); },
     clearWhere() { this.whereDraft = ""; this.go({ where: null }); },
@@ -2224,14 +2583,11 @@ const app = Vue.createApp({
     },
     async loadOverlay() {
       if (!this.isSweep) return;
-      const path = this.path;
-      const found = {};
-      for (const point of this.overlayPaths) {
-        const history = await api("/api/history", { path: point });
-        if (history) found[point] = history.lines;
-      }
-      if (path !== this.path) return;
-      this.overlay = found;
+      const path = this.path, paths = this.overlayPaths, key = this.overlayKey;
+      const found = paths.length && key ? await api("/api/series", { paths: paths.join(","), keys: key }) : null;
+      if (path !== this.path || key !== this.overlayKey) return;
+      this.overlay = found ? found.runs : {};
+      if (found) this.overlayKeys = found.keys;
       await this.loadDiff();
     },
     async loadDiff() {
@@ -2271,7 +2627,8 @@ const app = Vue.createApp({
       await this.loadLive();
       if (!this.path) return;
       if (this.page === "table") { await this.loadTable(); return; }
-      if (this.page === "compare" || !this.record) return;
+      if (this.page === "compare") { await this.loadCompare(); return; }
+      if (!this.record) return;
       if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
       if (!["running", "pending"].includes(this.state)) return;
       await this.loadRecord();
@@ -2328,6 +2685,18 @@ const app = Vue.createApp({
       this.connected = false;
     },
     async onChange(changed) {
+      if (this.changing) { this.pendingChanges = [...new Set([...(this.pendingChanges || []), ...changed])]; return; }
+      this.changing = true;
+      try {
+        await this.applyChanges(changed);
+      } finally {
+        this.changing = false;
+        const next = this.pendingChanges;
+        this.pendingChanges = null;
+        if (next && next.length) this.onChange(next);
+      }
+    },
+    async applyChanges(changed) {
       this.refreshed = new Date().toLocaleTimeString();
       const own = name => changed.some(item => item === name || item === `${this.path}/${name}`);
       const elsewhere = changed.some(item => item === "tree" || item.endsWith("/history.jsonl") || item.endsWith("/run.json"));
@@ -2335,7 +2704,12 @@ const app = Vue.createApp({
       if (this.page === "home" || elsewhere) await this.loadLive();
       if (this.page === "home") return;
       if (this.page === "table") { await this.loadTable(); return; }
-      if (this.page === "compare" || !this.record) return;
+      if (this.page === "compare") {
+        const compared = path => changed.includes(`${path}/history.jsonl`) || changed.includes(`${path}/run.json`);
+        if (this.comparePaths.some(compared)) await this.loadCompare();
+        return;
+      }
+      if (!this.record) return;
       if (this.isSweep) { await this.loadSweep(); await this.loadOverlay(); return; }
       const rest = changed.filter(name => !name.includes("/") && !["tree", "history.jsonl", "steps.jsonl", "stdout.txt", "stderr.txt", "events.jsonl"].includes(name));
       if (rest.length) await this.loadRecord();

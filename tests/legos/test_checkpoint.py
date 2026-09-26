@@ -42,9 +42,9 @@ def checkpoint(state, policy, metrics, record):
     return build("/lego/kalfa/checkpoint", state=state, policy=policy, metrics=metrics, record=record)
 
 
-def save_final(models, optimizers, emas, counters, rules, record):
+def save_final(models, optimizers, emas, counters, rules, record, policy=None):
     return build("/lego/kalfa/save_final", models=models, optimizers=optimizers, emas=emas, counters=counters,
-                 rules=rules, record=record)
+                 rules=rules, record=record, policy=policy)
 
 
 def select(models, emas, which, record):
@@ -154,17 +154,40 @@ def test_checkpoint_step_writes_nothing_without_a_policy_or_a_record(tmp_path):
     assert not (tmp_path / "checkpoints").exists()
 
 
-def test_save_final_writes_the_final_state_without_a_policy_state(tmp_path):
+def test_save_final_writes_the_final_state_with_the_policy_state(tmp_path):
     model = tiny_model()
     state = training_state(model, turn=3)
+    policy = build("/checkpoint/kalfa/best", monitor="val/rmse")
+    policy.tags({"val/rmse": 0.5})
     assert save_final(state["models_next"], state["optimizers_next"], state["emas_next"], state["counters_next"],
-                      state["rules_next"], str(tmp_path)) is None
+                      state["rules_next"], str(tmp_path), policy) is None
     payload = load(tmp_path / "final" / "state.pt")
     assert set(payload) == PAYLOAD_KEYS
-    assert payload["checkpoint"] is None
+    assert payload["checkpoint"] == {"best": 0.5}
     assert payload["turn"] == 3
     assert payload["rules"] == {"sticky": ["warm"]}
-    assert save_final({}, {}, {}, {}, {}, None) is None
+    assert save_final({}, {}, {}, {}, {}, None, policy) is None
+
+
+def test_save_final_without_a_policy_writes_no_policy_state(tmp_path):
+    state = training_state(tiny_model(), turn=3)
+    save_final(state["models_next"], state["optimizers_next"], state["emas_next"], state["counters_next"],
+               state["rules_next"], str(tmp_path))
+    assert load(tmp_path / "final" / "state.pt")["checkpoint"] is None
+
+
+def test_resuming_from_the_final_state_keeps_the_best_value(tmp_path):
+    source = training_state(fill(tiny_model(), 1.0), turn=3)
+    finished = build("/checkpoint/kalfa/best", monitor="val/rmse")
+    finished.tags({"val/rmse": 0.5})
+    save_final(source["models_next"], source["optimizers_next"], source["emas_next"], source["counters_next"],
+               {"checkpoint": {"best": 0.9}}, str(tmp_path), finished)
+    fresh = fill(tiny_model(), 0.0)
+    state = {"models": {"m": fresh}, "emas": {}, "optimizers": {}, "counters": {}, "rules": {}}
+    policy = build("/checkpoint/kalfa/best", monitor="val/rmse")
+    assert init_state(state, 5, None, policy=policy, resume=str(tmp_path / "final" / "state.pt")) == 2
+    assert policy.best == 0.5 and state["rules"]["checkpoint"] == {"best": 0.5}
+    assert policy.tags({"val/rmse": 0.7}) == ["last"]
 
 
 def test_select_best_loads_the_best_checkpoint_into_the_models(tmp_path):

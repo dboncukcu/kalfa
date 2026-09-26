@@ -274,7 +274,7 @@ record: runs/cv_housing_$fold$
 
 ```bash
 for i in 0 1 2 3 4; do kalfa run config.yaml -p fold=$i; done
-kalfa collect runs/cv_housing_*        # mean and deviation of the test/ metrics over the folds, cv.json, cv.md
+kalfa collect runs/cv_housing_*        # mean and deviation over the folds, runs/reports/cv.json and cv.md
 ```
 
 `kalfa check --layers` prints the layer tree and which file overrode which leaf; `resolved.yaml` carries the
@@ -767,13 +767,17 @@ sweep:
 kalfa sweep config.yaml --count                 # 6
 kalfa sweep config.yaml --show 4                # the params of point 4
 kalfa sweep config.yaml                         # the local loop, one subprocess per point
-kalfa collect runs/sweep_housing                # sweep.csv, sweep.md, the best point
+kalfa collect runs/sweep_housing                # runs/sweep_housing/reports/sweep.md, the report with its figures
 
 # on a queue system: plan the root once, then one job per point
 kalfa sweep config.yaml --plan --prepare-data --record /shared/sweeps/housing
 condor_submit /shared/sweeps/housing/sweep.sub  # sweep.sub and sweep.sh are yours to edit, never overwritten
 kalfa collect /shared/sweeps/housing            # works on a half finished sweep too
 ```
+
+A k fold inside a sweep is one more swept param: `fold: [0, 1, 2, 3, 4]` in the space and `fold: $fold$` in the
+`kfold` split. `kalfa collect <root> --mean-over fold` then ranks the settings of the other params by their mean
+objective over the folds, so the best setting is not the one that met the easiest fold (`groups.csv`).
 
 A point is an ordinary record under `<root>/<id>/`. `grid`, `random` and `sobol` are deterministic by id, so
 `--id N` reproduces one point anywhere and looks at no other point.
@@ -782,7 +786,7 @@ A point is an ordinary record under `<root>/<id>/`. `grid`, `random` and `sobol`
 ## Commands
 
 ```
-kalfa run      cfg.yaml [--set path=value] [-p name=value] [--log info|debug] [--no-progress] [--tensorboard]
+kalfa run      cfg.yaml [--set path=value] [-p name=value] [--log info|debug] [--no-progress]
 kalfa check    cfg.yaml [--layers] [--dump] [--recipe] [--measure]
 kalfa describe cfg.yaml [--measure] [--section data|model|training|after|columns|wiring] [--save report.txt]
 kalfa predict  runs/x   [--model name] [--which best|last|final] [--data new.parquet] [--device cuda] [--plots]
@@ -790,9 +794,10 @@ kalfa generate runs/x   [--which best|last] [--device cuda]
 kalfa export   runs/x   [--format onnx|pt2|state_dict] [--format-param opset=18] [--model name] [--out DIR]
 kalfa plots    runs/x   [--only a,b] [--set figures.format=pdf]
 kalfa resume   runs/x   [--set training.epochs=N]
+kalfa repair   cfg.yaml [--record runs/x | --record root [--id N]]   # continue a failed run or sweep points in place
 kalfa prepare  cfg.yaml --out DIR                        # run the data block once; run --prepared DIR reuses it
 kalfa sweep    cfg.yaml [--count | --show N | --id N | --plan [--prepare-data]] [--record root]
-kalfa collect  <sweep root> | runs/cv_*                  # the sweep table, or the k fold summary
+kalfa collect  <sweep root> [--mean-over fold] | runs/cv_*   # the sweep report, or the k fold summary
 kalfa stop     runs/x                                    # the run ends after its current turn
 kalfa board    <root> [--port 8080]                      # a page over every record under a root
 kalfa ls       [/alias/kalfa/tabular | /criterion | word] [--plugin mod] [--config cfg.yaml]
@@ -908,6 +913,26 @@ prints a line every N updates with the loss, the learning rate and the gradient 
 kalfa stop runs/x        # writes stop.json; the run ends after its current turn, as an early stop would
 ```
 
+### When it fails: `repair`
+
+A run that fails writes `failure.json` with the traceback of every failed node. Fix the lego or the plot, then
+continue the same run in its own directory, with the config you started it with:
+
+```bash
+kalfa repair cfg.yaml --record runs/x_20260916_115459          # --record when the config names $datetime$
+kalfa repair sweep.yaml --id 12 --record sweeps/lr             # one sweep point, for a queue job
+kalfa repair sweep.yaml --record sweeps/lr                     # every failed point, the others skipped
+```
+
+Where it continues from is read from the record: with `final/state.pt` training was over, so only the after block
+runs again (calibration, predictions, plots); with `checkpoints/last.pt` training goes on from that turn and
+`history.jsonl` and `steps.jsonl` are cut back to it. Without either there is nothing to continue from and repair
+says so; a run is repairable when it writes a checkpoint every turn (`training.checkpoint: last`, or `best`). The
+plugins next to the config are the code that runs, and the config may differ from the recorded one only under
+`plots`, `figures`, `device`, `calibrate`, `generate`, `params` and `training.report`; anything else is a new run
+(`kalfa run`) or more turns (`kalfa resume`). Only a failed run is repaired: a finished, running, pending or lost
+one is refused, and the sweep loop skips it.
+
 ## The board
 
 ```bash
@@ -951,15 +976,27 @@ of what every transform added or removed, what the fit learned on train and what
 
 **Predictions.** The prediction against the truth with the y = x line, the residual histogram, the distribution of
 the prediction outlined over the distribution of the truth on the same bins with the ratio of their counts and its
-error below, and the largest errors, in the original units. A pandas query over the columns of the file, the targets, the `pred_` and `raw_` wires, the calibration
-flags and the `data.spectators` columns narrows every number on the page to the rows it keeps, and rides in the
-address bar with the rest of the view:
+error below, and the largest errors, in the original units. A switch per target turns it into a classification:
+the ROC of a score column with its AUC, the background efficiency and rejection at 50, 80, 90 and 95 % signal
+efficiency with the cut that gives each, the score by class, and the confusion of the predicted classes. Nothing is
+drawn until you pick the score column and the signal class; the switch and the two picks are kept in the browser
+per target name, so every run and point with that target opens the same way. A filter over the
+columns of the file, the targets, the `pred_` and `raw_` wires, the calibration flags and the `data.spectators`
+columns narrows every number on the page to the rows it keeps, and rides in the address bar with the rest of the
+view:
 
 ```
 site == "b" and pred_y > 0 and price < 4
 ```
 
-It is evaluated server side, so `--host` beyond `127.0.0.1` hands that to whoever can reach the port.
+It takes column names, numbers, strings, comparisons, `and`, `or`, `not`, arithmetic and lists; anything else (an
+attribute, a call, a variable) is refused before pandas sees it.
+
+**Failures.** A failed run shows its failed node and the error in the header, and the overview the traceback from
+`failure.json` with every repair since; a sweep groups its failed points by their first error. A run whose
+heartbeat stopped for more than ten minutes without an end is shown as lost. A value that is not finite in the
+history (NaN, inf) is named in the header with the turn it appeared, and its charts break there instead of drawing
+over it.
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_sweep_space.png" width="920" alt="every point of a sweep across the space"></p>
 
@@ -979,16 +1016,46 @@ fails about as often as every other level points at the node or the environment,
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_sweep_progress.png" width="920" alt="the objective over the sweep order"></p>
 
-The objective over the sweep order says whether the search is still finding anything; below it the curves of the
-ticked points overlaid and the `resolved.yaml` difference between two of them.
+The objective over the sweep order says whether the search is still finding anything; below it any series of the
+ticked points overlaid (the objective unless you pick another, the best 5, 10, 20 or 50 ticked in one step) and the
+`resolved.yaml` difference between two of them.
+
+**Runs table.** Every run and sweep point under the root with its params, its best value and its last evaluation
+values. The filter takes words, each one a comparison of a param, a last value, `best`, `turns` or `seconds`, or a
+text found in the name, the path or a `param=value`; a row stays when every word holds:
+
+```
+lr<0.01 val/rmse<=0.3 width=64 fatjet
+```
+
+Chips keep the states you pick (running, failed, lost, ...) and a menu the runs started in the last day, week or
+month; the sidebar has the same chips over the whole tree. A columns menu picks the params and values the table
+carries (every param and the first 8 values unless you pick, kept in the browser per root), and the table, or the
+points of a sweep, saves as CSV as it is shown: filtered, sorted and with the columns picked.
+
+**Compare.** Tick any number of rows in the runs table (or the first 50 shown) or points of a sweep, and every
+history series of them is drawn together, one chart per series with a line per record, a colour and a dash per
+record so that 32 stay apart. Chips keep one set, a filter the series whose name holds a word; the params that
+differ are tabled below, and two records also get their `resolved.yaml` difference. A record that is running
+redraws as it goes. The page is a link (`#/compare?runs=a,b,c`), so a comparison can be shared as it is.
+
+**On a shared filesystem.** One background loop follows the records for every open tab, every two seconds, and
+stops half a minute after the last tab closes, so nothing polls the filesystem while nobody looks. The history,
+the steps and the events are read from where they were left, a log from its end, and a small file only when its
+size, time or inode changed; the last seen time of a record comes from the few files a run keeps writing. The
+last four prediction files read stay in memory while they are unchanged, so moving the bins or picking another
+score reads nothing again.
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_plots.png" width="920" alt="the plots of a record as a gallery"></p>
 
 **Plots, files and the rest.** The figures under `plots/` as a gallery, the sample images as they are written,
 every file of the record with a viewer for text, images and PDFs, `resolved.yaml`, the fitted preprocessors and
-what each learned, the identity notes (`manifest.json`, `host.json`, `device.json`, `git.json`), the node
-timeline, the event and log tails, and `describe` on demand. A running record shows a stop button in its header;
-`kalfa stop` from the shell does the same.
+what each learned, the identity notes (`manifest.json`, `host.json`, `device.json`, `git.json`), the event tail
+and `describe` on demand. The node timeline draws a loop as one bar and tables every node inside it summed over
+the iterations (runs, total, mean, longest and share of the loop), with every iteration as its own row a click
+away. The logs show the last 300, 2000 or 10000 lines of `stdout.txt` and `stderr.txt` with a progress bar as its
+last state, follow the end unless you scroll up, and link the whole file. A running record shows a stop button in
+its header; `kalfa stop` from the shell does the same.
 
 ## Python API
 
@@ -1016,13 +1083,14 @@ samples    = generate(result.record, which="best")
 | `probe(document, contract)` | `Probe` | the data and model blocks run alone: `sizes`, `prep`, `features`, `parameters`, `shapes` |
 | `run(paths, sets, executor, workers, contract, monitor, prepared)` | `RunResult` | `record`, `report`, `device` |
 | `resume(run_dir, sets, ...)` | `RunResult` | the same, in a new record directory |
+| `repair(paths, sets, record, prepared, executor, workers, contract, monitor)` | `Repaired` | `result`, `stage` (`after` or `training`), `turn`, `attempt`; the failed run goes on in its own directory |
 | `predict(run_dir, model, which, data, sets, device, contract, plots)` | `Prediction` | `path`, `table`, `model`, `plots` |
 | `generate(run_dir, which, sets, device, contract)` | `Generated` | `path`, `samples` |
 | `plots(run_dir, only, sets, device, contract)` | `Plots` | `record`, `names` |
 | `open_record(run_dir, which, sets, contract)` | `Opened` | `contract`, `document`, `store`, `prep`, `rebuild()` |
 | `stop(record, by="cli")` | list | the directories it wrote `stop.json` into |
 | `prepare_data(paths, sets, out)` | `PreparedData` | the data block run once into `out` |
-| `kalfa.collect.collect_root(root, out)` | mapping | the sweep or fold table and the best point |
+| `kalfa.collect.collect(run_dirs, out, markdown, style, top, figures, mean_over)` | tuple | `kind` (`sweep` or `cv`), the terminal text, the directory written and the files written in it |
 | `kalfa.sweep.plan(paths, sets, record)` | `Plan` | the points, without running any of them |
 
 In a notebook, four things differ from the shell:
@@ -1078,11 +1146,15 @@ a time. A thousand sweep points can write into one shared filesystem while someb
 | `device.json`, `git.json`, `host.json` | the chosen device, the commit of the config's repository and whether it was dirty, the host and pid |
 | `stop.json` | a stop request, the one file written from outside; the loop ends after the turn that sees it |
 | `events.jsonl`, `run.json`, `stdout.txt`, `stderr.txt` | tezgah's event stream and summary |
+| `failure.json` | when the run fails: every failed node with its path, the exception and the full traceback |
+| `heartbeat` | touched every minute while the run runs, removed when it ends; one left behind means the process was killed |
+| `repair.json`, `attempts/<n>/` | the repairs of a failed run and the files of every failed attempt (`kalfa repair`) |
 | `plugins/` | copies of the modules the run imported, so `predict`, `generate` and `resume` work from the record alone |
-| `tensorboard/`, `export/`, `resume.json` | under `--tensorboard`, what `kalfa export` wrote, the source run of a resume |
+| `export/`, `resume.json` | what `kalfa export` wrote, the source run of a resume |
 
 Status is derived, never written by a coordinator: a manifest alone is pending, a growing `history.jsonl` is
-running, `run.json` is finished or failed.
+running, `run.json` is finished or failed, a `failure.json` without `run.json` is failed, and a heartbeat older than
+ten minutes without either is lost (a job the batch system killed, or a machine that went away).
 
 ## Your own legos
 

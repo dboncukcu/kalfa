@@ -118,10 +118,10 @@ def test_stop_refuses_a_finished_record(reference):
 
 
 def test_collect_tabulates_a_single_record(copy, tmp_path):
-    kind, text, target = collect([str(copy)])
-    assert kind == "sweep" and target == str(tmp_path)
+    kind, text, target, written = collect([str(copy)])
+    assert kind == "sweep" and target == str(copy / "reports") and written == ["sweep.csv", "sweep.json", "sweep.md"]
     assert text.startswith("── RUNS") and "test/rmse_lin" in text
-    rows = json.loads((tmp_path / "sweep.json").read_text())["rows"]
+    rows = json.loads((copy / "reports" / "sweep.json").read_text())["rows"]
     assert len(rows) == 1 and rows[0]["turns"] == 3 and rows[0]["dir"] == str(copy)
 
 

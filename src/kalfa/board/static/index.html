@@ -21,6 +21,10 @@
       </div>
       <div class="root" :title="tree.root" v-if="sidebar">{{ tree.root }}</div>
       <input class="filter" v-model.trim="filter" type="search" placeholder="filter records" spellcheck="false" v-if="sidebar">
+      <div class="facets" v-if="sidebar && sideStatesPresent.length">
+        <button v-for="state in sideStatesPresent" :key="state" class="small" :class="{active: sideStates.includes(state)}" @click="toggleSideState(state)"><span class="dot" :class="state"></span> {{ state }}</button>
+        <select v-model="sideSince" title="started within"><option v-for="[value, label] in sinceChoices" :key="value" :value="value">{{ label }}</option></select>
+      </div>
     </header>
     <nav class="tree" v-show="sidebar">
       <section v-for="group in groups" :key="group.name" class="group">
@@ -75,6 +79,8 @@
   </aside>
 
   <main class="content" v-if="booted">
+    <div class="banner" v-if="connection.lost">The board cannot reach its server, or the login session ended: the page shows what it read last.
+      <a class="link" href="#" @click.prevent="reloadPage()">reload the page</a> to sign in again.</div>
     <section v-if="!path" class="view home">
       <header class="head">
         <div class="title-row"><h2 class="title">Live</h2><span class="muted">{{ liveBoard.live.length }} running · refreshed {{ refreshed || 'never' }}</span></div>
@@ -94,6 +100,7 @@
               <span>{{ entry.finished }} of {{ entry.total }} points finished</span>
               <span>{{ entry.running }} running</span>
               <span class="bad" v-if="entry.failed">{{ entry.failed }} failed</span>
+              <span class="bad" v-if="entry.lost">{{ entry.lost }} lost</span>
               <span v-if="entry.best">best {{ entry.objective.monitor }} {{ fmt(entry.best.objective.value) }} (point {{ entry.best.id }})</span>
             </div>
           </template>
@@ -127,7 +134,7 @@
               <td><span class="badge kind">{{ entry.kind }}</span></td>
               <td><span class="badge" :class="stateOf(entry)">{{ stateOf(entry) }}</span></td>
               <td class="muted">{{ entry.status.last_seen ? ago(entry.status.last_seen) : '' }}</td>
-              <td><template v-if="entry.kind === 'sweep'">{{ entry.finished }} of {{ entry.total }} points<span class="bad" v-if="entry.failed">, {{ entry.failed }} failed</span><template v-if="entry.best"> · best {{ fmt(entry.best.objective.value) }}</template></template></td>
+              <td><template v-if="entry.kind === 'sweep'">{{ entry.finished }} of {{ entry.total }} points<span class="bad" v-if="entry.failed">, {{ entry.failed }} failed</span><span class="bad" v-if="entry.lost">, {{ entry.lost }} lost</span><template v-if="entry.best"> · best {{ fmt(entry.best.objective.value) }}</template></template></td>
             </tr>
           </tbody>
         </table>
@@ -142,12 +149,29 @@
       <header class="head">
         <div class="title-row"><h2 class="title">Runs</h2><span class="muted">{{ tableSorted.length }} of {{ tableRows.length }} records</span></div>
         <div class="toolbar">
-          <input class="filter" v-model.trim="tableFilter" type="search" placeholder="filter by name, path or param=value" spellcheck="false">
-          <a class="small" v-if="selected.length === 2" :href="'#/compare?a=' + encodeURIComponent(selected[0]) + '&b=' + encodeURIComponent(selected[1])">compare the two ticked</a>
-          <span class="muted" v-else>tick two rows to compare them</span>
+          <input class="filter" v-model.trim="tableFilter" type="search" placeholder="lr<0.01 val/rmse<=0.3 name" spellcheck="false">
+          <a class="small" v-if="selected.length >= 2" :href="compareLink(selected)">compare the {{ selected.length }} ticked</a>
+          <span class="muted" v-else>tick two or more rows to compare them</span>
+          <button class="small" v-if="tableSorted.length" @click="tickShown()">tick the {{ Math.min(tableSorted.length, 50) }} shown</button>
+          <button class="small" v-if="selected.length" @click="go({pick: null}, true)">clear the ticks</button>
+        </div>
+        <div class="toolbar">
+          <button v-for="state in tableStatesPresent" :key="state" class="small" :class="{active: tableStates.includes(state)}" @click="toggleTableState(state)"><span class="dot" :class="state"></span> {{ state }}</button>
+          <label>started <select :value="tableSince" @change="go({since: $event.target.value || null}, true)"><option v-for="[value, label] in sinceChoices" :key="value" :value="value">{{ label }}</option></select></label>
+          <details class="columns" v-if="tableRows.length">
+            <summary>columns {{ tableColumns.params.length + tableColumns.metrics.length }} of {{ tableColumns.allParams.length + tableColumns.allMetrics.length }}</summary>
+            <div class="columns-list">
+              <span class="muted" v-if="tableColumns.allParams.length">params</span>
+              <label v-for="key in tableColumns.allParams" :key="'p' + key"><input type="checkbox" :checked="tableColumns.params.includes(key)" @change="toggleColumn('params', key)"> {{ key }}</label>
+              <span class="muted" v-if="tableColumns.allMetrics.length">last values</span>
+              <label v-for="key in tableColumns.allMetrics" :key="'m' + key"><input type="checkbox" :checked="tableColumns.metrics.includes(key)" @change="toggleColumn('metrics', key)"> {{ key }}</label>
+              <button class="small" @click="resetColumns()">every param and the first 8 values</button>
+            </div>
+          </details>
+          <button class="small" v-if="tableSorted.length" @click="saveTableCsv()">save the {{ tableSorted.length }} rows as CSV</button>
         </div>
       </header>
-      <p class="note">Every run and sweep point under the root: the params of its manifest, the best value of the checkpoint monitor with its turn, the last evaluation values, the turns, the time and the device. Sort by a column, filter by name, path or param=value, tick two rows to compare them.</p>
+      <p class="note">Every run and sweep point under the root: the params of its manifest, the best value of the checkpoint monitor with its turn, the last evaluation values, the turns, the time and the device. Sort by a column. The filter takes words, each one a comparison of a param, a last value, best, turns or seconds (lr&lt;0.01, val/rmse&lt;=0.3, width=64, model!=mlp) or a text found in the name, the path or a param=value; a row stays when every word holds. The chips keep the states you pick, the columns menu picks what the table and the CSV carry (kept in this browser), and ticking two or more rows (or the first 50 shown) draws every series of them together.</p>
       <div class="card">
         <div class="table-scroll">
           <table class="table runs" v-if="tableRows.length">
@@ -185,25 +209,49 @@
 
     <section v-else-if="page === 'compare'" class="view">
       <header class="head">
-        <div class="title-row"><h2 class="title">Compare</h2></div>
-        <div class="meta-row" v-if="compareData && !compareData.missing">
-          <span><span class="swatch" :style="{background: '#2f6fdd'}"></span> <a class="link" :href="recordLink(compareData.a.path)">{{ compareData.a.path }}</a> solid</span>
-          <span><span class="swatch" :style="{background: '#2f6fdd'}"></span> <a class="link" :href="recordLink(compareData.b.path)">{{ compareData.b.path }}</a> dashed</span>
+        <div class="title-row"><h2 class="title">Compare</h2><span class="muted" v-if="compareRuns.length">{{ compareRuns.length }} records</span></div>
+        <div class="legend-runs" v-if="compareRuns.length">
+          <span class="legend-run" v-for="run in compareRuns" :key="run.path">
+            <svg width="28" height="10" aria-hidden="true"><line x1="1" y1="5" x2="27" y2="5" :stroke="run.color" stroke-width="2.5" :stroke-dasharray="dashArray(run.dash)"></line></svg>
+            <a class="link" :href="recordLink(run.path)">{{ run.name }}</a>
+            <span class="muted mono">{{ run.path }}</span>
+            <a class="small" v-if="compareRuns.length > 2" :href="link({runs: comparePaths.filter(item => item !== run.path).join(','), a: null, b: null})" title="leave this record out">&times;</a>
+          </span>
         </div>
       </header>
-      <p class="note">The history series of both records overlaid, the first solid and the second dashed, one chart per metric with the sets as lines; below, the difference between their resolved.yaml files.</p>
-      <p class="empty" v-if="!route.params.a || !route.params.b">open this page from the runs table with two rows ticked, or write ?a=path&b=path</p>
-      <p class="empty" v-else-if="!compareData">reading both records</p>
-      <p class="empty" v-else-if="compareData.missing">one of the records does not exist</p>
+      <p class="note">The history series of every record together, one chart per series with a line per record, the colour and the dash as in the list above; the chips keep one set, the filter the series whose name holds it, and expand opens a chart large. Below, the params that differ between the records, and for two records the difference of their resolved.yaml files. A record that is running redraws as it goes.</p>
+      <p class="empty" v-if="comparePaths.length < 2">tick two or more rows in the runs table or points of a sweep, or write ?runs=path,path,...</p>
+      <p class="empty" v-else-if="!compareData"><span class="spinner"></span> reading the records</p>
       <template v-else>
-        <div class="toolbar"><label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label></div>
+        <p class="empty" v-if="compareData.missing && compareData.missing.length">not found: {{ compareData.missing.join(', ') }}</p>
+        <div class="toolbar">
+          <a class="small" :class="{active: !route.params.only}" :href="link({only: null})">every set</a>
+          <a v-for="name in compareSets" :key="name" class="small" :class="{active: route.params.only === name}" :href="link({only: name})">{{ name }}</a>
+          <input class="filter" :value="metricFilter" @input="setFilter($event.target.value)" type="search" placeholder="filter the series, say rmse" spellcheck="false">
+          <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
+        </div>
         <div class="grid charts" v-if="compareCharts.length">
           <div class="card" v-for="entry in compareCharts" :key="entry.name">
-            <chart :lines="entry.lines" :title="entry.name" :xlabel="compareUnit" :ylabel="entry.name" :logy="logy"></chart>
+            <chart :lines="entry.lines" :title="entry.name" :xlabel="compareUnit" :ylabel="entry.name" :logy="logy" :expand="link({chart: entry.name})"></chart>
           </div>
         </div>
-        <div class="card">
-          <div class="card-label">resolved.yaml, {{ compareData.a.path }} to {{ compareData.b.path }}</div>
+        <p class="empty" v-else>no series of these records matches</p>
+        <div class="card" v-if="compareParams.length">
+          <div class="card-label">params that differ</div>
+          <div class="table-scroll">
+          <table class="table">
+            <thead><tr><th>record</th><th class="num" v-for="key in compareParams" :key="key">{{ key }}</th></tr></thead>
+            <tbody>
+              <tr v-for="run in compareRuns" :key="run.path">
+                <td><span class="swatch" :style="{background: run.color}"></span> <a class="link" :href="recordLink(run.path)">{{ run.name }}</a></td>
+                <td class="num mono" v-for="key in compareParams" :key="key">{{ fmt(run.params[key]) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+        <div class="card" v-if="compareData.diff">
+          <div class="card-label">resolved.yaml, {{ comparePaths[0] }} to {{ comparePaths[1] }}</div>
           <pre class="diff"><span v-for="(line, index) in compareData.diff" :key="index" :class="diffClass(line)">{{ line }}
 </span></pre>
         </div>
@@ -238,7 +286,7 @@
         <div class="tile" :class="{alarm: sweepStats.failed}">
           <span class="tile-label">failed</span>
           <span class="tile-value">{{ sweepStats.failed }}</span>
-          <span class="tile-note">{{ sweepStats.failed ? Math.round(100 * sweepStats.failed / sweepStats.total) + '% of the points' : 'none' }}</span>
+          <span class="tile-note">{{ sweepStats.failed ? Math.round(100 * sweepStats.failed / sweepStats.total) + '% of the points' : 'none' }}<template v-if="sweepStats.lost">, {{ sweepStats.lost }} lost</template></span>
         </div>
         <div class="tile" v-if="sweep.best">
           <span class="tile-label">best {{ objectiveName }}</span>
@@ -292,6 +340,7 @@
         </div>
       </div>
       <div class="card" v-if="sweep">
+        <div class="toolbar" v-if="sortedPoints.length"><button class="small" @click="saveSweepCsv()">save the {{ sortedPoints.length }} points as CSV</button></div>
         <div class="table-scroll">
         <table class="table points">
           <thead>
@@ -332,9 +381,26 @@
                  :ylabel="objectiveName" kind="scatter" :xlog="entry.xlog" :expand="link({chart: 'param:' + entry.key})"></chart>
         </div>
       </div>
+      <div class="card" v-if="failureGroups.length">
+        <div class="card-label">why the points failed
+          <span class="muted">{{ sweepStats.failed }} of {{ sweepStats.total }} points, grouped by the first error of each</span></div>
+        <div class="table-scroll">
+        <table class="table">
+          <thead><tr><th class="num">points</th><th>error</th><th>ids</th></tr></thead>
+          <tbody>
+            <tr v-for="group in failureGroups" :key="group.reason">
+              <td class="num mono">{{ group.points.length }}</td>
+              <td class="mono error wrap">{{ group.reason }}</td>
+              <td class="wrap"><template v-for="(point, index) in group.points.slice(0, 40)" :key="point.path"><template v-if="index">, </template><a class="link mono" :href="recordLink(point.path)">{{ point.id ?? point.path.split('/').pop() }}</a></template><span class="muted" v-if="group.points.length > 40"> and {{ group.points.length - 40 }} more</span></td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <p class="muted">A point is repaired in place with kalfa repair CONFIG --id N --record ROOT once the cause is fixed; without --id every failed point is repaired.</p>
+      </div>
       <div class="card" v-if="hasFailures">
         <div class="card-label">where the points died
-          <span class="muted">{{ sweepStats.failed }} of {{ sweepStats.total }} never finished a turn</span></div>
+          <span class="muted">{{ sweepStats.failed }} of {{ sweepStats.total }} failed or lost</span></div>
         <div class="fail-map">
           <div class="fail-row" v-for="entry in failureMap" :key="entry.key">
             <span class="fail-key">{{ entry.key }}</span>
@@ -342,7 +408,7 @@
               <div class="fail-level" v-for="level in entry.levels" :key="level.label">
                 <span class="fail-name mono">{{ level.label }}</span>
                 <span class="fail-bar">
-                  <i class="failed" v-if="level.failed" :style="{flexGrow: level.failed}" :title="level.failed + ' failed'"></i>
+                  <i class="failed" v-if="level.failed" :style="{flexGrow: level.failed}" :title="level.failed + ' failed or lost'"></i>
                   <i class="scored" v-if="level.scored" :style="{flexGrow: level.scored}" :title="level.scored + ' scored'"></i>
                   <i class="other" v-if="level.other" :style="{flexGrow: level.other}" :title="level.other + ' pending or running'"></i>
                 </span>
@@ -358,10 +424,20 @@
           <span class="muted">is the search still finding anything</span></div>
         <chart :lines="progressChart.lines" xlabel="point" :ylabel="objectiveName" :height="280" :expand="link({chart: 'progress'})"></chart>
       </div>
-      <div class="card" v-if="overlayLines.length">
-        <div class="card-label">{{ sweep.objective.monitor || 'objective' }} of {{ selected.length ? 'the ticked points' : 'the running points' }}</div>
-        <chart :lines="overlayLines" :xlabel="sweepUnit" :ylabel="sweep.objective.monitor" :logy="logy" :expand="link({chart: 'overlay'})"></chart>
-        <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
+      <div class="card" v-if="sweep && sweep.points.length">
+        <div class="card-label">{{ overlayKey || 'a series' }} of {{ selected.length ? 'the ' + selected.length + ' ticked points' : 'the running points' }}</div>
+        <div class="toolbar">
+          <label>series <select :value="overlayKey" @change="go({metric: $event.target.value}, true)">
+            <option v-for="key in overlayKeyChoices" :key="key" :value="key">{{ key }}</option></select></label>
+          <label>tick the best <select @change="tickTop(Number($event.target.value)); $event.target.value = ''">
+            <option value="">…</option>
+            <option v-for="count in [5, 10, 20, 50]" :key="count" :value="count">{{ count }}</option></select></label>
+          <button class="small" v-if="selected.length" @click="go({pick: null}, true)">clear the ticks</button>
+          <a class="small" v-if="selected.length >= 2" :href="compareLink(selected)">every series of the ticked</a>
+          <label class="toggle"><input type="checkbox" :checked="logy" @change="setLog($event.target.checked)"> log scale</label>
+        </div>
+        <chart v-if="overlayLines.length" :lines="overlayLines" :xlabel="sweepUnit" :ylabel="overlayKey" :logy="logy" :expand="link({chart: 'overlay'})"></chart>
+        <p class="empty" v-else>tick points in the table, or the best ones here; without a tick the running points are drawn</p>
       </div>
       <div class="card" v-if="selected.length >= 2">
         <div class="card-label">difference between {{ selected[0] }} and {{ selected[1] }}</div>
@@ -392,6 +468,11 @@
         </div>
         <div class="chips" v-if="params.length">
           <span class="chip" v-for="[key, value] in params" :key="key">{{ key }} = {{ fmt(value) }}</span>
+        </div>
+        <div class="chips" v-if="divergence || (failures.length && state === 'failed') || state === 'lost'">
+          <span class="chip bad" v-if="divergence">{{ divergence.key }} is {{ divergence.value }} from {{ turnLabel }} {{ divergence.turn }} on</span>
+          <span class="chip bad mono" v-if="failures.length && state === 'failed'" :title="failures[0].path">{{ failures[0].node || 'failed' }}: {{ failures[0].type ? failures[0].type + ': ' : '' }}{{ failures[0].message }}</span>
+          <span class="chip bad" v-if="state === 'lost'">no heartbeat for more than ten minutes and no run.json: the process was killed or its machine went away</span>
         </div>
         <div class="card objective" v-if="record.sweep || pointObjective">
           <span class="card-label">objective</span>
@@ -434,7 +515,9 @@
             <chart :lines="entry.lines" :title="entry.name + ' per step'" xlabel="step" :ylabel="entry.name" :logy="logy" :marks="turnMarks" :turns="true" :expand="link({chart: entry.name})"></chart>
           </div>
         </div>
-        <p class="empty" v-if="!monitorChart && !activeLossChart && !stepCharts.length">nothing recorded yet, the first {{ turnLabel }} is running</p>
+        <p class="empty" v-if="!monitorChart && !activeLossChart && !stepCharts.length">
+          <template v-if="['failed', 'lost', 'unreadable'].includes(state)">nothing was recorded before the run ended ({{ state }}); the overview says why</template>
+          <template v-else>nothing recorded yet, the first {{ turnLabel }} is running</template></p>
           <div class="card" v-if="latest.length">
             <div class="card-label">latest {{ turnLabel }}</div>
             <div class="table-scroll">
@@ -468,6 +551,32 @@
       <div class="panel" v-if="tab === 'overview'">
         <p class="note">The last {{ turnLabel }} of history.jsonl per series with its kind and the lego behind it (from resolved.yaml), the loss every optimizer minimized with the weights of its terms as the rules left them, the switches and the other effects of the rules over the {{ turnLabel }}s, the learning rates, the best {{ turnLabel }} by the checkpoint monitor, the checkpoints and the calibrations of the record.</p>
         <div class="cards compact">
+            <div class="card wide" v-if="failures.length && state === 'failed'">
+              <div class="card-label">failure <span class="muted">{{ record.failure ? 'failure.json' : 'run.json' }}</span></div>
+              <div class="failure" v-for="(item, index) in failures" :key="index">
+                <div><b class="mono">{{ item.node || 'before the run started' }}</b> <span class="muted mono">{{ item.path }}</span></div>
+                <div class="mono error wrap">{{ item.type ? item.type + ': ' : '' }}{{ item.message }}</div>
+                <details v-if="item.traceback"><summary>traceback</summary><pre class="code log small">{{ item.traceback }}</pre></details>
+              </div>
+              <p class="muted">Once the cause is fixed, the run goes on in its own directory with kalfa repair CONFIG --record {{ path }}; a sweep point with kalfa repair CONFIG --id N --record ROOT.</p>
+            </div>
+            <div class="card" v-if="record.repair && (record.repair.attempts || []).length">
+              <div class="card-label">repairs</div>
+              <div class="table-scroll">
+              <table class="table">
+                <thead><tr><th class="num">#</th><th>stage</th><th>from</th><th>started</th><th>status</th></tr></thead>
+                <tbody>
+                  <tr v-for="item in record.repair.attempts" :key="item.attempt">
+                    <td class="num mono">{{ item.attempt }}</td><td>{{ item.stage }}</td>
+                    <td class="mono">{{ item.from }} <span class="muted">{{ turnLabel }} {{ item.turn }}</span></td>
+                    <td class="muted">{{ ago(item.started) }}</td>
+                    <td><span class="badge" :class="item.status === 'ok' ? 'finished' : (item.status === 'running' ? 'running' : 'failed')">{{ item.status }}</span></td>
+                  </tr>
+                </tbody>
+              </table>
+              </div>
+              <p class="muted">The files of every earlier attempt are under attempts/ in the record.</p>
+            </div>
             <div class="card" v-if="record.best">
               <div class="card-label">best {{ turnLabel }}</div>
               <div><span class="big">{{ fmt(record.best.value) }}</span> <span class="muted">{{ record.best.monitor }} ({{ record.best.mode }}) at {{ turnLabel }} {{ record.best.turn }}</span></div>
@@ -478,7 +587,7 @@
               <table class="table"><tbody>
                 <tr><td>status</td><td><span class="badge" :class="record.run.status === 'ok' ? 'finished' : 'failed'">{{ record.run.status }}</span></td></tr>
                 <tr><td>wall time</td><td class="mono">{{ ms(record.run.ms) }}</td></tr>
-                <tr v-if="record.run.error"><td>error</td><td class="mono error">{{ record.run.error }}</td></tr>
+                <tr v-if="record.run.status !== 'ok' && failures.length"><td>error</td><td class="mono error wrap">{{ failures[0].message }}</td></tr>
               </tbody></table>
               </div>
             </div>
@@ -583,30 +692,85 @@
       </div>
 
       <div class="panel" v-if="tab === 'predictions'">
-        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram, the distributions of the prediction and the truth over the same bins with their ratio below, and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. The filter is a pandas query over the columns of the file, the targets, the pred_ and raw_ wires, the flags and the data.spectators columns; R², rmse, mae, the histogram and the largest errors are all computed over the rows it keeps. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
+        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram, the distributions of the prediction and the truth over the same bins with their ratio below, and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. Every target is shown as a regression until you switch it to classification, which draws the ROC of a score column with its AUC and working points, the score by class and the confusion of the predicted classes. The filter runs over the columns of the file, the targets, the pred_ and raw_ wires, the flags and the data.spectators columns, with comparisons, and, or, not, arithmetic and lists (say pt > 500 and site in ['s1', 's2']); every number here is computed over the rows it keeps. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
         <div class="toolbar" v-if="record.predictions.length">
           <a v-for="name in record.predictions" :key="name" class="small" :class="{active: predictionFile === name}" :href="link({set: name, pair: null})">{{ name }}</a>
-          <template v-if="predictionsData && predictionsData.pairs.length > 1">
+          <template v-if="pairChoices.length > 1">
             <span class="muted">·</span>
-            <a v-for="pair in predictionsData.pairs" :key="pair.pred" class="small" :class="{active: pairInfo && pairInfo.pred === pair.pred}" :href="link({pair: pair.pred})">{{ pairLabel(pair) }}</a>
+            <a v-for="pair in pairChoices" :key="pair.pred" class="small" :class="{active: currentPair && currentPair.pred === pair.pred}" :href="link({pair: pair.pred, score: null, positive: null})">{{ pairLabel(pair) }}</a>
           </template>
           <span class="muted">·</span>
           <a class="small" :class="{active: !sampleAll}" :href="link({sample: null})">a sample of 2,000</a>
-          <a class="small" :class="{active: sampleAll}" :href="link({sample: 'all'})">all rows</a>
+          <a class="small" :class="{active: sampleAll}" :href="link({sample: 'all'})">all {{ predictionsData ? count(predictionsData.rows) + ' ' : '' }}rows</a>
           <span class="muted" v-if="predictionsData && !predictionsData.where">{{ count(predictionsData.rows) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
           <span class="muted" v-else-if="predictionsData">{{ count(predictionsData.rows) }} of {{ count(predictionsData.total) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
           <span class="spinner" v-if="busy"></span>
         </div>
         <div class="toolbar" v-if="record.predictions.length">
           <input class="filter" v-model="whereDraft" type="search" spellcheck="false" @keyup.enter="applyWhere()"
-                 placeholder="a pandas query over the columns of this file, say  pred_y > 0 and price < 4">
+                 placeholder="a filter over the columns of this file, say  pred_y > 0 and price < 4">
           <a class="small" href="#" @click.prevent="applyWhere()">filter</a>
           <a class="small" v-if="whereFilter" href="#" @click.prevent="clearWhere()">clear</a>
           <span class="muted" v-if="predictionsData && predictionsData.carried && predictionsData.carried.length">carried: {{ predictionsData.carried.join(", ") }}</span>
         </div>
-        <p class="empty" v-if="predictionsData && predictionsData.error">the query did not run: {{ predictionsData.error }}</p>
+        <div class="toolbar" v-if="currentPair">
+          <span class="muted">{{ currentPair.target }} as</span>
+          <button v-for="name in ['regression', 'classification']" :key="name" class="small" :class="{active: task === name}" @click="setTask(name)">{{ name }}</button>
+          <span class="muted">the choice is kept in this browser for every record with the target {{ currentPair.target }}</span>
+        </div>
+        <p class="empty" v-if="predictionsData && predictionsData.error">the filter did not run: {{ predictionsData.error }}</p>
         <p class="empty" v-if="!record.predictions.length">no predictions file in the record yet</p>
         <p class="empty" v-else-if="!predictionsData"><span class="spinner"></span> reading the predictions</p>
+        <template v-else-if="currentPair && task === 'classification'">
+          <p class="empty" v-if="!classifyData"><span class="spinner"></span> computing the classification view</p>
+          <p class="empty" v-else-if="!classifyData.classes">{{ classifyData.error || 'nothing to classify' }}</p>
+          <template v-else>
+            <div class="toolbar">
+              <label>score <select :value="classifyData.score || ''" @change="pickClassify('score', $event.target.value)">
+                <option value="">none</option>
+                <option v-for="name in classifyData.scores" :key="name" :value="name">{{ name }}</option></select></label>
+              <label>signal class <select :value="classifyData.positive == null ? '' : String(classifyData.positive)" @change="pickClassify('positive', $event.target.value)">
+                <option value="">none</option>
+                <option v-for="item in classifyData.classes" :key="String(item)" :value="String(item)">{{ item }}</option></select></label>
+              <span class="muted">the ROC takes both; the picks are kept for {{ classifyData.target }} in this browser</span>
+            </div>
+            <div class="chips">
+              <span class="chip" v-if="typeof classifyData.accuracy === 'number'">accuracy = {{ fmt(classifyData.accuracy) }}</span>
+              <span class="chip" v-if="classifyData.roc">AUC = {{ fmt(classifyData.roc.auc) }}</span>
+              <span class="chip">{{ count(classifyData.rows) }} rows</span>
+              <span class="chip" v-for="(item, index) in classifyData.classes" :key="'class' + index">{{ item }}: {{ count(classifyData.counts[index]) }}</span>
+            </div>
+            <p class="empty" v-if="classifyData.error">{{ classifyData.error }}</p>
+            <p class="empty" v-if="!classifyData.score || classifyData.positive == null">pick a score column and a signal class above to draw the ROC and the score by class</p>
+            <p class="empty" v-else-if="!classifyData.roc">the rows hold only one of the classes, so there is no ROC to draw</p>
+            <div class="grid charts" v-if="classifyData.roc">
+              <div class="card"><chart :lines="rocLines" :title="'ROC, ' + classifyData.target + ' = ' + classifyData.positive + ' as signal'" xlabel="background efficiency" ylabel="signal efficiency" :height="360" :expand="link({chart: 'roc'})"></chart></div>
+              <div class="card" v-if="scoreLines.length"><chart :lines="scoreLines" :title="classifyData.score + ' by class'" :xlabel="classifyData.score" ylabel="points" :height="360" :logy="logy" :settings="stepSettings" :expand="link({chart: 'scores'})"></chart></div>
+            </div>
+            <div class="card" v-if="classifyData.roc && classifyData.roc.working.length">
+              <div class="card-label">working points <span class="muted">{{ count(classifyData.roc.signal) }} signal and {{ count(classifyData.roc.background) }} background rows</span></div>
+              <div class="table-scroll">
+              <table class="table">
+                <thead><tr><th class="num">signal efficiency</th><th class="num">background efficiency</th><th class="num">rejection</th><th class="num">cut on {{ classifyData.score }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="item in classifyData.roc.working" :key="item.signal"><td class="num mono">{{ fmt(item.signal) }}</td><td class="num mono">{{ fmt(item.background) }}</td><td class="num mono">{{ fmt(item.rejection) }}</td><td class="num mono">{{ fmt(item.cut) }}</td></tr>
+                </tbody>
+              </table>
+              </div>
+            </div>
+            <div class="card" v-if="classifyData.confusion">
+              <div class="card-label">confusion <span class="muted">rows are {{ classifyData.target }}, columns {{ classifyData.pred }}</span></div>
+              <div class="table-scroll">
+              <table class="table">
+                <thead><tr><th></th><th class="num" v-for="(item, index) in classifyData.classes" :key="'head' + index">{{ item }}</th></tr></thead>
+                <tbody>
+                  <tr v-for="(row, index) in classifyData.confusion" :key="'row' + index"><td class="mono">{{ classifyData.classes[index] }}</td><td class="num mono" v-for="(value, column) in row" :key="column" :class="{diagonal: column === index}">{{ count(value) }}</td></tr>
+                </tbody>
+              </table>
+              </div>
+            </div>
+          </template>
+        </template>
         <template v-else-if="pairInfo">
           <div class="chips">
             <span class="chip">R² = {{ fmt(pairInfo.r2) }}</span>
@@ -638,6 +802,7 @@
             </div>
           </div>
         </template>
+        <p class="empty" v-else-if="currentPair">{{ currentPair.target }} or {{ currentPair.pred }} is not numeric, so the regression view has nothing to compute; switch to classification</p>
         <p class="empty" v-else>the predictions have no target and prediction pair to draw</p>
       </div>
 
@@ -727,17 +892,40 @@
       </div>
 
       <div class="panel" v-if="tab === 'timeline'">
-        <p class="note">The event stream of tezgah (events.jsonl): every node from its start to its end on one time axis, indented by block; a node still running is orange, a failed one red.</p>
+        <p class="note">The event stream of tezgah (events.jsonl): every node from its start to its end on one time axis, indented by block; a node still running is orange, a failed one red. A loop is one bar over all its iterations, and the table below sums every node inside it over the iterations: where the time of a turn goes. Every iteration as its own row is one click away.</p>
+        <div class="toolbar">
+          <a class="small" :class="{active: route.params.iterations !== 'all'}" :href="link({iterations: null})">a bar per loop</a>
+          <a class="small" :class="{active: route.params.iterations === 'all'}" :href="link({iterations: 'all'})">every iteration</a>
+        </div>
         <p class="empty" v-if="!eventsData">reading the events</p>
         <p class="empty" v-else-if="!timeline.rows.length">no node event yet</p>
         <div class="card" v-else>
           <div class="card-label">nodes over time <span class="muted">· {{ eventsData.total }} events, {{ ms(timeline.total) }} from the first start to the last end</span></div>
           <div class="timeline">
             <div class="timeline-row" v-for="row in timeline.rows" :key="row.key + row.start" :title="row.key + (row.ms !== undefined ? ' · ' + ms(row.ms) : '')">
-              <div class="timeline-label mono" :style="{paddingLeft: (4 + row.depth * 14) + 'px'}">{{ row.node }}</div>
+              <div class="timeline-label mono" :style="{paddingLeft: (4 + row.depth * 14) + 'px'}">{{ row.loop ? `${row.node} ×${row.count}` : row.node }}</div>
               <div class="timeline-track"><div class="timeline-bar" :class="{failed: row.status && row.status !== 'ok', open: row.end === null}" :style="{left: row.left + '%', width: row.width + '%'}"></div></div>
               <div class="timeline-ms mono muted">{{ row.ms !== undefined ? ms(row.ms) : '' }}</div>
             </div>
+          </div>
+        </div>
+        <div class="card" v-if="eventsData && timeline.profile.length">
+          <div class="card-label">inside the loops <span class="muted">every node of an iteration, summed over the iterations that ended</span></div>
+          <div class="table-scroll">
+          <table class="table">
+            <thead><tr><th>node</th><th>loop</th><th class="num">runs</th><th class="num">total</th><th class="num">mean</th><th class="num">longest</th><th class="num">share of the loop</th></tr></thead>
+            <tbody>
+              <tr v-for="entry in timeline.profile" :key="entry.path">
+                <td class="mono" :title="entry.path">{{ entry.name }} <span class="badge failed" v-if="entry.failed">{{ entry.failed }} failed</span></td>
+                <td class="mono muted">{{ entry.loop }}</td>
+                <td class="num mono">{{ count(entry.count) }}</td>
+                <td class="num mono">{{ ms(entry.total) }}</td>
+                <td class="num mono">{{ ms(entry.mean) }}</td>
+                <td class="num mono">{{ ms(entry.longest) }}</td>
+                <td class="num mono">{{ entry.share === null ? '' : (100 * entry.share).toFixed(1) + ' %' }}</td>
+              </tr>
+            </tbody>
+          </table>
           </div>
         </div>
       </div>
@@ -899,7 +1087,7 @@
               <table class="table nodes">
                 <tbody>
                   <tr v-for="node in runNodes" :key="node.path" :class="{failed: node.status !== 'ok'}">
-                    <td class="mono" :style="{paddingLeft: (10 + node.depth * 16) + 'px'}">{{ node.node }}</td>
+                    <td class="mono" :style="{paddingLeft: (10 + node.depth * 16) + 'px'}">{{ node.node }}<div class="error wrap" v-if="node.error">{{ node.error }}</div></td>
                     <td class="num mono">{{ ms(node.ms) }}</td>
                     <td class="barcell"><div class="bar" :style="{width: node.share + '%'}"></div></td>
                     <td><span class="badge" :class="node.status === 'ok' ? 'finished' : 'failed'">{{ node.status }}</span></td>
@@ -968,12 +1156,15 @@
       </div>
 
       <div class="panel" v-if="tab === 'logs'">
-        <p class="note">The tail of stdout.txt and stderr.txt as the run wrote them (tezgah tees both into the record): the last 300 lines, refreshed while the record runs.</p>
+        <p class="note">The tail of stdout.txt and stderr.txt as the run wrote them (tezgah tees both into the record), refreshed while the record runs. A progress bar shows as its last state, the way a terminal draws it; the view follows the end unless you scroll up.</p>
         <div class="toolbar">
           <a v-for="name in record.logs" :key="name" class="small" :class="{active: logName === name}" :href="link({file: name})">{{ name }}</a>
+          <label>lines <select :value="route.params.lines || '300'" @change="go({lines: $event.target.value === '300' ? null : $event.target.value}, true)">
+            <option value="300">300</option><option value="2000">2000</option><option value="10000">10000</option></select></label>
           <span class="muted" v-if="logs.total">last {{ logs.lines.length }} of {{ logs.total }} lines</span>
+          <a class="small" v-if="logName" :href="recordFile(logName)" target="_blank" rel="noopener">the whole file</a>
         </div>
-        <pre class="code log" v-if="logs.lines.length">{{ logs.lines.join('\n') }}</pre>
+        <pre class="code log" ref="log" @scroll="logScrolled" v-if="logs.lines.length">{{ logs.lines.join('\n') }}</pre>
         <p class="empty" v-else>{{ record.logs.length ? 'empty so far' : 'no log file in the record' }}</p>
       </div>
 

@@ -40,12 +40,13 @@ def test_the_best_checkpoint_is_the_turn_with_the_lowest_monitor(reference):
     assert best["counters"] == {"global_step": history[best["turn"] - 1]["global_step"], "turn": best["turn"]}
 
 
-def test_last_and_final_hold_the_end_of_training(reference):
+def test_last_and_final_hold_the_end_of_training_and_the_policy_state(reference):
     history = History.read(reference.record)
     found = payloads(reference.record)
     assert found["last"]["turn"] == 3 and found["final"]["turn"] == 3
     assert found["last"]["counters"] == {"global_step": history[-1]["global_step"], "turn": 3}
-    assert found["final"]["checkpoint"] is None
+    best = min(line["val/rmse_lin"] for line in history)
+    assert found["final"]["checkpoint"] == found["last"]["checkpoint"] == {"best": best}
     for name in MODELS:
         for key, value in found["last"]["models"][name].items():
             assert torch.equal(value, found["final"]["models"][name][key])
