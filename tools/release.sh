@@ -9,7 +9,8 @@ usage() {
 usage: bash tools/release.sh VERSION [SUMMARY]
 
 Writes VERSION into pyproject.toml and uv.lock, then asks before the commit,
-the annotated tag and the push. Nothing is committed without a yes.
+the annotated tag and the push. Nothing is committed without a yes. It first
+offers ruff check --fix, whose fixes join the release commit, and pytest.
 
   bash tools/release.sh 0.2.6
   bash tools/release.sh 0.2.6 "the std catalogue loads lazily"
@@ -44,9 +45,9 @@ fi
 
 printf '%s -> %s\n' "$OLD" "$NEW"
 
-if confirm "run ruff and pytest first?"; then
+if confirm "run ruff --fix and pytest first?"; then
     FAILED=()
-    uv run ruff check src tests tools || FAILED+=("ruff")
+    uv run ruff check --fix src tests tools || FAILED+=("ruff")
     uv run pytest -q || FAILED+=("pytest")
     if [[ ${#FAILED[@]} -gt 0 ]]; then
         printf 'release: %s reported problems\n' "${FAILED[*]}" >&2
