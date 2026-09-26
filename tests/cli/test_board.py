@@ -591,3 +591,37 @@ def test_history_lines_start_over_when_a_repair_cuts_the_file(tmp_path):
     assert beyond["reset"] and len(beyond["lines"]) == 1
     same = board.lines("runs/one", "history.jsonl", offset=1, file=again["file"])
     assert not same["reset"] and same["lines"] == []
+
+
+def test_the_histogram_bins_the_range_asked_and_names_the_rows_outside(tmp_path):
+    folder = tmp_path / "runs" / "binned"
+    folder.mkdir(parents=True)
+    y = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, -1.0]
+    pandas.DataFrame({"row": range(8), "y": y, "pred_head_y": [value + index % 2 for index, value in enumerate(y)],
+                      "is_hot": [0.0] * 4 + [1.0] * 4, "pred_tail_is_hot": [0.0] * 4 + [1.0] * 4,
+                      "raw_tail": [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]}).to_parquet(folder / "predictions.parquet")
+    board = Board(tmp_path / "runs")
+    whole = board.histogram("binned", "pred_head_y", bins=4)
+    assert len(whole["edges"]) == 5 and whole["edges"][0] == -1.0 and whole["edges"][-1] == 64.0
+    assert sum(whole["data"]) == sum(whole["pred"]) == whole["total"] == 8
+    assert whole["outside"] == {"data": [0, 0], "pred": [0, 0]}
+    ranged = board.histogram("binned", "pred_head_y", bins=2, low="2", high="10")
+    assert ranged["edges"] == [2.0, 6.0, 10.0] and ranged["data"] == [2, 1] and ranged["outside"]["data"] == [2, 3]
+    logged = board.histogram("binned", "pred_head_y", bins=3, low=1, high=1000, log=True)
+    assert logged["edges"] == pytest.approx([1, 10, 100, 1000]) and logged["data"] == [4, 3, 0]
+    assert logged["outside"]["data"] == [1, 0]
+    assert board.histogram("binned", "pred_head_y", low=-5, log=True)["error"] == "log bins need a range above 0"
+    guessed = board.histogram("binned", "pred_head_y", bins=2, log=True)
+    assert guessed["edges"][0] == pytest.approx(1.0) and guessed["outside"] == {"data": [1, 0], "pred": [1, 0]}
+    residual = board.histogram("binned", "pred_head_y", kind="residual", bins=2)
+    assert residual["edges"] == [0.0, 0.5, 1.0] and residual["counts"] == [4, 4] and residual["total"] == 8
+    scores = board.histogram("binned", "pred_tail_is_hot", kind="scores", score="raw_tail", bins=2, low=0, high=1)
+    assert [entry["label"] for entry in scores["classes"]] == [0.0, 1.0] and scores["outside"] == [0, 0]
+    assert [entry["counts"] for entry in scores["classes"]] == [[4, 0], [0, 4]]
+    missing = board.histogram("binned", "pred_tail_is_hot", kind="scores", score="nothing")
+    assert missing["error"] == "nothing is no column of predictions.parquet"
+    assert board.histogram("binned", "pred_nothing") is None
+    status, _, body = call(board, "/api/histogram?path=binned&pred=pred_head_y&kind=residual&bins=2&low=0&high=1")
+    assert status == 200 and json.loads(body)["counts"] == [4, 4]
+    status, _, body = call(board, "/api/histogram?path=binned&pred=pred_head_y&bins=3&low=1&high=1000&log=1")
+    assert status == 200 and json.loads(body)["data"] == [4, 3, 0]

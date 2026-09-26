@@ -51,7 +51,11 @@ function fileKind(name) {
 function defaultPlot() {
   return { logy: false, logx: false, width: 1.6, markers: 3, dots: 0, curve: "straight", grid: true, legend: true, font: 11,
            bins: 40, xmin: "", xmax: "", ymin: "", ymax: "", rmin: "", rmax: "", xlabel: "", ylabel: "", height: 0, format: "png",
-           extra: "" };
+           extra: "", normalize: false };
+}
+
+function centersOf(edges, log) {
+  return edges.slice(0, -1).map((edge, index) => (log && edge > 0 ? Math.sqrt(edge * edges[index + 1]) : (edge + edges[index + 1]) / 2));
 }
 
 function bound(value) {
@@ -1221,22 +1225,24 @@ function spectrumFigure(view) {
   const theme = plotTheme();
   const settings = { ...defaultPlot(), ...(view.settings || {}) };
   const { edges, data, pred, labels } = view.spec;
+  const scale = view.spec.scale || 1;
+  const shown = counts => counts.map(value => value / scale);
   const logx = !!settings.logx, logy = !!(view.logy || settings.logy);
   const light = theme.dark ? "#3987e5" : "#6da7ec";
   const fill = theme.dark ? "rgba(47, 111, 208, 0.35)" : "rgba(158, 197, 244, 0.55)";
   const deep = theme.dark ? "#9ec5f4" : "#184f95";
   const stepsX = [...edges.slice(0, -1), edges[edges.length - 1]];
   const steps = counts => [...counts, counts[counts.length - 1]];
-  const centers = data.map((value, index) => (edges[index] + edges[index + 1]) / 2);
+  const centers = centersOf(edges, logx);
   const ratio = data.map((count, index) => (count > 0 ? pred[index] / count : null));
   const error = data.map((count, index) => (count > 0 && pred[index] > 0 ? ratio[index] * Math.sqrt(1 / pred[index] + 1 / count) : 0));
   let low = 0.5, high = 1.5;
   ratio.forEach((value, index) => { if (value !== null) { low = Math.min(low, value - error[index]); high = Math.max(high, value + error[index]); } });
   const rmin = bound(settings.rmin), rmax = bound(settings.rmax);
   const traces = [
-    { type: "scatter", mode: "lines", name: labels.data, x: stepsX, y: steps(data), line: { shape: "hv", color: light, width: 1.2 },
+    { type: "scatter", mode: "lines", name: labels.data, x: stepsX, y: steps(shown(data)), line: { shape: "hv", color: light, width: 1.2 },
       fill: "tozeroy", fillcolor: fill, hovertemplate: "%{y}<extra>" + labels.data + "</extra>" },
-    { type: "scatter", mode: "lines", name: labels.pred, x: stepsX, y: steps(pred), line: { shape: "hv", color: deep, width: settings.width },
+    { type: "scatter", mode: "lines", name: labels.pred, x: stepsX, y: steps(shown(pred)), line: { shape: "hv", color: deep, width: settings.width },
       hovertemplate: "%{y}<extra>" + labels.pred + "</extra>" },
     { type: "scatter", mode: "markers", name: "pred / true", x: centers, y: ratio, yaxis: "y2", showlegend: false, customdata: error,
       marker: { color: deep, size: markerSize(centers.length, view.settings) },
@@ -1248,7 +1254,7 @@ function spectrumFigure(view) {
     hovermode: "x unified",
     uirevision: `${logy}-${logx}`,
     xaxis: { ...axisOf(theme, settings, settings.xlabel || view.xlabel, logx, edges, settings.xmin, settings.xmax), anchor: "y2" },
-    yaxis: { ...axisOf(theme, settings, settings.ylabel || "points", logy, [...data, ...pred], settings.ymin, settings.ymax), domain: [0.36, 1],
+    yaxis: { ...axisOf(theme, settings, settings.ylabel || view.ylabel || "points", logy, [...shown(data), ...shown(pred)], settings.ymin, settings.ymax), domain: [0.36, 1],
              ...(logy ? {} : { rangemode: "tozero" }) },
     yaxis2: { ...axisOf(theme, settings, "pred / true", false, [], "", ""), domain: [0, 0.3], anchor: "x",
               range: [rmin !== null ? rmin : Math.max(0, low), rmax !== null ? rmax : Math.min(3, high)] },
@@ -1259,7 +1265,7 @@ function spectrumFigure(view) {
 
 const Spectrum = {
   mixins: [Plotted],
-  props: { spec: { type: Object, required: true }, title: String, xlabel: String, logy: Boolean, expand: { type: String, default: "" },
+  props: { spec: { type: Object, required: true }, title: String, xlabel: String, ylabel: String, logy: Boolean, expand: { type: String, default: "" },
            modal: Boolean, height: { type: Number, default: 440 }, settings: { type: Object, default: () => ({}) } },
   computed: { figure() { return spectrumFigure(this); } },
   template: `
@@ -1322,7 +1328,7 @@ const app = Vue.createApp({
       logs: { name: "", lines: [], total: 0 }, logFollow: true, texts: {}, describeText: null, showModuleText: false,
       sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] }, brush: {},
       tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
-      whereDraft: "", classifyData: null, tasks: {}, connection, changing: false, pendingChanges: null, overlayKeys: [],
+      whereDraft: "", classifyData: null, expandedHist: null, histTimer: null, tasks: {}, connection, changing: false, pendingChanges: null, overlayKeys: [],
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
       refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
       source: null, timer: null, treeTimer: null, connected: false, queue: {}, inFlight: {}, plot: defaultPlot(), busy: 0,
@@ -1552,6 +1558,32 @@ const app = Vue.createApp({
       } catch (error) {
         return `not JSON yet: ${error.message}`;
       }
+    },
+    histView() {
+      const name = this.route.params.chart;
+      if (!name || !this.record || this.isSweep || this.tab !== "predictions" || !this.currentPair) return null;
+      if (this.task === "classification") {
+        const found = this.classifyData;
+        return name === "scores" && found && found.score ? { kind: "scores", pred: found.pred, score: found.score } : null;
+      }
+      if (name === "histogram") return { kind: "residual", pred: this.currentPair.pred };
+      if (name === "distribution") return { kind: "distribution", pred: this.currentPair.pred };
+      return null;
+    },
+    histKey() {
+      return JSON.stringify([this.histView, this.plot.bins, this.plot.xmin, this.plot.xmax, this.plot.logx, this.whereFilter,
+                             this.predictionFile, this.path]);
+    },
+    expandedNote() {
+      const found = this.expandedHist;
+      if (!this.histView || !found) return "";
+      if (found.error) return found.error;
+      if (!found.outside) return "";
+      const part = (pair, what) => (pair && (pair[0] || pair[1]) ? `${what}${count(pair[0])} below the range and ${count(pair[1])} above, not drawn` : "");
+      if (found.kind === "distribution") {
+        return [part(found.outside.data, `${found.target}: `), part(found.outside.pred, `${found.pred}: `)].filter(Boolean).join("; ");
+      }
+      return part(found.outside, "");
     },
     expandedHasPoints() {
       const view = this.expanded;
@@ -2027,17 +2059,31 @@ const app = Vue.createApp({
                    xlabel: "background efficiency", ylabel: "signal efficiency", marks: [] };
         }
         if (name === "scores" && this.scoreLines.length) {
-          return { name: `${found.score} by class of ${found.target}`, lines: this.scoreLines, xlabel: found.score,
-                   ylabel: "points", marks: [], bins: true };
+          const hist = this.histOf("scores"), scale = this.histScale(hist);
+          const middles = hist ? centersOf(hist.edges, this.plot.logx) : [];
+          const lines = hist ? hist.classes.map((entry, index) => ({ name: String(entry.label), color: PALETTE[index % PALETTE.length],
+                                                                     points: entry.counts.map((value, position) => [middles[position], value / scale]) }))
+                             : this.scoreLines;
+          return { name: `${found.score} by class of ${found.target}`, lines, xlabel: found.score,
+                   ylabel: this.histLabel(hist), marks: [], bins: true };
         }
         return null;
       }
       if (this.tab === "predictions" && this.pairInfo) {
         const pair = this.pairInfo;
         if (name === "scatter") return { name: `${pair.pred} against ${pair.target}`, lines: this.scatterLines, kind: "scatter", xlabel: pair.target, ylabel: pair.pred, marks: [] };
-        if (name === "histogram") return { name: "residual (prediction minus target)", lines: this.histogramLines, kind: "bar", xlabel: "residual", ylabel: "points", marks: [], bins: true };
+        if (name === "histogram") {
+          const hist = this.histOf("residual"), scale = this.histScale(hist);
+          const middles = hist ? centersOf(hist.edges, this.plot.logx) : [];
+          const lines = hist ? [{ name: "residual", color: PALETTE[1], widths: hist.edges.slice(1).map((edge, index) => edge - hist.edges[index]),
+                                  points: hist.counts.map((value, index) => [middles[index], value / scale]) }] : this.histogramLines;
+          return { name: "residual (prediction minus target)", lines, kind: "bar", xlabel: "residual", ylabel: this.histLabel(hist), marks: [], bins: true };
+        }
         if (name === "distribution" && this.distribution) {
-          return { name: `${pair.pred} and ${pair.target} over the same bins`, spectrum: this.distribution, xlabel: pair.target, bins: true, logy: this.logy };
+          const hist = this.histOf("distribution");
+          const spectrum = hist ? { edges: hist.edges, data: hist.data, pred: hist.pred, labels: this.distribution.labels, scale: this.histScale(hist) }
+                                : this.distribution;
+          return { name: `${pair.pred} and ${pair.target} over the same bins`, spectrum, xlabel: pair.target, ylabel: this.histLabel(hist), bins: true, logy: this.logy };
         }
         return null;
       }
@@ -2204,10 +2250,14 @@ const app = Vue.createApp({
       this.whereDraft = now;
       if (this.tab === "predictions" && this.predictionsData) this.loadPredictions();
     } },
-    "plot.bins"() { if (this.tab === "predictions" && this.predictionsData) this.loadPredictions(); },
+    histKey() {
+      clearTimeout(this.histTimer);
+      if (!this.histView) { this.expandedHist = null; return; }
+      this.histTimer = setTimeout(() => this.loadExpandedHist(), 250);
+    },
     expanded(now, before) {
       if (!now || before) return;
-      this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), logx: !!now.xlog, bins: this.plot.bins, height: this.modalHeight,
+      this.plot = { ...defaultPlot(), logy: !!(now.logy || this.logy), logx: !!now.xlog, height: this.modalHeight,
                     markers: markerSize(scatterPoints(now.lines || [], now.kind), null) };
     },
     comparePaths(now, before) {
@@ -2487,7 +2537,7 @@ const app = Vue.createApp({
     async loadPredictions() {
       if (!this.record || !this.predictionFile) { this.predictionsData = null; return; }
       const path = this.path, name = this.predictionFile;
-      const where = this.whereFilter, sample = this.sampleAll ? "all" : 2000, bins = this.plot.bins;
+      const where = this.whereFilter, sample = this.sampleAll ? "all" : 2000, bins = defaultPlot().bins;
       const asked = JSON.stringify([path, name, sample, bins, where]);
       if (this.inFlight.predictions === asked) return;
       this.inFlight.predictions = asked;
@@ -2504,10 +2554,29 @@ const app = Vue.createApp({
       const path = this.path, name = this.predictionFile, pred = this.currentPair.pred, where = this.whereFilter;
       if (this.classifyData && this.classifyData.pred !== pred) this.classifyData = null;
       const kept = choiceOf(this.currentPair.target);
-      const params = { path, name, pred, score: this.route.params.score || kept.score || null, positive: this.route.params.positive || kept.positive || null, bins: this.plot.bins, where };
+      const params = { path, name, pred, score: this.route.params.score || kept.score || null, positive: this.route.params.positive || kept.positive || null, bins: defaultPlot().bins, where };
       const found = await this.heavy(api("/api/classify", params));
       if (path !== this.path || name !== this.predictionFile || this.pairKey !== pred || where !== this.whereFilter) return;
       this.classifyData = found || { pred, error: `the classification view of ${pred} could not be computed` };
+    },
+    histOf(kind) {
+      const found = this.expandedHist, view = this.histView;
+      return found && view && found.kind === kind && found.pred === view.pred && Array.isArray(found.edges) ? found : null;
+    },
+    histScale(found) { return this.plot.normalize && found && found.total ? found.total : 1; },
+    histLabel(found) { return this.plot.normalize && found ? "fraction of rows" : "points"; },
+    async loadExpandedHist() {
+      const view = this.histView;
+      if (!view) { this.expandedHist = null; return; }
+      const params = { path: this.path, name: this.predictionFile, pred: view.pred, kind: view.kind, score: view.score || null,
+                       bins: this.plot.bins, low: bound(this.plot.xmin), high: bound(this.plot.xmax), log: this.plot.logx ? 1 : null,
+                       where: this.whereFilter || null };
+      const asked = JSON.stringify(params);
+      this.inFlight.histogram = asked;
+      const found = await this.heavy(api("/api/histogram", params));
+      if (this.inFlight.histogram !== asked) return;
+      this.inFlight.histogram = null;
+      this.expandedHist = found;
     },
     pickClassify(key, value) {
       if (!this.currentPair) return;

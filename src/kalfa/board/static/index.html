@@ -692,7 +692,7 @@
       </div>
 
       <div class="panel" v-if="tab === 'predictions'">
-        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram, the distributions of the prediction and the truth over the same bins with their ratio below, and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. Every target is shown as a regression until you switch it to classification, which draws the ROC of a score column with its AUC and working points, the score by class and the confusion of the predicted classes. The filter runs over the columns of the file, the targets, the pred_ and raw_ wires, the flags and the data.spectators columns, with comparisons, and, or, not, arithmetic and lists (say pt > 500 and site in ['s1', 's2']); every number here is computed over the rows it keeps. Expand opens a chart large with its settings: scales, line width, points, the bins of the histogram.</p>
+        <p class="note">The predictions of the test set, or of another set when the run wrote one: a target per chip, the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram, the distributions of the prediction and the truth over the same bins with their ratio below, and the largest errors over every row, in the original units; the calibration flags are counted on the rows drawn. Every target is shown as a regression until you switch it to classification, which draws the ROC of a score column with its AUC and working points, the score by class and the confusion of the predicted classes. The filter runs over the columns of the file, the targets, the pred_ and raw_ wires, the flags and the data.spectators columns, with comparisons, and, or, not, arithmetic and lists (say pt > 500 and site in ['s1', 's2']); every number here is computed over the rows it keeps. Expand opens a chart large with its settings: scales, line width, points; on a histogram the x range and the bins are counted again over the rows inside the range (evenly on the log axis under log x, the rows outside counted above the chart) and y can show the fraction of rows. Closing it leaves the page as it was, 40 bins over the whole range.</p>
         <div class="toolbar" v-if="record.predictions.length">
           <a v-for="name in record.predictions" :key="name" class="small" :class="{active: predictionFile === name}" :href="link({set: name, pair: null})">{{ name }}</a>
           <template v-if="pairChoices.length > 1">
@@ -1189,15 +1189,18 @@
         <div class="modal-chart">
           <div class="toolbar">
             <span class="card-label">{{ expanded.name }}</span>
+            <span class="muted" v-if="expandedNote">{{ expandedNote }}</span>
             <button class="small" @click="closeChart">close</button>
           </div>
-          <spectrum v-if="expanded.spectrum" ref="modal" :spec="expanded.spectrum" :title="expanded.name" :xlabel="expanded.xlabel" :logy="plot.logy" :settings="plot" :modal="true" :height="plot.height || modalHeight"></spectrum>
+          <spectrum v-if="expanded.spectrum" ref="modal" :spec="expanded.spectrum" :title="expanded.name" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel" :logy="plot.logy" :settings="plot" :modal="true" :height="plot.height || modalHeight"></spectrum>
           <chart v-else ref="modal" :lines="expanded.lines" :kind="expanded.kind || 'line'" :xlabel="expanded.xlabel" :ylabel="expanded.ylabel || expanded.name" :logy="plot.logy" :marks="expanded.marks" :turns="!!expanded.turns" :xlog="!!expanded.xlog" :settings="plot" :height="plot.height || modalHeight"></chart>
         </div>
         <aside class="plot-panel">
           <div class="card-label">axes</div>
           <label class="toggle"><input type="checkbox" v-model="plot.logy"> log scale on y</label>
           <label class="toggle"><input type="checkbox" v-model="plot.logx"> log scale on x</label>
+          <label class="toggle" v-if="expanded.bins"><input type="checkbox" v-model="plot.normalize"> y as the fraction of rows</label>
+          <p class="muted" v-if="expanded.bins">the x range and the bins count over the rows inside it; log x spaces the bins evenly on the log axis</p>
           <div class="pair"><span>x</span><input type="number" step="any" placeholder="min" v-model="plot.xmin"><input type="number" step="any" placeholder="max" v-model="plot.xmax"></div>
           <div class="pair"><span>y</span><input type="number" step="any" placeholder="min" v-model="plot.ymin"><input type="number" step="any" placeholder="max" v-model="plot.ymax"></div>
           <div class="pair" v-if="expanded.spectrum"><span>ratio</span><input type="number" step="any" placeholder="min" v-model="plot.rmin"><input type="number" step="any" placeholder="max" v-model="plot.rmax"></div>

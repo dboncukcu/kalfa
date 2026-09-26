@@ -958,7 +958,10 @@ progress of everything running, so a background tab says how far the training is
 fired marked; one chart per step series with the turns labelled along the top. Every chart expands into a large
 view beside a settings panel (log scale on either axis, the axis ranges and titles, grid, legend, font, line
 width, points, height, the bins of a histogram, and a JSON box for any other Plotly layout key) whose download
-writes it as drawn, as png or svg; the axis says epochs when a turn is one.
+writes it as drawn, as png or svg; the axis says epochs when a turn is one. On a histogram of the predictions the
+x range is where the bins go: the server counts them again over the rows inside it, evenly on the log axis under
+log x, names the rows left outside, and y can show the fraction of rows; the page keeps its own 40 bins over the
+whole range, so closing the large view leaves it as it was.
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_model.png" width="920" alt="the architecture drawn as a schematic"></p>
 

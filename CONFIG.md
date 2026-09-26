@@ -1302,11 +1302,16 @@ Every chart zooms with a drag (a box) or the wheel and resets with a double clic
 chart expands into a large view beside a settings panel: log scale on either axis, the range of every axis (the
 ratio panel of the distribution too), the axis titles, grid, legend, font size, line width, points, the point
 size, the curve, the height, the bins of a histogram, and a JSON box merged into the Plotly layout for anything
-else; the download writes the chart as drawn, as png or svg, and reset restores the defaults. An axis of integers
+else; the download writes the chart as drawn, as png or svg, and reset restores the defaults. The large view of a
+predictions histogram (the distribution, the residual, the score by class) reads its own counts from
+`/api/histogram` with the bins, the x range and log x of the panel: the bins cover the range (geometric under log
+x, which needs a range above 0), the rows outside are counted and named, and y can be the fraction of rows (the
+counts over the rows kept, so the shape and the ratio stay); the cards of the page keep 40 bins over the whole
+range. An axis of integers
 (turns, steps, points) gets integer ticks.
 
 The endpoints: `/api/tree`, `/api/live`, `/api/watch`, `/api/table`, `/api/record`, `/api/predictions`,
-`/api/classify`, `/api/series`, `/api/prep`, `/api/files`, `/api/text`, `/api/events`, `/api/history`,
+`/api/classify`, `/api/histogram`, `/api/series`, `/api/prep`, `/api/files`, `/api/text`, `/api/events`, `/api/history`,
 `/api/steps`, `/api/tail`, `/api/sweep`, `/api/diff`, `/api/describe`, `/file` (sent in pieces, with an ETag), and
 the one POST, `/api/stop`, which writes `stop.json` into a record, or
 into a sweep root and its running points. The board writes nothing else; the header of a running record and of a

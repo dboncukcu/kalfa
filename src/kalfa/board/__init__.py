@@ -249,6 +249,44 @@ def class_histograms(values, texts, classes, bins=40):
                         for item in classes]}
 
 
+def classes_of(labels):
+    present = labels.dropna().unique().tolist()
+    try:
+        return sorted(present)
+    except TypeError:
+        return sorted(present, key=str)
+
+
+def number_or_none(value):
+    try:
+        found = float(value)
+    except (TypeError, ValueError):
+        return None
+    return found if math.isfinite(found) else None
+
+
+def bin_edges(values, bins, low=None, high=None, log=False):
+    kept = values[numpy.isfinite(values)]
+    if log:
+        kept = kept[kept > 0]
+    start = low if low is not None else (float(kept.min()) if len(kept) else None)
+    stop = high if high is not None else (float(kept.max()) if len(kept) else None)
+    if start is None or stop is None:
+        return None, "no finite value to bin" + (" above 0" if log else "")
+    if log and start <= 0:
+        return None, "log bins need a range above 0"
+    if stop <= start:
+        stop = start * 10 if log else start + 1
+    count = max(2, int(bins))
+    return (numpy.geomspace(start, stop, count + 1) if log else numpy.linspace(start, stop, count + 1)), None
+
+
+def binned(values, edges):
+    kept = values[numpy.isfinite(values)]
+    counts, _ = numpy.histogram(kept, bins=edges)
+    return counts.tolist(), [int((kept < edges[0]).sum()), int((kept > edges[-1]).sum())]
+
+
 def read_space(manifest, points):
     declared = (manifest or {}).get("space") or {}
     keys = list(declared) or sorted({key for point in points for key in point.get("values") or {}})
@@ -758,11 +796,7 @@ class Board:
             return None
         found = {"pred": pred, "target": truth, "rows": len(table), "where": where, "error": failed}
         labels = table[truth]
-        present = labels.dropna().unique().tolist()
-        try:
-            classes = sorted(present)
-        except TypeError:
-            classes = sorted(present, key=str)
+        classes = classes_of(labels)
         if len(classes) > 100:
             return clean({**found, "error": f"{truth} holds {len(classes)} distinct values; the classification view "
                                             f"takes at most 100 classes"})
@@ -797,6 +831,54 @@ class Board:
         found["roc"] = roc_of(values, signal)
         found["histogram"] = class_histograms(values, texts[keep], classes[:10], bins)
         return clean(found)
+
+    def histogram(self, relative, pred, kind="distribution", name="predictions.parquet", bins=40, low=None,
+                  high=None, log=False, where=None, score=None):
+        path = self.resolve(relative)
+        if path is None or not pred or not name.startswith("predictions") or not name.endswith(".parquet"):
+            return None
+        target = path / name
+        if not target.is_file():
+            return None
+        table, failed = filtered(self.frames.read(target), where)
+        targets = [column for column in table.columns if not column.startswith(("pred_", "raw_")) and column != "row"]
+        truth = true_column(pred, targets)
+        if pred not in table.columns or truth is None:
+            return None
+        found = {"kind": kind, "pred": pred, "target": truth, "rows": len(table), "error": failed}
+        low, high = number_or_none(low), number_or_none(high)
+        numbers = lambda column: pandas.to_numeric(table[column], errors="coerce").to_numpy(dtype="float64")
+        if kind in ("distribution", "residual"):
+            actual, guess = numbers(truth), numbers(pred)
+            mask = numpy.isfinite(actual) & numpy.isfinite(guess)
+            actual, guess = actual[mask], guess[mask]
+            values = guess - actual if kind == "residual" else numpy.concatenate([actual, guess])
+            edges, problem = bin_edges(values, bins, low, high, log)
+            if edges is None:
+                return clean({**found, "error": failed or problem})
+            if kind == "residual":
+                counts, outside = binned(values, edges)
+                return clean({**found, "edges": edges.tolist(), "counts": counts, "total": len(values),
+                              "outside": outside})
+            data, outside_data = binned(actual, edges)
+            predicted, outside_pred = binned(guess, edges)
+            return clean({**found, "edges": edges.tolist(), "data": data, "pred": predicted, "total": len(actual),
+                          "outside": {"data": outside_data, "pred": outside_pred}})
+        if kind != "scores":
+            return clean({**found, "error": f"{kind} is no histogram; distribution, residual or scores"})
+        if score not in table.columns:
+            return clean({**found, "error": f"{score} is no column of {name}"})
+        values = numbers(score)
+        keep = numpy.isfinite(values) & table[truth].notna().to_numpy()
+        values, texts = values[keep], table[truth].astype(str).to_numpy()[keep]
+        edges, problem = bin_edges(values, bins, low, high, log)
+        if edges is None:
+            return clean({**found, "error": failed or problem})
+        classes = classes_of(table[truth])[:10]
+        return clean({**found, "score": score, "edges": edges.tolist(), "total": len(values),
+                      "outside": binned(values, edges)[1],
+                      "classes": [{"label": item, "counts": binned(values[texts == str(item)], edges)[0]}
+                                  for item in classes]})
 
     def files(self, relative):
         path = self.resolve(relative)
@@ -1132,6 +1214,11 @@ def handler_for(board):
                 keys = query.get("keys")
                 self.send_json(board.series([item for item in query.get("paths", "").split(",") if item],
                                             None if keys is None else [item for item in keys.split(",") if item]))
+            elif url.path == "/api/histogram":
+                self.send_json(board.histogram(path, query.get("pred", ""), query.get("kind", "distribution"),
+                                               query.get("name", "predictions.parquet"), query.get("bins", 40),
+                                               query.get("low"), query.get("high"), query.get("log") == "1",
+                                               query.get("where"), query.get("score")))
             elif url.path == "/api/classify":
                 self.send_json(board.classify(path, query.get("pred", ""), query.get("name", "predictions.parquet"),
                                               query.get("score"), query.get("positive"), query.get("bins", 40),
