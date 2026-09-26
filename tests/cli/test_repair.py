@@ -113,3 +113,14 @@ def test_repair_mends_a_failed_point_and_the_loop_skips_the_rest(housing, capsys
         main(["repair", REFERENCE, "--id", "1"])
     assert failure.value.code == 2
     assert capsys.readouterr().err == "kalfa: error: --id needs a config with a sweep section\n"
+
+
+def test_an_interrupt_is_written_as_a_failure_so_the_run_can_be_repaired(tmp_path):
+    from kalfa.api import failure_noted
+    from kalfa.record import Record
+
+    with pytest.raises(KeyboardInterrupt):
+        with failure_noted(tmp_path):
+            raise KeyboardInterrupt
+    written = Record(tmp_path).read_json("failure.json")["failures"]
+    assert Record(tmp_path).state() == "failed" and [entry["type"] for entry in written] == ["KeyboardInterrupt"]

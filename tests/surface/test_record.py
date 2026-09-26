@@ -17,10 +17,12 @@ from kalfa.record import (
     Heartbeat,
     Record,
     read_resolved,
+    readable_state,
     record_dir,
     resolved_text,
     resume_chain,
     resume_source,
+    settled_objective,
     stamp,
     write_failure,
     write_flow,
@@ -293,3 +295,13 @@ def test_record_writes_go_through_the_atomic_helper(tmp_path):
     assert record.path("contract.yaml").read_text() == "wiring: {}\n"
     assert record.read_json("device.json") == {"type": "cpu"}
     assert sorted(path.name for path in (tmp_path / "one").iterdir()) == ["contract.yaml", "device.json"]
+
+
+def test_a_run_json_being_written_reads_as_unreadable_and_a_blank_objective_as_the_defaults(tmp_path):
+    record = Record(tmp_path)
+    record.path("run.json").write_text('{"status": ')
+    assert readable_state(tmp_path) == "unreadable"
+    assert settled_objective({"monitor": "val/rmse", "mode": None, "at": None}) == {
+        "mode": "min", "at": "best", "monitor": "val/rmse"}
+    assert settled_objective({"mode": "max", "at": "last"}) == {"mode": "max", "at": "last"}
+    assert settled_objective(None) == {"mode": "min", "at": "best"}

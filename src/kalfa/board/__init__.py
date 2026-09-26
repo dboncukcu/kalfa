@@ -1,5 +1,6 @@
 import ast
 import difflib
+import gzip
 import json
 import math
 import mimetypes
@@ -18,7 +19,7 @@ import pandas
 
 from kalfa import api
 from kalfa.errors import KalfaError
-from kalfa.record import Record, failure_text, read_resolved
+from kalfa.record import Record, failure_text, read_resolved, settled_objective
 from kalfa.std.common.files import read_json, read_lines
 from kalfa.std.common.history import History
 from kalfa.std.common.log import logger_for
@@ -90,7 +91,7 @@ def clean(value):
 def axis_of(declared, seen):
     text = declared if isinstance(declared, str) else ""
     numbers = [value for value in seen if is_number(value)]
-    choices = re.search(r"Choices\(values=(\[[^\]]*\])", text)
+    choices = re.search(r"Choices\(values=(\[.*\])\)", text)
     if choices:
         try:
             return {"kind": "choices", "values": list(ast.literal_eval(choices.group(1)))}
@@ -191,6 +192,19 @@ def checked_where(text, columns):
     return text
 
 
+def same_label(item, text):
+    if text is None:
+        return False
+    if isinstance(item, (bool, numpy.bool_)):
+        return str(item).lower() == str(text).lower()
+    if is_number(item):
+        try:
+            return float(text) == float(item)
+        except ValueError:
+            return False
+    return str(item) == str(text)
+
+
 def filtered(table, where):
     if not where:
         return table, None
@@ -284,6 +298,14 @@ def stamp(path):
     return [stat.st_size, stat.st_mtime_ns]
 
 
+def folders(path):
+    try:
+        with os.scandir(path) as entries:
+            return sorted(Path(entry.path) for entry in entries if entry.is_dir(follow_symlinks=False))
+    except OSError:
+        return []
+
+
 def stamp_dir(path):
     if not path.is_dir():
         return None
@@ -311,7 +333,7 @@ def resolved_at(path):
 def best_point(points, objective):
     scored = [point for point in points if point["objective"] is not None
               and (point.get("status") or {}).get("state") not in ("failed", "lost", "unreadable")]
-    pick = min if objective.get("mode", "min") == "min" else max
+    pick = min if settled_objective(objective)["mode"] == "min" else max
     return pick(scored, key=lambda point: point["objective"]["value"]) if scored else None
 
 
@@ -351,6 +373,11 @@ class Lines:
             while len(self.kept) > self.room:
                 self.kept.popitem(last=False)
             return list(kept["lines"])
+
+    def identity(self, path):
+        with self.lock:
+            kept = self.kept.get(path)
+            return kept["ino"] if kept else None
 
 
 class Counts:
@@ -705,16 +732,17 @@ class Board:
                           "worst": [{"row": row["row"], "target": row[truth], "pred": row[pred]}
                                     for _, row in rows[["row", truth, pred]].iterrows()]})
         flags = [column for column in table.columns if column.startswith("flag_")]
-        named = {column for pair in pairs for column in pair}
+        paired = list(dict.fromkeys(column for pair in pairs for column in pair))
         carried = [column for column in table.columns
-                   if column not in named and column not in flags and column != "row"
+                   if column not in paired and column not in flags and column != "row"
                    and not column.startswith(("pred_", "raw_"))]
-        keep = list(dict.fromkeys(["row", *named, *flags, *carried]))
+        keep = list(dict.fromkeys(["row", *paired, *flags]))
         whole = sample == "all" or len(table) <= int(sample)
         picked = table if whole else table.sample(int(sample), random_state=0).sort_values("row")
         return clean({"file": name, "rows": len(table), "total": total, "where": where, "error": failed,
                       "carried": carried, "columns": list(table.columns), "pairs": found, "named": named,
-                      "flags": flags, "sample": picked[keep].to_dict("records")})
+                      "flags": flags, "drawn": len(picked),
+                      "sample": {column: picked[column].tolist() for column in keep}})
 
     def classify(self, relative, pred, name="predictions.parquet", score=None, positive=None, bins=40, where=None):
         path = self.resolve(relative)
@@ -758,7 +786,7 @@ class Board:
                                           *[item for item in table.columns if item.startswith("pred_")]]
                    if table[column].dtype.kind in "fiu"]
         chosen = score if score in choices else None
-        picked = next((item for item in classes if positive is not None and str(item) == str(positive)), None)
+        picked = next((item for item in classes if same_label(item, positive)), None)
         found.update({"classes": classes, "counts": [int((texts == str(item)).sum()) for item in classes],
                       "scores": choices, "score": chosen, "positive": picked})
         if chosen is None or picked is None or len(classes) < 2:
@@ -814,10 +842,9 @@ class Board:
 
     def tree_stamp(self):
         stamps = [stamp(self.root)]
-        for child in self.root.iterdir():
-            if child.is_dir():
-                stamps.append(stamp(child))
-                stamps.extend(stamp(grandchild) for grandchild in child.iterdir() if grandchild.is_dir())
+        for child in folders(self.root):
+            stamps.append(stamp(child))
+            stamps.extend(stamp(grandchild) for grandchild in folders(child))
         return stamps
 
     def record_stamp(self, path, files=("manifest.json", "history.jsonl", "steps.jsonl", "events.jsonl", "run.json",
@@ -838,6 +865,7 @@ class Board:
             target = self.root / entry["path"]
             for name in ("history.jsonl", "steps.jsonl", "run.json"):
                 snapshot[f"{entry['path']}/{name}"] = stamp(target / name)
+            snapshot[f"{entry['path']}/state"] = entry["status"]["state"]
         return snapshot
 
     def watched(self, relative, common=None):
@@ -849,6 +877,10 @@ class Board:
         if path is None or not Record(path).is_record:
             return snapshot
         snapshot.update(self.record_stamp(path))
+        try:
+            snapshot["state"] = Record(path, self.cache.json).state()
+        except OSError as problem:
+            snapshot["state"] = f"unreadable: {problem}"
         manifest = self.cache.json(path / "manifest.json") or {}
         if manifest.get("kind") == "sweep":
             for child in sorted(item for item in path.iterdir() if item.is_dir()):
@@ -862,12 +894,16 @@ class Board:
             return None
         return {"stopped": [relative_to(self.root, Path(item)) for item in api.stop(path, by="board")]}
 
-    def lines(self, relative, name, offset=0):
+    def lines(self, relative, name, offset=0, file=None):
         path = self.resolve(relative)
         if path is None:
             return None
         lines = self.jsonl.read(path / name)
-        return {"lines": [marked(line) for line in lines[int(offset):]], "offset": len(lines)}
+        current = self.jsonl.identity(path / name)
+        reset = int(offset) > len(lines) or (file not in (None, "") and str(file) != str(current))
+        start = 0 if reset else int(offset)
+        return {"lines": [marked(line) for line in lines[start:]], "offset": len(lines), "file": current,
+                "reset": reset}
 
     def tail(self, relative, name, count=200):
         path = self.resolve(relative)
@@ -884,7 +920,8 @@ class Board:
         if not monitor or not len(history):
             return None
         try:
-            value, turn = history.best(monitor, objective.get("mode", "min"), objective.get("at", "best"))
+            objective = settled_objective(objective)
+            value, turn = history.best(monitor, objective["mode"], objective["at"])
         except ValueError:
             return None
         return {"value": value, "turn": turn}
@@ -973,8 +1010,14 @@ def handler_for(board):
 
         def send(self, status, body, kind="application/json"):
             payload = body if isinstance(body, bytes) else body.encode("utf-8")
+            packed = len(payload) > 1024 and "gzip" in (self.headers.get("Accept-Encoding") or "")
+            if packed:
+                payload = gzip.compress(payload, compresslevel=5)
             self.send_response(status)
             self.send_header("Content-Type", kind)
+            if packed:
+                self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -1001,7 +1044,8 @@ def handler_for(board):
                 while True:
                     time.sleep(board.watcher.every)
                     snapshot = board.watched(relative, board.watcher.current())
-                    changed = [name for name in snapshot if snapshot.get(name) != last.get(name)]
+                    changed = sorted(name for name in snapshot.keys() | last.keys()
+                                     if snapshot.get(name) != last.get(name))
                     if changed:
                         self.wfile.write(f"data: {json.dumps({'changed': changed})}\n\n".encode("utf-8"))
                         self.wfile.flush()
@@ -1103,9 +1147,9 @@ def handler_for(board):
             elif url.path == "/api/record":
                 self.send_json(board.record(path))
             elif url.path == "/api/history":
-                self.send_json(board.lines(path, "history.jsonl", query.get("offset", 0)))
+                self.send_json(board.lines(path, "history.jsonl", query.get("offset", 0), query.get("file")))
             elif url.path == "/api/steps":
-                self.send_json(board.lines(path, "steps.jsonl", query.get("offset", 0)))
+                self.send_json(board.lines(path, "steps.jsonl", query.get("offset", 0), query.get("file")))
             elif url.path == "/api/tail":
                 self.send_json(board.tail(path, query.get("name", "stdout.txt"), query.get("lines", 200)))
             elif url.path == "/api/sweep":
@@ -1129,6 +1173,9 @@ def handler_for(board):
                 self.send_json(board.stop(query.get("path", "")))
             except KalfaError as error:
                 self.send(409, json.dumps({"error": str(error)}))
+            except Exception as problem:
+                logger.warning(f"POST {self.path}: {type(problem).__name__}: {problem}")
+                self.send(500, json.dumps({"error": f"{type(problem).__name__}: {problem}"}))
 
     return Handler
 

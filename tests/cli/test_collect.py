@@ -309,3 +309,24 @@ def test_collect_rates_every_param_by_its_rank_correlation_or_the_share_its_leve
     assert ("\n## Parameters\n\n| param | measure | value | direction | points |\n|---|---|---|---|---|\n"
             "| lr | Spearman ρ | -1 | better as it grows | 6 |\n| width | η² | 0.142857 | best mean at 32 | 6 |\n\n"
             "ρ is the Spearman rank correlation of a numeric param with the objective" in report)
+
+
+def test_collect_reads_a_blank_mode_as_min_and_takes_lists_as_choices(tmp_path, capsys):
+    root = sweep_root(tmp_path)
+    grid = Record(root)
+    grid.write_json("manifest.json", {**grid.read_json("manifest.json"),
+                                      "objective": {"monitor": "val/rmse", "mode": None, "at": None},
+                                      "space": {"lr": "Choices(values=[[0.1, 0.2], [0.2]])"}})
+    for index, lr in enumerate(([0.1, 0.2], [0.2])):
+        point = Record(root / f"{index:04d}")
+        entry = point.read_json("sweep.json")
+        point.write_json("sweep.json", {**entry, "point": {"lr": lr},
+                                        "objective": {**entry["objective"], "mode": None, "at": None}})
+    reports = tmp_path / "reports"
+    assert main(["collect", str(root), "--out", str(reports), "--no-figures"]) == 0
+    capsys.readouterr()
+    summary = json.loads((reports / "sweep.json").read_text())
+    assert summary["objective"] == {"monitor": "val/rmse", "mode": "min", "at": "best"}
+    assert summary["best"]["id"] == 1 and summary["best"]["point"] == {"lr": [0.2]}
+    assert ("| lr | points | best | median |\n|---|---|---|---|\n| [0.1, 0.2] | 1 | 0.5 | 0.5 |\n"
+            "| [0.2] | 1 | 0.4 | 0.4 |\n" in (reports / "sweep.md").read_text())

@@ -1266,7 +1266,9 @@ every two seconds for every open tab, stops half a minute after the last tab clo
 changed ones over a server sent event stream (`/api/watch`); the page reloads only those (the growing files by
 offset), or polls every 3, 5 or 10 seconds when the footer says so. A small file is parsed again only when its
 size, time or inode changed, a growing one is read from where it was left, a log from its end, and the last four
-prediction files stay in memory while unchanged. A record that cannot be read is listed as unreadable instead of
+prediction files stay in memory while unchanged; a JSON answer goes gzip compressed when the browser accepts it, and
+the rows drawn on the predictions tab come as one list per column, with the targets, the predictions and the flags
+only. A record that cannot be read is listed as unreadable instead of
 taking the page down, and a page that loses the server, or the single sign on in front of it, says so in a band. The page
 shows a spinner until the tree, the live list and the record it opens on have answered. The address bar carries
 the record, the tab, the open chart and the view options, so a link shares one view and a reload keeps it.

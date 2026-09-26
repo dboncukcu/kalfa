@@ -43,7 +43,7 @@ from .record import (
 from .std.calibrate.base import read_calibrations
 from .std.checkpoint.base import load, load_into
 from .std.common.device import Device
-from .std.common.files import atomic, read_lines, write_text
+from .std.common.files import atomic, read_lines, write_json, write_text
 from .std.common.generation import write_samples
 from .std.common.history import History
 from .std.common.log import Monitor, clock, logger_for, since
@@ -325,7 +325,7 @@ def device_of(config, contract=None):
 
 
 def write_device_note(record, device):
-    (Path(record) / "device.json").write_text(json.dumps(device.note(), indent=2))
+    write_json(Path(record) / "device.json", device.note())
 
 
 def git_note(root):
@@ -341,7 +341,7 @@ def git_note(root):
 def write_git_note(record, paths):
     files = [path for path in paths if not isinstance(path, dict)]
     root = Path(files[0]).resolve().parent if files else Path.cwd()
-    (Path(record) / "git.json").write_text(json.dumps(git_note(root), indent=2))
+    write_json(Path(record) / "git.json", git_note(root))
 
 
 def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None,
@@ -392,7 +392,7 @@ def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_f
 def failure_noted(record):
     try:
         yield
-    except Exception as exception:
+    except BaseException as exception:
         try:
             write_failure(record, exception)
         except OSError as problem:

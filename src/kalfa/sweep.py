@@ -10,8 +10,9 @@ from .api import gate, prepare_data, repair, run
 from .config import load_surface, parse_sets, resolve_alias
 from .errors import KalfaError
 from .kinds import kalfa_kind
-from .record import Record
+from .record import Record, readable_state, settled_objective
 from .schema import Schema
+from .std.common.files import write_json
 from .std.common.history import History
 from .std.strategy.base import Strategy, parse_space
 
@@ -60,7 +61,7 @@ def plan(paths, sets=None, record=None) -> Plan:
         raise SweepError("the config has no sweep section")
     strategy, uri = strategy_of(section, surface.aliases)
     space = parse_space(section.get("space"))
-    objective = dict(section.get("objective") or {})
+    objective = settled_objective(section.get("objective"))
     root = Path(record if record is not None else section.get("record") or "runs/sweep")
     return Plan(strategy, uri, space, objective, root, int(strategy.total(space)), surface.raw, list(paths))
 
@@ -201,7 +202,7 @@ def write_point(record, plan, index, point, value, turn):
     entry = {"id": int(index), "point": point, "strategy": plan.uri, "total": plan.total,
              "objective": {**{key: plan.objective.get(key) for key in Schema.objective}, "value": value, "turn": turn},
              "record": str(record)}
-    (Path(record) / "sweep.json").write_text(json.dumps(entry, indent=2))
+    write_json(Path(record) / "sweep.json", entry)
     return entry
 
 
@@ -258,7 +259,7 @@ def repair_points(paths, sets, params, plan, log=print, options=()):
     for index in range(plan.total):
         record = point_dir(plan.root, index)
         if record.exists():
-            states[index] = Record(record).state()
+            states[index] = readable_state(record)
     failed = [index for index, state in states.items() if state == "failed"]
     counts = {state: list(states.values()).count(state) for state in sorted(set(states.values()))}
     skipped = ", ".join(f"{count} {state}" for state, count in counts.items() if state != "failed")

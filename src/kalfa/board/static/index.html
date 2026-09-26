@@ -702,8 +702,8 @@
           <span class="muted">·</span>
           <a class="small" :class="{active: !sampleAll}" :href="link({sample: null})">a sample of 2,000</a>
           <a class="small" :class="{active: sampleAll}" :href="link({sample: 'all'})">all {{ predictionsData ? count(predictionsData.rows) + ' ' : '' }}rows</a>
-          <span class="muted" v-if="predictionsData && !predictionsData.where">{{ count(predictionsData.rows) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
-          <span class="muted" v-else-if="predictionsData">{{ count(predictionsData.rows) }} of {{ count(predictionsData.total) }} rows · {{ count(predictionsData.sample.length) }} drawn</span>
+          <span class="muted" v-if="predictionsData && !predictionsData.where">{{ count(predictionsData.rows) }} rows · {{ count(predictionsData.drawn) }} drawn</span>
+          <span class="muted" v-else-if="predictionsData">{{ count(predictionsData.rows) }} of {{ count(predictionsData.total) }} rows · {{ count(predictionsData.drawn) }} drawn</span>
           <span class="spinner" v-if="busy"></span>
         </div>
         <div class="toolbar" v-if="record.predictions.length">
@@ -753,7 +753,7 @@
               <table class="table">
                 <thead><tr><th class="num">signal efficiency</th><th class="num">background efficiency</th><th class="num">rejection</th><th class="num">cut on {{ classifyData.score }}</th></tr></thead>
                 <tbody>
-                  <tr v-for="item in classifyData.roc.working" :key="item.signal"><td class="num mono">{{ fmt(item.signal) }}</td><td class="num mono">{{ fmt(item.background) }}</td><td class="num mono">{{ fmt(item.rejection) }}</td><td class="num mono">{{ fmt(item.cut) }}</td></tr>
+                  <tr v-for="(item, index) in classifyData.roc.working" :key="index"><td class="num mono">{{ fmt(item.signal) }}</td><td class="num mono">{{ fmt(item.background) }}</td><td class="num mono">{{ fmt(item.rejection) }}</td><td class="num mono">{{ fmt(item.cut) }}</td></tr>
                 </tbody>
               </table>
               </div>
@@ -777,7 +777,7 @@
             <span class="chip">rmse = {{ fmt(pairInfo.rmse) }}</span>
             <span class="chip">mae = {{ fmt(pairInfo.mae) }}</span>
             <span class="chip">{{ count(pairInfo.points) }} points</span>
-            <span class="chip" v-for="flag in predictionsData.flags" :key="flag">{{ flag }}: {{ count(predictionsData.sample.filter(row => row[flag]).length) }} of {{ count(predictionsData.sample.length) }} drawn</span>
+            <span class="chip" v-for="flag in predictionsData.flags" :key="flag">{{ flag }}: {{ count((predictionsData.sample[flag] || []).filter(Boolean).length) }} of {{ count(predictionsData.drawn) }} drawn</span>
           </div>
           <div class="grid charts">
             <div class="card"><chart :lines="scatterLines" :title="pairInfo.pred + ' against ' + pairInfo.target" :xlabel="pairInfo.target" :ylabel="pairInfo.pred" kind="scatter" :height="360" :expand="link({chart: 'scatter'})"></chart></div>

@@ -1,3 +1,4 @@
+import gzip
 import io
 import json
 import threading
@@ -138,16 +139,20 @@ def test_board_predictions_pair_every_target_with_its_prediction(board, record_d
     assert found["file"] == "predictions.parquet" and found["rows"] == found["total"] == len(table) == 278
     assert found["where"] is None and found["error"] is None and found["columns"] == list(table.columns)
     assert [(pair["pred"], pair["target"]) for pair in found["pairs"]] == PAIRS
+    assert [(item["pred"], item["target"]) for item in found["named"]][:len(PAIRS)] == PAIRS
+    status, _, body = call(board, "/api/predictions?path=ref_fixed&sample=5")
+    assert status == 200 and json.loads(body)["named"] == found["named"]
     pair = found["pairs"][0]
     assert pair["points"] == 278 and pair["rmse"] > 0 and pair["mae"] > 0 and pair["r2"] is not None
     assert len(pair["histogram"]["counts"]) == 40 and len(pair["histogram"]["edges"]) == 41
     assert len(pair["distribution"]["edges"]) == 41 and len(pair["worst"]) == 15
     assert found["flags"] == ["flag_tail_logit"] and found["carried"] == ["sample_id", "site"]
-    assert len(found["sample"]) == 278
-    assert set(found["sample"][0]) == {"row", *[column for pair in PAIRS for column in pair], "flag_tail_logit",
-                                       "sample_id", "site"}
+    assert found["drawn"] == 278 and found["sample"]["row"] == table["row"].tolist()
+    assert list(found["sample"]) == ["row", *[column for pair in PAIRS for column in pair], "flag_tail_logit"]
+    assert found["sample"]["pred_y_hat_y_lin"] == table["pred_y_hat_y_lin"].tolist()
     kept = board.predictions("ref_fixed", where="site == 's1'", sample=10)
-    assert kept["rows"] == int((table["site"] == "s1").sum()) and kept["total"] == 278 and len(kept["sample"]) == 10
+    assert kept["rows"] == int((table["site"] == "s1").sum()) and kept["total"] == 278
+    assert kept["drawn"] == 10 and all(len(values) == 10 for values in kept["sample"].values())
     assert kept["pairs"][0]["points"] == kept["rows"] and kept["where"] == "site == 's1'"
     broken = board.predictions("ref_fixed", where="ghost > 1")
     assert broken["rows"] == 0 and broken["pairs"] == [] and "ghost" in broken["error"]
@@ -271,7 +276,11 @@ def test_handler_answers_the_json_endpoints_without_a_server(board, record_dir):
                      "describe?path=ref_fixed"):
         status, headers, body = call(board, f"/api/{endpoint}")
         assert status == 200 and headers["Content-Type"] == "application/json" and isinstance(json.loads(body), dict)
-    assert len(json.loads(call(board, "/api/predictions?path=ref_fixed&sample=5")[2])["sample"]) == 5
+    assert json.loads(call(board, "/api/predictions?path=ref_fixed&sample=5")[2])["drawn"] == 5
+    plain = call(board, "/api/predictions?path=ref_fixed")
+    packed = call(board, "/api/predictions?path=ref_fixed", headers={"Accept-Encoding": "gzip, deflate"})
+    assert "Content-Encoding" not in plain[1] and packed[1]["Content-Encoding"] == "gzip"
+    assert gzip.decompress(packed[2]) == plain[2] and len(packed[2]) < len(plain[2])
     history = json.loads(call(board, "/api/history?path=ref_fixed&offset=2")[2])
     assert history["offset"] == 3 and [line["turn"] for line in history["lines"]] == [3]
     tail = json.loads(call(board, "/api/tail?path=ref_fixed&name=stderr.txt&lines=1")[2])
@@ -530,3 +539,55 @@ def test_the_prediction_frames_are_read_once_until_the_file_changes(tmp_path, mo
     assert list(frames.kept) == [tmp_path / "b.parquet", tmp_path / "c.parquet"]
     tight = kalfa.board.Frames(budget=1)
     assert len(tight.read(first)) == 3 and not tight.kept
+
+
+def test_classify_matches_the_signal_class_the_browser_sends_back(tmp_path):
+    folder = tmp_path / "runs" / "labels"
+    folder.mkdir(parents=True)
+    pandas.DataFrame({"row": range(6), "is_hot": [0.0, 1.0, 0.0, 1.0, 1.0, 0.0],
+                      "pred_head_is_hot": [0.0, 1.0, 1.0, 1.0, 1.0, 0.0],
+                      "raw_head": [0.1, 0.9, 0.6, 0.8, 0.7, 0.2],
+                      "good": [True, False, True, False, True, False],
+                      "pred_tail_good": [True, False, False, False, True, False],
+                      "raw_tail": [0.9, 0.1, 0.4, 0.2, 0.8, 0.3]}).to_parquet(folder / "predictions.parquet")
+    board = Board(tmp_path / "runs")
+    hot = board.classify("labels", "pred_head_is_hot", score="raw_head", positive="1")
+    assert hot["classes"] == [0.0, 1.0] and hot["positive"] == 1.0 and hot["roc"]["signal"] == 3
+    assert board.classify("labels", "pred_head_is_hot", score="raw_head", positive="1.0")["positive"] == 1.0
+    assert board.classify("labels", "pred_head_is_hot", score="raw_head", positive="2")["positive"] is None
+    good = board.classify("labels", "pred_tail_good", score="raw_tail", positive="true")
+    assert good["positive"] is True and good["roc"]["auc"] == 1.0
+
+
+def test_the_watch_names_a_state_change_and_survives_an_unreadable_folder(tmp_path, monkeypatch):
+    board = Board(fake_records(tmp_path))
+    assert board.common_stamps()["runs/one/state"] == "running" and board.watched("runs/one")["state"] == "running"
+    assert kalfa.board.best_point([{"objective": {"value": 2.0}}, {"objective": {"value": 1.0}}],
+                                  {"mode": None})["objective"]["value"] == 1.0
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    locked.chmod(0)
+    try:
+        assert board.tree_stamp()
+    finally:
+        locked.chmod(0o755)
+    monkeypatch.setattr(board, "stop", lambda relative: (_ for _ in ()).throw(RuntimeError("disk gone")))
+    status, _, body = call(board, "/api/stop?path=runs/one", method="POST")
+    assert status == 500 and json.loads(body) == {"error": "RuntimeError: disk gone"}
+
+
+def test_history_lines_start_over_when_a_repair_cuts_the_file(tmp_path):
+    board = Board(fake_records(tmp_path))
+    first = board.lines("runs/one", "history.jsonl")
+    assert first["offset"] == 2 and not first["reset"] and first["file"] is not None
+    history = tmp_path / "runs" / "one" / "history.jsonl"
+    kept = history.read_text().splitlines()[:1]
+    replaced = tmp_path / "cut.jsonl"
+    replaced.write_text(kept[0] + "\n")
+    replaced.replace(history)
+    again = board.lines("runs/one", "history.jsonl", offset=2, file=first["file"])
+    assert again["reset"] and again["offset"] == 1 and [line["turn"] for line in again["lines"]] == [1]
+    beyond = board.lines("runs/one", "history.jsonl", offset=5)
+    assert beyond["reset"] and len(beyond["lines"]) == 1
+    same = board.lines("runs/one", "history.jsonl", offset=1, file=again["file"])
+    assert not same["reset"] and same["lines"] == []

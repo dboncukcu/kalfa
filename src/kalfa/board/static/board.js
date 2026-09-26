@@ -203,6 +203,10 @@ function saveCsv(name, headers, rows) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function scoredPoint(point) {
+  return !!point.objective && typeof point.objective.value === "number";
+}
+
 function baseName(path) {
   return String(path || "").split("/").filter(Boolean).pop() || "kalfa";
 }
@@ -487,7 +491,9 @@ function setIcon(svg) {
 function parseHash(hash) {
   const text = (hash || "").replace(/^#/, "");
   const question = text.indexOf("?");
-  const path = decodeURIComponent((question < 0 ? text : text.slice(0, question)).replace(/^\/+/, "").replace(/\/+$/, ""));
+  const raw = (question < 0 ? text : text.slice(0, question)).replace(/^\/+/, "").replace(/\/+$/, "");
+  let path = raw;
+  try { path = decodeURIComponent(raw); } catch (error) { console.warn("the address is not URI encoded", error); }
   const params = {};
   if (question >= 0) {
     for (const [key, value] of new URLSearchParams(text.slice(question + 1))) params[key] = value;
@@ -1305,7 +1311,7 @@ const app = Vue.createApp({
       whereDraft: "", classifyData: null, tasks: {}, connection, changing: false, pendingChanges: null, overlayKeys: [],
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
       refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
-      source: null, timer: null, treeTimer: null, connected: false, queue: {}, plot: defaultPlot(), busy: 0,
+      source: null, timer: null, treeTimer: null, connected: false, queue: {}, inFlight: {}, plot: defaultPlot(), busy: 0,
       booted: false, entering: null,
       sidebar: (() => { try { return localStorage.getItem("kalfa-board-sidebar") !== "closed"; } catch (error) { return true; } })(),
     };
@@ -1358,7 +1364,9 @@ const app = Vue.createApp({
     scatterLines() {
       if (!this.pairInfo || !this.predictionsData) return [];
       const pair = this.pairInfo;
-      const points = this.predictionsData.sample.map(row => [row[pair.target], row[pair.pred]]).filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      const sample = this.predictionsData.sample || {};
+      const truth = sample[pair.target] || [], guess = sample[pair.pred] || [];
+      const points = truth.map((value, index) => [value, guess[index]]).filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
       const [low, high] = extent(points.flatMap(point => point));
       const diagonal = Number.isFinite(low) && Number.isFinite(high) && high > low ? [{ name: "y = x", color: "#9aa0a8", kind: "line", dashed: true, points: [[low, low], [high, high]] }] : [];
       return [{ name: `${pair.pred} against ${pair.target}`, color: PALETTE[0], points }, ...diagonal];
@@ -1452,7 +1460,8 @@ const app = Vue.createApp({
         Object.keys(row.last || {}).forEach(key => metrics.add(key));
       }
       const allParams = [...params], allMetrics = [...metrics];
-      const chosen = this.columns === undefined ? columnsOf(this.tree.root) : this.columns;
+      const kept = this.columns === undefined ? columnsOf(this.tree.root) : this.columns;
+      const chosen = kept && Array.isArray(kept.params) && Array.isArray(kept.metrics) ? kept : null;
       return { allParams, allMetrics,
                params: chosen ? allParams.filter(key => chosen.params.includes(key)) : allParams,
                metrics: chosen ? allMetrics.filter(key => chosen.metrics.includes(key)) : allMetrics.slice(0, 8) };
@@ -1538,7 +1547,7 @@ const app = Vue.createApp({
     objectiveName() { return (this.sweep && this.sweep.objective && this.sweep.objective.monitor) || "objective"; },
     objectiveMode() { return (this.sweep && this.sweep.objective && this.sweep.objective.mode) || "min"; },
     scoreExtent() {
-      const values = this.sweep ? this.sweep.points.filter(point => point.objective).map(point => point.objective.value) : [];
+      const values = this.sweep ? this.sweep.points.filter(scoredPoint).map(point => point.objective.value) : [];
       return values.length ? extent(values) : [0, 1];
     },
     scoreAxis() {
@@ -1551,11 +1560,11 @@ const app = Vue.createApp({
     sweepRows() {
       if (!this.sweep) return [];
       const sign = this.objectiveMode === "min" ? 1 : -1;
-      const ranked = this.sweep.points.filter(point => point.objective)
+      const ranked = this.sweep.points.filter(scoredPoint)
         .sort((first, second) => sign * (first.objective.value - second.objective.value));
       const order = new Map(ranked.map((point, index) => [point.path, index]));
       return this.sweep.points.map(point => {
-        const score = point.objective ? point.objective.value : null;
+        const score = scoredPoint(point) ? point.objective.value : null;
         const state = this.stateOf(point);
         const at = order.get(point.path);
         return { path: point.path, id: point.id, label: point.path.split("/").pop(), state, turns: point.turns,
@@ -2193,7 +2202,7 @@ const app = Vue.createApp({
     overlayKey() { this.loadOverlay(); },
     tab: { immediate: true, handler() { this.enterTab(); } },
     item() { this.enterItem(); },
-    overlayPaths() { this.loadOverlay(); },
+    overlayPaths(now, before) { if (JSON.stringify(now) !== JSON.stringify(before)) this.loadOverlay(); },
     logName() { if (this.tab === "logs") this.loadLogs(); },
   },
   methods: {
@@ -2368,7 +2377,7 @@ const app = Vue.createApp({
       this.overlay = {}; this.diff = null; this.describeText = null; this.showModuleText = false;
       this.logs = { name: "", lines: [], total: 0 }; this.logFollow = true;
       this.predictionsData = null; this.classifyData = null; this.prepData = null; this.filesData = null; this.fileView = null;
-      this.eventsData = null;
+      this.eventsData = null; this.compareData = null;
       this.stopPlaying();
       if (this.refresh === "realtime") this.connectWatch();
       if (this.page === "table") { await this.loadTable(); return; }
@@ -2389,8 +2398,8 @@ const app = Vue.createApp({
     loadMore(name) {
       const chained = (this.queue[name] || Promise.resolve()).then(async () => {
         const path = this.path;
-        const found = await api(`/api/${name}`, { path, offset: this[name].offset });
-        if (found && path === this.path) this[name] = { lines: this[name].lines.concat(found.lines), offset: found.offset };
+        const found = await api(`/api/${name}`, { path, offset: this[name].offset, file: this[name].file ?? null });
+        if (found && path === this.path) this[name] = { lines: found.reset ? found.lines : this[name].lines.concat(found.lines), offset: found.offset, file: found.file };
       });
       this.queue[name] = chained.catch(error => console.warn(`${name} did not load`, error));
       return chained;
@@ -2434,6 +2443,12 @@ const app = Vue.createApp({
     async loadCompare() {
       const paths = this.comparePaths;
       if (paths.length < 2) { this.compareData = null; return; }
+      const asked = JSON.stringify(paths);
+      if (this.inFlight.compare === asked) return;
+      this.inFlight.compare = asked;
+      try { await this.fetchCompare(paths); } finally { if (this.inFlight.compare === asked) this.inFlight.compare = null; }
+    },
+    async fetchCompare(paths) {
       const two = paths.length === 2;
       const [series, diff] = await this.heavy(Promise.all([
         api("/api/series", { paths: paths.join(",") }),
@@ -2458,9 +2473,16 @@ const app = Vue.createApp({
     async loadPredictions() {
       if (!this.record || !this.predictionFile) { this.predictionsData = null; return; }
       const path = this.path, name = this.predictionFile;
-      const where = this.whereFilter;
-      const found = await this.heavy(api("/api/predictions", { path, name, sample: this.sampleAll ? "all" : 2000, bins: this.plot.bins, where }));
-      if (path === this.path && name === this.predictionFile && where === this.whereFilter) this.predictionsData = found;
+      const where = this.whereFilter, sample = this.sampleAll ? "all" : 2000, bins = this.plot.bins;
+      const asked = JSON.stringify([path, name, sample, bins, where]);
+      if (this.inFlight.predictions === asked) return;
+      this.inFlight.predictions = asked;
+      try {
+        const found = await this.heavy(api("/api/predictions", { path, name, sample, bins, where }));
+        if (path === this.path && name === this.predictionFile && where === this.whereFilter) this.predictionsData = found;
+      } finally {
+        if (this.inFlight.predictions === asked) this.inFlight.predictions = null;
+      }
       await this.loadClassify();
     },
     async loadClassify() {
@@ -2699,8 +2721,8 @@ const app = Vue.createApp({
     async applyChanges(changed) {
       this.refreshed = new Date().toLocaleTimeString();
       const own = name => changed.some(item => item === name || item === `${this.path}/${name}`);
-      const elsewhere = changed.some(item => item === "tree" || item.endsWith("/history.jsonl") || item.endsWith("/run.json"));
-      if (changed.includes("tree")) await this.loadTree();
+      const elsewhere = changed.some(item => item === "tree" || item.endsWith("/history.jsonl") || item.endsWith("/run.json") || item.endsWith("/state"));
+      if (changed.includes("tree") || changed.some(item => item.endsWith("/state"))) await this.loadTree();
       if (this.page === "home" || elsewhere) await this.loadLive();
       if (this.page === "home") return;
       if (this.page === "table") { await this.loadTable(); return; }

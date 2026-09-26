@@ -14,7 +14,7 @@ import pandas
 
 from . import collect_figures
 from .describe.text import PLAIN, field_line, head, table, width_of
-from .record import Record, failure_text, read_resolved
+from .record import Record, failure_text, read_resolved, readable_state, settled_objective
 from .std.common.history import History, is_number
 
 
@@ -240,7 +240,7 @@ def is_run_dir(path):
 
 
 def point_status(child):
-    state = Record(child).state()
+    state = readable_state(child)
     return state if state in ("failed", "lost") else "unfinished"
 
 
@@ -265,7 +265,7 @@ def link(directory, target):
 def listed(declared):
     if isinstance(declared, list):
         return declared
-    found = re.search(r"Choices\(values=(\[[^\]]*\])", declared if isinstance(declared, str) else "")
+    found = re.search(r"Choices\(values=(\[.*\])\)", declared if isinstance(declared, str) else "")
     if found:
         try:
             return list(ast.literal_eval(found.group(1)))
@@ -282,10 +282,11 @@ def param_axis(declared, values):
     present = [value for value in values if value is not None]
     if present and all(finite(value) for value in present):
         return "log" if "log=True" in text else "linear"
+    unique = list({json.dumps(value, sort_keys=True, default=str): value for value in present}.values())
     try:
-        return sorted(set(present))
+        return sorted(unique)
     except TypeError:
-        return sorted(set(present), key=str)
+        return sorted(unique, key=lambda value: json.dumps(value, sort_keys=True, default=str))
 
 
 def copy_plots(source, destination):
@@ -613,7 +614,7 @@ def collect_root(root, out=None, markdown=False, style=PLAIN, top=5, figures=Tru
                 (finished if found[0] == "finished" else skipped).append(found[1])
     if not finished:
         raise ValueError(f"{root}: no finished point (a directory with sweep.json) under the sweep root")
-    objective = {**finished[0]["objective"], **(manifest.get("objective") or {})}
+    objective = settled_objective({**finished[0]["objective"], **(manifest.get("objective") or {})})
     ranked = ranked_points(finished, objective)
     best = ranked[0]
     rows = []

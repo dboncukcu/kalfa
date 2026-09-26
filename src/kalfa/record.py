@@ -175,6 +175,18 @@ def first_error(node):
     return None
 
 
+def readable_state(record):
+    try:
+        return Record(record).state()
+    except ValueError:
+        return "unreadable"
+
+
+def settled_objective(objective):
+    given = {key: value for key, value in (objective or {}).items() if value is not None}
+    return {"mode": "min", "at": "best", **given}
+
+
 def failure_text(record):
     try:
         failures = (record.read_json("failure.json") or {}).get("failures") or []

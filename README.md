@@ -1044,7 +1044,8 @@ stops half a minute after the last tab closes, so nothing polls the filesystem w
 the steps and the events are read from where they were left, a log from its end, and a small file only when its
 size, time or inode changed; the last seen time of a record comes from the few files a run keeps writing. The
 last four prediction files read stay in memory while they are unchanged, so moving the bins or picking another
-score reads nothing again.
+score reads nothing again. Every JSON answer goes gzip compressed to a browser that accepts it, and the predictions
+send only the columns the page draws.
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_plots.png" width="920" alt="the plots of a record as a gallery"></p>
 
