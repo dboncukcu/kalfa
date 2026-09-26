@@ -561,6 +561,19 @@ function integerStep(values) {
   return high > low ? Math.max(1, Math.ceil((high - low) / 8)) : 1;
 }
 
+function diagonalPoints(lines, logx, logy) {
+  const log = logx || logy;
+  const values = lines.filter(line => !line.diagonal).flatMap(line => line.points.flatMap(point => [point[0], point[1]]))
+    .filter(value => Number.isFinite(value) && (!log || value > 0));
+  if (!values.length) return [];
+  const [low, high] = extent(values);
+  if (!(high > low)) return [];
+  if (!log) return [[low, low], [high, high]];
+  const steps = Array.from({ length: 120 }, (_, index) => index / 119);
+  const xs = [...steps.map(at => low + at * (high - low)), ...steps.map(at => low * Math.pow(high / low, at))];
+  return [...new Set(xs)].sort((first, second) => first - second).map(value => [value, value]);
+}
+
 function chartFigure(view) {
   const theme = plotTheme();
   const settings = { ...defaultPlot(), ...(view.settings || {}) };
@@ -572,7 +585,8 @@ function chartFigure(view) {
   const turnOf = value => { const found = marks.filter(mark => mark.text && mark.x <= value).pop(); return found ? found.text : ""; };
   const data = view.lines.map(line => {
     const type = line.kind || kind;
-    const points = line.points.filter(point => Number.isFinite(point[0]) && (Number.isFinite(point[1]) || point[1] === null));
+    const source = line.diagonal ? diagonalPoints(view.lines, logx, logy) : line.points;
+    const points = source.filter(point => Number.isFinite(point[0]) && (Number.isFinite(point[1]) || point[1] === null));
     const x = points.map(point => point[0]), y = points.map(point => point[1]);
     const trace = { name: line.name, x, y, hoverlabel: { namelength: -1 } };
     if (type === "bar") return { ...trace, type: "bar", marker: { color: line.color }, ...(line.widths ? { width: line.widths } : {}) };
@@ -1368,7 +1382,7 @@ const app = Vue.createApp({
       const truth = sample[pair.target] || [], guess = sample[pair.pred] || [];
       const points = truth.map((value, index) => [value, guess[index]]).filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
       const [low, high] = extent(points.flatMap(point => point));
-      const diagonal = Number.isFinite(low) && Number.isFinite(high) && high > low ? [{ name: "y = x", color: "#9aa0a8", kind: "line", dashed: true, points: [[low, low], [high, high]] }] : [];
+      const diagonal = Number.isFinite(low) && Number.isFinite(high) && high > low ? [{ name: "y = x", color: "#9aa0a8", kind: "line", dashed: true, diagonal: true, points: [[low, low], [high, high]] }] : [];
       return [{ name: `${pair.pred} against ${pair.target}`, color: PALETTE[0], points }, ...diagonal];
     },
     sampleAll() { return this.route.params.sample === "all"; },
