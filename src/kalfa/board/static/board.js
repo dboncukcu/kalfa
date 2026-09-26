@@ -622,7 +622,7 @@ function chartFigure(view) {
   const layout = {
     ...frame,
     hovermode: kind === "scatter" ? "closest" : "x unified",
-    uirevision: `${logy}-${logx}`,
+    uirevision: `${logy}-${logx}-${settings.xmin}-${settings.xmax}-${settings.bins}`,
     xaxis: { ...axisOf(theme, settings, settings.xlabel || view.xlabel, logx, xs, settings.xmin, settings.xmax),
              ...(step ? { dtick: step, tick0: 0 } : {}) },
     yaxis: axisOf(theme, settings, settings.ylabel || view.ylabel, logy, ys, settings.ymin, settings.ymax),
@@ -1252,7 +1252,7 @@ function spectrumFigure(view) {
   const layout = {
     ...plotFrame(view, theme, settings),
     hovermode: "x unified",
-    uirevision: `${logy}-${logx}`,
+    uirevision: `${logy}-${logx}-${settings.xmin}-${settings.xmax}-${settings.bins}`,
     xaxis: { ...axisOf(theme, settings, settings.xlabel || view.xlabel, logx, edges, settings.xmin, settings.xmax), anchor: "y2" },
     yaxis: { ...axisOf(theme, settings, settings.ylabel || view.ylabel || "points", logy, [...shown(data), ...shown(pred)], settings.ymin, settings.ymax), domain: [0.36, 1],
              ...(logy ? {} : { rangemode: "tozero" }) },
@@ -1581,7 +1581,7 @@ const app = Vue.createApp({
       if (!found.outside) return "";
       const part = (pair, what) => (pair && (pair[0] || pair[1]) ? `${what}${count(pair[0])} below the range and ${count(pair[1])} above, not drawn` : "");
       if (found.kind === "distribution") {
-        return [part(found.outside.data, `${found.target}: `), part(found.outside.pred, `${found.pred}: `)].filter(Boolean).join("; ");
+        return [part(found.outside.data, `${found.target}: `), part(found.outside.pred, `${found.column}: `)].filter(Boolean).join("; ");
       }
       return part(found.outside, "");
     },
@@ -2561,7 +2561,7 @@ const app = Vue.createApp({
     },
     histOf(kind) {
       const found = this.expandedHist, view = this.histView;
-      return found && view && found.kind === kind && found.pred === view.pred && Array.isArray(found.edges) ? found : null;
+      return found && view && found.kind === kind && found.column === view.pred && Array.isArray(found.edges) ? found : null;
     },
     histScale(found) { return this.plot.normalize && found && found.total ? found.total : 1; },
     histLabel(found) { return this.plot.normalize && found ? "fraction of rows" : "points"; },

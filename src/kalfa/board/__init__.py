@@ -845,7 +845,7 @@ class Board:
         truth = true_column(pred, targets)
         if pred not in table.columns or truth is None:
             return None
-        found = {"kind": kind, "pred": pred, "target": truth, "rows": len(table), "error": failed}
+        found = {"kind": kind, "column": pred, "target": truth, "rows": len(table), "error": failed}
         low, high = number_or_none(low), number_or_none(high)
         numbers = lambda column: pandas.to_numeric(table[column], errors="coerce").to_numpy(dtype="float64")
         if kind in ("distribution", "residual"):

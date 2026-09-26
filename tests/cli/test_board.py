@@ -602,6 +602,7 @@ def test_the_histogram_bins_the_range_asked_and_names_the_rows_outside(tmp_path)
                       "raw_tail": [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]}).to_parquet(folder / "predictions.parquet")
     board = Board(tmp_path / "runs")
     whole = board.histogram("binned", "pred_head_y", bins=4)
+    assert whole["kind"] == "distribution" and whole["column"] == "pred_head_y" and whole["target"] == "y"
     assert len(whole["edges"]) == 5 and whole["edges"][0] == -1.0 and whole["edges"][-1] == 64.0
     assert sum(whole["data"]) == sum(whole["pred"]) == whole["total"] == 8
     assert whole["outside"] == {"data": [0, 0], "pred": [0, 0]}
@@ -624,4 +625,6 @@ def test_the_histogram_bins_the_range_asked_and_names_the_rows_outside(tmp_path)
     status, _, body = call(board, "/api/histogram?path=binned&pred=pred_head_y&kind=residual&bins=2&low=0&high=1")
     assert status == 200 and json.loads(body)["counts"] == [4, 4]
     status, _, body = call(board, "/api/histogram?path=binned&pred=pred_head_y&bins=3&low=1&high=1000&log=1")
-    assert status == 200 and json.loads(body)["data"] == [4, 3, 0]
+    served = json.loads(body)
+    assert status == 200 and served["data"] == [4, 3, 0] and served["column"] == "pred_head_y"
+    assert served["pred"] == logged["pred"] and all(isinstance(value, int) for value in served["pred"])
