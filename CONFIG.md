@@ -1016,6 +1016,9 @@ The record directory; `$datetime$` is built in (`YYYYmmdd_HHMMSS`, filled once a
 | `device.json`, `git.json` | the chosen device and its lego; the commit of the config's repository and whether it was dirty |
 | `export/`, `resume.json` | what `kalfa export` wrote; the source run of a resume |
 | `stop.json` | a stop request, who asked and when; the loop ends after the turn that sees it |
+| `failure.json` | when the run fails: every failed node with its path, the exception and the full traceback; a config that fails before training writes it too |
+| `heartbeat` | touched every minute while the run runs and removed when it ends; one older than ten minutes without `run.json` makes the record lost |
+| `repair.json`, `attempts/<n>/` | every `kalfa repair` of the record (its stage, its source, its turn, its host, how it ended) and the files of the attempt it replaced |
 
 ### The commands
 
@@ -1135,7 +1138,27 @@ and the plot params can change; the data is read again, nothing is fitted or tra
 #### `kalfa resume`
 
 `kalfa resume runs/x [--set training.epochs=N]`: from `last.pt` when it exists, else from `final/` when the run
-has ended; an error when neither exists. It opens a new directory; there is no `training.resume` key.
+has ended; an error when neither exists. It opens a new directory; there is no `training.resume` key. Both files
+carry the state of the checkpoint policy (the best value so far, the snapshot count), so a resumed `best` policy
+overwrites `best.pt` only on a real improvement.
+
+#### `kalfa repair`
+
+`kalfa repair CONFIG... [--set path=value] [-p name=value] [--contract PATH] [--record DIR] [--id N]` continues a
+failed run in its own directory, with the config files it was started with (never the record directory; `--record`
+when the config writes a new directory per run through `$datetime$`). Where it continues from is read from the
+record: with `final/state.pt` training was over and only the after block runs again (`init_state` loads the final
+state and skips training); with `checkpoints/last.pt` training goes on from that turn, and `history.jsonl` and
+`steps.jsonl` are cut back to it; with neither it is refused, with the way to make a run repairable
+(`training.checkpoint: last`, or `best`). The files of the failed attempt (`run.json`, `failure.json`,
+`events.jsonl`, the console, the notes, the heartbeat) move to `attempts/<n>/` first, and `repair.json` lists every
+attempt. The plugins next to the config are the code that runs; the config may differ from `resolved.yaml` only
+under `plots`, `figures`, `device`, `calibrate`, `generate`, `params`, `record`, `include`, `plugins`, `sweep` and
+`training.report`, and a change anywhere else (a model, the data, an optimizer, a loss, a metric) is refused with
+the keys that changed, since the checkpoint and the history so far were made under the recorded config. Only a
+failed record is repaired: a finished, running, pending or lost one is refused. With a sweep config it takes the
+arguments of `kalfa sweep`: `--id N` repairs point N (a queue job), and without it every failed point is repaired
+one after the other, the others skipped and counted in the first line.
 
 #### `kalfa prepare`
 
@@ -1238,18 +1261,23 @@ predictions and the plots are written and `run.json` says ok. A record that has 
 and one page, the Vue application under `src/kalfa/board/static/` served at `/static/`; Vue and Plotly come from
 jsDelivr at pinned versions with their hashes, so the browser needs the internet and the server does not. It
 finds the manifests under the root (a record made before the manifest by its `resolved.yaml`),
-shows the tree, and follows the records as they change: the server stats the files of the open record once a
-second and pushes the names of the changed ones over a server sent event stream (`/api/watch`), the page reloads
-only those (the growing files by offset), or polls every 3, 5 or 10 seconds when the footer says so. The page
+shows the tree, and follows the records as they change: one background loop stats the files of the open records
+every two seconds for every open tab, stops half a minute after the last tab closes, and pushes the names of the
+changed ones over a server sent event stream (`/api/watch`); the page reloads only those (the growing files by
+offset), or polls every 3, 5 or 10 seconds when the footer says so. A small file is parsed again only when its
+size, time or inode changed, a growing one is read from where it was left, a log from its end, and the last four
+prediction files stay in memory while unchanged. A record that cannot be read is listed as unreadable instead of
+taking the page down, and a page that loses the server, or the single sign on in front of it, says so in a band. The page
 shows a spinner until the tree, the live list and the record it opens on have answered. The address bar carries
 the record, the tab, the open chart and the view options, so a link shares one view and a reload keeps it.
 
 | Page | Shows |
 |---|---|
 | home | what is running with its progress and what finished lately; the tab title of the browser carries the finished turns over the planned turns of every live run as a percentage (`Kalfa Board (59%)`), and the icon's colour says the state on every page: grey when nothing runs, amber while something runs, red when the latest record failed or the open record did |
-| table | every run and point with its params, best value and last values, sortable and filterable; two ticked rows compared (curves overlaid, config diff) |
+| table | every run and point with its params, best value and last values, sortable; a filter of words, each a comparison (`lr<0.01`, `val/rmse<=0.3`) or a text, chips for the states and a menu for when it started (the sidebar has the same over the tree), a columns menu kept per root, and the rows as shown saved as CSV |
+| compare | any number of ticked runs or points (`#/compare?runs=a,b,c`): one chart per history series with a line per record, a colour and a dash each, the params that differ, and the `resolved.yaml` difference of two |
 | a run | the tabs below |
-| a sweep | the live table of points (finished ones from `sweep.json`, running ones with the best value so far from the history tail), every point drawn across the whole space (drag on an axis to narrow the charts and the table together), an explorer with its own axes, every param against the objective, where the failed points died, the objective over the sweep order, the curves of the ticked points overlaid and the `resolved.yaml` difference between two of them; the table and the axes say epochs when the points count epochs |
+| a sweep | the live table of points (finished ones from `sweep.json`, running ones with the best value so far from the history tail), every point drawn across the whole space (drag on an axis to narrow the charts and the table together), an explorer with its own axes, every param against the objective, where the failed points died, the objective over the sweep order, the curves of the ticked points overlaid (any series, the best K ticked in one step) and the `resolved.yaml` difference between two of them, the failed points grouped by their first error, the points saved as CSV; the queued points count, so a half started sweep is not finished; the table and the axes say epochs when the points count epochs |
 
 The tabs of a run:
 
@@ -1261,11 +1289,11 @@ The tabs of a run:
 | optimizer steps | the step curves with the turns marked and labelled along the top; the tooltip names the turn of a step |
 | model | the architecture from `architecture.json` as a schematic: one block per node with its input pins on the left and its output pins on the right, every wire with its width, the losses and the optimizers beside the outputs. A block clicked opens in place (the layers of a node chained left to right with the tensor shapes on the wires between them, the nodes of another model, the features of the input); an inner block opens the same way. A block drags, the upright part of a wire drags to bend it, the wheel zooms and the background pans; the arrangement is kept in the browser per record, with fit and reset to undo it, save writes the png as arranged and expand opens it large |
 | data | the data pipeline drawn by the same schematic and the stage tables of `data.json`; a stage clicked lists the columns it added or removed |
-| predictions | the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram, the distributions of the prediction and the truth over the same bins with their ratio below, the largest errors, all over the rows a pandas query keeps (`/api/predictions` takes the query and applies it before every number on the page is computed) |
+| predictions | the prediction against the truth with the y = x line on a sample of 2,000 rows or on every row, the residual histogram, the distributions of the prediction and the truth over the same bins with their ratio below, the largest errors, all over the rows a filter keeps (`/api/predictions` takes it and applies it before every number on the page is computed); a switch per target, kept in the browser, turns it into a classification (`/api/classify`): the ROC of the picked score column with its AUC, the background efficiency, the rejection and the cut at 50, 80, 90 and 95 % signal efficiency, the score by class and the confusion, nothing drawn until the score and the signal class are picked |
 | prep | the fitted preprocessors and what each learned |
 | plots, samples | the figures under `plots/` as a gallery and the sample images as they are written |
 | config, notes, files | `resolved.yaml`; `manifest.json`, `host.json`, `device.json`, `git.json` and the node timings of `run.json`; every file of the record with a viewer for text, images and PDFs and a download for every file |
-| timeline, events, logs, describe | the timeline of the nodes, the event tail, the tails of `stdout.txt` and `stderr.txt`, `describe` on demand |
+| timeline, events, logs, describe | the timeline of the nodes with a loop as one bar and every node inside it summed over the iterations (every iteration as a row on request), the event tail, the last 300, 2000 or 10000 lines of `stdout.txt` and `stderr.txt` with a progress bar as its last state and a link to the whole file, `describe` on demand |
 
 Every chart zooms with a drag (a box) or the wheel and resets with a double click; a log axis shows its decades as
 10^n with the digits between them as small ticks, and labels the digits when less than a decade is in view. Every
@@ -1276,13 +1304,16 @@ else; the download writes the chart as drawn, as png or svg, and reset restores 
 (turns, steps, points) gets integer ticks.
 
 The endpoints: `/api/tree`, `/api/live`, `/api/watch`, `/api/table`, `/api/record`, `/api/predictions`,
-`/api/prep`, `/api/files`, `/api/text`, `/api/events`, `/api/history`, `/api/steps`, `/api/tail`, `/api/sweep`,
-`/api/diff`, `/api/describe`, `/file`, and the one POST, `/api/stop`, which writes `stop.json` into a record, or
+`/api/classify`, `/api/series`, `/api/prep`, `/api/files`, `/api/text`, `/api/events`, `/api/history`,
+`/api/steps`, `/api/tail`, `/api/sweep`, `/api/diff`, `/api/describe`, `/file` (sent in pieces, with an ETag), and
+the one POST, `/api/stop`, which writes `stop.json` into a record, or
 into a sweep root and its running points. The board writes nothing else; the header of a running record and of a
 live sweep shows the stop button, with a confirmation, anyone who reaches the page can press it, and a stopped run
 continues from its last checkpoint with `kalfa resume`. On a batch system it runs where the files are readable and
-the browser reaches it through an ssh tunnel; the nodes never talk to it. The query of the predictions tab is
-evaluated server side, so `--host` beyond `127.0.0.1` hands that to whoever can reach the port.
+the browser reaches it through an ssh tunnel; the nodes never talk to it. The filter of the predictions tab is
+evaluated server side after a check that lets through column names, numbers, strings, comparisons, `and`, `or`,
+`not`, arithmetic and lists only (no attribute, call or variable); still, `--host` beyond `127.0.0.1` hands the
+stop button and the files to whoever can reach the port.
 
 ## Appendix (designer)
 
@@ -1393,8 +1424,9 @@ five rules, the rules of `kalfa.record.Record`:
    paths, the params, the started time, the kalfa version, a hash of the contract, whether a turn is an epoch or a
    step count) and `host.json` (the hostname, the pid, the working directory);
 5. status is derived, never written by a coordinator: a manifest alone is pending, a growing `history.jsonl` is
-   running, `run.json` is finished or failed, and `Record.status()` says so with the time the record was last seen
-   and the stop request when there is one.
+   running, `run.json` is finished or failed, a `failure.json` without `run.json` is failed, a `heartbeat` older
+   than ten minutes without `run.json` is lost (the process was killed), and `Record.status()` says so with the
+   time the record was last seen and the stop request when there is one.
 
 kalfa recognises a record by its manifest, and one made before the manifest by its `resolved.yaml`, so the layout
 above the records is the user's.
