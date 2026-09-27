@@ -6,6 +6,8 @@ import math
 import mimetypes
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -19,6 +21,7 @@ import pandas
 
 from kalfa import api
 from kalfa.errors import KalfaError
+from kalfa.labels import classes_of, same_label
 from kalfa.record import Record, failure_text, read_resolved, settled_objective
 from kalfa.std.common.files import read_json, read_lines
 from kalfa.std.common.history import History
@@ -192,19 +195,6 @@ def checked_where(text, columns):
     return text
 
 
-def same_label(item, text):
-    if text is None:
-        return False
-    if isinstance(item, (bool, numpy.bool_)):
-        return str(item).lower() == str(text).lower()
-    if is_number(item):
-        try:
-            return float(text) == float(item)
-        except ValueError:
-            return False
-    return str(item) == str(text)
-
-
 def filtered(table, where):
     if not where:
         return table, None
@@ -247,14 +237,6 @@ def class_histograms(values, texts, classes, bins=40):
     return {"edges": edges.tolist(),
             "classes": [{"label": item, "counts": numpy.histogram(values[texts == str(item)], bins=edges)[0].tolist()}
                         for item in classes]}
-
-
-def classes_of(labels):
-    present = labels.dropna().unique().tolist()
-    try:
-        return sorted(present)
-    except TypeError:
-        return sorted(present, key=str)
 
 
 def number_or_none(value):
@@ -547,6 +529,56 @@ class Frames:
         return table
 
 
+def run_report(argv):
+    return subprocess.run(argv, capture_output=True, text=True, timeout=3600)
+
+
+class Reports:
+    def __init__(self, runner=run_report):
+        self.runner = runner
+        self.jobs = {}
+        self.lock = threading.Lock()
+
+    def status(self, root):
+        with self.lock:
+            job = dict(self.jobs.get(root) or {"state": "idle"})
+        try:
+            written = os.stat(root / "reports" / "report" / "report.html").st_mtime
+        except OSError:
+            return job
+        return {**job, "written": datetime.fromtimestamp(written).isoformat(timespec="seconds")}
+
+    def start(self, root, argv):
+        with self.lock:
+            if (self.jobs.get(root) or {}).get("state") == "running":
+                raise KalfaError(f"a report of {root.name} is being written; wait for it to end")
+            self.jobs[root] = {"state": "running", "started": datetime.now().isoformat(timespec="seconds")}
+        worker = threading.Thread(target=self.finish, args=(root, argv), daemon=True)
+        worker.start()
+        return worker
+
+    def finish(self, root, argv):
+        try:
+            done = self.runner(argv)
+            state = "done" if done.returncode == 0 else "failed"
+            lines = ((done.stdout if state == "done" else done.stderr) or "").strip().splitlines()
+            message = lines[-1] if lines else ""
+        except (OSError, subprocess.SubprocessError) as problem:
+            state, message = "failed", f"{type(problem).__name__}: {problem}"
+        with self.lock:
+            self.jobs[root] = {**self.jobs.get(root, {}), "state": state, "message": message,
+                               "ended": datetime.now().isoformat(timespec="seconds")}
+
+
+def report_argv(root, points, tasks=(), scores=(), signals=()):
+    argv = [sys.executable, "-c", "import sys; from kalfa.cli import main; sys.exit(main(sys.argv[1:]))", "report",
+            str(root), "--points", str(points)]
+    for flag, items in (("--task", tasks), ("--score", scores), ("--signal", signals)):
+        for item in items:
+            argv += [flag, item]
+    return argv
+
+
 class Board:
     def __init__(self, root):
         self.root = Path(root).resolve()
@@ -555,6 +587,7 @@ class Board:
         self.jsonl = Lines()
         self.counts = Counts()
         self.watcher = Watcher(self)
+        self.reports = Reports()
 
     def history(self, path):
         return History(self.cache.read(path / "history.jsonl", read_lines))
@@ -970,6 +1003,31 @@ class Board:
                     snapshot[f"{child.name}/{name}"] = stamp(child / name)
         return snapshot
 
+    def report_root(self, relative):
+        path = self.resolve(relative)
+        if path is None or (self.cache.json(path / "manifest.json") or {}).get("kind") != "sweep":
+            return None
+        return path
+
+    def report_status(self, relative):
+        path = self.report_root(relative)
+        if path is None:
+            return None
+        found = self.reports.status(path)
+        if "written" in found:
+            found["file"] = "/".join(part for part in ((relative or "").strip("/"), "reports", "report", "report.html")
+                                     if part)
+        return found
+
+    def start_report(self, relative, points, tasks=(), scores=(), signals=()):
+        path = self.report_root(relative)
+        if path is None:
+            return None
+        if not points:
+            raise KalfaError("pick the points of the report")
+        self.reports.start(path, report_argv(path, points, tasks, scores, signals))
+        return self.report_status(relative)
+
     def stop(self, relative):
         path = self.resolve(relative)
         if path is None or not Record(path).is_record:
@@ -1214,6 +1272,8 @@ def handler_for(board):
                 keys = query.get("keys")
                 self.send_json(board.series([item for item in query.get("paths", "").split(",") if item],
                                             None if keys is None else [item for item in keys.split(",") if item]))
+            elif url.path == "/api/report":
+                self.send_json(board.report_status(path))
             elif url.path == "/api/histogram":
                 self.send_json(board.histogram(path, query.get("pred", ""), query.get("kind", "distribution"),
                                                query.get("name", "predictions.parquet"), query.get("bins", 40),
@@ -1253,10 +1313,16 @@ def handler_for(board):
         def do_POST(self):
             url = urlparse(self.path)
             query = {key: values[0] for key, values in parse_qs(url.query).items()}
-            if url.path != "/api/stop":
+            if url.path not in ("/api/stop", "/api/report"):
                 self.send(404, "not found", "text/plain")
                 return
+            lists = parse_qs(url.query)
             try:
+                if url.path == "/api/report":
+                    self.send_json(board.start_report(query.get("path", ""), query.get("points", ""),
+                                                      lists.get("task", []), lists.get("score", []),
+                                                      lists.get("signal", [])))
+                    return
                 self.send_json(board.stop(query.get("path", "")))
             except KalfaError as error:
                 self.send(409, json.dumps({"error": str(error)}))

@@ -1328,7 +1328,9 @@ const app = Vue.createApp({
       logs: { name: "", lines: [], total: 0 }, logFollow: true, texts: {}, describeText: null, showModuleText: false,
       sweep: null, overlay: {}, diff: null, modalHeight: 520, liveBoard: { live: [], recent: [] }, brush: {},
       tableRows: [], tableLoaded: false, tableFilter: "", compareData: null, predictionsData: null, prepData: null,
-      whereDraft: "", classifyData: null, expandedHist: null, histTimer: null, tasks: {}, connection, changing: false, pendingChanges: null, overlayKeys: [],
+      whereDraft: "", classifyData: null, expandedHist: null, histTimer: null,
+      reportOpen: false, reportPicks: [], reportTargets: [], reportColumns: [], reportTasks: {}, reportScores: {},
+      reportSignals: {}, reportStatus: null, reportTimer: null, reportAsking: false, tasks: {}, connection, changing: false, pendingChanges: null, overlayKeys: [],
       filesData: null, fileView: null, eventsData: null, playing: false, frame: 0, player: null,
       refresh: (() => { try { return localStorage.getItem("kalfa-board-refresh") || "realtime"; } catch (error) { return "realtime"; } })(),
       source: null, timer: null, treeTimer: null, connected: false, queue: {}, inFlight: {}, plot: defaultPlot(), busy: 0,
@@ -2441,7 +2443,8 @@ const app = Vue.createApp({
       this.overlay = {}; this.diff = null; this.describeText = null; this.showModuleText = false;
       this.logs = { name: "", lines: [], total: 0 }; this.logFollow = true;
       this.predictionsData = null; this.classifyData = null; this.prepData = null; this.filesData = null; this.fileView = null;
-      this.eventsData = null; this.compareData = null;
+      this.eventsData = null; this.compareData = null; this.reportStatus = null; this.reportOpen = false;
+      this.reportTargets = []; this.reportColumns = [];
       this.stopPlaying();
       if (this.refresh === "realtime") this.connectWatch();
       if (this.page === "table") { await this.loadTable(); return; }
@@ -2685,6 +2688,70 @@ const app = Vue.createApp({
       const path = this.path;
       const sweep = await api("/api/sweep", { path });
       if (sweep && path === this.path) this.sweep = sweep;
+      if (sweep && path === this.path && !this.reportStatus) await this.loadReportStatus();
+    },
+    reportPoints() {
+      return this.sweep ? [...this.sweep.points].filter(point => point.id !== null && point.id !== undefined).sort((first, second) => first.id - second.id) : [];
+    },
+    async loadReportStatus() {
+      clearTimeout(this.reportTimer);
+      if (!this.isSweep) return;
+      const path = this.path;
+      const found = await api("/api/report", { path });
+      if (path !== this.path) return;
+      this.reportStatus = found;
+      if (found && found.state === "running") this.reportTimer = setTimeout(() => this.loadReportStatus(), 2000);
+    },
+    openReport() {
+      const ticked = new Set(this.selected);
+      this.reportPicks = this.reportPoints().filter(point => ticked.has(point.path)).map(point => point.id);
+      this.reportOpen = true;
+      this.loadReportTargets();
+    },
+    toggleReportPoint(id) {
+      this.reportPicks = this.reportPicks.includes(id) ? this.reportPicks.filter(item => item !== id) : [...this.reportPicks, id].sort((first, second) => first - second);
+      this.loadReportTargets();
+    },
+    pickReportPoints(kind) {
+      const points = this.reportPoints();
+      this.reportPicks = kind === "none" ? [] : points.filter(point => kind === "all" || this.stateOf(point) === "finished").map(point => point.id);
+      this.loadReportTargets();
+    },
+    async loadReportTargets() {
+      const first = this.reportPoints().find(point => this.reportPicks.includes(point.id));
+      if (!first) return;
+      const found = await api("/api/predictions", { path: first.path, sample: 1 });
+      if (!found || !Array.isArray(found.named)) return;
+      const targets = [...new Set(found.named.map(pair => pair.target))];
+      this.reportTargets = targets;
+      this.reportColumns = (found.columns || []).filter(column => column.startsWith("raw_") || column.startsWith("pred_"));
+      for (const target of targets) {
+        const kept = choiceOf(target);
+        if (!(target in this.reportTasks)) this.reportTasks = { ...this.reportTasks, [target]: taskOf(target) };
+        if (!(target in this.reportScores)) this.reportScores = { ...this.reportScores, [target]: kept.score || "" };
+        if (!(target in this.reportSignals)) this.reportSignals = { ...this.reportSignals, [target]: kept.positive || "" };
+      }
+    },
+    async writeReport() {
+      if (!this.reportPicks.length || this.reportAsking) return;
+      const query = new URLSearchParams({ path: this.path, points: this.reportPicks.join(",") });
+      for (const target of this.reportTargets) {
+        const task = this.reportTasks[target] || "regression";
+        query.append("task", `${target}=${task}`);
+        if (task !== "classification") continue;
+        if (this.reportScores[target]) query.append("score", `${target}=${this.reportScores[target]}`);
+        if (this.reportSignals[target]) query.append("signal", `${target}=${this.reportSignals[target]}`);
+      }
+      this.reportAsking = true;
+      try {
+        const response = await fetch(`/api/report?${query.toString()}`, { method: "POST" });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) { window.alert(body.error || "the board could not start the report"); return; }
+        this.reportStatus = body;
+      } finally {
+        this.reportAsking = false;
+      }
+      await this.loadReportStatus();
     },
     async loadOverlay() {
       if (!this.isSweep) return;

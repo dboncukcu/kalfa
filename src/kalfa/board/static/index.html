@@ -266,6 +266,9 @@
           <span class="badge" :class="sweepState">{{ sweepState }}</span>
           <span class="badge stop" v-if="stopText(record)">{{ stopText(record) }}</span>
           <button class="small stop" v-if="canStop(record)" @click="requestStop(path)" title="write stop.json into the root and its running points: no new point starts, the running ones end after their turn">stop</button>
+          <button class="small" @click="openReport" title="write a detailed report of the points you pick into reports/report of the root">report</button>
+          <a class="small" v-if="reportStatus && reportStatus.file" :href="'/file?path=' + encodeURIComponent(reportStatus.file)" target="_blank" rel="noopener">the report of {{ reportStatus.written }}</a>
+          <span class="muted" v-if="reportStatus && reportStatus.state === 'running'"><span class="spinner"></span> writing the report</span>
         </div>
         <div class="meta-row">
           <span v-if="sweep.objective.monitor"><b>{{ sweep.objective.monitor }}</b> {{ sweep.objective.mode || 'min' }} at
@@ -1225,6 +1228,52 @@
           </div>
           <p class="muted">drag a box to zoom, double click to reset, the wheel zooms too; the download writes the chart as drawn with these settings, and the JSON box reaches every layout key Plotly knows</p>
         </aside>
+      </div>
+    </div>
+  </div>
+  <div class="lightbox" v-if="reportOpen && sweep" @click="reportOpen = false">
+    <div class="chart-modal card report-modal" @click.stop>
+      <div class="toolbar">
+        <span class="card-label">report of {{ path }}</span>
+        <button class="small" @click="reportOpen = false">close</button>
+      </div>
+      <p class="note">kalfa report over the points you tick, written into reports/report of the root and written again over the previous one every time: every metric at the objective turn with its minimum and maximum, which point takes how many, the training, the params and the config differences, and every target as a regression (distributions, residuals, response, resolution) or as a classification (ROC, rejection, precision and recall, scores, confusion, calibration).</p>
+      <div class="toolbar">
+        <button class="small" @click="pickReportPoints('finished')">every finished point</button>
+        <button class="small" @click="pickReportPoints('all')">every point</button>
+        <button class="small" @click="pickReportPoints('none')">none</button>
+        <span class="muted">{{ reportPicks.length }} ticked</span>
+      </div>
+      <div class="table-scroll report-points">
+        <table class="table">
+          <thead><tr><th class="tick"></th><th>id</th><th>state</th><th class="num">{{ sweep.objective.monitor || 'objective' }}</th><th v-for="key in pointKeys" :key="key">{{ key }}</th></tr></thead>
+          <tbody>
+            <tr v-for="point in reportPoints()" :key="point.path">
+              <td class="tick"><input type="checkbox" :checked="reportPicks.includes(point.id)" @change="toggleReportPoint(point.id)"></td>
+              <td class="mono">{{ point.id }}</td>
+              <td><span class="badge" :class="stateOf(point)">{{ stateOf(point) }}</span></td>
+              <td class="num mono">{{ point.objective ? fmt(point.objective.value) : '' }}</td>
+              <td v-for="key in pointKeys" :key="key" class="mono">{{ fmt(point.values[key]) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="report-targets" v-if="reportTargets.length">
+        <div class="card-label">targets</div>
+        <div class="toolbar" v-for="target in reportTargets" :key="target">
+          <span class="mono">{{ target }}</span>
+          <select v-model="reportTasks[target]"><option value="regression">regression</option><option value="classification">classification</option></select>
+          <template v-if="reportTasks[target] === 'classification'">
+            <label>score <select v-model="reportScores[target]"><option value="">none</option><option v-for="column in reportColumns" :key="column" :value="column">{{ column }}</option></select></label>
+            <label>signal class <input type="text" v-model.trim="reportSignals[target]" placeholder="say 1" spellcheck="false"></label>
+          </template>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="small" :disabled="!reportPicks.length || reportAsking || (reportStatus && reportStatus.state === 'running')" @click="writeReport">write the report</button>
+        <span class="muted" v-if="reportStatus && reportStatus.state === 'running'"><span class="spinner"></span> writing since {{ reportStatus.started }}</span>
+        <span class="muted error" v-else-if="reportStatus && reportStatus.state === 'failed'">{{ reportStatus.message }}</span>
+        <a class="small" v-if="reportStatus && reportStatus.file && reportStatus.state !== 'running'" :href="'/file?path=' + encodeURIComponent(reportStatus.file)" target="_blank" rel="noopener">open the report of {{ reportStatus.written }}</a>
       </div>
     </div>
   </div>

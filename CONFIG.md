@@ -1230,6 +1230,37 @@ table of the list of runs, the `params` differences as columns. The files go to 
 given, or inside the parent of the runs when there are several (`runs/reports/cv.md`); `--out DIR` puts them
 elsewhere.
 
+#### `kalfa report`
+
+`kalfa report <sweep root> --points 3,7,12 | all` or `kalfa report <record> <record> ...`, with `--task
+TARGET=regression|classification`, `--score TARGET=COLUMN`, `--signal TARGET=CLASS` (each repeated per target),
+`--predictions FILE` (`predictions.parquet` without it) and `--out DIR` (`reports/report` inside the sweep root, or
+inside the parent of the records). A sweep root needs `--points`; record directories take none. It writes
+`report.html`, one file with every figure inside as a png, and `report.json`, `points.csv`, `metrics.csv` and a
+CSV per target; before writing it removes the files its previous `report.json` names, so every run replaces the
+report.
+
+The sections: the summary (the objective, the states of every point of the sweep, the hours of training of the
+chosen ones, the best of them); every `val/` and `test/` value at the objective turn of every point (the turn the
+sweep objective, or the checkpoint monitor of a run, was best at), the minimum and the maximum of every column
+marked and neither called better; who takes what, the points by the number of minima and maxima they hold and
+every metric with its minimum, its maximum, the gaps to the next values and the spread; the training, the turns,
+the objective turn and the turns after it, the seconds, the spread of the monitor over the last five turns and
+validation minus training for every value both sets carry, and every `train/`, `val/` and `test/` series drawn
+for all the points; the params that differ and the `resolved.yaml` difference of the best point against every
+other; then every pair of a `pred_` column and its target in the predictions file. As a regression (the default):
+rows, rmse, mae, r2, bias, median residual, response (the median of prediction over truth), resolution (half the
+16 to 84 % width of that ratio) and its relative form, the share within 10 %, the best of every column marked;
+the distributions of the prediction over the truth on the same bins with the ratio of the counts, the residual
+and the relative residual, the response and the resolution in twelve bins of the truth holding the same number of
+rows, and the prediction against the truth for every point. As a classification: the classes and their rows, the
+accuracy and the macro F1 when the `pred_` column holds the class labels, the precision, recall and F1 of every
+class, the confusion as the share of every true class; with a score column and a signal class the AUC, the
+average precision, the background rejection at 50, 80, 90 and 95 % signal efficiency, the ROC, the rejection
+against the signal efficiency on a log axis, the precision against the recall, the score of every class and, for
+a score between 0 and 1, the calibration. A target of more than 100 distinct values is no classification and says
+so. The failed and lost points close it with their first error, and a list of the terms ends the page.
+
 #### `kalfa ls`, `kalfa docs`, `kalfa contract`
 
 `kalfa ls [/alias/kalfa/tabular | /criterion | word] [--kind kind]` lists the packs and the legos with their
@@ -1279,7 +1310,7 @@ the record, the tab, the open chart and the view options, so a link shares one v
 | table | every run and point with its params, best value and last values, sortable; a filter of words, each a comparison (`lr<0.01`, `val/rmse<=0.3`) or a text, chips for the states and a menu for when it started (the sidebar has the same over the tree), a columns menu kept per root, and the rows as shown saved as CSV |
 | compare | any number of ticked runs or points (`#/compare?runs=a,b,c`): one chart per history series with a line per record, a colour and a dash each, the params that differ, and the `resolved.yaml` difference of two |
 | a run | the tabs below |
-| a sweep | the live table of points (finished ones from `sweep.json`, running ones with the best value so far from the history tail), every point drawn across the whole space (drag on an axis to narrow the charts and the table together), an explorer with its own axes, every param against the objective, where the failed points died, the objective over the sweep order, the curves of the ticked points overlaid (any series, the best K ticked in one step) and the `resolved.yaml` difference between two of them, the failed points grouped by their first error, the points saved as CSV; the queued points count, so a half started sweep is not finished; the table and the axes say epochs when the points count epochs |
+| a sweep | the live table of points (finished ones from `sweep.json`, running ones with the best value so far from the history tail), every point drawn across the whole space (drag on an axis to narrow the charts and the table together), an explorer with its own axes, every param against the objective, where the failed points died, the objective over the sweep order, the curves of the ticked points overlaid (any series, the best K ticked in one step) and the `resolved.yaml` difference between two of them, the failed points grouped by their first error, the points saved as CSV, and the report button (the points and the task, score and signal class of every target picked in a list, `kalfa report` run behind it); the queued points count, so a half started sweep is not finished; the table and the axes say epochs when the points count epochs |
 
 The tabs of a run:
 
@@ -1311,10 +1342,12 @@ range. An axis of integers
 (turns, steps, points) gets integer ticks.
 
 The endpoints: `/api/tree`, `/api/live`, `/api/watch`, `/api/table`, `/api/record`, `/api/predictions`,
-`/api/classify`, `/api/histogram`, `/api/series`, `/api/prep`, `/api/files`, `/api/text`, `/api/events`, `/api/history`,
-`/api/steps`, `/api/tail`, `/api/sweep`, `/api/diff`, `/api/describe`, `/file` (sent in pieces, with an ETag), and
-the one POST, `/api/stop`, which writes `stop.json` into a record, or
-into a sweep root and its running points. The board writes nothing else; the header of a running record and of a
+`/api/classify`, `/api/histogram`, `/api/series`, `/api/report`, `/api/prep`, `/api/files`, `/api/text`,
+`/api/events`, `/api/history`, `/api/steps`, `/api/tail`, `/api/sweep`, `/api/diff`, `/api/describe`, `/file` (sent
+in pieces, with an ETag), and two POSTs: `/api/stop`, which writes `stop.json` into a record, or into a sweep root
+and its running points, and `/api/report`, which runs `kalfa report` over the points picked in a process of its
+own (one at a time per sweep; `GET /api/report` says whether it runs, how it ended and when `report.html` was
+written). The board writes nothing else; the header of a running record and of a
 live sweep shows the stop button, with a confirmation, anyone who reaches the page can press it, and a stopped run
 continues from its last checkpoint with `kalfa resume`. On a batch system it runs where the files are readable and
 the browser reaches it through an ssh tunnel; the nodes never talk to it. The filter of the predictions tab is

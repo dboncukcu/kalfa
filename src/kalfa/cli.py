@@ -369,6 +369,37 @@ def build_parser():
                                   "by the mean objective over the values of PARAM once it has every one of them")
     collect_cmd.set_defaults(handler=cmd_collect)
 
+    report_cmd = command(commands, "report", "a detailed report over chosen points of a sweep, or over runs",
+                         "Write reports/report/report.html, one file with its figures inside, and the tables as CSV: "
+                         "every val/ and test/ metric of every chosen point at its objective turn with the minimum "
+                         "and the maximum of every metric marked, which point takes how many minima and maxima, the "
+                         "training (turns, time, the objective turn, the gap of validation over training, every "
+                         "series drawn together), the params that differ and the config differences, and every "
+                         "target of the predictions: as a regression the distributions over the truth, the "
+                         "residuals, the response and the resolution over the truth and the prediction against the "
+                         "truth; as a classification the accuracy, the precision, recall and F1 per class, the "
+                         "confusion and, with a score and a signal class, the ROC, the background rejection, the "
+                         "precision and recall curve, the score by class and the calibration. Every run writes the "
+                         "report again over the previous one.",
+                         ["kalfa report sweeps/lr --points 3,7,12",
+                          "kalfa report sweeps/lr --points all --task label=classification --score label=raw_head "
+                          "--signal label=1",
+                          "kalfa report runs/a runs/b    two runs side by side"])
+    report_cmd.add_argument("records", nargs="+", metavar="RECORD", help="one sweep root, or record directories")
+    report_cmd.add_argument("--points", metavar="IDS",
+                            help="with a sweep root: the point ids, 3,7,12, or all; a sweep root needs it")
+    report_cmd.add_argument("--task", action="append", default=[], metavar="TARGET=KIND",
+                            help="regression or classification for a target; a target without it is a regression")
+    report_cmd.add_argument("--score", action="append", default=[], metavar="TARGET=COLUMN",
+                            help="the score column of a classification target, say raw_head")
+    report_cmd.add_argument("--signal", action="append", default=[], metavar="TARGET=CLASS",
+                            help="the signal class of a classification target, say 1")
+    report_cmd.add_argument("--predictions", default="predictions.parquet", metavar="FILE",
+                            help="the predictions file of every record; predictions.parquet without it")
+    report_cmd.add_argument("--out", metavar="DIR",
+                            help="the directory of the report; reports/report inside the sweep root without it")
+    report_cmd.set_defaults(handler=cmd_report)
+
     docs_cmd = command(commands, "docs", "the lego reference generated from the registry",
                        "Print the lego reference generated from the registry: every lego by kind with its URI, "
                        "aliases, signature, facts and description, and the alias packs. With --plugin or --config your "
@@ -779,6 +810,19 @@ def cmd_generate(args) -> int:
     print_warnings(caught)
     style = style_for(sys.stdout)
     print(f"generated: {style.cyan(result.path)}")
+    return 0
+
+
+def cmd_report(args) -> int:
+    from . import report
+    from .collect import joined
+
+    target, figures, tables, written = report.report(
+        args.records, report.point_ids(args.points), report.keyed(args.task, "--task"),
+        report.keyed(args.score, "--score"), report.keyed(args.signal, "--signal"), args.predictions, args.out)
+    files = [name for name in written if name.endswith(".csv")]
+    print(f"wrote report.html with {figures} figure{'s' if figures != 1 else ''} and {tables} table"
+          f"{'s' if tables != 1 else ''}" + (f", and {joined(files)}" if files else "") + f" under {target}")
     return 0
 
 

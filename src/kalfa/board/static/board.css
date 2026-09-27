@@ -260,6 +260,10 @@ ul.plain { margin: 0; padding-left: 18px; }
 .lightbox figure { margin: 0; max-width: 92vw; max-height: 92vh; cursor: default; text-align: center; }
 .chart-modal { width: min(96vw, 1600px); cursor: default; margin: 0; }
 .chart-modal .toolbar { margin-bottom: 4px; }
+.report-modal { width: min(96vw, 1100px); max-height: 92vh; overflow: auto; padding: 16px 18px; }
+.report-points { max-height: 46vh; overflow: auto; margin-bottom: 12px; }
+.report-targets { margin: 8px 0 12px; }
+.report-targets .toolbar { margin-bottom: 6px; }
 .modal-body { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 18px; }
 .modal-chart { min-width: 0; }
 .plot-panel { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--ink-2); border-left: 1px solid var(--line); padding-left: 18px; max-height: 82vh; overflow: auto; }

@@ -779,6 +779,25 @@ A k fold inside a sweep is one more swept param: `fold: [0, 1, 2, 3, 4]` in the 
 `kfold` split. `kalfa collect <root> --mean-over fold` then ranks the settings of the other params by their mean
 objective over the folds, so the best setting is not the one that met the easiest fold (`groups.csv`).
 
+`collect` is the overview; `report` is the close look at the points you name:
+
+```bash
+kalfa report runs/sweep_housing --points 3,7,12        # runs/sweep_housing/reports/report/report.html
+kalfa report runs/sweep_housing --points all --task label=classification --score label=raw_head --signal label=1
+kalfa report runs/a runs/b                              # two runs side by side
+```
+
+One `report.html` with its figures inside (it opens without the network and prints to PDF) and the tables as CSV:
+every `val/` and `test/` metric of every point at its objective turn with the minimum and the maximum of each
+marked, which point takes how many minima and maxima, the training (turns, time, the turns after the objective
+turn, the gap of validation over training, every series drawn together), the params that differ and the config
+differences, and every target of the predictions. A regression gets the distributions over the truth with their
+ratio, the residuals, the response and the resolution in bins of the truth and the prediction against the truth; a
+classification gets the accuracy, the precision, recall and F1 per class, the confusion, and with `--score` and
+`--signal` the ROC, the background rejection, the precision and recall curve, the score by class and the
+calibration. A target without `--task` is a regression. Every run writes the report again over the previous one,
+and the board writes the same report from a button on the sweep page.
+
 A point is an ordinary record under `<root>/<id>/`. `grid`, `random` and `sobol` are deterministic by id, so
 `--id N` reproduces one point anywhere and looks at no other point.
 </details>
@@ -798,6 +817,7 @@ kalfa repair   cfg.yaml [--record runs/x | --record root [--id N]]   # continue 
 kalfa prepare  cfg.yaml --out DIR                        # run the data block once; run --prepared DIR reuses it
 kalfa sweep    cfg.yaml [--count | --show N | --id N | --plan [--prepare-data]] [--record root]
 kalfa collect  <sweep root> [--mean-over fold] | runs/cv_*   # the sweep report, or the k fold summary
+kalfa report   <sweep root> --points 3,7,12 | runs/a runs/b    # a detailed report of the points you name
 kalfa stop     runs/x                                    # the run ends after its current turn
 kalfa board    <root> [--port 8080]                      # a page over every record under a root
 kalfa ls       [/alias/kalfa/tabular | /criterion | word] [--plugin mod] [--config cfg.yaml]
@@ -939,7 +959,8 @@ one is refused, and the sweep loop skips it.
 kalfa board runs --port 8080        # http.server plus one page; Vue and Plotly come from jsDelivr, pinned by version and hash
 ```
 
-The board reads records; it never writes one except to ask a run to stop. It finds every record under the root,
+The board reads records; it writes into one only to ask a run to stop and to write a report you ask for. It finds
+every record under the root,
 follows the live ones over a server sent event stream, and gives every record one page of tabs. The address bar
 carries the record, the tab, the open chart and the view options, so a link is one exact view and a reload keeps
 it. Every chart zooms with a drag and resets with a double click, and a log axis is a real log axis. On a batch
@@ -1005,7 +1026,9 @@ over it.
 
 **Sweeps.** A sweep is one record with its points below it. Its page draws every point across the whole space,
 the failed ones dashed, coloured by the rank of the objective; a drag on any axis narrows the charts and the table
-together.
+together. The report button opens the list of points: tick the ones you want, pick for every target a regression
+or a classification (with its score column and signal class), and the board runs `kalfa report` in a process of
+its own, then links the `report.html` it wrote; pressing it again writes the report again with the data as it is.
 
 <p align="center"><img src="https://raw.githubusercontent.com/dboncukcu/kalfa/main/docs/images/board_sweep_explorer.png" width="920" alt="the explorer and the table of points"></p>
 
@@ -1094,6 +1117,7 @@ samples    = generate(result.record, which="best")
 | `open_record(run_dir, which, sets, contract)` | `Opened` | `contract`, `document`, `store`, `prep`, `rebuild()` |
 | `stop(record, by="cli")` | list | the directories it wrote `stop.json` into |
 | `prepare_data(paths, sets, out)` | `PreparedData` | the data block run once into `out` |
+| `kalfa.report.report(records, points, tasks, scores, signals, predictions, out)` | tuple | the directory written, the figures and the tables of `report.html` and the files written |
 | `kalfa.collect.collect(run_dirs, out, markdown, style, top, figures, mean_over)` | tuple | `kind` (`sweep` or `cv`), the terminal text, the directory written and the files written in it |
 | `kalfa.sweep.plan(paths, sets, record)` | `Plan` | the points, without running any of them |
 
