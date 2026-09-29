@@ -637,12 +637,13 @@ def test_the_board_writes_a_report_in_its_own_process_and_says_how_it_went(tmp_p
     asked, release = [], threading.Event()
     written = tmp_path / "sweeps" / "grid" / "reports" / "report"
 
-    def runner(argv):
+    def runner(argv, listen):
         asked.append(argv)
+        assert listen("progress 1/3 reading point 0") and not listen("a warning")
         release.wait(5)
         written.mkdir(parents=True, exist_ok=True)
         (written / "report.html").write_text("<html></html>")
-        return subprocess.CompletedProcess(argv, 0, stdout="wrote report.html with 3 figures\n", stderr="")
+        return 0, "wrote report.html with 3 figures"
 
     board.reports.runner = runner
     assert board.report_status("sweeps/grid") == {"state": "idle"} and board.report_status("runs/one") is None
@@ -651,6 +652,12 @@ def test_the_board_writes_a_report_in_its_own_process_and_says_how_it_went(tmp_p
     assert status == 200 and json.loads(body)["state"] == "running"
     status, _, body = call(board, f"/api/report?{query}", method="POST")
     assert status == 409 and json.loads(body) == {"error": "a report of grid is being written; wait for it to end"}
+    for _ in range(500):
+        if "progress" in board.report_status("sweeps/grid"):
+            break
+        time.sleep(0.01)
+    running = board.report_status("sweeps/grid")
+    assert running["progress"] == {"done": 1, "total": 3, "text": "reading point 0"} and running["elapsed"] >= 0
     release.set()
     for _ in range(500):
         if board.report_status("sweeps/grid")["state"] != "running":
@@ -659,13 +666,15 @@ def test_the_board_writes_a_report_in_its_own_process_and_says_how_it_went(tmp_p
     found = board.report_status("sweeps/grid")
     assert found["state"] == "done" and found["message"] == "wrote report.html with 3 figures"
     assert found["file"] == "sweeps/grid/reports/report/report.html" and found["written"]
-    assert asked[0][3:] == ["report", str(board.root / "sweeps" / "grid"), "--points", "0,1", "--task", "y=regression",
-                            "--task", "hot=classification", "--score", "hot=raw_h", "--signal", "hot=1"]
+    assert asked[0][3:] == ["report", str(board.root / "sweeps" / "grid"), "--points", "0,1", "--progress", "lines",
+                            "--task", "y=regression", "--task", "hot=classification", "--score", "hot=raw_h",
+                            "--signal", "hot=1"]
+    assert "elapsed" not in found and "since" not in found
     status, headers, _ = call(board, "/file?path=sweeps/grid/reports/report/report.html")
     assert status == 200 and headers["Content-Type"].startswith("text/html")
     assert call(board, "/api/report?path=sweeps/grid&points=", method="POST")[0] == 409
     assert call(board, "/api/report?path=runs/one&points=1", method="POST")[0] == 404
-    board.reports.runner = lambda argv: subprocess.CompletedProcess(argv, 1, stdout="", stderr="boom\nno point 9\n")
+    board.reports.runner = lambda argv, listen: (1, "no point 9")
     board.reports.finish(board.root / "sweeps" / "grid", [])
     assert board.report_status("sweeps/grid")["state"] == "failed"
     assert board.report_status("sweeps/grid")["message"] == "no point 9"

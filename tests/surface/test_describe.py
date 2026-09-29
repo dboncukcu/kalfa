@@ -7,6 +7,7 @@ from kalfa.config import parse_sets
 from kalfa.describe import ALL_SECTIONS, DEFAULT_SECTIONS, Plain, visible
 from kalfa.describe.render import measure_text, render, report
 from kalfa.describe.text import ARROW, DOT, head, wide
+from kalfa.describe.training import compares_of
 from kalfa.style import Style
 
 
@@ -378,3 +379,10 @@ def test_sections_that_need_a_shaped_config_say_so(workdir):
     assert lines.count("  the config could not be shaped, no data analysis") == 1
     assert "  no implicit bindings" in report(prepared, Plain(), sections=["wiring"]).splitlines()
     assert ARROW == "─→"
+
+
+def test_compares_of_writes_an_input_columns_target():
+    assert compares_of({"output": "y_hat", "target": {"input": ["num_0", "num_1"]}}) == (
+        f"y_hat {ARROW} input[num_0, num_1]")
+    assert compares_of({"target": {"input": "fast_*"}}) == f"— {ARROW} input[fast_*]"
+    assert compares_of({"output": "y_hat", "target": ["y_heavy", "y_frac"]}) == f"y_hat {ARROW} y_heavy, y_frac"

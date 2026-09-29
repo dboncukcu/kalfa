@@ -1,5 +1,6 @@
 import functools
 import math
+import re
 
 import numpy
 import pytest
@@ -13,7 +14,7 @@ from kalfa.std.adapter.kalfa.criterion import CriterionAdapter, MeanTracker
 from kalfa.std.adapter.kalfa.metric import MetricAdapter, MetricTracker
 from kalfa.std.adapter.kalfa.objective import ObjectiveAdapter, ObjectiveTracker
 from kalfa.std.common.runtime import Context, LossView, Pass
-from kalfa.std.pre.base import Field, Grouped, Prep
+from kalfa.std.pre.base import Field, Grouped, Prep, Scaler
 
 
 ADAPTERS = sorted(uri for uri in STD_URIS if uri.startswith("/adapter/"))
@@ -132,6 +133,32 @@ def test_criterion_adapter_target_input_reads_the_model_input():
     context = Context(data, scope(constant(tiny_model(3, 3), 0.0)))
     value = adapter.loss(context, {"target": "input"})
     assert float(value.detach()) == pytest.approx(float((data["x"] ** 2).mean()))
+
+
+def test_target_input_columns_pick_the_named_features_of_the_plan():
+    adapter = criterion("/criterion/kalfa/mse")
+    data = batch()
+    context = Context(data, scope(constant(tiny_model(3, 1), 0.0), prep=price_prep(None)))
+    assert torch.equal(context.target({"input": ["x2", "x0"]}), data["x"][:, [2, 0]])
+    assert torch.equal(context.target({"input": "x*"}), data["x"])
+    assert torch.equal(context.target({"input": ["x*", "x1"]}), data["x"])
+    value = adapter.loss(context, {"target": {"input": "x1"}})
+    assert float(value.detach()) == pytest.approx(float((data["x"][:, 1] ** 2).mean()))
+
+
+def test_target_input_columns_need_the_plan_and_columns_it_names():
+    data = batch()
+    context = Context(data, scope(constant(tiny_model(3, 1), 0.0), prep=price_prep(None)))
+    with pytest.raises(ValueError, match=re.escape("target input: 'zz*' matches no feature column; the columns are "
+                                                   "['x0', 'x1', 'x2']")):
+        context.target({"input": ["x0", "zz*"]})
+    bare = Context(data, scope(constant(tiny_model(3, 1), 0.0)))
+    with pytest.raises(ValueError, match="needs the fitted preprocessors of a table feed"):
+        bare.target({"input": "x0"})
+    wide = Context(batch(features=4), scope(constant(tiny_model(4, 1), 0.0), prep=price_prep(None)))
+    with pytest.raises(ValueError, match=re.escape("pick from the feature tensor of 3 columns; the input wire has "
+                                                   "shape (8, 4)")):
+        wide.target({"input": "x0"})
 
 
 def test_context_refuses_an_unwritten_target_among_several_fields():
@@ -257,6 +284,44 @@ def test_rescale_of_target_input_inverts_the_feature_columns():
     assert torch.allclose(predictions, torch.tensor([[1.0, 2.0, 3.0]]).expand(8, 3))
     assert torch.allclose(targets, data["x"] * torch.tensor([1.0, 2.0, 3.0]) + torch.tensor([1.0, 2.0, 3.0]),
                           atol=1e-5)
+
+
+class Tenfold(Scaler):
+    def inverse(self, values):
+        return numpy.asarray(values) * 10.0
+
+
+def test_rescale_of_target_input_columns_inverts_each_with_its_own_chain():
+    scaler = build("/pre/sklearn/standard_scaler")
+    scaler.fit(numpy.array([[0.0, 0.0, 0.0], [2.0, 4.0, 6.0]]))
+    fields = [Field("x0", ["scale"], False, ["x0"]), Field("x1", ["scale"], False, ["x1"]),
+              Field("x2", ["scale"], False, ["x2"])]
+    prep = Prep(fields, {"scale": Grouped(scaler, ["x0", "x1", "x2"])}, {}, {}, [])
+    data = batch()
+    context = Context(data, scope(constant(tiny_model(3, 2), 0.0), prep=prep, set_name="test"))
+    predictions, targets = context.rescaled("y", {"input": ["x2", "x1"]})
+    assert torch.allclose(predictions, torch.tensor([[3.0, 2.0]]).expand(8, 2))
+    assert torch.allclose(targets, torch.stack([data["x"][:, 2] * 3.0 + 3.0, data["x"][:, 1] * 2.0 + 2.0], dim=1),
+                          atol=1e-5)
+    assert context.rescaled("y", {"input": ["x2", "x1"]})[1] is targets
+
+
+def test_rescale_of_target_input_columns_leaves_an_extra_column_alone_on_both_paths():
+    fields = [Field("x0", [], False, ["x0"]), Field("x1", ["scale"], False, ["x1"], extras=["x1_missing"]),
+              Field("x2", [], False, ["x2"])]
+    data = batch(features=4)
+    scaler = build("/pre/sklearn/standard_scaler")
+    scaler.fit(numpy.array([[0.0], [4.0]]))
+    on_device = Prep(fields, {"scale": {"x1": scaler}}, {}, {}, [])
+    context = Context(data, scope(constant(tiny_model(4, 2), 0.0), prep=on_device, set_name="test"))
+    predictions, targets = context.rescaled("y", {"input": ["x1", "x1_missing"]})
+    assert torch.allclose(predictions, torch.tensor([[2.0, 0.0]]).expand(8, 2))
+    assert torch.allclose(targets, torch.stack([data["x"][:, 1] * 2.0 + 2.0, data["x"][:, 2]], dim=1), atol=1e-5)
+    numpy_path = Prep(fields, {"scale": {"x1": Tenfold()}}, {}, {}, [])
+    context = Context(data, scope(constant(tiny_model(4, 2), 0.0), prep=numpy_path, set_name="test"))
+    predictions, targets = context.rescaled("y", {"input": ["x1", "x1_missing"]})
+    assert torch.allclose(predictions, torch.zeros(8, 2))
+    assert torch.allclose(targets, torch.stack([data["x"][:, 1] * 10.0, data["x"][:, 2]], dim=1), atol=1e-5)
 
 
 def test_mean_tracker_averages_the_loss_over_the_observed_rows():

@@ -529,8 +529,18 @@ class Frames:
         return table
 
 
-def run_report(argv):
-    return subprocess.run(argv, capture_output=True, text=True, timeout=3600)
+PROGRESS = re.compile(r"^progress (\d+)/(\d+) (.*)$")
+
+
+def run_report(argv, listen):
+    process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    last = ""
+    with process.stdout:
+        for line in process.stdout:
+            text = line.rstrip("\n")
+            if not listen(text) and text.strip():
+                last = text
+    return process.wait(), last
 
 
 class Reports:
@@ -542,6 +552,9 @@ class Reports:
     def status(self, root):
         with self.lock:
             job = dict(self.jobs.get(root) or {"state": "idle"})
+        since = job.pop("since", None)
+        if job.get("state") == "running" and since is not None:
+            job["elapsed"] = round(time.monotonic() - since, 1)
         try:
             written = os.stat(root / "reports" / "report" / "report.html").st_mtime
         except OSError:
@@ -552,17 +565,25 @@ class Reports:
         with self.lock:
             if (self.jobs.get(root) or {}).get("state") == "running":
                 raise KalfaError(f"a report of {root.name} is being written; wait for it to end")
-            self.jobs[root] = {"state": "running", "started": datetime.now().isoformat(timespec="seconds")}
+            self.jobs[root] = {"state": "running", "started": datetime.now().isoformat(timespec="seconds"),
+                               "since": time.monotonic()}
         worker = threading.Thread(target=self.finish, args=(root, argv), daemon=True)
         worker.start()
         return worker
 
     def finish(self, root, argv):
+        def listen(line):
+            found = PROGRESS.match(line)
+            if found is None:
+                return False
+            with self.lock:
+                if root in self.jobs:
+                    self.jobs[root]["progress"] = {"done": int(found[1]), "total": int(found[2]), "text": found[3]}
+            return True
+
         try:
-            done = self.runner(argv)
-            state = "done" if done.returncode == 0 else "failed"
-            lines = ((done.stdout if state == "done" else done.stderr) or "").strip().splitlines()
-            message = lines[-1] if lines else ""
+            code, message = self.runner(argv, listen)
+            state = "done" if code == 0 else "failed"
         except (OSError, subprocess.SubprocessError) as problem:
             state, message = "failed", f"{type(problem).__name__}: {problem}"
         with self.lock:
@@ -572,7 +593,7 @@ class Reports:
 
 def report_argv(root, points, tasks=(), scores=(), signals=()):
     argv = [sys.executable, "-c", "import sys; from kalfa.cli import main; sys.exit(main(sys.argv[1:]))", "report",
-            str(root), "--points", str(points)]
+            str(root), "--points", str(points), "--progress", "lines"]
     for flag, items in (("--task", tasks), ("--score", scores), ("--signal", signals)):
         for item in items:
             argv += [flag, item]

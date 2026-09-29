@@ -343,9 +343,9 @@ class SectionRules:
                                                  f"must take scaler", path)
                 if entry.get("output") is not None and not isinstance(entry["output"], str):
                     self.error("invalid_value", f"{section}.{name}.output must be a name", path)
-                if entry.get("target") is not None and not is_selector(entry["target"]):
-                    self.error("invalid_value", f"{section}.{name}.target must be a field name, a list of names "
-                                                f"or a glob", path)
+                if entry.get("target") is not None and not is_target(entry["target"]):
+                    self.error("invalid_value", f"{section}.{name}.target must be a field name, a list of names, "
+                                                f"a glob, input, or {{input: columns}}", path)
                 elif self.compares(uri, facts):
                     self.target_checks.append((section, name, entry, path))
         optimizers = self.data.get("optimizers") or {}
@@ -752,6 +752,12 @@ class SectionRules:
 
 def is_selector(value):
     return isinstance(value, str) or (isinstance(value, list) and all(isinstance(item, str) for item in value))
+
+
+def is_target(value):
+    if isinstance(value, dict):
+        return list(value) == ["input"] and is_selector(value["input"])
+    return is_selector(value)
 
 
 def turn_extras(registry, uri, target=None):

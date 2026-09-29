@@ -51,9 +51,14 @@ def labelled_sweep(tmp_path):
 def test_report_writes_every_section_of_the_chosen_points(tmp_path, capsys):
     root = labelled_sweep(tmp_path)
     assert main(["report", str(root), "--points", "0,1,2", "--task", "is_hot=classification",
-                 "--score", "is_hot=raw_tail", "--signal", "is_hot=1"]) == 0
+                 "--score", "is_hot=raw_tail", "--signal", "is_hot=1", "--progress", "lines"]) == 0
     written = root / "reports" / "report"
-    out = capsys.readouterr().out
+    lines = capsys.readouterr().out.splitlines()
+    steps, out = [line for line in lines if line.startswith("progress ")], lines[-1] + "\n"
+    assert steps[:3] == ["progress 0/3 reading point 0", "progress 1/3 reading point 1", "progress 2/3 reading point 2"]
+    assert steps[3] == "progress 3/17 training: test/acc" and steps[-1] == "progress 16/17 writing report.html"
+    assert [int(line.split()[1].split("/")[0]) for line in steps] == list(range(17))
+    assert "progress 13/17 is_hot as a classification: point 1" in steps and len(lines) == len(steps) + 1
     assert out.startswith("wrote report.html with ") and out.endswith(f" under {written}\n")
     assert "points.csv, metrics.csv, regression_y_pred_head_y.csv and classification_is_hot_pred_tail_is_hot.csv" in out
     summary = json.loads((written / "report.json").read_text())

@@ -5,7 +5,7 @@ from ..kinds import kalfa_kind, names_of
 from ..std.common.effects import relative_effect
 from ..std.common.optional import installed
 from ..std.common.runtime import expand_targets
-from ..std.pre.base import assign_fields
+from ..std.pre.base import assign_fields, is_pattern
 
 
 def loss_head(name):
@@ -172,7 +172,7 @@ class RefRules:
         uses = names_of(facts.get("uses"))
         return kind == "metric" and (not uses or "predictions" in uses)
 
-    def target_fields(self):
+    def role_fields(self, target):
         if self.header is None:
             return None
         data = self.data.get("data") or {}
@@ -184,9 +184,12 @@ class RefRules:
         owners, _ = assign_fields(columns, list(fields))
         found = []
         for pattern, spec in fields.items():
-            if (spec or {}).get("target"):
+            if bool((spec or {}).get("target")) == target:
                 found.extend([column for column in columns if owners.get(column) == pattern])
         return found
+
+    def target_fields(self):
+        return self.role_fields(True)
 
     def output_wires(self):
         training = self.data.get("training") or {}
@@ -211,6 +214,9 @@ class RefRules:
 
     def definition_target(self, section, name, entry, path):
         selector = self.target_selector(entry)
+        if isinstance(selector, dict):
+            self.input_columns(selector["input"], f"{section}.{name}.target", path)
+            return
         fields = self.target_fields()
         if selector == "input" or not fields:
             return
@@ -231,6 +237,21 @@ class RefRules:
         elif unknown:
             self.warning("target_not_a_field", f"{label} names {unknown}, which the data does not carry as target "
                                                f"fields; only a feed that writes them puts them in the batch", path)
+
+    def input_columns(self, selector, label, path):
+        fields = self.role_fields(False)
+        if not fields:
+            return
+        for pattern in [selector] if isinstance(selector, str) else selector:
+            if any(fnmatch.fnmatchcase(column, pattern) for column in fields):
+                continue
+            if is_pattern(pattern):
+                self.error("target_not_a_field", f"{label} names {pattern!r}, which matches no input field; the input "
+                                                 f"fields are {fields}", path)
+            else:
+                self.warning("target_not_a_field", f"{label} names {pattern!r}, which the data does not carry as an "
+                                                   f"input field; only a chain that widens a column (one_hot) or adds "
+                                                   f"one (an imputer's indicator) puts it in the feature tensor", path)
 
     def requires_of(self, uri, name, path):
         for library in names_of(self.registry.facts(uri).get("requires")):

@@ -268,7 +268,7 @@
           <button class="small stop" v-if="canStop(record)" @click="requestStop(path)" title="write stop.json into the root and its running points: no new point starts, the running ones end after their turn">stop</button>
           <button class="small" @click="openReport" title="write a detailed report of the points you pick into reports/report of the root">report</button>
           <a class="small" v-if="reportStatus && reportStatus.file" :href="'/file?path=' + encodeURIComponent(reportStatus.file)" target="_blank" rel="noopener">the report of {{ reportStatus.written }}</a>
-          <span class="muted" v-if="reportStatus && reportStatus.state === 'running'"><span class="spinner"></span> writing the report</span>
+          <span class="muted report-progress" v-if="reportStatus && reportStatus.state === 'running'"><span class="spinner"></span> {{ reportLine() }}<span class="report-bar"><span :style="{width: reportShare() + '%'}"></span></span></span>
         </div>
         <div class="meta-row">
           <span v-if="sweep.objective.monitor"><b>{{ sweep.objective.monitor }}</b> {{ sweep.objective.mode || 'min' }} at
@@ -1271,7 +1271,7 @@
       </div>
       <div class="toolbar">
         <button class="small" :disabled="!reportPicks.length || reportAsking || (reportStatus && reportStatus.state === 'running')" @click="writeReport">write the report</button>
-        <span class="muted" v-if="reportStatus && reportStatus.state === 'running'"><span class="spinner"></span> writing since {{ reportStatus.started }}</span>
+        <span class="muted report-progress" v-if="reportStatus && reportStatus.state === 'running'"><span class="spinner"></span> {{ reportLine() }}<span class="report-bar"><span :style="{width: reportShare() + '%'}"></span></span></span>
         <span class="muted error" v-else-if="reportStatus && reportStatus.state === 'failed'">{{ reportStatus.message }}</span>
         <a class="small" v-if="reportStatus && reportStatus.file && reportStatus.state !== 'running'" :href="'/file?path=' + encodeURIComponent(reportStatus.file)" target="_blank" rel="noopener">open the report of {{ reportStatus.written }}</a>
       </div>

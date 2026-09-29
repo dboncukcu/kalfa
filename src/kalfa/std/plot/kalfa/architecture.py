@@ -5,7 +5,7 @@ import torch
 from kalfa.std.builder.base import Model
 from kalfa.std.common.figure import Figure
 from kalfa.std.common.log import logger_for
-from kalfa.std.common.runtime import call_model
+from kalfa.std.common.runtime import call_model, target_text
 from kalfa.std.plot.base import report_loader
 
 
@@ -222,7 +222,8 @@ def training_layout(layout, model, label, last, predicts, losses, losses_keys, o
         keys = (losses_keys or {}).get(name) or {}
         if entry.reads == "predictions" and label == predicts:
             output = keys.get("output") or (outputs[0] if outputs else None)
-            layout.add(f"loss:{name}", "loss", [name, f"vs {keys.get('target') or 'the target'}"], last + 1)
+            against = target_text(keys.get("target")) or "the target"
+            layout.add(f"loss:{name}", "loss", [name, f"vs {against}"], last + 1)
             if output is not None:
                 layout.link(f"out:{output}", f"loss:{name}")
         elif name in minimized:

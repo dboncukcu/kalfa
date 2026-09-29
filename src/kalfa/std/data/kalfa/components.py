@@ -2,6 +2,8 @@ import fnmatch
 
 import torch
 
+from kalfa.std.common.runtime import feature_columns
+
 
 def weight_of(column, weights):
     for pattern, value in weights.items():
@@ -43,10 +45,4 @@ def feature_width(loader):
 
 def feature_index(loader, columns):
     names = list(loader.dataset.frame.features)
-    chosen = []
-    for pattern in [columns] if isinstance(columns, str) else list(columns):
-        hits = [name for name in names if fnmatch.fnmatchcase(name, str(pattern))]
-        if not hits:
-            raise ValueError(f"feature_index: {pattern!r} matches no feature column; the columns are {names}")
-        chosen.extend(name for name in hits if name not in chosen)
-    return [names.index(name) for name in chosen]
+    return [names.index(name) for name in feature_columns(columns, names, "feature_index")]

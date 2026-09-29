@@ -58,6 +58,37 @@ def expand_targets(selector, fields):
     return [str(name) for name in selector]
 
 
+def feature_columns(selector, names, what="target input"):
+    chosen = []
+    for pattern in [selector] if isinstance(selector, str) else list(selector):
+        hits = [name for name in names if fnmatch.fnmatchcase(name, str(pattern))]
+        if not hits:
+            raise ValueError(f"{what}: {pattern!r} matches no feature column; the columns are {list(names)}")
+        chosen.extend(name for name in hits if name not in chosen)
+    return chosen
+
+
+def pick_columns(values, positions, width):
+    if values.ndim < 2 or values.shape[1] != width:
+        raise ValueError(f"target input columns pick from the feature tensor of {width} columns; the input wire has "
+                         f"shape {tuple(values.shape)}")
+    return values.index_select(1, torch.as_tensor(positions, dtype=torch.long, device=values.device))
+
+
+def selector_key(target):
+    if isinstance(target, dict):
+        return ("input", selector_key(target["input"]))
+    return tuple(target) if isinstance(target, list) else target
+
+
+def target_text(target):
+    if target is None:
+        return ""
+    if isinstance(target, dict):
+        return f"input[{target_text(target['input'])}]"
+    return target if isinstance(target, str) else ", ".join(target)
+
+
 def parameter_names(function):
     try:
         return set(inspect.signature(function).parameters)
@@ -143,9 +174,23 @@ class Context:
             raise KeyError(f"target {selector!r} names no target field; the fields are {targets}")
         return names
 
+    def input(self):
+        return self.batch[self.scope.model().inputs[0]]
+
+    def input_columns(self, selector):
+        prep = self.scope.prep
+        if prep is None:
+            raise ValueError("target {input: ...} picks feature columns by name, which needs the fitted preprocessors "
+                             "of a table feed; this pass has none")
+        features = list(prep.features)
+        return features, feature_columns(selector, features)
+
     def target(self, name=None, output=None):
         if name == "input":
-            return self.batch[self.scope.model().inputs[0]]
+            return self.input()
+        if isinstance(name, dict):
+            features, chosen = self.input_columns(name["input"])
+            return pick_columns(self.input(), [features.index(column) for column in chosen], len(features))
         names = self.target_fields(name, output)
         missing = [field_name for field_name in names if field_name not in self.batch]
         if missing:
@@ -156,7 +201,7 @@ class Context:
                          dim=1)
 
     def rescaled(self, output=None, target=None):
-        key = (output, tuple(target) if isinstance(target, list) else target)
+        key = (output, selector_key(target))
         if key not in self.inverted:
             self.inverted[key] = self.invert(output, target)
         return self.inverted[key]
@@ -173,10 +218,14 @@ class Context:
                 return predictions, targets
             return (rescale_tensor(predictions, lambda matrix: prep.rescale_features(matrix, set_name)),
                     rescale_tensor(targets, lambda matrix: prep.rescale_features(matrix, set_name)))
-        names = self.target_fields(target, output)
-        if not any(prep.rescales(name) for name in names):
+        if isinstance(target, dict):
+            names = [prep.field_of(column) for column in self.input_columns(target["input"])[1]]
+            known = [name for name in names if name is not None]
+        else:
+            names = known = self.target_fields(target, output)
+        if not any(prep.rescales(name) for name in known):
             return predictions, targets
-        if prep.rescales_on_device(names, set_name):
+        if prep.rescales_on_device(known, set_name):
             return (rescale_on_device(prep, names, predictions, set_name),
                     rescale_on_device(prep, names, targets, set_name))
         return (rescale_tensor(predictions, lambda matrix: rescale_columns(prep, names, matrix, set_name)),
@@ -197,7 +246,7 @@ def rescale_columns(prep, names, matrix, set_name):
             out[:, position] = prep.rescale(names[0], out[:, position], set_name)
         return out
     for position, name in enumerate(names):
-        if position < out.shape[1]:
+        if position < out.shape[1] and name is not None:
             out[:, position] = prep.rescale(name, out[:, position], set_name)
     return out
 
@@ -210,7 +259,7 @@ def rescale_on_device(prep, names, value, set_name):
         out = prep.rescale_torch(names[0], flat, set_name)
     else:
         out = torch.cat([prep.rescale_torch(names[position], flat[:, position:position + 1], set_name)
-                         if position < len(names) else flat[:, position:position + 1]
+                         if position < len(names) and names[position] is not None else flat[:, position:position + 1]
                          for position in range(flat.shape[1])], dim=1)
     return out.reshape(value.shape)
 

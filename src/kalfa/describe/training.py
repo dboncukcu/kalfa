@@ -1,7 +1,7 @@
 from cirak.registry import registry
 
 from ..std.common.effects import relative_effect
-from ..std.common.runtime import expand_targets
+from ..std.common.runtime import expand_targets, target_text
 from .document import block_params, group_of, reference, target_fields, unwrap
 from .text import ARROW, PLAIN, call_text, field_line, number, pad, params_text, short, table
 
@@ -37,8 +37,7 @@ def compares_of(keys, style=PLAIN):
     output, target = keys.get("output"), keys.get("target")
     if output is None and target is None:
         return ""
-    selector = target if isinstance(target, str) else (", ".join(target) if target else "")
-    return f"{output or '—'} {ARROW} {selector or '—'}"
+    return f"{output or '—'} {ARROW} {target_text(target) or '—'}"
 
 
 def definition_table(label, definitions, keys_table, style, width, notes, sets):

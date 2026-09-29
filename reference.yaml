@@ -63,7 +63,7 @@ losses: {}                        # [required, at least one] name: {uri, params,
                                   # a lego of the criterion kind ((predictions, targets); the std adapter hands the predicts output and the target) or of the
                                   # objective kind ((models, batch, **params); a scalar or a mapping of terms with a required loss key); the metric kind is a check error
                                   # output: the wire of a multi output model (the first output when absent)
-                                  # target: a field name | a list of names | a glob | input; absent takes the selector training.targets gives the wire,
+                                  # target: a field name | a list of names | a glob | input | {input: columns} (named feature columns of the input); absent takes the selector training.targets gives the wire,
                                   # else the single target: true field (a check error with several); several fields are stacked into one (batch, n) tensor
                                   # needs_grad objectives write sets: [train]; the alias table is flat: mae is /criterion/kalfa/mae in both sections
 optimizers: {}                    # [empty, with an inline one] name: {uri, params: {lr, ..., groups: [{name, match: "model.*", lr}]}, loss: loss_name, schedule: {uri, params}}

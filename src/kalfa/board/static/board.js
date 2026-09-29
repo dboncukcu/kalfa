@@ -2690,6 +2690,19 @@ const app = Vue.createApp({
       if (sweep && path === this.path) this.sweep = sweep;
       if (sweep && path === this.path && !this.reportStatus) await this.loadReportStatus();
     },
+    reportLine() {
+      const found = this.reportStatus;
+      if (!found || found.state !== "running") return "";
+      const step = found.progress;
+      if (!step || !step.total) return `writing the report since ${found.started}`;
+      const share = Math.floor(100 * step.done / step.total);
+      const left = step.done > 0 && typeof found.elapsed === "number" ? found.elapsed * (step.total - step.done) / step.done : null;
+      return `${share} % · step ${step.done + 1} of ${step.total} · ${step.text}` + (left !== null ? ` · about ${ms(left * 1000)} left` : "");
+    },
+    reportShare() {
+      const step = this.reportStatus && this.reportStatus.progress;
+      return step && step.total ? Math.min(100, 100 * step.done / step.total) : 0;
+    },
     reportPoints() {
       return this.sweep ? [...this.sweep.points].filter(point => point.id !== null && point.id !== undefined).sort((first, second) => first.id - second.id) : [];
     },

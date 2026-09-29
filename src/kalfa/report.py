@@ -60,6 +60,21 @@ dl.terms dd { margin: 2px 0 0 0; color: var(--muted); max-width: 900px; }
 """
 
 
+class Progress:
+    def __init__(self, listen=None):
+        self.listen = listen
+        self.done = 0
+        self.total = 0
+
+    def plan(self, total):
+        self.total = max(int(total), self.done)
+
+    def begin(self, text):
+        if self.listen is not None:
+            self.listen(self.done, max(self.total, self.done + 1), text)
+        self.done += 1
+
+
 def finite(value):
     return is_number(value) and math.isfinite(value)
 
@@ -139,7 +154,7 @@ def entry_of(directory, label, values, objective):
             "error": failure_text(record) if state == "failed" else None}
 
 
-def sweep_entries(root, points):
+def sweep_entries(root, points, tracker):
     manifest = readable_json(Record(root), "manifest.json") or {}
     objective = settled_objective(manifest.get("objective"))
     found = {}
@@ -157,8 +172,10 @@ def sweep_entries(root, points):
     if not wanted:
         raise ValueError(f"{root}: no point under the root yet")
     entries = []
+    tracker.plan(len(wanted))
     for index in wanted:
         child, note = found[index]
+        tracker.begin(f"reading point {index}")
         entry = entry_of(child, f"point {index}", note.get("values") or {}, objective)
         entries.append({**entry, "id": index})
     states = {}
@@ -168,9 +185,11 @@ def sweep_entries(root, points):
     return manifest, objective, entries, states
 
 
-def run_entries(directories):
+def run_entries(directories, tracker):
     entries, objective = [], None
+    tracker.plan(len(directories))
     for directory in directories:
+        tracker.begin(f"reading {Path(directory).name}")
         record = Record(directory)
         if not record.is_record:
             raise ValueError(f"{directory} is no record directory")
@@ -550,9 +569,10 @@ def fractions(values, edges):
     return counts / len(values) if len(values) else counts.astype("float64")
 
 
-def regression_section(page, drawer, entries, pred, truth, name, files, out):
+def regression_section(page, drawer, entries, pred, truth, name, files, out, tracker):
     rows, loaded = [], []
     for entry in entries:
+        tracker.begin(f"{truth} as a regression: {entry['label']}")
         column = pred if pred in (entry.get("columns") or []) else None
         table = read_columns(entry, name, [truth, column]) if column else None
         if table is None:
@@ -564,6 +584,7 @@ def regression_section(page, drawer, entries, pred, truth, name, files, out):
             continue
         loaded.append((entry["label"], actual, guess))
         rows.append({"point": entry["label"], **regression_numbers(actual, guess)})
+    tracker.begin(f"{truth} as a regression: the figures")
     if not loaded:
         page.text(f"No selected point holds {pred} and {truth} in {name}.", "note")
         return {"target": truth, "prediction": pred, "task": "regression", "points": []}
@@ -641,9 +662,10 @@ def regression_section(page, drawer, entries, pred, truth, name, files, out):
             "response": {label: profile for label, profile in profiles}}
 
 
-def classification_section(page, drawer, entries, pred, truth, name, score, signal, files, out):
+def classification_section(page, drawer, entries, pred, truth, name, score, signal, files, out, tracker):
     rows, loaded = [], []
-    for entry in entries:
+    for position, entry in enumerate(entries):
+        tracker.begin(f"{truth} as a classification: {entry['label']}")
         columns = [truth] + ([pred] if pred in (entry.get("columns") or []) else []) \
             + ([score] if score and score in (entry.get("columns") or []) else [])
         table = read_columns(entry, name, columns)
@@ -656,6 +678,8 @@ def classification_section(page, drawer, entries, pred, truth, name, score, sign
         if len(classes) > 100:
             page.text(f"{truth} holds {len(classes)} distinct values in {entry['label']}; a classification takes at "
                       f"most 100 classes, so {truth} is no classification target.", "note")
+            tracker.plan(tracker.total - (len(entries) - position - 1))
+            tracker.begin(f"{truth} as a classification: stopped")
             return {"target": truth, "prediction": pred, "task": "classification", "points": []}
         numbers = class_scores(table[truth], table[pred] if pred in table.columns else None, classes)
         found = {"point": entry["label"], **numbers}
@@ -670,6 +694,7 @@ def classification_section(page, drawer, entries, pred, truth, name, score, sign
                 found["calibration"] = calibration_of(values[usable], texts[usable] == str(matched[0]))
                 found["scores"] = {str(item): values[usable][texts[usable] == str(item)] for item in classes[:10]}
         loaded.append(found)
+    tracker.begin(f"{truth} as a classification: the figures")
     if not loaded:
         page.text(f"No selected point holds {truth} in {name}.", "note")
         return {"target": truth, "prediction": pred, "task": "classification", "points": []}
@@ -806,8 +831,10 @@ def plain(value):
     return value
 
 
-def report(records, points=None, tasks=None, scores=None, signals=None, predictions="predictions.parquet", out=None):
+def report(records, points=None, tasks=None, scores=None, signals=None, predictions="predictions.parquet", out=None,
+           progress=None):
     records = [Path(record) for record in records]
+    tracker = Progress(progress)
     tasks, scores, signals = dict(tasks or {}), dict(scores or {}), dict(signals or {})
     wrong = [f"{target}={task}" for target, task in tasks.items() if task not in TASKS]
     if wrong:
@@ -815,11 +842,15 @@ def report(records, points=None, tasks=None, scores=None, signals=None, predicti
     note = readable_json(Record(records[0]), "manifest.json") or {}
     sweep = len(records) == 1 and note.get("kind") == "sweep"
     if sweep:
-        manifest, objective, entries, states = sweep_entries(records[0], points)
+        manifest, objective, entries, states = sweep_entries(records[0], points, tracker)
     else:
         if points is not None:
             raise ValueError("--points picks the points of one sweep root; give record directories without it")
-        manifest, objective, entries, states = run_entries(records)
+        manifest, objective, entries, states = run_entries(records, tracker)
+    pairs = prediction_targets(entries, predictions)
+    series = sorted({key for entry in entries for line in entry["history"].lines for key, value in line.items()
+                     if key.startswith(("val/", "train/", "test/")) and finite(value)})
+    tracker.plan(tracker.done + len(series) + len(pairs) * (len(entries) + 1) + 1)
     target = Path(out) if out is not None else default_out(records)
     target.mkdir(parents=True, exist_ok=True)
     clear_previous(target)
@@ -905,9 +936,8 @@ def report(records, points=None, tasks=None, scores=None, signals=None, predicti
     page.text(f"The spread of the last 5 is the standard deviation of {monitor or 'the objective'} over the last five "
               f"turns; val - train is the value on the validation set minus the one on the training set at the "
               f"objective turn, a first look at over fitting.", "muted")
-    series = sorted({key for entry in entries for line in entry["history"].lines for key, value in line.items()
-                     if key.startswith(("val/", "train/", "test/")) and finite(value)})
     for key in series:
+        tracker.begin(f"training: {key}")
         drawn = [(entry["label"], [line["turn"] for line in entry["history"].lines if finite(line.get(key))],
                   [line[key] for line in entry["history"].lines if finite(line.get(key))]) for entry in entries]
         if sum(len(xs) for _, xs, _ in drawn) < 2:
@@ -927,7 +957,6 @@ def report(records, points=None, tasks=None, scores=None, signals=None, predicti
         page.raw(f"<details><summary>resolved.yaml, {html.escape(best_config['label'])} against "
                  f"{html.escape(label)}</summary><pre>{html.escape(chr(10).join(lines) or 'no difference')}</pre>"
                  f"</details>")
-    pairs = prediction_targets(entries, predictions)
     sections = []
     for pred, truth in pairs:
         task = tasks.get(truth, "regression")
@@ -937,10 +966,11 @@ def report(records, points=None, tasks=None, scores=None, signals=None, predicti
             page.text(f"{truth} is reported as a regression; --task {truth}=classification reports it as classes.",
                       "muted")
         if task == "regression":
-            sections.append(regression_section(page, drawer, entries, pred, truth, predictions, files, target))
+            sections.append(regression_section(page, drawer, entries, pred, truth, predictions, files, target,
+                                               tracker))
         else:
             sections.append(classification_section(page, drawer, entries, pred, truth, predictions,
-                                                   scores.get(truth), signals.get(truth), files, target))
+                                                   scores.get(truth), signals.get(truth), files, target, tracker))
     if not pairs:
         page.section("predictions", "Predictions")
         page.text(f"No selected point wrote {predictions} with a pred_ column next to its target.", "note")
@@ -962,6 +992,7 @@ def report(records, points=None, tasks=None, scores=None, signals=None, predicti
              "least the signal efficiency named</dd>"
              "<dt>average precision</dt><dd>the area under the precision and recall curve, summed over the cuts</dd>"
              "</dl>")
+    tracker.begin("writing report.html")
     (target / "report.html").write_text(page.document(head))
     files.append("report.html")
     summary = {"records": [str(record) for record in records], "points": [entry["label"] for entry in entries],

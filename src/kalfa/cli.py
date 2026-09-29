@@ -398,6 +398,9 @@ def build_parser():
                             help="the predictions file of every record; predictions.parquet without it")
     report_cmd.add_argument("--out", metavar="DIR",
                             help="the directory of the report; reports/report inside the sweep root without it")
+    report_cmd.add_argument("--progress", choices=["bar", "lines", "none"], default="bar",
+                            help="a bar over the steps on stderr (the default), a line per step on stdout, "
+                                 "progress DONE/TOTAL WHAT, for a program that follows it, or nothing")
     report_cmd.set_defaults(handler=cmd_report)
 
     docs_cmd = command(commands, "docs", "the lego reference generated from the registry",
@@ -813,13 +816,48 @@ def cmd_generate(args) -> int:
     return 0
 
 
+class ReportBar:
+    def __init__(self):
+        self.bar = None
+
+    def __call__(self, done, total, text):
+        if self.bar is None:
+            from tqdm.auto import tqdm
+
+            self.bar = tqdm(total=total, unit="step", file=sys.stderr, dynamic_ncols=True)
+        self.bar.total = total
+        self.bar.n = done
+        self.bar.set_postfix_str(text[:48], refresh=False)
+        self.bar.refresh()
+
+    def close(self, finished=False):
+        if self.bar is not None:
+            if finished:
+                self.bar.n = self.bar.total
+            self.bar.close()
+
+
+def progress_line(done, total, text):
+    print(f"progress {done}/{total} {text}", flush=True)
+
+
 def cmd_report(args) -> int:
     from . import report
     from .collect import joined
 
-    target, figures, tables, written = report.report(
-        args.records, report.point_ids(args.points), report.keyed(args.task, "--task"),
-        report.keyed(args.score, "--score"), report.keyed(args.signal, "--signal"), args.predictions, args.out)
+    bar = ReportBar() if args.progress == "bar" else None
+    listen = bar if bar is not None else (progress_line if args.progress == "lines" else None)
+    try:
+        target, figures, tables, written = report.report(
+            args.records, report.point_ids(args.points), report.keyed(args.task, "--task"),
+            report.keyed(args.score, "--score"), report.keyed(args.signal, "--signal"), args.predictions, args.out,
+            listen)
+    except BaseException:
+        if bar is not None:
+            bar.close()
+        raise
+    if bar is not None:
+        bar.close(finished=True)
     files = [name for name in written if name.endswith(".csv")]
     print(f"wrote report.html with {figures} figure{'s' if figures != 1 else ''} and {tables} table"
           f"{'s' if tables != 1 else ''}" + (f", and {joined(files)}" if files else "") + f" under {target}")

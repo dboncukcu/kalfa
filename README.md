@@ -515,8 +515,8 @@ Three kinds go in these sections:
 | `metric` | stateful `update(...)` / `compute()`, arguments bound by name | `metrics` only |
 
 Definition level keys sit beside `uri` and `params`, never inside them: `sets: [train]`, `every: 5`,
-`output: x_hat` (which wire of a multi output model), `target: input` (a field, a list, a glob, or the model's own
-input).
+`output: x_hat` (which wire of a multi output model), `target: input` (a field, a list, a glob, the model's own
+input, or `{input: columns}` for named columns of that input).
 
 **The scale rule follows the section, not the kind.** `losses` are computed in the model scale (the transformed
 target), `metrics` in the original scale: the adapter runs prediction and target back through the rescaling
@@ -796,7 +796,8 @@ ratio, the residuals, the response and the resolution in bins of the truth and t
 classification gets the accuracy, the precision, recall and F1 per class, the confusion, and with `--score` and
 `--signal` the ROC, the background rejection, the precision and recall curve, the score by class and the
 calibration. A target without `--task` is a regression. Every run writes the report again over the previous one,
-and the board writes the same report from a button on the sweep page.
+with a bar over its steps (reading every point, every figure, every target of every point), and the board writes the
+same report from a button on the sweep page, showing the share done, the step it is on and the time left.
 
 A point is an ordinary record under `<root>/<id>/`. `grid`, `random` and `sobol` are deterministic by id, so
 `--id N` reproduces one point anywhere and looks at no other point.

@@ -496,6 +496,26 @@ def test_a_target_name_the_data_does_not_carry_is_a_target_not_a_field_warning(w
         "metrics.acc.target", "metrics.ap_every.target"]
 
 
+def test_target_input_columns_are_checked_against_the_input_fields(workdir):
+    config = load_config("reference")
+    put(config, ("losses", "mse_lin", "target"), {"input": ["num_0", "zz_*", "num_9"]})
+    prepared = check([write_config(workdir / "mutated.yaml", config)], parse_sets([]))
+    assert [(problem.severity, problem.kind) for problem in prepared.problems] == [
+        ("error", "target_not_a_field"), ("warning", "target_not_a_field")]
+    assert prepared.problems[0].message.startswith("losses.mse_lin.target names 'zz_*', which matches no input "
+                                                   "field; the input fields are ['num_0', 'num_1', ")
+    assert prepared.problems[1].message == ("losses.mse_lin.target names 'num_9', which the data does not carry as "
+                                            "an input field; only a chain that widens a column (one_hot) or adds "
+                                            "one (an imputer's indicator) puts it in the feature tensor")
+    put(config, ("losses", "mse_lin", "target"), {"inputs": "num_0"})
+    prepared = check([write_config(workdir / "mutated.yaml", config)], parse_sets([]))
+    assert [(problem.severity, problem.kind, problem.message) for problem in prepared.problems] == [
+        ("error", "invalid_value", "losses.mse_lin.target must be a field name, a list of names, a glob, input, or "
+                                   "{input: columns}")]
+    put(config, ("losses", "mse_lin", "target"), {"input": "num_*"})
+    assert check([write_config(workdir / "mutated.yaml", config)], parse_sets([])).problems == []
+
+
 def test_set_effects_are_checked_against_the_definition(workdir):
     config = load_config("reference")
     config["training"]["rules"][2]["set"] = {"ws.terms.nope": 2.0, "ws.terms.mse_lin": "two", "ws.nope": 1.0,

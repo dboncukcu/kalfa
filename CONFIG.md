@@ -613,12 +613,13 @@ The adapter keys sit on the definition beside `every` and `sets`; `params` go to
 | Key | Means |
 |---|---|
 | `output` | the wire of a multi output model; the first output when not written |
-| `target` | a field name, a list of names, a glob, or `input` (the model's own input). When not written: the selector of the wire in `training.targets`, else the single field marked `target: true`; a `check` error when there are several and nothing names one. Several fields are stacked into one `(batch, n)` tensor in the plan's field order and every column is rescaled with its own chain |
+| `target` | a field name, a list of names, a glob, `input` (the model's own input), or `{input: columns}` (named columns of that input: a name, a list or a glob over the feature columns of the fitted plan, in the order written, the way `feature_index` reads them, so a column a chain widened (`one_hot`) is named as the plan names it; `check` reads the names against the input fields of the header, a glob that matches none is an error and a plain name it does not carry a warning). When not written: the selector of the wire in `training.targets`, else the single field marked `target: true`; a `check` error when there are several and nothing names one. Several fields are stacked into one `(batch, n)` tensor in the plan's field order and every column is rescaled with its own chain, the picked input columns too |
 
 ```yaml
 losses:
-  rec: {uri: mse, target: input}
-  ce:  {uri: cross_entropy, params: {weight: {uri: class_weights}}}
+  rec:  {uri: mse, target: input}
+  part: {uri: mse, output: fast_hat, target: {input: "fast_*"}}
+  ce:   {uri: cross_entropy, params: {weight: {uri: class_weights}}}
 ```
 
 Under `losses` the criterion value is backpropagated when it is the active loss and enters the history as a
@@ -1234,8 +1235,10 @@ elsewhere.
 
 `kalfa report <sweep root> --points 3,7,12 | all` or `kalfa report <record> <record> ...`, with `--task
 TARGET=regression|classification`, `--score TARGET=COLUMN`, `--signal TARGET=CLASS` (each repeated per target),
-`--predictions FILE` (`predictions.parquet` without it) and `--out DIR` (`reports/report` inside the sweep root, or
-inside the parent of the records). A sweep root needs `--points`; record directories take none. It writes
+`--predictions FILE` (`predictions.parquet` without it), `--out DIR` (`reports/report` inside the sweep root, or
+inside the parent of the records) and `--progress bar|lines|none`: a bar over the steps on stderr (reading every
+point, every training figure, every point of every target and its figures, the page), one line per step on stdout
+(`progress 14/41 y as a regression: point 7`, what the board reads), or nothing. A sweep root needs `--points`; record directories take none. It writes
 `report.html`, one file with every figure inside as a png, and `report.json`, `points.csv`, `metrics.csv` and a
 CSV per target; before writing it removes the files its previous `report.json` names, so every run replaces the
 report.
@@ -1346,8 +1349,9 @@ The endpoints: `/api/tree`, `/api/live`, `/api/watch`, `/api/table`, `/api/recor
 `/api/events`, `/api/history`, `/api/steps`, `/api/tail`, `/api/sweep`, `/api/diff`, `/api/describe`, `/file` (sent
 in pieces, with an ETag), and two POSTs: `/api/stop`, which writes `stop.json` into a record, or into a sweep root
 and its running points, and `/api/report`, which runs `kalfa report` over the points picked in a process of its
-own (one at a time per sweep; `GET /api/report` says whether it runs, how it ended and when `report.html` was
-written). The board writes nothing else; the header of a running record and of a
+own (one at a time per sweep; `GET /api/report` says whether it runs, the step it is on out of how many and the
+seconds since it started, how it ended and when `report.html` was written; the page turns that into the share
+done and the time left, and a closed tab changes nothing, the process goes on). The board writes nothing else; the header of a running record and of a
 live sweep shows the stop button, with a confirmation, anyone who reaches the page can press it, and a stopped run
 continues from its last checkpoint with `kalfa resume`. On a batch system it runs where the files are readable and
 the browser reaches it through an ssh tunnel; the nodes never talk to it. The filter of the predictions tab is
@@ -1434,7 +1438,8 @@ generator, the preprocessors, the set name, the loss scaler of mixed precision, 
 the record. What changes per batch is a `Context` over it: the batch on the device, the global step, and the
 outputs of the `predicts` model computed once and shared by every entry that reads `predictions`;
 `target(name, output)` resolves a definition's target selector against the batch (`input` is the model's first
-input wire), `rescaled(output, target)` gives both in the original units.
+input wire, `{input: columns}` the named feature columns of it), `rescaled(output, target)` gives both in the
+original units.
 
 ### The frames
 
