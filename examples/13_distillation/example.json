@@ -1,0 +1,14 @@
+{
+  "title": "Knowledge distillation: a shared data layer, a teacher trained first, then a small student that learns from the frozen teacher loaded from its record",
+  "shows": ["include", "shared data layer", "weights from a record", "freeze", "distill", "above rule",
+            "plateau stop", "loss terms in the loss curve", "summarize two records"],
+  "needs": [],
+  "steps": [
+    {"run": "teacher.yaml", "record": "teacher", "sets": {"train.epochs": 3, "data.batch.size": 16}},
+    {"run": "config.yaml", "record": "student",
+     "sets": {"train.epochs": 3, "data.batch.size": 16, "rules.cool_down.when.value": 0.1,
+              "rules.stop.after": "cool_down", "rules.stop.when.patience": 0},
+     "params": {"teacher_run": "{records}/teacher"}},
+    {"summarize": ["teacher", "student"], "out": "summary", "html": "report.html"}
+  ]
+}

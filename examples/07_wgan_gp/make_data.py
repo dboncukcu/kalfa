@@ -1,35 +1,55 @@
-"""Data of example 07: data/celeba64, ten classes of 32 by 32 RGB images (the generator produces 32 by 32)."""
-
 from pathlib import Path
 
 import numpy
+from PIL import Image, ImageDraw
 
-HERE = Path(__file__).parent
+
+HERE = Path(__file__).resolve().parent
+SIZE = 16
+CANVAS = 64
+MOODS = ("smile", "frown", "surprise")
 
 
-def write_image_folder(root, classes=("zero", "one"), per_class=24, size=28, channels=1, seed=0):
-    from PIL import Image
+def color(generator, low, high):
+    return tuple(int(value) for value in generator.integers(low, high, 3))
 
+
+def mouth(draw, mood, center, generator):
+    width = int(generator.integers(9, 14))
+    left, right = center - width, center + width
+    if mood == "smile":
+        draw.arc([left, 30, right, 46], start=20, end=160, fill=(120, 20, 30), width=4)
+    elif mood == "frown":
+        draw.arc([left, 40, right, 56], start=200, end=340, fill=(120, 20, 30), width=4)
+    else:
+        draw.ellipse([center - 5, 38, center + 5, 50], outline=(120, 20, 30), width=4)
+
+
+def face(mood, generator):
+    image = Image.new("RGB", (CANVAS, CANVAS), color(generator, 40, 200))
+    draw = ImageDraw.Draw(image)
+    center = 32 + int(generator.integers(-3, 4))
+    skin = (int(generator.integers(170, 250)), int(generator.integers(130, 200)), int(generator.integers(90, 160)))
+    draw.ellipse([center - 24, 6, center + 24, 60], fill=skin)
+    for side in (-10, 10):
+        draw.ellipse([center + side - 4, 20, center + side + 4, 28], fill=(30, 30, 40))
+    mouth(draw, mood, center, generator)
+    return image.resize((SIZE, SIZE), Image.LANCZOS)
+
+
+def write_faces(root, count, seed):
     generator = numpy.random.default_rng(seed)
-    root = Path(root)
-    for position, name in enumerate(classes):
-        directory = root / name
+    for mood in MOODS:
+        directory = root / mood
         directory.mkdir(parents=True, exist_ok=True)
-        for index in range(per_class):
-            canvas = generator.integers(0, 40, size=(size, size, channels), dtype="uint8")
-            half = size // 2
-            row = 0 if position % 2 == 0 else half
-            column = 0 if position < 2 else half
-            canvas[row:row + half, column:column + half] = 200 + generator.integers(0, 50, size=(half, half, channels))
-            image = Image.fromarray(canvas[:, :, 0] if channels == 1 else canvas, mode="L" if channels == 1 else "RGB")
-            image.save(directory / f"{index:03d}.png")
-    return root
+        for index in range(count):
+            face(mood, generator).save(directory / f"{index:03d}.png")
+    return len(MOODS) * count
 
 
 def main():
-    classes = tuple(f"attr_{position}" for position in range(10))
-    write_image_folder(HERE / "data" / "celeba64", classes=classes, per_class=48, size=32, channels=3)
-    print("wrote data/celeba64 (10 classes, 480 images)")
+    written = write_faces(HERE / "data" / "faces", 300, seed=0)
+    print(f"wrote data/faces ({written} images of {', '.join(MOODS)})")
 
 
 if __name__ == "__main__":

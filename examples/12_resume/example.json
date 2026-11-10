@@ -1,0 +1,10 @@
+{
+  "title": "Resume a record: train two turns, continue from its checkpoint to four turns in a new directory",
+  "shows": ["include", "kalfa run --from", "resumed_from", "summarize"],
+  "needs": ["01_mlp_regression"],
+  "steps": [
+    {"run": "config.yaml", "record": "resume_first", "params": {"epochs": 2}, "sets": {"data.batch": 32}},
+    {"resume": "resume_first", "record": "resume_more", "sets": {"train.epochs": 4}},
+    {"summarize": ["resume_first", "resume_more"], "out": "resume_summary"}
+  ]
+}

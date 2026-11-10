@@ -1,0 +1,45 @@
+params:
+  epochs: 100
+  lr: 1.0e-3
+  seed: 7
+seed: $seed$
+data:
+  use: table
+  file: housing.parquet
+  split: [0.7, 0.15, 0.15]
+  features: {"x*": standard_scaler}
+  targets: {price: standard_scaler}
+  batch: 128
+models:
+  net: {use: mlp, hidden: [64, 64], out: 1}
+losses:
+  mse: mse
+  mae: l1
+  total:
+    use: mdmm
+    objective: "@losses.mse"
+    constraints:
+      - {of: "@losses.mae", epsilon: 0.05, lmbda_init: 0.5}
+metrics:
+  rmse: rmse
+optimizers:
+  main:
+    use: adam
+    lr: $lr$
+    over:
+      - "@models.net"
+      - {of: "@losses.total", lr: -0.05}
+    minimizes: "@losses.total"
+train:
+  epochs: $epochs$
+  checkpoint: {watch: val/rmse}
+  report: best
+  track: [losses.total.lmbda]
+rules:
+  tighten:
+    when: {use: after_epoch, at: 30}
+    set:
+      losses.total.constraints[0].epsilon: 0.02
+plots:
+  loss_curve: {use: loss_curve, series: [train/total, train/total/objective, val/rmse]}
+record: runs/mdmm_$datetime$

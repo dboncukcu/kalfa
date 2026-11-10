@@ -1,0 +1,9 @@
+seed: 7
+data:
+  use: image_folder
+  folder: data/objects
+  split: [0.7, 0.15, 0.15]
+  transform: [to_tensor, {use: normalize, mean: cifar10}]
+  train_transform: [{use: random_crop, size: 16, padding: 2}, random_flip, to_tensor, {use: normalize, mean: cifar10}]
+  batch: {size: 16, eval_size: 512}
+metrics: {accuracy: accuracy}

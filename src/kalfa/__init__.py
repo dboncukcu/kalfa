@@ -1,27 +1,19 @@
 from importlib.metadata import PackageNotFoundError, version
-from pathlib import Path
 
-from cirak import register_fragment
+from .core.aliases import lego, register, resolve
+from .core.errors import BuildError, ConfigError, KalfaError, Problem, RunError
+from .core.protocols import Action, ContextMetric, Logger, Objective, Step, Trigger
 
-from . import std
-from .registration import lego
-
-
-PACKS = Path(__file__).parent / "packs"
-CONTRACT = Path(__file__).parent / "contract.yaml"
-
-
-def register_packs():
-    for path in sorted(PACKS.glob("*.yaml")):
-        register_fragment(f"/alias/kalfa/{path.stem}", path,
-                          description=f"alias pack {path.stem}: short names for the std legos")
-
-
-register_packs()
 
 try:
     __version__ = version("kalfa")
 except PackageNotFoundError:
-    __version__ = "unknown"
+    __version__ = "3.0.0.dev0"
 
-__all__ = ["CONTRACT", "PACKS", "__version__", "lego", "std"]
+from . import std  # noqa: E402
+from .api import Monitor, Record, Rule, Run, Train, call, check, open, predict, run, summarize  # noqa: E402
+
+
+__all__ = ["Action", "BuildError", "ConfigError", "ContextMetric", "KalfaError", "Logger", "Monitor", "Objective",
+           "Problem", "Record", "Rule", "Run", "RunError", "Step", "Train", "Trigger", "__version__", "call", "check",
+           "lego", "predict", "records", "register", "resolve", "run", "std", "summarize"]

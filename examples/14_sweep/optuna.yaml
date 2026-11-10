@@ -1,0 +1,12 @@
+include: [../01_mlp_regression/config.yaml]
+params:
+  width: 128
+models:
+  net: {use: mlp, hidden: [$width$, $width$], out: 1}
+sweep:
+  strategy: {use: optuna, trials: 12, sampler: tpe}
+  space:
+    lr: {log: [1.0e-4, 1.0e-2]}
+    width: {int: [16, 256]}
+  objective: {watch: val/rmse, mode: min, at: best}
+  record: runs/sweep_housing_optuna

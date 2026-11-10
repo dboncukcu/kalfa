@@ -1,246 +1,69 @@
 # Examples
 
-Every folder is one reference config and everything it needs: `config.yaml` (the configs that build on another
-include it by its path, `../01_mlp_regression/config.yaml`), the plugin module the config names, `make_data.py`
-writing small synthetic data next to it (the generator lives in that file); the commands run from inside the folder (the paths
-are relative to it), and the test suite runs every folder the same way on a copy. The
-sizes finish in a minute or two on a laptop CPU; where a config asks for a GPU, `--set device=cpu` and a shortened
-`epochs` are in the command, the config stays untouched (`cpu` is a device lego like `auto`, `cuda` and `mps`; a
-device that is not available is an error, never a silent fallback). The `uv run` prefix uses the project's virtual
-environment; drop it inside an activated one.
+Every example is a folder with an `example.json` recipe, a `config.yaml` (and sometimes more YAML files; `14_sweep` has `grid.yaml`, `random.yaml` and `optuna.yaml` instead), a `make_data.py` that writes small synthetic data next to the config (`11_kfold`, `12_resume` and `14_sweep` read the data of `01_mlp_regression` instead) and a plugin module when the example brings its own model. No example needs torchvision, timm or a download: images are 16x16 PNG files drawn with PIL, tables are parquet files and text is a `.txt` file, all made in a few seconds.
 
-The general pattern:
+| folder | what it shows | plugin |
+|---|---|---|
+| `minimal` | the smallest config that runs: a table, one model, one loss, one metric, one optimizer | none |
+| `01_mlp_regression` | a rule chain (`after_epoch`, `below`, `plateau`), a plain function as a criterion, predictions in the original units, onnx export | `mylegos.py` |
+| `02_mlp_classification` | `one_hot` features, a `label` target, `@data.class_weights`, `f1`, a confusion matrix | none |
+| `03_timeseries_window` | a `sequential` split, the `window` feed with context, a `stack` model, a forecast over a horizon | none |
+| `04_cnn_images` | `image_folder` and transforms, a frozen backbone and the rule that unfreezes it, optimizer groups, AMP | `cnn_legos.py` |
+| `05_autoencoder` | a model with two outputs, `latent_sampler`, `image_pairs` | `ae_legos.py` |
+| `06_vae` | `vae_elbo`, a `linear_warmup` weight, rules that change a weight and a reference | `vae_legos.py` |
+| `07_wgan_gp` | `alternating` with `repeat`, an EMA copy, `fid`, a `write_samples` rule, `gan_sampler` | `gan_legos.py` |
+| `08_ddpm` | `ddpm`, `cosine_beta`, `predicts: false`, `ddpm_sampler`, an lr schedule | `unet_legos.py` |
+| `09_simclr` | `two_views`, `ntxent`, embeddings as predictions | `simclr_legos.py` |
+| `10_char_lm` | `text_lines`, `train.updates`, `perplexity`, `lm_sampler` | `gpt_legos.py` |
+| `11_kfold` | the config of `01_mlp_regression` as a layer, `kfold`, the fold groups of a summary | none |
+| `12_resume` | `kalfa run --from` continues a record into a new directory | none |
+| `13_distillation` | a shared data layer, a teacher loaded from its own record with `weights`, `freeze`, `distill` | `distill_legos.py` |
+| `14_sweep` | grid, `random_search` and optuna sweeps, a sweep report | none |
+| `15_multi_target` | three targets, `weighted_sum`, a rule that patches a param inside a list | `multihead_legos.py` |
+| `16_mdmm` | an `mdmm` constraint, a negative lr group, a rule that tightens epsilon, `train.track` | none |
+| `alad` | five models, two custom objectives, a filter per set, a chain of preprocessors, anomaly scores | `alad_legos.py` |
 
-```
-cd examples/<folder>
-uv run python make_data.py
-uv run kalfa run config.yaml --set record=runs/x [...]
-uv run kalfa predict runs/x [--device cuda] [...]     # or kalfa generate runs/x [--device cuda]
-```
+On the board, the model tab draws the diagram of every model the first batch can drive (a model whose inputs the batch does not hold, such as the generator of `07_wgan_gp`, which reads the noise `z`, or the denoiser of `08_ddpm`, shows its module tree instead), the data tab draws the flowchart of a table, an image folder or text lines, and the predictions tab reads each prediction as a task: regression for `01_mlp_regression`, binary for `02_mlp_classification` (scored by `prob_net_yes`) and for `alad` (scored by its anomaly score, with the threshold of the best f1), multiclass with an image gallery for `04_cnn_images`, embeddings for `05_autoencoder`, `06_vae` and `09_simclr`, and three regression pairs under one overview for `15_multi_target`.
 
-`kalfa predict` and `kalfa generate` take `--device` with the same values as the config key, so a record made here
-can be replayed on a GPU box; without it they stay on the cpu.
+## Running one
 
-## 01_mlp_regression
+From the root of the repository:
 
-Table regression: `standard_scaler`, a two layer MLP, four loss definitions and a loss switch through rules
-evaluated at the end of a turn (`rules`), stopping with `plateau`, the `best` checkpoint, `predictions.parquet` in
-the original scale.
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set record=runs/01
-uv run kalfa predict runs/01 --data new.parquet
-```
-
-## 02_mlp_classification
-
-Binary classification: `one_hot` and `label_encoder`, `cross_entropy` with class weights (the `class_weights` run
-time component), `accuracy` and `f1`, `best` with `mode: max`, the prediction decoded back to the label and the
-`confusion` plot.
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set record=runs/02
-uv run kalfa predict runs/02 --data new.parquet
+```sh
+uv run python examples/01_mlp_regression/make_data.py
+uv run kalfa run examples/01_mlp_regression/config.yaml
 ```
 
-## 03_timeseries_window
+`make_data.py` writes the data into the example's own folder. The data paths of a config are relative to the config (`file: housing.parquet`, `folder: data/pets`): kalfa looks for a relative path in the working directory first and in the directories of the config files next, so the command works from any directory. The plugin module beside a config is found the same way. Records go to `runs/<name>_<datetime>` under the working directory, and `kalfa run` prints the directory it writes. Two configs write a fixed directory instead: `11_kfold` writes `runs/cv_housing_fold<k>` for fold k and `13_distillation/teacher.yaml` writes `runs/teacher`. A second run of the same fold or of the teacher finds that directory taken and writes into `<record>_<datetime>` beside it, saying so on stderr; `--record DIR` names another directory, and `-p teacher_run=DIR` points the student at a newer teacher.
 
-Time series: the `sequential` split (grouped by `site_id`), the `window` feed (window, horizon, context at the split
-boundary), `gru` and `last_step`, a multi step target (`pred_y_0..`), the `forecast` plot.
+The budgets of a config are the ones of a full training. A first try is shorter with an override: `--set train.epochs=3` for a config that counts epochs, or `-p epochs=3` when the config reads the budget from a param (the `params` block at its top says which). `10_char_lm` counts updates, and its cosine schedule reads the same params as its budget, so its first try is `-p total_steps=300 -p turn_updates=100 -p warmup=20`. Some full configs need more than a shorter budget, and the `sets` and `params` of the `run` steps in a folder's `example.json` are a short try that the tests run. `07_wgan_gp` is one: its `fid` metric scores every fifth epoch, so in a three epoch run the `val/fid` series that its checkpoint watches never appears and `report: best` stops the run after the last turn. A short try of it takes `--set metrics.fid.every=1` on top of `-p epochs=3`, and its recipe also passes `--set metrics.fid.n=16 --set data.batch.size=8`. `kalfa check examples/<folder>/config.yaml` (or `examples/14_sweep/grid.yaml` and its two siblings) lists the problems of a config without running it. The recipe of a folder shows the commands it is meant for, such as `kalfa predict`, `kalfa generate`, `kalfa export` or `kalfa summarize`.
 
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set record=runs/03
-uv run kalfa predict runs/03
-```
+An example whose recipe lists `needs` builds on another folder: `11_kfold`, `12_resume` and `14_sweep` include the config of `01_mlp_regression` as a layer and read its table, so run that folder's `make_data.py` first. `13_distillation` trains its teacher from `teacher.yaml` first into `runs/teacher`, the record the student config reads by default through its `teacher_run` param; `-p teacher_run=DIR` points the student at another teacher record. `14_sweep` is run with `kalfa sweep` over `grid.yaml`, `random.yaml` or `optuna.yaml`.
 
-## 04_cnn_images
+## The demo
 
-Image classification: the `image_folder` source (`root/<class>/*.png`), a per item chain (`resize`,
-`random_crop_flip` on the train set only, `to_tensor`, `normalize`), the `balanced` sampler, a backbone from a
-plugin (`timm_legos.py` is a small convolutional network here), the `unfreeze` rule opening the backbone that
-starts frozen, group learning rates.
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set device=cpu -p epochs=3 --set record=runs/04
-uv run kalfa predict runs/04 --data data/pets_new
+```sh
+uv run python examples/demo.py
+uv run kalfa board runs/demo --open
 ```
 
-## 05_autoencoder
+`demo.py` runs the `make_data.py` of every folder and plays its recipe with short budgets, each example under `runs/demo/<folder>`, then prints how to open the board. `--only 05_autoencoder 07_wgan_gp` plays some folders, `--out DIR` picks another root and `--device cpu` overrides the device of every config. An example directory the demo made before is removed and made again; an existing directory it did not make stops the demo with a message and is left alone.
 
-An autoencoder: `flatten` and `unflatten`, a composite model (`{model: name}` nodes), `target: input`, the
-`reconstructions` plot (`image_pairs`), inference with the encoder (`--model encoder`).
+## Recipes
 
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set record=runs/05
-uv run kalfa predict runs/05 --model encoder --data data/mnist_new
-```
+`example.json` holds the title of an example, the features it shows, the folders whose data it needs and its steps:
 
-## 06_vae_loss_dynamics
-
-A VAE and loss dynamics: the `vae` objective with a mapping of terms (`train/vae_loss/recon`, `kl`, `w_kl`),
-`reparam`, the `linear_warmup` KL schedule, rules targeting objective params (`vae_loss.w_rec`, `vae_loss.recon`),
-`plateau`.
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set record=runs/06
-uv run kalfa predict runs/06 --data data/mnist_new
+```json
+{
+  "title": "...",
+  "shows": ["after_epoch", "plateau"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "housing", "params": {"epochs": 3}, "sets": {"data.batch": 32}},
+    {"predict": "housing", "data": "new.parquet"},
+    {"export": "housing", "format": "onnx"}
+  ]
+}
 ```
 
-## 07_wgan_gp
-
-WGAN GP: two optimizers with `order` and `steps` (n_critic 5), `fresh_batch`, the gradient penalty inside the loss
-(`needs_grad`), the EMA copy of the generator, `fid` and `sample_writer` every five turns (`samples/turn_<n>.png`;
-the `samples_gif` and `samples_matrix` plots at the end), `best` by `val/fid`, generation with `gan_sampler`. The
-`pixel_features` extractor in the command computes the FID from pixel statistics instead of the Inception network
-(a fast demonstration); for the real FID `extractor` is not written (torchmetrics downloads the Inception weights).
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set device=cpu -p epochs=10 --set data.batch.size=16 --set 'metrics.fid.params.extractor={uri: /lego/kalfa/pixel_features}' --set metrics.fid.params.n=64 --set record=runs/07
-uv run kalfa generate runs/07
-```
-
-On a machine with a GPU the same record generates there: `uv run kalfa generate runs/07 --device cuda`.
-
-## 08_ddpm
-
-DDPM: the `ddpm` objective (the time step and the noise from the turn's `rng`), the `linear_betas` schedule,
-`warmup_cosine`, `amp` and `grad_clip`, `sample_writer` every five turns, generation from the EMA copy with
-`ddpm_sampler` (`samples/grid.png`).
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set device=cpu -p epochs=5 -p diffusion_steps=100 --set generate.params.n=16 --set record=runs/08
-uv run kalfa generate runs/08
-```
-
-## 09_simclr
-
-SimCLR: `two_views` (a preprocessor referencing another preprocessor, train set only), `simclr_aug`, `ntxent`,
-training without targets and metrics, inference with the backbone (`--model backbone`, a new folder).
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set device=cpu -p epochs=3 --set data.batch.size=64 --set record=runs/09
-uv run kalfa predict runs/09 --model backbone --data data/stl10/test
-```
-
-## 10_char_lm
-
-A character level language model: the `text_lines` source, `char_tokenizer` (the vocabulary goes into the record),
-the vocabulary size reaching the model through the `vocab_size` component, the `next_token` feed, the steps mode
-(`steps: {total, turn}`), `accumulate`, `amp`, `grad_clip`, `perplexity`, generation with `lm_sampler`
-(`samples/samples.txt`). The step count is reduced for a short demonstration; `amp` is for the GPU, on the CPU
-bfloat16 mixed precision can be very slow depending on the hardware, the command turns it off.
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml --set device=cpu --set training.amp=false -p total_steps=100 -p turn_steps=25 --set record=runs/10
-uv run kalfa generate runs/10
-```
-
-## 11_kfold_cv
-
-k fold cross validation: config 01 as the lower layer (`include`), the `kfold` split (the held out fold is the
-test set), five runs with `-p fold=i`, the fold summary with `kalfa collect` (`cv.json`, `cv.md`).
-
-```
-uv run python make_data.py
-for i in 0 1 2 3 4; do uv run kalfa run config.yaml -p fold=$i -p epochs=10; done
-uv run kalfa collect runs/cv_housing_*
-```
-
-## 12_resume
-
-Resuming: config 01 as the lower layer, the run ends (`final/`), `kalfa resume` continues to more epochs in a new
-directory (`resume.json` shows the source).
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml -p epochs=5 --set record=runs/12
-uv run kalfa resume runs/12 --set training.epochs=10 --set record=runs/12_more
-```
-
-## 13_distillation
-
-Knowledge distillation: first `teacher.yaml` (a small config specific to this folder) produces the run
-`runs/cifar_resnet50_x`; then `config.yaml` loads the teacher with `weights: {run, model, which}`, keeps it frozen
-and in eval mode with `trainable: false`, trains the student with the `distill` objective, and the `cool_down` rule
-lowers the learning rate.
-
-```
-uv run python make_data.py
-uv run kalfa run teacher.yaml
-uv run kalfa run config.yaml --set device=cpu -p epochs=3 --set record=runs/13
-uv run kalfa predict runs/13 --data data/cifar10_new
-```
-
-## 14_sweep_grid
-
-A sweep: config 01 as the lower layer, a `width` param and the `sweep` section (lr x width, a 3x2 grid, the
-objective is the best turn of `val/rmse`). Every point is an ordinary run under `runs/sweep_housing/<id>/` plus
-`sweep.json`; `kalfa collect` on the root writes the table (`sweep.csv`, `sweep.json`, `sweep.md`) and the best
-point, and works on a half done sweep too.
-
-```
-uv run python make_data.py
-uv run kalfa sweep config.yaml -p epochs=5
-uv run kalfa collect runs/sweep_housing
-```
-
-Queue usage (a SLURM array job, say): one job per point, a shared root; the points are deterministic by id, so the
-jobs do not look at each other and `collect` gathers the finished ones.
-
-```
-uv run kalfa sweep config.yaml --count                                    # 6
-uv run kalfa sweep config.yaml --id $SLURM_ARRAY_TASK_ID --record /shared/sweep_housing
-uv run kalfa collect /shared/sweep_housing
-```
-
-A fed back strategy runs in the local loop only: `--set 'sweep.strategy={uri: optuna, params: {trials: 8, seed: 1}}'
---set 'sweep.space.lr={low: 1.0e-4, high: 1.0e-2, log: true}'`.
-
-## 15_multi_target
-
-Multi target regression: three analysis scores come out of one three wide output wire, their combination out of a
-second and a tail label out of a third. `training.targets` binds every wire to the target fields it predicts, so
-one loss call compares the whole `(batch, 3)` block, every column is reported and inverted with its own scaler,
-and `pred_vs_true` draws one titled panel per field. The losses and the metrics name only their wire and inherit
-the target from that table.
-
-```
-uv run python make_data.py
-uv run kalfa describe config.yaml --measure
-uv run kalfa run config.yaml -p epochs=10 --set record=runs/15
-```
-
-## alad
-
-Adversarial anomaly detection with a plugin: five trained models and a composite score model, two optimizers over
-two objectives from `myexample.py` (the plugin next to the config), filters before and after the split, `one_hot`
-free feature chains (`abs`, `log`, `standard_scaler`), no checkpoint (`checkpoint: null`, `report: last`) and four
-plots. The config is the target surface written by hand; the golden dump `tests/golden/dumps/alad.flow.yaml` is generated from it.
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml -p epochs=10 --set record=runs/alad
-uv run kalfa predict runs/alad
-```
-
-## minimal
-
-The smallest table regression: one model named `net` with an inline optimizer (no `optimizers` section), four loss
-definitions with the rule chain, `plateau` stopping and the `best` checkpoint. The twin of `01_mlp_regression` in
-the user's own writing.
-
-```
-uv run python make_data.py
-uv run kalfa run config.yaml -p epochs=10 --set record=runs/minimal
-uv run kalfa predict runs/minimal --data new.parquet
-```
+Each step names one action: `run` (a config with `sets` and `params`), `resume` (a record of an earlier step into a new `record`), `sweep` (a sweep config into a sweep root), `predict` (with an optional `data` file or folder and `which`), `generate` (with `n`), `export` (with `format`) or `summarize` (records or a sweep root, with `out` for the csv and markdown tables, plus `folds.csv` when the records carry a `fold` param, and `html` for a report). In text values `{records}` becomes the record root and `{here}` the example folder, so the student step of `13_distillation` passes `teacher_run: {records}/teacher`. Every run is short: at most three turns, a resumed run four in total, one turn per sweep point. These recipes are what `tests/examples/test_examples.py` plays on a copy of the folder and what `demo.py` plays into the demo root, so every example in this table is run by the tests.

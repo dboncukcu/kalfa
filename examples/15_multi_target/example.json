@@ -1,0 +1,10 @@
+{
+  "title": "One network with three heads predicts yield, moisture and defect counts; a weighted sum joins three losses and a rule raises a weight inside its list",
+  "shows": ["three targets", "multi output model", "pred and target keys", "poisson_nll", "weighted_sum", "rule on a list item", "loss_curve series", "pred_vs_true pairs", "predict on new rows"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "plant",
+     "sets": {"train.epochs": 3, "data.batch": 32, "rules.rebalance.when.at": 2}},
+    {"predict": "plant", "data": "new.parquet"}
+  ]
+}

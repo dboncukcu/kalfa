@@ -1,33 +1,34 @@
-"""Test stand in for a UNet plugin: a tiny noise predictor taking the image and the time step."""
-
-import math
-
-import kalfa
 import torch
 from torch import nn
 
 
-class TinyUnet(nn.Module):
-    kalfa_lazy = True
-
-    def __init__(self, channels):
+class Block(nn.Module):
+    def __init__(self, inlets, outlets, embed):
         super().__init__()
-        self.channels = int(channels)
-        self.first = nn.LazyConv2d(self.channels, 3, padding=1)
-        self.time = nn.Linear(16, self.channels)
-        self.last = nn.Conv2d(self.channels, 3, 3, padding=1)
+        self.first = nn.Conv2d(inlets, outlets, 3, padding=1)
+        self.time = nn.Linear(embed, outlets)
+        self.norm = nn.GroupNorm(1, outlets)
+        self.second = nn.Conv2d(outlets, outlets, 3, padding=1)
 
-    def embed(self, t):
-        positions = torch.arange(8, device=t.device, dtype=torch.float32)
-        angles = t.float()[:, None] / (1000.0 ** (positions[None, :] / 8.0))
-        return torch.cat([angles.sin(), angles.cos()], dim=1)
-
-    def forward(self, image, t):
-        hidden = torch.relu(self.first(image) + self.time(self.embed(t))[:, :, None, None])
-        return self.last(hidden)
+    def forward(self, x, embedded):
+        hidden = torch.nn.functional.silu(self.first(x) + self.time(embedded)[:, :, None, None])
+        return torch.nn.functional.silu(self.second(self.norm(hidden)))
 
 
-@kalfa.lego("/layer/unet/unet", alias="unet",
-            description="Test noise predictor: two convolutions with a sinusoidal time embedding in between")
-def unet(channels):
-    return TinyUnet(channels)
+class UNet(nn.Module):
+    def __init__(self, channels=64, steps=1000, image_channels=3):
+        super().__init__()
+        self.embed = nn.Sequential(nn.Embedding(steps, channels), nn.SiLU())
+        self.down = Block(image_channels, channels, channels)
+        self.shrink = nn.Conv2d(channels, channels * 2, 4, stride=2, padding=1)
+        self.middle = Block(channels * 2, channels * 2, channels)
+        self.grow = nn.ConvTranspose2d(channels * 2, channels, 4, stride=2, padding=1)
+        self.up = Block(channels * 2, channels, channels)
+        self.out = nn.Conv2d(channels, image_channels, 3, padding=1)
+
+    def forward(self, x, t):
+        embedded = self.embed(t)
+        skip = self.down(x, embedded)
+        hidden = self.middle(self.shrink(skip), embedded)
+        hidden = self.up(torch.cat([self.grow(hidden), skip], dim=1), embedded)
+        return self.out(hidden)

@@ -1,0 +1,11 @@
+{
+  "title": "Image classification on a folder of class folders: a frozen backbone that a rule unfreezes, two optimizer groups, AMP",
+  "shows": ["image_folder", "transforms", "freeze", "after_epoch rule", "optimizer groups", "amp", "grad_clip",
+            "confusion_matrix", "predict on a new folder"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "pets",
+     "sets": {"train.epochs": 3, "rules.unfreeze.when.at": 1, "data.batch.size": 16}},
+    {"predict": "pets", "data": "data/pets_new", "which": "best"}
+  ]
+}

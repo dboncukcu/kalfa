@@ -1,0 +1,10 @@
+{
+  "title": "A conditional WGAN GP: the critic steps five times per generator step, an EMA generator is scored by FID and a rule writes samples each turn",
+  "shows": ["alternating", "repeat", "fresh_batch", "ema", "normal_init", "fid", "every rule", "write_samples", "gan_sampler"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "wgan", "params": {"epochs": 3, "latent": 16},
+     "sets": {"data.batch.size": 32, "metrics.fid.every": 1, "metrics.fid.n": 16, "rules.samples.when.epochs": 1}},
+    {"generate": "wgan", "n": 16}
+  ]
+}

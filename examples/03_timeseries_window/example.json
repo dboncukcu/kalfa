@@ -1,0 +1,12 @@
+{
+  "title": "Hourly load of two sites: a sequential split within each site, windows that reach back into the previous set, and a GRU stack that forecasts the next hours",
+  "shows": ["sequential split with group", "window feed", "context", "stack model", "horizon forecast", "forecast_samples", "predict on new rows", "summarize"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "energy", "sets": {"data.batch": 16}, "params": {"size": 24, "horizon": 6, "epochs": 3}},
+    {"run": "config.yaml", "record": "energy_long", "sets": {"data.batch": 16}, "params": {"size": 48, "horizon": 6, "epochs": 3}},
+    {"predict": "energy"},
+    {"predict": "energy", "data": "energy_next.parquet"},
+    {"summarize": ["energy", "energy_long"], "out": "energy_summary"}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "title": "MDMM holds the mean absolute error at a target while the mse falls: a lambda learned through a negative lr, a rule that tightens epsilon, and lambda tracked every turn",
+  "shows": ["mdmm", "constraints", "negative lr group", "rule on a list item", "train.track", "loss terms as series"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "mdmm", "params": {"epochs": 3},
+     "sets": {"data.batch": 32, "rules.tighten.when.at": 2}},
+    {"predict": "mdmm", "which": "best"}
+  ]
+}

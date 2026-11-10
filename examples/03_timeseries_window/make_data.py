@@ -1,34 +1,43 @@
-"""Data of example 03: energy.parquet, three sites of 600 hourly steps with daily and weekly cycles."""
-
 from pathlib import Path
 
 import numpy
 import pandas
 
-HERE = Path(__file__).parent
+
+HERE = Path(__file__).resolve().parent
+HOURS = 720
+AHEAD = 240
+SITES = {"north": (40.0, 12.0, 0.6), "south": (55.0, 18.0, 1.1)}
 
 
-def energy_frame(sites=3, steps=600, seed=0):
+def site_frame(name, base, swing, cooling, generator, hours):
+    clock = numpy.arange(hours)
+    hour = clock % 24
+    angle = 2.0 * numpy.pi * hour / 24.0
+    temperature = (15.0 + 6.0 * numpy.sin(angle - 2.0 * numpy.pi * 9.0 / 24.0) + numpy.sin(clock / 70.0) * 3.0
+                   + generator.normal(scale=0.8, size=hours))
+    shape = numpy.sin(angle - 2.0 * numpy.pi * 6.0 / 24.0) + 0.5 * numpy.sin(2.0 * angle)
+    load = base + swing * shape + cooling * (temperature - 15.0) + generator.normal(scale=1.5, size=hours)
+    return pandas.DataFrame({"site_id": name, "x0": numpy.sin(angle), "x1": numpy.cos(angle),
+                             "x2": temperature, "load": load})
+
+
+def frames(seed=3):
     generator = numpy.random.default_rng(seed)
-    pieces = []
-    for site in range(sites):
-        time = numpy.arange(steps)
-        x0 = numpy.sin(2 * numpy.pi * time / 24.0) + generator.normal(scale=0.1, size=steps)
-        x1 = numpy.cos(2 * numpy.pi * time / 168.0) + generator.normal(scale=0.1, size=steps)
-        x2 = generator.normal(size=steps)
-        load = 100.0 + 30.0 * x0 + 15.0 * x1 + 5.0 * x2 + 10.0 * site + generator.normal(scale=1.0, size=steps)
-        pieces.append(pandas.DataFrame({"site_id": f"site_{site}", "x0": x0, "x1": x1, "x2": x2, "load": load}))
-    return pandas.concat(pieces, ignore_index=True)
-
-
-def write_energy(path, sites=3, steps=600, seed=0):
-    energy_frame(sites, steps, seed).to_parquet(path, index=False)
-    return path
+    seen, ahead = [], []
+    for name, (base, swing, cooling) in SITES.items():
+        frame = site_frame(name, base, swing, cooling, generator, HOURS + AHEAD)
+        seen.append(frame.iloc[:HOURS])
+        ahead.append(frame.iloc[HOURS:])
+    return pandas.concat(seen, ignore_index=True), pandas.concat(ahead, ignore_index=True)
 
 
 def main():
-    write_energy(HERE / "energy.parquet", sites=3, steps=600)
-    print("wrote energy.parquet (3 sites, 1800 rows)")
+    seen, ahead = frames()
+    seen.to_parquet(HERE / "energy.parquet", index=False)
+    ahead.to_parquet(HERE / "energy_next.parquet", index=False)
+    print(f"wrote {HERE / 'energy.parquet'} ({len(seen)} hourly rows of {len(SITES)} sites: site_id, x0 to x2, load)")
+    print(f"wrote {HERE / 'energy_next.parquet'} (the next {AHEAD} hours of each site)")
 
 
 if __name__ == "__main__":

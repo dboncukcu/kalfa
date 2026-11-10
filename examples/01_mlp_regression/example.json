@@ -1,0 +1,13 @@
+{
+  "title": "A rule chain moves the loss from mse to huber, mae and a plain function, predictions come back in the original units, and the model leaves as onnx",
+  "shows": ["params", "after_epoch", "below", "plateau", "after", "plain function criterion", "rescale", "predict on new rows", "onnx export"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "housing", "params": {"epochs": 3},
+     "sets": {"data.batch": 32, "rules.to_huber.when.at": 1, "rules.to_l1.when.value": 100.0,
+              "rules.to_log_cosh.when.patience": 0}},
+    {"predict": "housing", "data": "new.parquet"},
+    {"predict": "housing", "which": "last"},
+    {"export": "housing", "format": "onnx"}
+  ]
+}

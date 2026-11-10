@@ -1,73 +1,35 @@
-# 09: SimCLR. Two views per sample come from a preprocessor (two_views, train set only); the ntxent loss takes the pair of
-# views in the batch, with in batch negatives; no target, no metric, no validation. The backbone and the projection head are
-# separate models on the same optimizer; the simclr composite model is used in training; at inference the projection head is dropped:
-# kalfa predict runs/simclr_x --model backbone --data data/stl10/test. It fits the alternating turn: one optimizer.
-
-include:
-  - /alias/kalfa/vision
-
-plugins:
-  - timm_legos
-
-params:
-  epochs: 100
-  lr: 3.0e-4
-  temperature: 0.5
-  seed: 7
-
-seed: $seed$
-device: cuda                      # a device lego (auto | cpu | cuda | mps | {uri, params}); an unavailable device is an error
-
+seed: 7
 data:
-  source: {uri: image_folder, params: {path: data/stl10/unlabeled}}
-  split: {ratios: [1.0, 0.0, 0.0], seed: $seed$}
-  batch: {size: 256, drop_last: true}
-  preprocessors:
-    simclr_aug: {uri: simclr_aug, params: {size: 96}}
-    two_views:  {uri: two_views, params: {transform: simclr_aug}, sets: [train]}
-    to_tensor:  {uri: to_tensor}
-  fields:
-    image: {preprocessors: [two_views, to_tensor]}
-  feed: table
-
-model:
-  models:
-    backbone:
-      optimizer: main
-      inputs: [image]
-      outputs: [h]
-      nodes:
-        - {uri: timm_backbone, params: {name: resnet18, pooled: true}}
-    head:
-      optimizer: main
-      inputs: [h]
-      outputs: [z]
-      nodes:
-        - {uri: linear_relu, params: {out_features: 512}}
-        - {uri: linear, params: {out_features: 128}}
-    simclr:
-      inputs: [image]
-      outputs: [z]
-      nodes:
-        h: {model: backbone, inputs: [image]}
-        z: {model: head, inputs: [h]}
-
+  use: image_folder
+  folder: data/unlabeled
+  split: [0.8, 0.1, 0.1]
+  labels: false
+  train_transform:
+    - use: two_views
+      each:
+        - {use: random_crop, size: 16, padding: 2}
+        - random_flip
+        - to_tensor
+  transform: [to_tensor]
+  batch: {size: 64, drop_last: true}
+models:
+  encoder: {use: simclr_legos.Encoder, width: 32, outputs: [h]}
+  projector: {use: mlp, hidden: [128], out: 32, in_features: 32, inputs: [h]}
 losses:
-  ntx: {uri: ntxent, params: {model: simclr, temperature: $temperature$}, sets: [train]}
-
+  ntxent: {use: ntxent, encoder: "@models.encoder", projector: "@models.projector", views: image, temperature: 0.5,
+           on: [train]}
 optimizers:
-  main: {uri: adamw, params: {lr: $lr$}, loss: ntx}
-
-training:
-  turn: supervised
-  predicts: simclr
-  epochs: $epochs$
-  amp: true
-  checkpoint: last
-  report: last
-  stop: []
-
+  main:
+    use: adamw
+    lr: 1.0e-3
+    over: ["@models.encoder", "@models.projector"]
+    minimizes: "@losses.ntxent"
+    schedule: {use: cosine, steps: 400}
+train:
+  epochs: 50
+  step: {use: supervised, amp: true}
+  predicts: "@models.encoder"
+  checkpoint: {every: 10}
 plots:
-  loss_curve: {uri: loss_curve}
-
+  loss_curve: loss_curve
 record: runs/simclr_$datetime$

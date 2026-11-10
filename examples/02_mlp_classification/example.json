@@ -1,0 +1,9 @@
+{
+  "title": "Churn classification over numeric and categorical columns, with class weights from the data, macro f1 and a confusion matrix",
+  "shows": ["one_hot", "label", "@data.n_classes", "@data.class_weights", "cross_entropy", "f1", "confusion_matrix", "checkpoint on a max series", "predict on new rows"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "churn", "sets": {"train.epochs": 3, "data.batch": 32}},
+    {"predict": "churn", "data": "new.parquet"}
+  ]
+}

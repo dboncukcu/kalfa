@@ -1,0 +1,12 @@
+include: [../01_mlp_regression/config.yaml]
+params:
+  width: 128
+models:
+  net: {use: mlp, hidden: [$width$, $width$], out: 1}
+sweep:
+  strategy: grid
+  space:
+    lr: [1.0e-2, 1.0e-3, 1.0e-4]
+    width: [64, 128, 256]
+  objective: {watch: val/rmse, mode: min, at: best}
+  record: runs/sweep_housing

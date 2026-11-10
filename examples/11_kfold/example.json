@@ -1,0 +1,11 @@
+{
+  "title": "Five fold cross validation of the housing regression: three folds as three runs and the fold group summary",
+  "shows": ["include", "kfold", "valid_ratio", "params", "fold groups"],
+  "needs": ["01_mlp_regression"],
+  "steps": [
+    {"run": "config.yaml", "record": "fold0", "params": {"fold": 0, "epochs": 3}, "sets": {"data.batch": 32}},
+    {"run": "config.yaml", "record": "fold1", "params": {"fold": 1, "epochs": 3}, "sets": {"data.batch": 32}},
+    {"run": "config.yaml", "record": "fold2", "params": {"fold": 2, "epochs": 3}, "sets": {"data.batch": 32}},
+    {"summarize": ["fold0", "fold1", "fold2"], "out": "folds"}
+  ]
+}

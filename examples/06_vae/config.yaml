@@ -1,0 +1,44 @@
+params:
+  epochs: 40
+  kl_warmup_steps: 100
+seed: 7
+data:
+  use: image_folder
+  folder: data/digits
+  split: [0.8, 0.1, 0.1]
+  labels: false
+  transform: [to_tensor]
+  batch: 16
+models:
+  vae: {use: vae_legos.Vae, latent: 32, outputs: [x_hat, mu, logvar]}
+losses:
+  mse: {use: mse, pred: x_hat, target: image}
+  huber: {use: torch.nn.HuberLoss, pred: x_hat, target: image}
+  elbo:
+    use: vae_elbo
+    recon: "@losses.mse"
+    w_rec: 1.0
+    w_kl: {use: linear_warmup, start: 0.0, end: 1.0, steps: $kl_warmup_steps$}
+metrics:
+  recon_rmse: {use: rmse, pred: x_hat, target: image}
+optimizers:
+  main: {use: adam, lr: 1.0e-3, over: "@models.vae", minimizes: "@losses.elbo"}
+train:
+  epochs: $epochs$
+  checkpoint: {watch: val/recon_rmse}
+  report: best
+rules:
+  half_recon:
+    when: {use: after_epoch, at: 10}
+    set: {losses.elbo.w_rec: 0.5}
+  to_huber:
+    when: {use: plateau, watch: val/recon_rmse, patience: 5}
+    set: {losses.elbo.recon: "@losses.huber"}
+  stop:
+    when: {use: plateau, watch: val/recon_rmse, patience: 12}
+    stop: true
+generate: {use: latent_sampler, model: "@models.vae.decoder", latent: 32, n: 64}
+plots:
+  loss_curve: {use: loss_curve, series: [train/elbo/recon, train/elbo/kl, val/recon_rmse]}
+  reconstructions: {use: image_pairs, n: 8}
+record: runs/vae_$datetime$

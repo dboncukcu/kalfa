@@ -1,0 +1,10 @@
+{
+  "title": "Self supervised SimCLR on an unlabeled flat folder: two augmented views per image, the ntxent loss and embeddings as predictions",
+  "shows": ["image_folder without labels", "two_views", "ntxent", "drop_last", "cosine schedule", "amp",
+            "embedding predictions"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "simclr", "sets": {"train.epochs": 3, "data.batch.size": 64}},
+    {"predict": "simclr", "data": "data/unlabeled", "which": "last"}
+  ]
+}

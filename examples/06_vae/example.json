@@ -1,0 +1,10 @@
+{
+  "title": "A variational autoencoder whose KL weight warms up while rules halve the reconstruction weight and swap its criterion",
+  "shows": ["vae_elbo", "linear_warmup", "rule sets a weight", "rule sets a reference", "plateau stop", "loss terms in the loss curve", "latent_sampler"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "vae", "params": {"epochs": 3, "kl_warmup_steps": 40},
+     "sets": {"data.batch": 4, "rules.half_recon.when.at": 1, "rules.to_huber.when.patience": 0}},
+    {"generate": "vae", "n": 16}
+  ]
+}

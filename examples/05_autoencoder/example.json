@@ -1,0 +1,10 @@
+{
+  "title": "An autoencoder with two outputs: reconstructions beside their images, latent codes of new digits and samples from the decoder",
+  "shows": ["multi output model", "outputs", "latent_sampler", "image_pairs", "samples_grid", "predict on a new folder"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "ae", "sets": {"train.epochs": 3, "data.batch": 4}},
+    {"predict": "ae", "data": "data/digits_new", "which": "best"},
+    {"generate": "ae", "n": 16}
+  ]
+}
