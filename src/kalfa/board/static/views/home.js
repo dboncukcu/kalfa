@@ -3,7 +3,7 @@ import { computed } from "https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.esm-b
 import { Badge } from "../components/badge.js";
 import { ErrorBox } from "../components/error.js";
 import { Progress } from "../components/progress.js";
-import { EMPTY, ago, bestText, seconds, when } from "../format.js";
+import { EMPTY, ago, bestText, liveNote, nonfiniteText, seconds, when } from "../format.js";
 import { isActive, isSweepEntry, linkOf, nameOf, progressOf, statusOf, store } from "../store.js";
 
 
@@ -20,6 +20,7 @@ export function metaOf(entry) {
   }
   const summary = entry.summary || {};
   const parts = [];
+  if (liveNote(summary)) parts.push(liveNote(summary));
   if (summary.best && summary.best.series) parts.push("best " + bestText(summary.best));
   if (summary.updated) parts.push("updated " + ago(summary.updated));
   if (summary.seconds) parts.push(seconds(summary.seconds));
@@ -35,8 +36,9 @@ export const Home = {
     const kindOf = (entry) => (isSweepEntry(entry) ? "sweep" : "record");
     const startedOf = (entry) => when(isSweepEntry(entry) ? (entry.sweep || {}).started : (entry.summary || {}).started);
     const failureOf = (entry) => (entry.summary && entry.summary.failure) || "";
+    const warningOf = (entry) => nonfiniteText(entry.summary && entry.summary.nonfinite);
     return {
-      store, active, recent, kindOf, startedOf, failureOf, linkOf, nameOf, progressOf, statusOf, metaOf,
+      store, active, recent, kindOf, startedOf, failureOf, warningOf, linkOf, nameOf, progressOf, statusOf, metaOf,
     };
   },
   template: `
@@ -53,10 +55,11 @@ export const Home = {
               <k-badge :status="statusOf(entry)"></k-badge>
             </div>
             <div class="muted small mono">{{ entry.path }}</div>
-            <k-progress :value="progressOf(entry).value" :total="progressOf(entry).total"
+            <k-progress :value="progressOf(entry).value" :total="progressOf(entry).total" :part="progressOf(entry).part"
               :label="progressOf(entry).value + ' / ' + (progressOf(entry).total || '?') + ' ' + progressOf(entry).unit">
             </k-progress>
             <div class="muted small">{{ metaOf(entry) }}</div>
+            <div v-if="warningOf(entry)" class="fail-text small">{{ warningOf(entry) }}</div>
           </a>
         </div>
         <h2 class="section-title">recent</h2>
@@ -74,7 +77,8 @@ export const Home = {
                 <td><k-badge :status="statusOf(entry)"></k-badge></td>
                 <td><k-progress :value="progressOf(entry).value" :total="progressOf(entry).total"></k-progress></td>
                 <td class="muted">{{ startedOf(entry) }}</td>
-                <td class="small">{{ metaOf(entry) }} <span v-if="failureOf(entry)" class="fail-text">{{ failureOf(entry) }}</span></td>
+                <td class="small">{{ metaOf(entry) }} <span v-if="failureOf(entry)" class="fail-text">{{ failureOf(entry) }}</span>
+                  <span v-if="warningOf(entry)" class="fail-text">{{ warningOf(entry) }}</span></td>
               </tr>
             </tbody>
           </table>

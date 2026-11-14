@@ -22,7 +22,9 @@ else:
 PRIMARY = {"records": "#records-table", "legos": "#legos-tree", "config": "#config-output", "guide": "#guide-sections"}
 STYLE = """
 #tabs, #tabs > ContentSwitcher, TabPane, #records-view, #legos-view, #config-view, #legos-tree { height: 1fr; }
-#records-table { width: 3fr; height: 1fr; }
+#records-main { width: 3fr; height: 1fr; }
+#records-table { height: 1fr; }
+#records-order { height: 1; padding: 0 1; color: $text-muted; }
 #records-side, #legos-side { width: 2fr; }
 #legos-scroll { width: 3fr; }
 #legos-tree { overflow-x: hidden; }

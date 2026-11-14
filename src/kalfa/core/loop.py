@@ -12,7 +12,7 @@ from torch.nn.parameter import is_lazy
 
 from kalfa.core import graph, state
 from kalfa.core.errors import RunError
-from kalfa.core.history import Means, history_line, prefixed
+from kalfa.core.history import Means, history_line, prefixed, progress_text
 from kalfa.core.predict import batch_size, empty, enter, write_predictions
 from kalfa.core.protocols import Step
 from kalfa.core.record import now
@@ -38,6 +38,18 @@ def as_number(value):
 
 def detached(outputs):
     return {name: value.detach() if isinstance(value, torch.Tensor) else value for name, value in outputs.items()}
+
+
+def size_of(loader):
+    try:
+        return len(loader)
+    except (TypeError, NotImplementedError):
+        return None
+
+
+def tell(ctx, phase, done=None, total=None, unit=None):
+    if ctx.record is not None:
+        ctx.record.note(ctx.turn, phase, done, total, unit)
 
 
 def observers_of(ctx, set_name):
@@ -126,8 +138,16 @@ class TrainTurn:
             self.cursor = ctx.cursor
         else:
             self.cursor = Cursor(self.loader, endless=False)
+        self.total = self.limit if self.limit is not None else size_of(self.loader)
         self.taken = 0
         self.seen = 0
+        self.note()
+
+    def note(self):
+        if self.limit is not None:
+            tell(self.ctx, "train", self.taken, self.total, "updates")
+        else:
+            tell(self.ctx, "train", self.seen, self.total, "batches")
 
     @property
     def exhausted(self):
@@ -141,6 +161,7 @@ class TrainTurn:
         if batch is None:
             return None
         self.seen += 1
+        self.note()
         return enter(self.ctx, batch)
 
     def record_losses(self, losses, size):
@@ -160,6 +181,7 @@ class TrainTurn:
                 line[f"grad_norm/{name}"] = float(norm)
         if ctx.record is not None:
             ctx.record.append("updates.jsonl", line)
+        self.note()
         for logger in ctx.loggers:
             logger.update(ctx, line)
         return line
@@ -217,9 +239,12 @@ def evaluate(ctx, set_name):
     for _, metric in metrics:
         metric.reset()
     seen = 0
+    total = size_of(loader)
+    tell(ctx, set_name, seen, total, "batches")
     with torch.no_grad():
         for batch in loader:
             seen += 1
+            tell(ctx, set_name, seen, total, "batches")
             batch = enter(ctx, batch)
             outputs = ctx.step.eval_batch(batch, ctx)
             observe(ctx, outputs, batch, set_name, means, metrics, losses)
@@ -335,6 +360,7 @@ def one_turn(ctx, total):
     ctx.turn += 1
     started = time.perf_counter()
     ctx.fired = []
+    tell(ctx, "train")
     results = {"train": train_turn(ctx)}
     loaders = ctx.loaders()
     for set_name in ctx.train.evaluate:
@@ -357,6 +383,8 @@ def one_turn(ctx, total):
         ctx.record.append("history.jsonl", line)
         ctx.record.event("turn", turn=ctx.turn, seconds=round(seconds, 3), rules=list(ctx.fired))
         ctx.record.manifest(updated=now(), turn=ctx.turn)
+        fired = f"  rules {', '.join(ctx.fired)}" if ctx.fired else ""
+        ctx.record.log(progress_text(line, total) + fired)
     if ctx.monitor is not None:
         ctx.monitor.turn(line)
     if ctx.record is not None and ctx.stopping is None and ctx.record.stop_requested():
@@ -371,6 +399,7 @@ def note_stop(ctx):
     if ctx.stopping is None or ctx.record is None or getattr(ctx, "stop_noted", False):
         return
     ctx.record.event("stop", turn=ctx.turn, by=getattr(ctx, "stopped_by", None), reason=ctx.stopping)
+    ctx.record.log(f"stop asked in turn {ctx.turn}: {ctx.stopping}")
     ctx.stop_noted = True
 
 
@@ -652,6 +681,7 @@ def draw_plots(ctx):
 
 def after(ctx):
     record = ctx.record
+    tell(ctx, "after")
     if record is not None:
         state.save_checkpoint(ctx, record.path("checkpoints/final.pt"))
         write_summary(ctx)
@@ -664,12 +694,15 @@ def after(ctx):
     ctx.set_modes(False)
     tables = {}
     loaders = ctx.loaders() if getattr(ctx.data, "predictions", True) else {}
+    tell(ctx, "predictions")
     if "test" in loaders:
         tables["test"] = write_predictions(ctx, "test")
     for set_name in loaders:
         if set_name not in ("train", "valid", "test"):
             tables[set_name] = write_predictions(ctx, set_name)
+    tell(ctx, "samples")
     write_samples(ctx)
+    tell(ctx, "plots")
     draw_plots(ctx)
     if record is not None:
         record.event("run_end", turn=ctx.turn, stopping=ctx.stopping)

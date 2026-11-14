@@ -1,7 +1,9 @@
 import contextlib
 import logging
+import os
 import shutil
 import signal
+import socket
 import sys
 import threading
 import traceback
@@ -19,14 +21,14 @@ from .check import check
 from .context import Context
 from .device import Device
 from .errors import KalfaError, ProblemsError, RunError
-from .record import RecordWriter, atomic, manifest_files, now, start_record
+from .history import progress_text
+from .record import Pulse, RecordWriter, atomic, manifest_files, now, start_record
 from .rng import Rng
 from .rules import Rule, replay
 from .spec import parse_param, parse_set
 from .state import checkpoint_path, load_checkpoint
 
 
-SKIPPED = ("turn", "update", "seconds", "rules")
 CHECKPOINTS = ("best", "last", "final")
 TABLES = (".parquet", ".pq", ".csv", ".tsv")
 
@@ -53,23 +55,6 @@ class Monitor:
 
     def turn(self, line):
         self.say(progress_text(line, self.total))
-
-
-def progress_text(line, total=None, count=4):
-    turn = line.get("turn")
-    parts = [f"turn {turn}/{total}" if total else f"turn {turn}"]
-    seconds = line.get("seconds")
-    if isinstance(seconds, (int, float)):
-        parts.append(f"{float(seconds):.1f}s")
-    shown = 0
-    for key, value in line.items():
-        if key in SKIPPED or isinstance(value, bool) or not isinstance(value, (int, float)):
-            continue
-        parts.append(f"{key} {value:.4g}")
-        shown += 1
-        if shown == count:
-            break
-    return "  ".join(parts)
 
 
 def stamp():
@@ -315,7 +300,41 @@ def note_record(ctx, exc):
         exc.add_note(f"record {ctx.record.directory}")
 
 
+class RecordLog(logging.Handler):
+    def __init__(self, record):
+        super().__init__(level=logging.INFO)
+        self.record = record
+
+    def emit(self, entry):
+        try:
+            self.record.log(f"{entry.levelname.lower()}: {entry.getMessage()}")
+        except Exception:
+            self.handleError(entry)
+
+
+@contextlib.contextmanager
+def followed(ctx):
+    record = ctx.record
+    if record is None:
+        yield
+        return
+    logger = logging.getLogger("kalfa")
+    handler = RecordLog(record)
+    logger.addHandler(handler)
+    record.log(f"run on {socket.gethostname()}, pid {os.getpid()}, device {getattr(ctx, 'device', None)}")
+    try:
+        with Pulse(record):
+            yield
+    finally:
+        logger.removeHandler(handler)
+
+
 def train_into(ctx):
+    with followed(ctx):
+        return trained(ctx)
+
+
+def trained(ctx):
     history = None
     try:
         with interruptible(ctx):
@@ -325,6 +344,7 @@ def train_into(ctx):
     except KeyboardInterrupt as exc:
         if ctx.record is not None:
             ctx.record.event("stop", turn=ctx.turn, by="keyboard", aborted=True)
+            ctx.record.log(f"aborted from the keyboard in turn {ctx.turn}")
         finish(ctx, "stopped")
         note_record(ctx, exc)
         raise
@@ -333,8 +353,12 @@ def train_into(ctx):
             failure = {"type": type(exc).__name__, "message": str(exc), "traceback": traceback.format_exc()}
             ctx.record.event("error", turn=ctx.turn, type=failure["type"], message=failure["message"])
             ctx.record.manifest(status="failed", finished=now(), failure=failure)
+            ctx.record.log(f"failed in turn {ctx.turn}: {failure['type']}: {failure['message']}")
+            ctx.record.log(failure["traceback"].rstrip())
         note_record(ctx, exc)
         raise
+    if ctx.record is not None:
+        ctx.record.log(f"{'done' if ctx.stopping is None else 'stopped: ' + str(ctx.stopping)} after turn {ctx.turn}")
     if history is None:
         history = ctx.history
     record = str(ctx.record.directory) if ctx.record is not None else None

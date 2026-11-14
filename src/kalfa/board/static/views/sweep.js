@@ -6,10 +6,11 @@ import { Chart } from "../components/chart.js";
 import { ErrorBox } from "../components/error.js";
 import { Table } from "../components/table.js";
 import { EMPTY, number, text, when } from "../format.js";
-import { onLive, recordLink, touches } from "../store.js";
+import { compareLink, onLive, recordLink, setSelected, store, touches } from "../store.js";
 
 
 const POLL = 1000;
+const BEST = [5, 10, 20];
 
 export function pointPath(root, point) {
   return root && root !== "." ? root + "/" + point.path : point.path;
@@ -44,6 +45,16 @@ export function pointColumns(root, answer) {
       text: (point) => text((point.values || {})[key]), numeric: true });
   }
   return columns;
+}
+
+export function orderLines(answer) {
+  const order = (answer && answer.order) || {};
+  const ids = Array.isArray(order.ids) ? order.ids : [];
+  if (!ids.length) return [];
+  return [
+    { name: "objective", x: ids, y: order.objective || [], mode: "markers" },
+    { name: "best so far", x: ids, y: order.best || [], mode: "lines" },
+  ];
 }
 
 export function scatters(answer) {
@@ -143,7 +154,25 @@ export const Sweep = {
 
     const info = computed(() => (answer.value && answer.value.sweep) || {});
     const objective = computed(() => info.value.objective || {});
-    const points = computed(() => (answer.value && answer.value.points) || []);
+    const points = computed(() => ((answer.value && answer.value.points) || [])
+      .map((point) => ({ ...point, full: pointPath(props.path, point) })));
+    const paths = computed(() => points.value.map((point) => point.full));
+    const chosen = computed(() => store.selected.filter((path) => paths.value.includes(path)));
+    const compareHref = computed(() => compareLink(chosen.value));
+    const select = (found) => setSelected(found);
+    const clear = () => setSelected(store.selected.filter((path) => !paths.value.includes(path)));
+    const pickBest = (count) => {
+      const ranked = (answer.value && answer.value.ranked) || [];
+      const best = ranked.slice(0, count).map((id) => points.value.find((point) => point.id === id))
+        .filter((point) => point && point.objective !== null && point.objective !== undefined);
+      setSelected(best.map((point) => point.full));
+    };
+    const order = computed(() => orderLines(answer.value));
+    const orderOptions = computed(() => ({ xlabel: "point", ylabel: objective.value.watch || "objective" }));
+    const space = computed(() => (answer.value && answer.value.space) || { axes: [], left_out: 0 });
+    const spaceNote = computed(() => (space.value.left_out
+      ? space.value.left_out + " points without an objective are not drawn; the color is the objective, the best bright"
+      : "a line per point; the color is the objective, the best bright; drag along an axis to keep a range"));
     const best = computed(() => (answer.value && answer.value.best) || null);
     const columns = computed(() => pointColumns(props.path, answer.value));
     const charts = computed(() => scatters(answer.value));
@@ -171,7 +200,8 @@ export const Sweep = {
     });
     return {
       answer, error, loading, job, report, info, objective, points, best, columns, charts, counts, bestLink, valuesOf,
-      strategy, writeReport, number, text, when,
+      strategy, writeReport, number, text, when, store, chosen, compareHref, select, clear, pickBest, order,
+      orderOptions, space, spaceNote, BEST,
     };
   },
   template: `
@@ -218,8 +248,27 @@ export const Sweep = {
           </div>
         </div>
         <h3 class="section-title">points</h3>
-        <k-table :columns="columns" :rows="points" row-key="id" sort-key="rank" placeholder="filter points"
-          empty="the sweep has no points yet"></k-table>
+        <k-table :columns="columns" :rows="points" row-key="full" sort-key="rank" placeholder="filter points"
+          selectable :selected="store.selected" @update:selected="select" empty="the sweep has no points yet">
+          <template #tools>
+            <span class="spacer"></span>
+            <button v-for="count in BEST" :key="count" type="button" class="tool" @click="pickBest(count)"
+              title="select the best points by the objective">best {{ count }}</button>
+            <span class="muted small" v-if="chosen.length">{{ chosen.length }} selected</span>
+            <a class="button" :class="{ disabled: !chosen.length }" :href="chosen.length ? compareHref : null">compare</a>
+            <button type="button" class="button ghost" v-if="chosen.length" @click="clear">clear</button>
+          </template>
+        </k-table>
+        <h3 class="section-title">the search over its order</h3>
+        <div v-if="!order.length" class="empty">no point has an objective yet</div>
+        <div class="grid" v-else>
+          <k-chart title="objective by point" kind="lines" :data="order" :options="orderOptions"
+            note="the objective of every point in the order the sweep made them, and the best value so far"></k-chart>
+        </div>
+        <h3 class="section-title">every point across the space</h3>
+        <div v-if="space.axes.length < 2" class="empty">no point has an objective yet</div>
+        <k-chart v-else title="params and objective" kind="parallel" :data="space" :height="340" :log-toggle="false"
+          :note="spaceNote"></k-chart>
         <h3 class="section-title">objective against each param</h3>
         <div v-if="!charts.length" class="empty">the sweep has no params</div>
         <div class="grid">

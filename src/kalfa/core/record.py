@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 from contextlib import contextmanager
 from datetime import datetime
 from io import StringIO
@@ -22,6 +23,9 @@ from .refs import tokenize
 
 FILES = ("manifest.json", "resolved.yaml", "plan.json", "history.jsonl", "updates.jsonl", "events.jsonl")
 STOP_FILE = "stop.json"
+LOG_FILE = "log.txt"
+FINAL = ("done", "failed", "stopped")
+BEAT = 10.0
 
 
 def file_mode():
@@ -61,6 +65,8 @@ def version():
 class RecordWriter:
     def __init__(self, directory):
         self.directory = Path(directory)
+        self.lock = threading.RLock()
+        self.within = None
 
     def path(self, name):
         return self.directory / name
@@ -87,17 +93,77 @@ class RecordWriter:
         self.append("events.jsonl", {"at": now(), "turn": turn, "kind": kind, **fields})
 
     def manifest(self, **changes):
-        note = self.read_json("manifest.json") or {}
-        note.update(changes)
-        note["updated"] = now()
-        self.write_json("manifest.json", note)
-        return note
+        with self.lock:
+            note = self.read_json("manifest.json") or {}
+            note.update(changes)
+            note["updated"] = now()
+            if note.get("status") in FINAL:
+                note.pop("within", None)
+            elif self.within is not None:
+                note["within"] = dict(self.within)
+            self.write_json("manifest.json", note)
+            return note
+
+    def note(self, turn, phase, done=None, total=None, unit=None):
+        before = self.within
+        started = before["started"] if before is not None and before.get("turn") == turn else now()
+        self.within = {"turn": turn, "phase": phase, "done": done, "total": total, "unit": unit, "started": started}
+
+    def beat(self):
+        with self.lock:
+            try:
+                note = self.read_json("manifest.json")
+            except (OSError, ValueError):
+                return False
+            if not isinstance(note, dict) or note.get("status") != "running":
+                return False
+            note["updated"] = now()
+            if self.within is not None:
+                note["within"] = dict(self.within)
+            try:
+                self.write_json("manifest.json", note)
+            except OSError:
+                return False
+            return True
+
+    def log(self, text):
+        path = self.path(LOG_FILE)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stamp = now()
+        with self.lock, path.open("a", encoding="utf-8") as handle:
+            for line in str(text).splitlines() or [""]:
+                handle.write(f"{stamp} {line}\n")
 
     def stop_requested(self):
         return self.path(STOP_FILE).exists()
 
     def stop_note(self):
         return self.read_json(STOP_FILE)
+
+
+class Pulse:
+    def __init__(self, writer, every=None):
+        self.writer = writer
+        self.every = float(BEAT if every is None else every)
+        self.ended = threading.Event()
+        self.thread = None
+
+    def __enter__(self):
+        self.ended.clear()
+        self.thread = threading.Thread(target=self.run, name="kalfa-pulse", daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, kind, error, trace):
+        self.ended.set()
+        thread, self.thread = self.thread, None
+        if thread is not None:
+            thread.join()
+        return False
+
+    def run(self):
+        while not self.ended.wait(self.every):
+            self.writer.beat()
 
 
 def commented(value):

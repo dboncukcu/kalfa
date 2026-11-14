@@ -6,7 +6,7 @@ import { Badge } from "../components/badge.js";
 import { ErrorBox } from "../components/error.js";
 import { Loading } from "../components/loading.js";
 import { Progress } from "../components/progress.js";
-import { bestText, seconds, when } from "../format.js";
+import { bestText, liveNote, nonfiniteText, seconds, when } from "../format.js";
 import { TABS, entryOf, isSweepEntry, onLive, recordLink, sweepLink, touches } from "../store.js";
 
 
@@ -90,6 +90,8 @@ export const Record = {
     const asSweep = computed(() => isSweepEntry(entryOf(props.path)));
     const sweepParent = computed(() => (summary.value.sweep ? parentOf(props.path) : ""));
     const tabLink = (tab) => recordLink(props.path, tab);
+    const note = computed(() => liveNote(progress.value));
+    const warning = computed(() => nonfiniteText(summary.value.nonfinite));
 
     const stop = async () => {
       if (stopping.value) return;
@@ -128,7 +130,7 @@ export const Record = {
     });
     return {
       api, record, error, loading, version, tabError, stopping, stopNote, summary, progress, best, status, current,
-      view, canStop, asSweep, sweepParent, tabLink, stop, TABS, bestText, seconds, when, sweepLink,
+      view, canStop, asSweep, sweepParent, tabLink, note, warning, stop, TABS, bestText, seconds, when, sweepLink,
     };
   },
   template: `
@@ -151,13 +153,16 @@ export const Record = {
             <span class="mono muted">{{ path }}</span>
             <span v-if="sweepParent">point of <a class="link" :href="sweepLink(sweepParent)">{{ sweepParent }}</a></span>
             <k-progress :value="progress.turn || summary.turn || 0" :total="progress.total || summary.total || null"
+              :part="progress.fraction"
               :label="(progress.turn || summary.turn || 0) + ' / ' + (progress.total || summary.total || '?') + ' ' + (progress.unit || summary.unit || 'turns')">
             </k-progress>
+            <span v-if="note" class="muted">{{ note }}</span>
             <span v-if="best && best.series">best <b>{{ bestText(best) }}</b><span v-if="best.turn" class="muted"> at turn {{ best.turn }}</span></span>
             <span class="muted">{{ seconds(progress.seconds || summary.seconds) }}</span>
             <span class="muted">started {{ when(summary.started) }}</span>
           </div>
           <div v-if="summary.failure" class="error-box">{{ summary.failure }}</div>
+          <div v-if="warning" class="error-box">{{ warning }}</div>
           <div v-if="stopNote" class="notice small">{{ stopNote }}</div>
         </header>
         <nav class="tabs">

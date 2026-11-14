@@ -1,6 +1,7 @@
 import { reactive } from "https://cdn.jsdelivr.net/npm/vue@3.4.38/dist/vue.esm-browser.prod.js";
 
 import { encodePath, getJson, live } from "./api.js";
+import { isNumber } from "./format.js";
 
 
 export const TABS = ["overview", "curves", "model", "data", "predictions", "plots", "config", "files", "log"];
@@ -193,7 +194,12 @@ export function progressOf(entry) {
     return { value: sweep.done || 0, total: sweep.points || sweep.count || null, unit: "points" };
   }
   const summary = (entry && entry.summary) || {};
-  return { value: summary.turn || 0, total: summary.total || null, unit: summary.unit || "turns" };
+  return {
+    value: summary.turn || 0,
+    total: summary.total || null,
+    unit: summary.unit || "turns",
+    part: isNumber(summary.fraction) ? summary.fraction : null,
+  };
 }
 
 export function linkOf(entry) {

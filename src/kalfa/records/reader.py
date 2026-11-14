@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -17,7 +18,13 @@ FIELDS = "fitted/fields.json"
 PLOTS = "plots/"
 IMAGES = (".png", ".svg", ".jpg", ".jpeg", ".gif", ".pdf", ".html")
 SWEEP = "sweep.json"
+LOG = "log.txt"
 STALE_AFTER = 120.0
+RECENT_TURNS = 5
+AFTER = ("after", "predictions", "samples", "plots")
+BLOCK = 65_536
+MISSING = "-"
+STAMPED = (MANIFEST, HISTORY, EVENTS, UPDATES)
 FINAL = ("done", "failed", "stopped")
 HISTORY_AXES = ("turn", "update", "seconds", "rules")
 UPDATE_AXES = ("update", "turn")
@@ -186,6 +193,60 @@ def normal_mode(mode):
     return "max" if str(mode or "min").lower().startswith("max") else "min"
 
 
+def within_of(manifest, turn):
+    within = manifest.get("within") if isinstance(manifest, dict) else None
+    if not isinstance(within, dict) or manifest.get("status") != "running":
+        return None
+    if not is_number(within.get("turn")):
+        return None
+    current, phase = int(within["turn"]), str(within.get("phase") or "train")
+    if current != turn + 1 and not (current == turn and phase in AFTER):
+        return None
+    done, total = within.get("done"), within.get("total")
+    return {"turn": current, "phase": phase, "done": int(done) if is_finite(done) else None,
+            "total": int(total) if is_finite(total) else None, "unit": within.get("unit"),
+            "started": within.get("started")}
+
+
+def share_of(within):
+    if within is None or within["phase"] in AFTER:
+        return 0.0
+    if within["phase"] != "train":
+        return 1.0
+    done, total = within["done"], within["total"]
+    if done is None or not total or total <= 0:
+        return 0.0
+    return max(0.0, min(1.0, done / total))
+
+
+def fraction_of(turn, total, share):
+    if not is_finite(total) or total <= 0:
+        return None
+    return max(0.0, min(1.0, (turn + share) / total))
+
+
+def turn_seconds(manifest, history, within, share):
+    recent = [float(line["seconds"]) for line in history[-RECENT_TURNS:] if is_finite(line.get("seconds"))]
+    if recent:
+        return sum(recent) / len(recent)
+    if within is None or share <= 0:
+        return None
+    started, updated = moment_of(within.get("started")), moment_of(manifest.get("updated"))
+    if started is None or updated is None or updated <= started:
+        return None
+    return (updated - started).total_seconds() / share
+
+
+def eta_of(manifest, history, turn, within, share):
+    total = manifest.get("turns_planned")
+    if manifest.get("status") != "running" or not is_finite(total) or total <= 0:
+        return None
+    each = turn_seconds(manifest, history, within, share)
+    if each is None:
+        return None
+    return max(0.0, each * (total - turn - share))
+
+
 def progress_from(manifest, history):
     manifest = manifest if isinstance(manifest, dict) else {}
     last = history[-1] if history else None
@@ -196,9 +257,13 @@ def progress_from(manifest, history):
     else:
         turn = 0
     seconds = sum((float(line["seconds"]) for line in history if is_finite(line.get("seconds"))), 0.0)
+    within = within_of(manifest, turn)
+    share = share_of(within)
     return {"turn": turn, "total": manifest.get("turns_planned"), "status": state_of(manifest),
             "manifest_status": manifest.get("status"), "updated": manifest.get("updated"), "seconds": seconds,
-            "last": numeric_in(last or {}, HISTORY_AXES), "unit": manifest.get("unit")}
+            "last": numeric_in(last or {}, HISTORY_AXES), "unit": manifest.get("unit"), "within": within,
+            "fraction": fraction_of(turn, manifest.get("turns_planned"), share),
+            "eta": eta_of(manifest, history, turn, within, share)}
 
 
 def progress_of(directory):
@@ -257,6 +322,43 @@ def rules_in(history):
     return fired
 
 
+def rule_turns(history):
+    found = []
+    for position, line in enumerate(history):
+        names = line.get("rules")
+        if isinstance(names, (list, tuple)) and names:
+            found.append({"turn": turn_of(line, position), "update": value_of(line.get("update")),
+                          "rules": [str(name) for name in names]})
+    return found
+
+
+def number_word(value):
+    if math.isnan(value):
+        return "nan"
+    return "inf" if value > 0 else "-inf"
+
+
+def nonfinite_in(history):
+    for position, line in enumerate(history):
+        bad = [key for key, value in line.items()
+               if key not in HISTORY_AXES and is_number(value) and not math.isfinite(value)]
+        if bad:
+            return {"turn": turn_of(line, position), "series": bad, "value": number_word(line[bad[0]])}
+    return None
+
+
+def failure_of(directory):
+    try:
+        manifest = read_manifest(directory)
+    except (OSError, ValueError):
+        return None
+    failure = manifest.get("failure") if isinstance(manifest, dict) else None
+    if isinstance(failure, dict):
+        return {"type": failure.get("type"), "message": failure.get("message"),
+                "traceback": failure.get("traceback")}
+    return {"type": None, "message": str(failure), "traceback": None} if failure else None
+
+
 def summary_of(directory):
     manifest = read_manifest(directory)
     manifest = manifest if isinstance(manifest, dict) else {}
@@ -290,6 +392,10 @@ def summary_of(directory):
         "resumed_from": manifest.get("resumed_from"),
         "stop_reason": manifest.get("stop_reason"),
         "stopped_by": manifest.get("stopped_by"),
+        "within": progress["within"],
+        "fraction": progress["fraction"],
+        "eta": progress["eta"],
+        "nonfinite": nonfinite_in(history),
     }
 
 
@@ -380,3 +486,76 @@ def plots_of(directory):
         if path.startswith(PLOTS) and path.lower().endswith(IMAGES):
             found.append({"name": Path(path[len(PLOTS):]).with_suffix("").as_posix(), **entry})
     return found
+
+
+def last_lines(path, count):
+    if count <= 0:
+        return b""
+    with Path(path).open("rb") as handle:
+        position = handle.seek(0, os.SEEK_END)
+        blocks = []
+        newlines = 0
+        while position > 0 and newlines <= count:
+            step = min(BLOCK, position)
+            position -= step
+            handle.seek(position)
+            block = handle.read(step)
+            newlines += block.count(b"\n")
+            blocks.append(block)
+    data = b"".join(reversed(blocks))
+    return b"".join(data.splitlines(keepends=True)[-count:])
+
+
+def log_of(directory, count=200):
+    path = Path(directory) / LOG
+    try:
+        data = last_lines(path, count) if path.is_file() else b""
+    except OSError:
+        return []
+    return data.decode("utf-8", errors="replace").splitlines()
+
+
+def file_stamp(path):
+    try:
+        info = Path(path).stat()
+    except OSError:
+        return MISSING
+    return f"{info.st_mtime_ns}:{info.st_size}"
+
+
+def record_stamp(directory, manifest):
+    directory = Path(directory)
+    manifest = manifest if isinstance(manifest, dict) else {}
+    files = "|".join(file_stamp(directory / name) for name in STAMPED)
+    return f"{manifest.get('updated')}|{state_of(manifest)}|{files}"
+
+
+class Cache:
+    def __init__(self, limit=8192):
+        self.limit = int(limit)
+        self.kept = {}
+        self.lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+
+    def get(self, key, stamp, compute):
+        with self.lock:
+            found = self.kept.get(key)
+            if found is not None and found[0] == stamp:
+                self.hits += 1
+                return found[1]
+            self.misses += 1
+        value = compute()
+        with self.lock:
+            if len(self.kept) >= self.limit:
+                self.kept.clear()
+            self.kept[key] = (stamp, value)
+        return value
+
+
+def summary_with(cache, directory, manifest=None):
+    if cache is None:
+        return summary_of(directory)
+    if manifest is None:
+        manifest = safe_json(directory, MANIFEST)
+    return cache.get(("summary", str(directory)), record_stamp(directory, manifest), lambda: summary_of(directory))

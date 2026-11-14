@@ -2,7 +2,6 @@ import ast
 import json
 import math
 import numbers
-import os
 import sys
 from collections.abc import Mapping
 from datetime import date, datetime, time
@@ -16,6 +15,7 @@ from kalfa.core.errors import KalfaError
 from kalfa.records import compare as comparing
 from kalfa.records import reader, stats
 from kalfa.records import sweep as sweeping
+from kalfa.records.reader import file_stamp, last_lines, record_stamp
 
 
 TEXT_SUFFIXES = (".yaml", ".yml", ".json", ".jsonl", ".txt", ".md", ".csv", ".py", ".sh", ".sub", ".log")
@@ -28,14 +28,11 @@ BINARY_TYPE = "application/octet-stream"
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
                ".svg": "image/svg+xml"}
 GALLERIES = ("plots/", "samples/")
-STAMPED = (reader.HISTORY, reader.EVENTS)
 STATES = ("done", "running", "failed", "stopped", "stale")
 SAMPLE = 2000
 BINS = 40
 MAX_BINS = stats.MAX_BINS
 SERIES_LIMIT = 2000
-BLOCK = 65_536
-MISSING = "-"
 WHERE_NODES = (ast.Expression, ast.BoolOp, ast.UnaryOp, ast.BinOp, ast.Compare, ast.Name, ast.Constant, ast.List,
                ast.Tuple, ast.Load, ast.And, ast.Or, ast.Not, ast.Invert, ast.UAdd, ast.USub, ast.Add, ast.Sub,
                ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow, ast.BitAnd, ast.BitOr, ast.BitXor, ast.Eq,
@@ -165,9 +162,9 @@ def image_file(directory, value):
     return directory / path
 
 
-def summary_or_note(directory):
+def summary_or_note(directory, cache=None, manifest=None):
     try:
-        return reader.summary_of(directory)
+        return reader.summary_with(cache, directory, manifest)
     except (OSError, ValueError) as error:
         return {"path": str(directory), "name": Path(directory).name, "status": "unknown", "error": str(error)}
 
@@ -180,24 +177,6 @@ def counts_of(root):
 def gallery(files):
     return [entry["path"] for entry in files
             if entry["path"].startswith(GALLERIES) and entry["path"].lower().endswith(IMAGE_SUFFIXES)]
-
-
-def last_lines(path, count):
-    if count <= 0:
-        return b""
-    with path.open("rb") as handle:
-        position = handle.seek(0, os.SEEK_END)
-        blocks = []
-        newlines = 0
-        while position > 0 and newlines <= count:
-            step = min(BLOCK, position)
-            position -= step
-            handle.seek(position)
-            block = handle.read(step)
-            newlines += block.count(b"\n")
-            blocks.append(block)
-    data = b"".join(reversed(blocks))
-    return b"".join(data.splitlines(keepends=True)[-count:])
 
 
 def clipped(data, size):
@@ -225,24 +204,12 @@ def read_text(path, tail=None):
     return clipped(data, size), False
 
 
-def file_stamp(path):
-    try:
-        info = path.stat()
-    except OSError:
-        return MISSING
-    return f"{info.st_mtime_ns}:{info.st_size}"
-
-
-def record_stamp(directory, manifest):
-    files = "|".join(file_stamp(directory / name) for name in STAMPED)
-    return f"{manifest.get('updated')}|{reader.state_of(manifest)}|{files}"
-
-
 class Board:
     def __init__(self, root):
         self.root = Path(root).resolve()
         if not self.root.is_dir():
             raise KalfaError(f"{root} is not a directory")
+        self.cache = reader.Cache()
 
     def resolve(self, relative):
         directory = inside(self.root, relative)
@@ -267,7 +234,8 @@ class Board:
                 found.append({"path": entry["path"], "kind": "sweep",
                               "sweep": {**entry["manifest"], **counts_of(directory)}})
             else:
-                found.append({"path": entry["path"], "kind": "record", "summary": summary_or_note(directory)})
+                found.append({"path": entry["path"], "kind": "record",
+                              "summary": summary_or_note(directory, self.cache, entry["manifest"])})
         return {"root": str(self.root), "records": found}
 
     def record(self, relative):
@@ -282,7 +250,8 @@ class Board:
                 "events": reader.events_of(directory, limit=EVENTS_LIMIT), "files": files,
                 "config": comparing.config_of(directory), "fields": reader.fields_of(directory),
                 "has_predictions": (directory / stats.PREDICTIONS).is_file(), "plots": gallery(files),
-                "tables": stats.prediction_tables(directory)}
+                "tables": stats.prediction_tables(directory), "failure": reader.failure_of(directory),
+                "marks": reader.rule_turns(history)}
 
     def series(self, relative, keys=None, limit=SERIES_LIMIT):
         return reader.series_of(self.resolve(relative), keys or None, count_of(limit, SERIES_LIMIT, "limit"))
@@ -360,7 +329,7 @@ class Board:
             raise KalfaError(f"{relative} is not a sweep root")
         spec = sweeping.read_sweep(root)
         objective = spec.get("objective") if isinstance(spec, dict) else None
-        points = sorted(sweeping.sweep_points(root), key=sweeping.id_key)
+        points = sorted(sweeping.sweep_points(root, self.cache), key=sweeping.id_key)
         names = []
         for point in points:
             names.extend(key for key in point["values"] if key not in names)
@@ -368,7 +337,8 @@ class Board:
                 "ranked": [point["id"] for point in sweeping.rank_points(points, objective)],
                 "best": sweeping.best_point(points, objective),
                 "params": {key: [point["values"].get(key) for point in points] for key in names},
-                "objectives": [point["objective"] for point in points], "ids": [point["id"] for point in points]}
+                "objectives": [point["objective"] for point in points], "ids": [point["id"] for point in points],
+                "order": sweeping.running_best(points, objective), "space": sweeping.axes_of(points, spec)}
 
     def stop(self, relative):
         written = stop_record(self.resolve(relative), by="board")

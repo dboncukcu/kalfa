@@ -16,8 +16,8 @@ from kalfa.records import reader
 
 TEXT = "text/plain; charset=utf-8"
 RECORD_KEYS = {"path", "summary", "plan", "progress", "best", "model_summary", "events", "files", "config", "fields",
-               "has_predictions", "plots", "tables", "data_report"}
-SWEEP_KEYS = {"root", "sweep", "points", "ranked", "best", "params", "objectives", "ids"}
+               "has_predictions", "plots", "tables", "data_report", "failure", "marks"}
+SWEEP_KEYS = {"root", "sweep", "points", "ranked", "best", "params", "objectives", "ids", "order", "space"}
 
 
 def now_text():

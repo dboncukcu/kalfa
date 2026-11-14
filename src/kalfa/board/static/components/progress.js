@@ -1,4 +1,4 @@
-import { fraction, share } from "../format.js";
+import { fraction, isNumber, share } from "../format.js";
 
 
 export const Progress = {
@@ -7,9 +7,10 @@ export const Progress = {
     value: { type: Number, default: 0 },
     total: { type: Number, default: null },
     label: { type: String, default: "" },
+    part: { type: Number, default: null },
   },
   setup(props) {
-    const part = () => share(props.value, props.total);
+    const part = () => (isNumber(props.part) ? Math.max(0, Math.min(1, props.part)) : share(props.value, props.total));
     const width = () => (part() === null ? "0%" : (100 * part()).toFixed(1) + "%");
     const caption = () => props.label || fraction(props.value, props.total);
     return { part, width, caption };

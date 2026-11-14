@@ -2,6 +2,7 @@ import torch
 
 
 PREFIX = {"train": "train", "valid": "val", "test": "test"}
+SKIPPED = ("turn", "update", "seconds", "rules")
 
 
 def as_float(value):
@@ -50,3 +51,20 @@ def history_line(ctx, metrics, seconds):
     line["seconds"] = round(float(seconds), 3)
     line["rules"] = list(ctx.fired)
     return line
+
+
+def progress_text(line, total=None, count=4):
+    turn = line.get("turn")
+    parts = [f"turn {turn}/{total}" if total else f"turn {turn}"]
+    seconds = line.get("seconds")
+    if isinstance(seconds, (int, float)):
+        parts.append(f"{float(seconds):.1f}s")
+    shown = 0
+    for key, value in line.items():
+        if key in SKIPPED or isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        parts.append(f"{key} {value:.4g}")
+        shown += 1
+        if shown == count:
+            break
+    return "  ".join(parts)

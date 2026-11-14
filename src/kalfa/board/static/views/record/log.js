@@ -3,6 +3,9 @@ import { when } from "../../format.js";
 
 
 const LIMIT = 200;
+const TAIL = 300;
+const OUTPUT = "log.txt";
+const CODE = "overflow: auto; max-height: 50vh; margin: 0; padding: 10px; background: var(--surface-2); border-radius: 6px; white-space: pre";
 const SKIP = ["at", "turn", "kind"];
 const TONES = {
   run_start: "var(--done)",
@@ -38,10 +41,17 @@ export default {
     version: { type: Number, default: 0 },
   },
   data() {
-    return { fetched: null, error: "", loading: false, kind: "" };
+    return { fetched: null, error: "", loading: false, kind: "", output: "", outputError: "" };
   },
   computed: {
     row() { return ROW; },
+    code() { return CODE; },
+    tail() { return TAIL; },
+    hasOutput() {
+      const files = this.record && Array.isArray(this.record.files) ? this.record.files : [];
+      return files.some(item => item && item.path === OUTPUT);
+    },
+    outputUrl() { return this.api ? this.api.fileUrl(this.path, OUTPUT, null) : ""; },
     events() {
       if (Array.isArray(this.fetched)) return this.fetched;
       return this.record && Array.isArray(this.record.events) ? this.record.events : [];
@@ -73,9 +83,23 @@ export default {
   watch: {
     record() {
       if (Array.isArray(this.fetched)) this.load();
+      this.loadOutput();
     },
   },
+  mounted() { this.loadOutput(); },
   methods: {
+    async loadOutput() {
+      if (!this.api || !this.hasOutput) return;
+      const path = this.path;
+      try {
+        const text = await this.api.getText(this.api.fileUrl(path, OUTPUT, TAIL));
+        if (path !== this.path) return;
+        this.output = text;
+        this.outputError = "";
+      } catch (error) {
+        if (path === this.path) this.outputError = messageOf(error);
+      }
+    },
     moment(value) { return when(value); },
     title(group) { return group.turn === null ? "no turn" : "turn " + group.turn; },
     tone(kind) { return { "--tone": TONES[kind] || "var(--muted)", minWidth: "84px", textAlign: "center" }; },
@@ -104,6 +128,17 @@ export default {
   },
   template: `
   <div class="page pane-log">
+    <section class="card" v-if="hasOutput">
+      <div class="card-head">
+        <span class="card-title">output</span>
+        <span class="card-tools">
+          <span class="muted small">the last {{ tail }} lines of log.txt, followed while the record runs</span>
+          <a class="tool" :href="outputUrl" download="log.txt">save</a>
+        </span>
+      </div>
+      <div class="error-box" v-if="outputError">{{ outputError }}</div>
+      <pre class="mono" :style="code">{{ output }}</pre>
+    </section>
     <div class="muted small">The events of the record from events.jsonl, newest first and grouped by turn: the start and the end
       of the run, checkpoints, the patches rules applied, stops and failures.</div>
     <div class="toolbar">

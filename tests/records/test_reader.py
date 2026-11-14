@@ -115,7 +115,8 @@ def test_progress_of(tmp_path):
 def test_progress_of_a_fresh_record(tmp_path):
     progress = reader.progress_of(make_record(tmp_path / "run", values=()))
     assert progress == {"turn": 0, "total": 10, "status": "stale", "manifest_status": "running",
-                        "updated": "2026-11-07T10:05:00", "seconds": 0.0, "last": {}, "unit": "epochs"}
+                        "updated": "2026-11-07T10:05:00", "seconds": 0.0, "last": {}, "unit": "epochs",
+                        "within": None, "fraction": 0.0, "eta": None}
 
 
 def test_progress_of_without_a_manifest(tmp_path):

@@ -41,9 +41,10 @@ export default {
     version: { type: Number, default: 0 },
   },
   data() {
-    return { history: null, steps: null, error: "", loading: false, logy: false, filter: "" };
+    return { history: null, steps: null, error: "", loading: false, logy: false, filter: "", ruled: true };
   },
   computed: {
+    fired() { return this.record && Array.isArray(this.record.marks) ? this.record.marks : []; },
     historyGroups() { return groupsOf(this.history, "turn", historyName); },
     stepGroups() { return groupsOf(this.steps, "update", updateName); },
     historyCharts() { return this.decorate(this.historyGroups, "turn"); },
@@ -58,19 +59,27 @@ export default {
   },
   mounted() { this.load(); },
   methods: {
+    marksOn(axis) {
+      if (!this.ruled) return [];
+      return this.fired
+        .map(mark => ({ x: mark[axis], text: (mark.rules || []).join(", ") }))
+        .filter(mark => typeof mark.x === "number");
+    },
     decorate(groups, xlabel) {
       const wanted = this.filter.trim().toLowerCase();
       const logy = this.logy;
+      const marks = this.marksOn(xlabel);
       return groups
         .filter(group => !wanted || group.title.toLowerCase().includes(wanted))
         .map(group => ({
           key: group.title + (logy ? " log" : ""),
           title: group.title,
           series: group.series,
-          options: { xlabel, ylabel: group.title, logy },
+          options: { xlabel, ylabel: group.title, logy, marks },
         }));
     },
     toggleLog() { this.logy = !this.logy; },
+    toggleRules() { this.ruled = !this.ruled; },
     async load() {
       if (!this.api) {
         this.error = "the api prop is missing";
@@ -98,10 +107,11 @@ export default {
   <div class="page pane-curves">
     <div class="muted small">One chart per series of history.jsonl, one point per turn; train, val and test of the same name share
       a chart. Below, the optimizer updates of updates.jsonl: the batch loss, the learning rate and the gradient norm of every
-      optimizer. Expand opens a chart large.</div>
+      optimizer. A dotted line marks every turn a rule fired, with the names of the rules. Expand opens a chart large.</div>
     <div class="toolbar">
       <input class="filter" type="search" v-model="filter" placeholder="filter charts" spellcheck="false">
       <button type="button" class="tool" :class="{ on: logy }" @click="toggleLog">log y on every chart</button>
+      <button type="button" class="tool" :class="{ on: ruled }" v-if="fired.length" @click="toggleRules">rule marks</button>
       <button type="button" class="tool" :disabled="loading" @click="load">refresh</button>
       <span class="muted small">{{ countText }}</span>
     </div>

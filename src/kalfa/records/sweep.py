@@ -1,9 +1,12 @@
+import json
+import math
 import re
 from pathlib import Path
 
 import numpy
 
 from .reader import (
+    MANIFEST,
     SWEEP,
     best_in,
     is_finite,
@@ -12,6 +15,8 @@ from .reader import (
     normal_mode,
     read_history,
     read_json,
+    record_stamp,
+    safe_json,
     summary_of,
 )
 
@@ -75,26 +80,38 @@ def point_values(summary):
     return dict(params) if isinstance(params, dict) else {}
 
 
-def sweep_points(root):
+def point_of(directory, root, objective):
+    summary = summary_of(directory)
+    if not isinstance(summary, dict):
+        return None
+    status = summary.get("status")
+    return {
+        "id": point_id(summary, directory),
+        "path": directory.relative_to(root).as_posix(),
+        "values": point_values(summary),
+        "status": status,
+        "turn": summary.get("turn"),
+        "total": summary.get("total"),
+        "objective": None if status == FAILED else objective_of(summary, objective),
+        "summary": summary,
+    }
+
+
+def sweep_points(root, cache=None):
     root = Path(root)
     sweep = read_sweep(root)
     objective = sweep.get("objective") if isinstance(sweep, dict) else None
+    asked = json.dumps(objective, sort_keys=True, default=str)
     points = []
     for directory in point_dirs(root):
-        summary = summary_of(directory)
-        if not isinstance(summary, dict):
-            continue
-        status = summary.get("status")
-        points.append({
-            "id": point_id(summary, directory),
-            "path": directory.relative_to(root).as_posix(),
-            "values": point_values(summary),
-            "status": status,
-            "turn": summary.get("turn"),
-            "total": summary.get("total"),
-            "objective": None if status == FAILED else objective_of(summary, objective),
-            "summary": summary,
-        })
+        if cache is None:
+            point = point_of(directory, root, objective)
+        else:
+            stamp = record_stamp(directory, safe_json(directory, MANIFEST))
+            point = cache.get(("point", str(directory), str(root), asked), stamp,
+                              lambda directory=directory: point_of(directory, root, objective))
+        if point is not None:
+            points.append(dict(point))
     return points
 
 
@@ -125,6 +142,66 @@ def best_point(points, objective):
     if ranked and is_valued(ranked[0]):
         return ranked[0]
     return None
+
+
+def running_best(points, objective):
+    maximize = mode_of(objective) == "max"
+    ordered = sorted(points, key=id_key)
+    best = None
+    found = {"ids": [], "objective": [], "best": []}
+    for point in ordered:
+        value = point["objective"] if is_valued(point) else None
+        if value is not None and (best is None or (value > best if maximize else value < best)):
+            best = value
+        found["ids"].append(point.get("id"))
+        found["objective"].append(value)
+        found["best"].append(best)
+    return found
+
+
+def is_log_space(spec):
+    return isinstance(spec, dict) and isinstance(spec.get("log"), (list, tuple))
+
+
+def label_of(value):
+    if isinstance(value, float):
+        return f"{value:.4g}"
+    return value if isinstance(value, str) else json.dumps(value, default=str)
+
+
+def axis_of(key, values, spec):
+    numeric = all(is_finite(value) for value in values)
+    if numeric and is_log_space(spec) and all(value > 0 for value in values):
+        shown = sorted(set(values))
+        return {"key": key, "label": f"{key} (log)", "values": [math.log10(value) for value in values],
+                "ticks": [math.log10(value) for value in shown] if len(shown) <= 12 else None,
+                "text": [label_of(float(value)) for value in shown] if len(shown) <= 12 else None}
+    if numeric:
+        return {"key": key, "label": key, "values": [float(value) for value in values], "ticks": None, "text": None}
+    names = []
+    for value in values:
+        name = label_of(value)
+        if name not in names:
+            names.append(name)
+    return {"key": key, "label": key, "values": [float(names.index(label_of(value))) for value in values],
+            "ticks": [float(position) for position in range(len(names))], "text": names}
+
+
+def axes_of(points, sweep):
+    sweep = sweep if isinstance(sweep, dict) else {}
+    objective = sweep.get("objective") if isinstance(sweep.get("objective"), dict) else {}
+    space = sweep.get("space") if isinstance(sweep.get("space"), dict) else {}
+    valued = sorted((point for point in points if is_valued(point)), key=id_key)
+    keys = []
+    for point in valued:
+        keys.extend(key for key in point["values"] if key not in keys)
+    keys = [key for key in keys if all(key in point["values"] for point in valued)]
+    axes = [axis_of(key, [point["values"][key] for point in valued], space.get(key)) for key in keys]
+    watch = str(objective.get("watch") or "objective")
+    axes.append({"key": "objective", "label": watch, "values": [float(point["objective"]) for point in valued],
+                 "ticks": None, "text": None})
+    return {"ids": [point.get("id") for point in valued], "axes": axes if valued else [],
+            "left_out": len(points) - len(valued), "mode": mode_of(objective)}
 
 
 def frozen(value):

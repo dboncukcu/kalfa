@@ -137,7 +137,8 @@ export const Table = {
               <td v-for="column in columns" :key="column.key" :class="cellClass(column)" :title="titleOf(row, column)">
                 <k-badge v-if="column.badge" :status="valueOf(row, column)"></k-badge>
                 <k-progress v-else-if="column.progress" :value="progressOf(row, column).value"
-                  :total="progressOf(row, column).total" :label="progressOf(row, column).label || ''"></k-progress>
+                  :total="progressOf(row, column).total" :label="progressOf(row, column).label || ''"
+                  :part="progressOf(row, column).part"></k-progress>
                 <k-spark v-else-if="column.spark" :values="column.spark(row)"></k-spark>
                 <a v-else-if="href(row, column)" class="link" :href="href(row, column)">{{ textOf(row, column) }}</a>
                 <span v-else>{{ textOf(row, column) }}</span>

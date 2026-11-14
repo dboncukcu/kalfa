@@ -4,6 +4,7 @@ const CONFIG = { responsive: true, displaylogo: false, modeBarButtonsToRemove: [
 const MODES = ["lines", "markers", "lines+markers"];
 const DASHES = ["solid", "dash", "dot"];
 const SAMPLES = 120;
+const MARK_LABELS = 12;
 const UNSAFE = ["__proto__", "constructor", "prototype"];
 
 export const PALETTES = {
@@ -252,6 +253,35 @@ export function smooth(values, weight) {
   });
 }
 
+function marksOf(marks, colors) {
+  const found = Array.isArray(marks) ? marks.filter((mark) => mark && numberOf(mark.x) !== null) : [];
+  const labelled = found.length <= MARK_LABELS;
+  return {
+    shapes: found.map((mark) => ({
+      type: "line",
+      xref: "x",
+      yref: "paper",
+      x0: mark.x,
+      x1: mark.x,
+      y0: 0,
+      y1: 1,
+      line: { width: 1, dash: "dot", color: colors.muted },
+    })),
+    annotations: !labelled ? [] : found.map((mark) => ({
+      xref: "x",
+      yref: "paper",
+      x: mark.x,
+      y: 1,
+      text: String(mark.text || ""),
+      showarrow: false,
+      textangle: -90,
+      xanchor: "left",
+      yanchor: "top",
+      font: { size: 9, color: colors.muted },
+    })),
+  };
+}
+
 function modeOf(mode, fallback, count) {
   if (MODES.includes(mode)) return mode;
   return fallback || (count <= 40 ? "lines+markers" : "lines");
@@ -315,6 +345,11 @@ export function lines(el, series, options = {}) {
   layout.hovermode = "x unified";
   layout.showlegend = options.legend !== undefined ? Boolean(options.legend) : found.length > 1;
   if (weight > 0) layout.legend.traceorder = "normal";
+  const marks = marksOf(options.marks, colors);
+  if (marks.shapes.length) {
+    layout.shapes = marks.shapes;
+    layout.annotations = marks.annotations;
+  }
   finish(el, traces, layout, options);
 }
 
@@ -492,6 +527,40 @@ export function bars(el, data, options = {}) {
   finish(el, traces, layout, options);
 }
 
+export function parallel(el, data, options = {}) {
+  const colors = themeColors(options.palette);
+  const axes = data && Array.isArray(data.axes) ? data.axes : [];
+  const last = axes.length ? axes[axes.length - 1] : null;
+  const dimensions = axes.map((item) => {
+    const dimension = { label: String(item.label || item.key || ""), values: item.values || [] };
+    if (Array.isArray(item.ticks) && Array.isArray(item.text)) {
+      dimension.tickvals = item.ticks;
+      dimension.ticktext = item.text;
+    }
+    return dimension;
+  });
+  const traces = [{
+    type: "parcoords",
+    dimensions,
+    line: {
+      color: last ? last.values : [],
+      colorscale: "Viridis",
+      reversescale: Boolean(data && data.mode === "min"),
+      showscale: true,
+    },
+    labelfont: { color: colors.ink, size: 11 },
+    tickfont: { color: colors.muted, size: 10 },
+    rangefont: { color: colors.muted, size: 9 },
+  }];
+  const flat = { ...options, logx: false, logy: false, xmin: null, xmax: null, ymin: null, ymax: null };
+  const layout = baseLayout(flat);
+  delete layout.xaxis;
+  delete layout.yaxis;
+  layout.margin = { l: 64, r: 64, t: 56, b: 28 };
+  layout.showlegend = false;
+  finish(el, traces, layout, flat);
+}
+
 function fileName(name) {
   return String(name || "chart").trim().replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "") || "chart";
 }
@@ -520,5 +589,6 @@ export function draw(kind, el, data, options = {}) {
   if (kind === "histogram") return histogram(el, data, options);
   if (kind === "heatmap") return heatmap(el, data, options);
   if (kind === "bars") return bars(el, data, options);
+  if (kind === "parallel") return parallel(el, data, options);
   return lines(el, data, options);
 }

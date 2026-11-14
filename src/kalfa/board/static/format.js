@@ -107,3 +107,32 @@ export function bestText(best) {
   if (!best || typeof best !== "object" || !best.series) return EMPTY;
   return best.series + " " + number(best.value);
 }
+
+export function left(value) {
+  if (!isNumber(value)) return "";
+  if (value < 60) return "under a minute left";
+  return "about " + seconds(value) + " left";
+}
+
+export function withinText(within) {
+  if (!within || typeof within !== "object") return "";
+  const phase = within.phase && within.phase !== "train" ? String(within.phase) + " " : "";
+  const unit = String(within.unit || "batches");
+  const one = unit === "batches" ? "batch" : unit === "updates" ? "update" : unit;
+  if (isNumber(within.done) && isNumber(within.total) && within.total > 0) {
+    return phase + one + " " + within.done + " of " + within.total;
+  }
+  if (isNumber(within.done) && within.done > 0) return phase + within.done + " " + unit;
+  return phase.trim();
+}
+
+export function nonfiniteText(found) {
+  if (!found || !Array.isArray(found.series) || !found.series.length) return "";
+  const more = found.series.length > 1 ? " and " + (found.series.length - 1) + " more" : "";
+  return found.series[0] + more + " is " + (found.value || "not finite") + " from turn " + found.turn;
+}
+
+export function liveNote(summary) {
+  if (!summary || typeof summary !== "object") return "";
+  return [withinText(summary.within), left(summary.eta)].filter(Boolean).join(", ");
+}

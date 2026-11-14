@@ -74,9 +74,16 @@ class FakeRecord:
         self.manifests = []
         self.events = []
         self.lines = []
+        self.logged = []
 
     def manifest(self, **changes):
         self.manifests.append(changes)
+
+    def log(self, text):
+        self.logged.append(str(text))
+
+    def beat(self):
+        return True
 
     def event(self, kind, turn=None, **fields):
         self.events.append({"kind": kind, "turn": turn, **fields})
@@ -212,6 +219,10 @@ def test_train_into_marks_done_stopped_and_failed(monkeypatch):
     assert ctx.record.manifests[-1]["failure"]["type"] == "RuntimeError"
     assert "boom" in ctx.record.manifests[-1]["failure"]["traceback"]
     assert ctx.record.events[-1]["kind"] == "error"
+    logged = ctx.record.logged
+    assert logged[0].startswith("run on ") and "done after turn 0" in logged
+    assert "stopped: rule stop after turn 0" in logged and "failed in turn 0: RuntimeError: boom" in logged
+    assert logged[-1].startswith("Traceback") and logged[-1].endswith("RuntimeError: boom")
 
     def interrupted(ctx):
         raise KeyboardInterrupt

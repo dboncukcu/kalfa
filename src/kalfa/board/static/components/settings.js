@@ -171,7 +171,7 @@ export function payloadOf(key, settings, options) {
 }
 
 function featuresOf(kind, horizontal, binsBox) {
-  const grid = kind !== "heatmap";
+  const grid = kind !== "heatmap" && kind !== "parallel";
   return {
     x: grid && !(kind === "bars" && !horizontal),
     y: grid && !(kind === "bars" && horizontal),

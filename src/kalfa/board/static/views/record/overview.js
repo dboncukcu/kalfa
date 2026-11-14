@@ -1,12 +1,13 @@
 import Badge from "../../components/badge.js";
 import Table from "../../components/table.js";
-import { number, percent, seconds, when } from "../../format.js";
+import { left, number, percent, seconds, when, withinText } from "../../format.js";
 
 
 const LAST_COLUMNS = [
   { key: "name", label: "series", className: "mono" },
   { key: "value", label: "last value", numeric: true },
 ];
+const TRACE = "overflow: auto; max-height: 50vh; margin: 8px 0 0; white-space: pre; font-size: 12px";
 const PARAM_COLUMNS = [
   { key: "name", label: "param", className: "mono" },
   { key: "value", label: "value", numeric: true },
@@ -61,11 +62,22 @@ export default {
     elapsed() { return present(this.summary.seconds) ? seconds(this.summary.seconds) : seconds(0); },
     started() { return present(this.summary.started) ? "started " + when(this.summary.started) : ""; },
     fraction() {
+      const known = this.progress.fraction;
+      if (typeof known === "number" && Number.isFinite(known)) return Math.max(0, Math.min(1, known));
       const total = Number(this.total);
       const turn = Number(this.turn);
       if (!total || !Number.isFinite(total) || !Number.isFinite(turn)) return null;
       return Math.max(0, Math.min(1, turn / total));
     },
+    within() { return withinText(this.progress.within); },
+    remaining() { return left(this.progress.eta); },
+    failure() { return (this.record && this.record.failure) || null; },
+    traceback() { return this.failure && this.failure.traceback ? String(this.failure.traceback) : ""; },
+    failureTitle() {
+      if (!this.failure) return "";
+      return [this.failure.type, this.failure.message].filter(Boolean).join(": ");
+    },
+    trace() { return TRACE; },
     hasFraction() { return this.fraction !== null; },
     fractionText() { return this.hasFraction ? percent(this.fraction) : ""; },
     fill() { return { width: (this.hasFraction ? (this.fraction * 100).toFixed(1) : "0") + "%" }; },
@@ -124,7 +136,12 @@ export default {
   },
   template: `
   <div class="page pane-overview">
-    <div class="error-box" v-if="summary.failure">failed: {{ summary.failure }}</div>
+    <div class="error-box" v-if="summary.failure">failed: {{ failureTitle || summary.failure }}
+      <details v-if="traceback">
+        <summary>traceback</summary>
+        <pre class="mono" :style="trace">{{ traceback }}</pre>
+      </details>
+    </div>
     <div class="notice-box" v-if="summary.stop_reason">stopped: {{ summary.stop_reason }}</div>
     <div class="cards">
       <section class="card">
@@ -135,6 +152,7 @@ export default {
           <span class="progress-text">{{ fractionText }}</span>
         </span>
         <div class="muted small">{{ turnText }}<span v-if="unit"> {{ unit }}</span></div>
+        <div class="muted small" v-if="within">{{ within }}</div>
       </section>
       <section class="card">
         <div class="stat-label">best</div>
@@ -146,6 +164,7 @@ export default {
         <div class="stat-label">elapsed</div>
         <div class="stat-value">{{ elapsed }}</div>
         <div class="muted small">{{ started }}</div>
+        <div class="muted small" v-if="remaining">{{ remaining }}</div>
       </section>
       <section class="card">
         <div class="stat-label">rules fired</div>
