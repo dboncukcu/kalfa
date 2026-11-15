@@ -1,5 +1,7 @@
 import copy
 import fnmatch
+import functools
+import inspect
 import math
 
 import torch
@@ -201,6 +203,9 @@ def pair_values(owner, outputs, batch, ctx, kind):
 
 
 def apply_keys(obj, keys, path):
+    if keys.get("sample_weight") is not None:
+        raise BuildError(f"{path}: sample_weight belongs to a criterion, a loss of (pred, target); "
+                         f"{type(obj).__name__} is an objective and reads the batch field itself")
     for key in ("pred", "target", "rescale"):
         if key not in keys:
             continue
@@ -214,22 +219,92 @@ def apply_keys(obj, keys, path):
         obj.every = int(keys["every"])
 
 
+def takes_reduction(function):
+    try:
+        return "reduction" in inspect.signature(function).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def function_name(function):
+    inner = function.func if isinstance(function, functools.partial) else function
+    return getattr(inner, "__name__", None) or type(inner).__name__
+
+
+def reduction_of(function):
+    reduction = getattr(function, "reduction", None)
+    if isinstance(reduction, str):
+        return reduction
+    if not takes_reduction(function):
+        return None
+    bound = function.keywords.get("reduction") if isinstance(function, functools.partial) else None
+    return "mean" if bound is None else bound
+
+
+def element_losses(function, guess, truth):
+    kept = getattr(function, "reduction", None)
+    if not isinstance(kept, str):
+        return function(guess, truth, reduction="none")
+    function.reduction = "none"
+    try:
+        return function(guess, truth)
+    finally:
+        function.reduction = kept
+
+
+def weighted(values, weight, reduction, label):
+    if reduction not in ("mean", "sum"):
+        raise RunError(f"{label}: sample_weight takes the reduction mean or sum, not {reduction!r}")
+    if not isinstance(values, torch.Tensor) or values.ndim == 0:
+        raise RunError(f"{label}: sample_weight needs one loss value per element, but the loss returned one value")
+    weight = weight.to(values.dtype)
+    while weight.ndim > 1 and weight.shape[-1] == 1:
+        weight = weight.squeeze(-1)
+    if weight.ndim > values.ndim or tuple(weight.shape) != tuple(values.shape[:weight.ndim]):
+        raise RunError(f"{label}: the weights of shape {tuple(weight.shape)} do not match the element losses of shape "
+                       f"{tuple(values.shape)}; a weight has one value per row")
+    scaled = values * weight.reshape(weight.shape + (1,) * (values.ndim - weight.ndim))
+    return scaled.sum() if reduction == "sum" else scaled.mean()
+
+
 class Criterion(Objective):
-    def __init__(self, function, pred=None, target=None, rescale=False, on=("train", "valid", "test"), every=1):
+    def __init__(self, function, pred=None, target=None, rescale=False, on=("train", "valid", "test"), every=1,
+                 sample_weight=None, path=""):
         super().__init__()
-        self.function = function
         self.pred = pred
         self.target = target
         self.rescale = bool(rescale)
         self.on = (on,) if isinstance(on, str) else tuple(on)
         self.every = int(every)
+        self.sample_weight = sample_weight
+        self.function = function
+        if sample_weight is not None:
+            self.check_weight(path or "loss")
+
+    def check_weight(self, path):
+        if not isinstance(self.sample_weight, str) or not self.sample_weight:
+            raise BuildError(f"{path}: sample_weight names a batch field such as w, got {self.sample_weight!r}")
+        reduction = reduction_of(self.function)
+        if reduction is None:
+            raise BuildError(f"{path}: sample_weight needs a loss that can return one value per element, a loss "
+                             "with a reduction param such as mse, l1, huber, bce_logits or cross_entropy; "
+                             f"{function_name(self.function)} has none")
+        if reduction not in ("mean", "sum"):
+            raise BuildError(f"{path}: sample_weight takes the reduction mean or sum, not {reduction!r}")
 
     def pair(self, outputs, batch, ctx):
         return pair_values(self, outputs, batch, ctx, "loss")
 
     def forward(self, outputs, batch, ctx):
         guess, truth = self.pair(outputs, batch, ctx)
-        return self.function(guess, truth)
+        if self.sample_weight is None:
+            return self.function(guess, truth)
+        label = f"loss {self.name!r}" if getattr(self, "name", "") else "loss"
+        if self.sample_weight not in batch:
+            raise RunError(f"{label}: sample_weight names the field {self.sample_weight!r}, which is not in the "
+                           f"batch; its fields are {fields(batch)}")
+        values = element_losses(self.function, guess, truth)
+        return weighted(values, batch[self.sample_weight], reduction_of(self.function), label)
 
 
 def wrap_loss(obj, keys, name, path):
@@ -241,7 +316,8 @@ def wrap_loss(obj, keys, name, path):
         result = obj
     elif callable(obj):
         result = Criterion(obj, pred=keys.get("pred"), target=keys.get("target"), rescale=bool(keys.get("rescale")),
-                           on=keys.get("on", DEFAULT_ON), every=keys.get("every", 1))
+                           on=keys.get("on", DEFAULT_ON), every=keys.get("every", 1),
+                           sample_weight=keys.get("sample_weight"), path=path)
     else:
         raise BuildError(f"{path}: {type(obj).__name__} is not a loss; a loss is an Objective or a callable "
                          "taking (pred, target)")

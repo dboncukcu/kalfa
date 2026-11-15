@@ -34,7 +34,8 @@ ABOUT = {
                "and kalfa picks the two tensors; an objective reads the outputs, the batch and the run context "
                "itself. Every loss writes the series <set>/<name> on the sets it runs on, such as train/mse and "
                "val/mse. A loss that an optimizer minimizes gives the gradients; the others are computed without "
-               "gradients and only observe."),
+               "gradients and only observe. sample_weight names a row weight of the data (data.weights) that "
+               "multiplies the loss of every row of a criterion."),
     "metrics": ("Each name is a call of a metric, accumulated over a whole set and written as <set>/<name>, such as "
                 "val/rmse. A metric takes the same pred, target, on, every and rescale keys as a loss. rescale is on "
                 "by default when the target has an invertible preprocessor, so the metric speaks the original units. "

@@ -13,7 +13,7 @@ from .rules import parse_rules
 SLOT_KEYS = {
     "data": (),
     "model": ("inputs", "outputs", "ema", "freeze", "weights", "init"),
-    "loss": ("pred", "target", "on", "every", "rescale"),
+    "loss": ("pred", "target", "on", "every", "rescale", "sample_weight"),
     "metric": ("pred", "target", "on", "every", "rescale"),
     "optimizer": ("over", "minimizes", "schedule"),
     "step": ("order", "amp", "grad_clip", "accumulate"),

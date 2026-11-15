@@ -1,1658 +1,1277 @@
-# kalfa lego reference
+# kalfa reference
 
-Generated from the registry by `kalfa docs --write DOCS.md`; do not edit by hand, the test `tests/surface/test_docs.py`
-compares this file with the registry. One table per kind: the URI, the alias names, the signature with the param
-defaults, the facts a lego declares and its description. The kind of a lego is the first segment of its URI; which
-config section it may be written in follows from the kind (`CONFIG.md` section 5). Every URI of the catalog is
-valid in a config; the alias packs at the end give the short names. The skeleton steps come after the catalog.
+This is the full reference of kalfa: the words it uses, the config grammar, every section and key, what happens while a run trains, the files of a record directory, every command, the Python API, the board and the terminal interface, and how to write your own pieces. The catalog of short names is not copied here, because it changes with the code: `uv run kalfa legos --docs` prints it as markdown, `uv run kalfa legos` lists it in the terminal and `uv run kalfa legos NAME` shows one page with the params, their defaults and notes, YAML examples and the example configs that use the name.
 
-## Catalog
+Contents:
 
-The legos a config writes, by kind.
+1. [Vocabulary](#vocabulary)
+2. [The config grammar](#the-config-grammar)
+3. [Sections](#sections)
+4. [The runtime](#the-runtime)
+5. [The record directory](#the-record-directory)
+6. [Commands](#commands)
+7. [Python API](#python-api)
+8. [The board](#the-board)
+9. [The terminal interface](#the-terminal-interface)
+10. [Writing your own pieces](#writing-your-own-pieces)
+11. [Reference config](#reference-config)
 
-### Kinds
+## Vocabulary
 
-| Kind | Where it is written | Count |
+* **config**: one or more YAML files (or Python mappings) that describe a run. Later files override earlier ones.
+* **section**: a top level key of the config, such as `data`, `models` or `rules`.
+* **call**: a mapping with a `use` key, `{use: mlp, hidden: [64], out: 1}`. kalfa builds the object `use` names with the other keys as params. A mapping without `use` is plain data.
+* **short name**: a name from the catalog (`mlp`, `adam`, `plateau`). The catalog is also called the legos; `kalfa legos` lists it.
+* **import path**: a dotted path to any importable class or function, `torch.nn.HuberLoss` or `mylegos.Classifier`.
+* **slot**: the role of a call, given by where it stands: data, model, loss, metric, optimizer, step, trigger, action, logger, schedule, plot, sampler, strategy or value.
+* **category**: the group a short name is listed under by `kalfa legos` and the terminal interface, such as `losses`, `lr schedules` or `table preprocessing`, with the place in a config where its names go (see [kalfa legos](#kalfa-legos)).
+* **slot key**: a key kalfa reads itself instead of passing it to the class, such as `outputs` on a model or `minimizes` on an optimizer.
+* **reference**: a string that starts with `@` and names another built object, `"@models.net"`.
+* **node**: one built object of the plan, addressed by its path (`models.net`, `losses.total`, `rules.stop.when`).
+* **plan**: the checked, resolved form of a config, written as `plan.json`.
+* **record**: the directory a run writes. Every tool reads records and nothing else.
+* **turn**: one unit of training. With `train.epochs` a turn is an epoch; with `train.updates` it is a fixed number of updates.
+* **update**: one optimizer step. With `accumulate: k` an update takes k batches.
+* **step**: the algorithm object that trains a turn (`supervised`, `alternating` or your own class). It is not a counter.
+* **set**: a named part of the data: `train`, `valid` and `test` for the std data classes. Series of the valid set use the prefix `val`.
+* **series**: a named number per turn, written to `history.jsonl`: `train/mse`, `val/rmse`, `lr/main`, `track/optimizers.main.lr`.
+* **objective**: a loss that reads everything (`forward(outputs, batch, ctx)`), a subclass of `kalfa.Objective`.
+* **criterion**: a loss that compares one prediction with one target (`function(pred, target)`); kalfa wraps it and picks the two tensors.
+* **predicts model**: the model whose outputs the step computes for each batch and whose outputs go into the predictions table.
+* **rule**: a condition (`when`) and its effects (`set`, `stop`, `run`), checked after every turn.
+* **trigger**: the object behind `when`; it answers `fires(ctx)`.
+* **action**: the object behind `run`; it is called with the run context.
+* **patch**: one change a rule makes to a running config, such as `optimizers.main.lr` times 0.5.
+* **sweep root**: a directory with `sweep.json` whose numbered subdirectories (`0000`, `0001`, ...) are the records of the sweep points.
+
+## The config grammar
+
+The top level keys are `include`, `params`, `plugins`, `seed`, `device`, `record`, `data`, `models`, `losses`, `metrics`, `optimizers`, `train`, `rules`, `plots`, `generate` and `sweep`. Any other key is the problem `unknown_section`.
+
+### Values
+
+A value is one of these:
+
+* a scalar: a number, a string, a boolean or null;
+* a param, `$name$`: replaced by the value of `params.name`. A string that is only `$name$` takes the value with its type (a list stays a list); inside a longer string it is formatted as text (`runs/lr_$lr$`). `$name.field$` reads a field of a mapping param. `$datetime$` is built in and gives the start time as `20261108_143000`. `$$` writes a literal dollar sign;
+* a call, `{use: ..., ...}`;
+* a reference, `"@models.net"` (quote it, since YAML reserves a leading `@`);
+* a list or a mapping of these.
+
+Substitution happens after every layer is merged. An unknown `$name$` is the error `unknown_param`, a param that refers to itself is `param_cycle`, and a param that nothing reads is a warning (an error when it came from `-p`).
+
+### Calls
+
+`{use: <name>, <param>: <value>, ...}` builds the target of `use` with the params. Where a section expects a call, a bare name is a call without params: `mse: mse` is the same as `mse: {use: mse}`.
+
+The params are checked against the signature of the target before anything is built: a key the target does not take is `unknown_key`, a required param that is missing is `missing_key`. When the signature cannot be read, or the target takes `**kwargs`, the params pass and the plan writes `signature: open` for that node. A call nested in a param is built first and passed as the object (`schedule: {use: cosine, steps: 1000}`).
+
+A plain function can be a loss. When `use` under `losses` names a function whose first two positional params are required (`log_cosh(pred, target)`), the function itself is the criterion and the other params are bound to it. A function without required params is a factory: kalfa calls it and uses what it returns.
+
+### Short names and import paths
+
+A name without a dot is looked up in the catalog; a name with a dot is imported. The directories of the config files and the working directory are put on `sys.path`, so a module next to the config (`mylegos.py`) imports as `mylegos.Thing`. The catalog is one name space across slots: `mae` is the metric and the loss is `l1` (or `torch.nn.L1Loss`); `sequential` is the split and the layer stack model is `stack`. A misspelt name gets a suggestion (`did you mean to_tensor`).
+
+### References
+
+A reference is a string that starts with `@`. It is resolved to the built object when the node that holds it is built (and, in a rule patch, when the rule fires).
+
+| reference | resolves to |
+|---|---|
+| `@models.<name>` | the model itself, the plain `nn.Module` |
+| `@models.<name>.ema` | the EMA copy of the model (needs the `ema` key) |
+| `@models.<name>.<child>.<child>` | a submodule, such as `@models.ae.decoder` |
+| `@losses.<name>` | the objective, or the wrapped criterion |
+| `@losses.<name>.<attribute>` | an attribute of a loss, such as `@losses.ddpm.schedule` |
+| `@metrics.<name>` | the metric entry |
+| `@optimizers.<name>` | the optimizer entry (the torch optimizer is its `real` attribute) |
+| `@data.<attribute>` | a value the data class exposes after it is fitted, such as `@data.n_classes` |
+| `@generate` | the sampler of the `generate` section |
+| `@train.step` | the step object |
+
+`@data.<attribute>` accepts only the names in the `exposes` list of the data class. Inside one section the order of the entries does not matter (`@losses.mse` may be used above `mse`); across sections the build order holds, so a loss can name a model but a model cannot name a loss. A reference that names nothing is `reference_unknown`.
+
+### Tensor names are plain text
+
+Outputs and batch fields are named with plain strings, never with references. `pred: x_hat` names an output of the step (the names come from the model's `outputs`), and `target: image` names a field of the batch (the names come from the data class: `x` and the targets of a table, `image` and `label` of an image folder, `input_ids` and `targets` of a text file).
+
+### Layers: include, params, --set and -p
+
+A config is merged from layers, lowest first:
+
+1. the files named by `include` (a path or a list of paths, relative to the file that includes them); an included file may include others;
+2. the config files in the order given (and Python mappings after them);
+3. `--set path=value` overrides, one leaf each (`--set train.epochs=3`, `--set data.batch=32`). The path is dotted and takes no list index. The value is parsed as YAML, and a value that starts with `@` stays a reference;
+4. `-p name=value` params (`-p lr=3e-4`).
+
+The same key twice inside one layer is an error (`duplicate_key`). Across layers a later leaf wins. A mapping with `use` and a list are replaced as a whole, never merged item by item; other mappings merge key by key. `params` mappings merge, the later layer winning. `resolved.yaml` in the record shows the merged config with a comment beside every leaf that a layer overrode.
+
+`plugins` is a module name or a `.py` file, or a list of them, imported by `check` before anything is built. A `.py` file is looked for in the working directory and the config directories. Plugins register short names with `kalfa.lego`; a plain import path needs no plugin entry.
+
+`seed` (default 0) seeds every random stream and the splits. `device` is `auto` (the default: cuda, then mps, then cpu), `cpu`, `mps`, `cuda` or `cuda:<index>`. `record` is the record directory; without it the run writes `runs/<config name>_<datetime>`. A record directory must be new or empty.
+
+### Slot keys
+
+Slot keys are read by kalfa and never passed to the target. A slot key that is also a param of the target is the error `slot_conflict`, since the class could never receive it from a config. The step slot is the exception: a step constructor receives the slot keys it takes (`supervised` takes `order`, `amp`, `grad_clip` and `accumulate`).
+
+| slot | slot keys | fixed during a run |
 |---|---|---|
-| `source` | data.source | 7 |
-| `transform` | data.transform | 5 |
-| `split` | data.split | 5 |
-| `frame` | data.frame | 2 |
-| `pre` | data.preprocessors | 29 |
-| `feed` | data.feed | 3 |
-| `layer` | model nodes | 125 |
-| `init` | model init | 5 |
-| `criterion` | losses, metrics | 7 |
-| `objective` | losses | 8 |
-| `metric` | metrics | 9 |
-| `adapter` | the driver | 3 |
-| `optimizer` | optimizers | 3 |
-| `schedule` | optimizer schedule | 4 |
-| `turn` | training.turn | 1 |
-| `trigger` | training.stop, rules when | 5 |
-| `checkpoint` | training.checkpoint | 3 |
-| `generate` | generate | 3 |
-| `plot` | plots | 26 |
-| `strategy` | sweep.strategy | 4 |
-| `device` | device, predict --device, generate --device | 4 |
-| `rng` | rng | 3 |
-| `export` | kalfa export --format | 3 |
-| `calibrate` | calibrate | 1 |
-| `lego` | a param value, or the contract | 1 |
-| `data` | a param value ({uri: name}) | 5 |
+| model | `inputs` (batch fields fed in order, default the data class `inputs`), `outputs` (names of the results, default the model name), `ema` (a decay, `true`, or `{decay, every}`), `freeze` (`true`, `false` or a list of parameter name patterns), `weights` (`{run, model, which}`), `init` (a call applied to the module) | `inputs`, `outputs`, `ema`, `weights`, `init` and every constructor param |
+| loss, metric | `pred`, `target`, `on` (the sets it runs on), `every` (every k turns), `rescale`; a loss also takes `sample_weight` (a row weight field of the data) | `pred`, `target`, `rescale`, `sample_weight` and the `fixed` list of the class |
+| optimizer | `over` (what it optimizes), `minimizes` (the loss), `schedule` (an lr factor per update) | `over`, `schedule` |
+| step | `order`, `amp`, `grad_clip`, `accumulate` (and the params of the class, such as `repeat` and `fresh_batch` of `alternating`) | the `fixed` list of the class |
 
-### source
+The last column lists what a rule cannot patch; everything else of these slots can change while the run goes on (see [rules](#rules)).
 
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/source/kalfa/csv` | `csv` | `(path, columns=None)` | returns: df; header: /lego/kalfa/csv_header | Read a CSV file into a DataFrame; columns lists the ones to read, the others stay on disk |
-| `/source/kalfa/csv_stream` |  | `(path, chunk=65536, columns=None)` | returns: df; header: /lego/kalfa/csv_header; stream: True | Read a CSV file in chunks (the lazy set) |
-| `/source/kalfa/image_folder` | `image_folder` | `(path)` | returns: df; header: /lego/kalfa/image_folder_header; samples: True | Images under root/<class>/ as a Dataset with fields image and label |
-| `/source/kalfa/parquet` | `parquet` | `(path, columns=None)` | returns: df; header: /lego/kalfa/parquet_header | Read a parquet file into a DataFrame; columns lists the ones to read, the others stay on disk |
-| `/source/kalfa/parquet_stream` |  | `(path, chunk=65536, columns=None)` | returns: df; header: /lego/kalfa/parquet_header; stream: True | Read a parquet file in chunks (the lazy set): a stream the data legos filter, cut and fit without loading the table |
-| `/source/kalfa/prepared` |  | `(path)` | returns: df; header: /lego/kalfa/prepared_header | The data kalfa prepare wrote: the sets of a table read back into one frame marked by set, or the items of a Dataset source read from where they are with the split kept as positions |
-| `/source/kalfa/text_lines` | `text_lines` | `(path)` | returns: df; header: /lego/kalfa/text_lines_header; samples: True | The lines of a text file as a Dataset with the field text |
+### The five defaults
 
-### transform
+kalfa fills in exactly these, and nothing else:
 
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/transform/kalfa/astype` | `astype` | `(df, columns)` | partial: True; needs_table: True | Cast columns to dtypes, {column: dtype} |
-| `/transform/kalfa/derive` | `derive` | `(df, column, expr)` | partial: True; needs_table: True | A new column from a pandas eval expression over the frame (log10(x), a > b, a + b) |
-| `/transform/kalfa/drop` | `drop` | `(df, columns)` | partial: True; needs_table: True | Drop columns from the frame before anything reads them |
-| `/transform/kalfa/filter` | `filter` | `(df, query)` | partial: True | Keep the rows a pandas query selects; a bare string in data.transform is this call; a stream applies it chunk by chunk and a Dataset source takes field equality queries |
-| `/transform/kalfa/rename` | `rename` | `(df, pattern, to)` | partial: True; needs_table: True | Rename the columns a regular expression matches, pattern to the replacement, backreferences allowed (cms_(.*)_Z_score to z_\1) |
+1. With one model, `train.predicts` is that model. With several, nothing is predicted unless `train.predicts` names one.
+2. The `pred` of a criterion or metric is the first output of the predicts model, and its `target` is the only target of the data. Otherwise `check` asks for them (`pred_required`, `target_required`).
+3. `rescale` is on for a metric when the target has an invertible preprocessor (a scaler), so metrics speak the original units; it is off for a loss.
+4. `train.step` is `supervised`, and `train.evaluate` is the existing `valid` and `test` sets.
+5. The seed of a split is the top level `seed`.
 
-### split
+The filled `pred`, `target` and metric `rescale` and the default step are written into `plan.json`; `train.predicts`, `train.evaluate` and `seed` stay there as the config wrote them.
 
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/split/kalfa/given` | `given` | `(df, valid=None, test=None)` | returns: train, valid, test; sizes: /lego/kalfa/given_sizes | The source is the train set; valid and test come from the given paths, read like the source (a missing path means no set) |
-| `/split/kalfa/kfold` | `kfold` | `(df, k, fold, val=None, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/kfold_sizes; needs_table: True | k folds of a seeded permutation: the held out fold is the test set, val carves the valid set from the rest; without val there is no valid set |
-| `/split/kalfa/prepared` |  | `(df, path)` | returns: train, valid, test; sizes: /lego/kalfa/prepared_sizes | The split kalfa prepare recorded: the sets a prepared frame is marked with, or the positions of a Dataset source's items per set |
-| `/split/kalfa/random` | `random_split` | `(df, ratios, seed=None)` | returns: train, valid, test; sizes: /lego/kalfa/ratio_sizes; needs_table: True | Shuffle the rows with a seed and cut them by ratios into train, valid and test; the short form of a split without a uri |
-| `/split/kalfa/sequential` | `sequential` | `(df, ratios, group=None)` | returns: train, valid, test; refs: group=column; sizes: /lego/kalfa/ratio_sizes | Cut the rows in their order by ratios; with a group column every group is cut on its own |
+## Sections
 
-### frame
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/frame/kalfa/group_statistic` | `group_statistic` | `(by, column, statistic='mean', name=None)` | refs: by=column; needs_table: True | A statistic of a column per group, learned on the train set and mapped onto every set as a new column (name, or <column>_<statistic>_by_<by>); a group the train set never saw takes the statistic over the whole train set |
-| `/frame/kalfa/target_encoding` | `target_encoding` | `(column, target, smoothing=1.0, name=None)` | refs: column=column; needs_table: True | The train mean of the target per category of a column, smoothed toward the overall mean by smoothing pseudo counts, as a new column (name, or <column>_target); a category the train set never saw takes the overall mean |
-
-### pre
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/pre/kalfa/abs` | `abs` | `()` |  | Absolute value of a column |
-| `/pre/kalfa/asinh` | `asinh` | `(scale=1.0, overflow=700.0)` |  | Signed log scale of a heavy tailed column: arcsinh(x / scale), inverted by scale sinh(y); keeps the sign, linear near zero, logarithmic in the tails, defined at zero; the inverse refuses values past overflow, where sinh leaves float64 |
-| `/pre/kalfa/atanh` | `atanh` | `(scale=1.0)` |  | artanh(x / scale) of a bounded column, inverted by scale tanh(y); a value outside (-scale, scale) is an error that names how many and how large |
-| `/pre/kalfa/cast` | `cast` | `(dtype)` |  | Cast a column to a numpy dtype |
-| `/pre/kalfa/char_tokenizer` | `char_tokenizer` | `()` | state: True | Character level tokenizer fitted on the train text; the vocabulary goes into the record |
-| `/pre/kalfa/fill` | `fill` | `(value=None, method=None)` |  | Fill the missing values of a column without a fit: a constant (a number, or a name such as missing that becomes its own category), or method ffill or bfill along the rows |
-| `/pre/kalfa/label_encoder` | `label_encoder` | `()` | state: True | Integer codes of a label column, sorted by label; inverted in reports and predictions, class scores decode to labels |
-| `/pre/kalfa/log` | `log` | `(base=10.0, norm=1.0)` |  | log1p of a column divided by norm, in the given base |
-| `/pre/kalfa/logit` | `logit` | `(low=1e-06, high=1e-06)` |  | log(x / (1 - x)) of a column inside [0, 1], the way to give a probability the whole real line, inverted by the sigmoid; the column is clipped to [low, 1 - high] first, so the two margins are what a saturated 0 and a saturated 1 come out as |
-| `/pre/kalfa/median_std_scaler` | `median_std_scaler` | `()` | grouped: True | Center a column on its median and scale it by its standard deviation: the center an outlier does not move, the scale of a standard scaler |
-| `/pre/kalfa/normalize` | `normalize` | `(mean, std)` |  | Normalize an image tensor per channel; mean and std are numbers, lists or the presets imagenet and cifar10 |
-| `/pre/kalfa/one_hot` | `one_hot` | `()` | state: True | One hot columns <field>_<category> of a categorical column; unknown categories give zeros |
-| `/pre/kalfa/random_crop_flip` | `random_crop_flip` | `(size)` |  | Random crop of size after padding and a random horizontal flip |
-| `/pre/kalfa/resize` | `resize` | `(size)` |  | Resize an image to size (int or [h, w]) |
-| `/pre/kalfa/simclr_aug` | `simclr_aug` | `(size, scale=(0.5, 1.0))` |  | SimCLR augmentation: random resized crop to size, horizontal flip, brightness jitter |
-| `/pre/kalfa/simple_imputer` | `simple_imputer` | `(strategy='mean', fill_value=None, indicator=False)` |  | Fill the missing values of a column with the train mean, median, most frequent value or a constant; indicator adds <field>_missing, computed before the fill, as a feature of its own |
-| `/pre/kalfa/sinh` | `sinh` | `(scale=1.0, overflow=700.0)` |  | sinh(x / scale), the direction opposite to asinh: it stretches the tails instead of compressing them; a value past overflow is an error, where sinh leaves float64 |
-| `/pre/kalfa/tanh` | `tanh` | `(scale=1.0, eps=1e-15)` |  | tanh(x / scale) into (-1, 1); the inverse clips at 1 - eps, so a value that saturated in float64 (past about 19 scale) comes back at the clip instead of infinity |
-| `/pre/kalfa/to_tensor` | `to_tensor` | `()` |  | Image to a float tensor in [0, 1], channels first |
-| `/pre/kalfa/to_tensor_signed` | `to_tensor_signed` | `()` |  | Image to a float tensor in [-1, 1], channels first |
-| `/pre/kalfa/two_views` | `two_views` | `(transform)` | refs: transform=preprocessor | Two independent applications of a transform to one image, as a pair |
-| `/pre/sklearn/kbins_discretizer` | `kbins_discretizer` | `(bins=5, strategy='quantile', encode='onehot')` | state: True | Cut a column into bins and write them as one hot columns <field>_bin<n> (encode: ordinal for one integer column); strategy quantile, uniform or kmeans (sklearn KBinsDiscretizer) |
-| `/pre/sklearn/max_abs_scaler` | `max_abs_scaler` | `()` | state: True; grouped: True | Scale a column by its largest absolute value, into [-1, 1] with the sign and the zeros kept (sklearn MaxAbsScaler); one object over every column that names it |
-| `/pre/sklearn/minmax_scaler` | `minmax_scaler` | `(low=0.0, high=1.0)` | state: True; grouped: True | Scale a column into [low, high] (sklearn MinMaxScaler); one object over every column that names it, its statistics per column |
-| `/pre/sklearn/power_transformer` | `power_transformer` | `(method='yeo-johnson', standardize=True)` | state: True | Yeo-Johnson (or Box-Cox for positive columns) with the exponent fitted per column, then standardized (sklearn PowerTransformer); the invertible way to a near normal column |
-| `/pre/sklearn/quantile_transformer` | `quantile_transformer` | `(quantiles=1000, output='uniform', seed=None)` | state: True | Map a column onto its own quantiles, uniform or normal (sklearn QuantileTransformer); flattens any shape, the inverse interpolates between the stored quantiles |
-| `/pre/sklearn/robust_scaler` | `robust_scaler` | `(low=25.0, high=75.0)` | state: True; grouped: True | Center a column on its median and scale it by the distance between the low and high percentiles (sklearn RobustScaler); outliers do not move the statistics |
-| `/pre/sklearn/spline_transformer` | `spline_transformer` | `(knots=5, degree=3, extrapolation='constant')` | state: True | A B-spline basis of a column, <field>_spline<n>: a smooth non linear expansion of one feature that a linear head can use (sklearn SplineTransformer) |
-| `/pre/sklearn/standard_scaler` | `standard_scaler` | `()` | state: True; grouped: True | Standardize a column to zero mean and unit variance (sklearn StandardScaler); one object over every column that names it, its statistics per column |
-
-### feed
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/feed/kalfa/next_token` | `next_token` | `(frame, frames, seq_len)` |  | input_ids and targets windows of seq_len tokens over the set's token stream |
-| `/feed/kalfa/table` | `table` | `(frame, frames=None)` |  | Feature columns as one tensor x and target fields by name; Dataset fields by name |
-| `/feed/kalfa/window` | `window` | `(frame, frames, size, horizon, context=False, group=None)` | refs: group=column; needs_table: True | Windows of size steps and the next horizon steps of the targets; context takes the tail of the previous set at the split boundary, group keeps series apart |
-
-### layer
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/layer/kalfa/add` | `add` | `(*args: Any, **kwargs: Any) -> None` |  | The elementwise sum of its input wires, the residual connection of a model graph; shapes broadcast |
-| `/layer/kalfa/divide` | `divide` | `(*args: Any, **kwargs: Any) -> None` |  | The first input wire divided by the second; shapes broadcast and a zero divisor gives an infinity, as torch does |
-| `/layer/kalfa/l1_distance` | `l1_distance` | `()` |  | Mean absolute difference of two wires per sample |
-| `/layer/kalfa/l2_normalize` | `l2_normalize` | `(eps=1e-12)` |  | Divide every sample by the L2 norm of its own feature vector (sklearn's Normalizer as a layer: it reads the whole vector, so it belongs to the model, not to a column chain) |
-| `/layer/kalfa/linear` | `linear` | `(out_features, in_features=None)` |  | Linear layer; without in_features the input width is taken from the first batch |
-| `/layer/kalfa/linear_relu` | `linear_relu` | `(out_features, in_features=None)` |  | Linear layer followed by ReLU; lazy without in_features |
-| `/layer/kalfa/mlp` | `mlp` | `(widths, activation='relu', dropout=0.0, out_features=None, in_features=None)` |  | A multilayer perceptron in one node: a linear layer, the activation and dropout for every width, then a plain linear layer of out_features when it is written; lazy without in_features |
-| `/layer/kalfa/multipliers` | `multipliers` | `(names, init=0.0)` |  | The Lagrange multipliers of an mdmm loss as a model of their own: one learnable lambda per name, in the order written, started at the lmbda_init of its entry (init without one); names takes the constraints mapping of the loss (names: $constraints$) so the two stay in step, and forward ignores its input and returns the vector. A model, so an optimizer updates them (a group matching <name>.* with a negative lr, the gradient ascent of a saddle point) and the checkpoint carries them |
-| `/layer/kalfa/multiply` | `multiply` | `(*args: Any, **kwargs: Any) -> None` |  | The elementwise product of its input wires, the gate of a model graph; shapes broadcast |
-| `/layer/kalfa/negate` | `negate` | `(*args: Any, **kwargs: Any) -> None` |  | Minus the input wire |
-| `/layer/kalfa/polynomial` | `polynomial` | `(degree=2, interaction_only=False, bias=False, keep=True)` |  | Polynomial expansion of the feature vector: the features and every product of degree of them (interaction_only drops the squares, bias adds a constant column, keep: false returns the products alone); the place for feature interactions, computed per batch |
-| `/layer/kalfa/reparam` | `reparam` | `()` |  | Sample z from mu and logvar in train mode, return mu in eval mode |
-| `/layer/kalfa/select` | `select` | `(index, dim=1)` |  | The positions of the feature axis the index names, in that order; index is a list of positions or a run time component such as feature_index, and dim picks the axis (1, the features, by default). The piece a long range skip connection needs: it takes the columns the output is a correction of out of the input wire |
-| `/layer/kalfa/subtract` | `subtract` | `(*args: Any, **kwargs: Any) -> None` |  | The first input wire minus the second; shapes broadcast |
-| `/layer/kalfa/unflatten` | `unflatten` | `(shape)` |  | Reshape the features of every sample to shape |
-| `/layer/torch/adaptive_avgpool` | `adaptive_avgpool` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool2d to output_size, a number or [height, width] |
-| `/layer/torch/adaptive_avgpool1d` | `adaptive_avgpool1d` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool1d |
-| `/layer/torch/adaptive_avgpool3d` | `adaptive_avgpool3d` | `(output_size=1)` |  | torch.nn.AdaptiveAvgPool3d |
-| `/layer/torch/adaptive_maxpool` | `adaptive_maxpool` | `(output_size=1)` |  | torch.nn.AdaptiveMaxPool2d to output_size, a number or [height, width] |
-| `/layer/torch/adaptive_maxpool1d` | `adaptive_maxpool1d` | `(output_size=1)` |  | torch.nn.AdaptiveMaxPool1d |
-| `/layer/torch/adaptive_maxpool3d` | `adaptive_maxpool3d` | `(output_size=1)` |  | torch.nn.AdaptiveMaxPool3d |
-| `/layer/torch/alpha_dropout` | `alpha_dropout` | `(p=0.5)` |  | torch.nn.AlphaDropout, the dropout of selu |
-| `/layer/torch/avgpool` | `avgpool` | `(kernel, stride=None, padding=0)` |  | torch.nn.AvgPool2d |
-| `/layer/torch/avgpool1d` | `avgpool1d` | `(kernel, stride=None, padding=0)` |  | torch.nn.AvgPool1d |
-| `/layer/torch/avgpool3d` | `avgpool3d` | `(kernel, stride=None, padding=0)` |  | torch.nn.AvgPool3d |
-| `/layer/torch/batch_norm` | `batch_norm` | `(dims=1, eps=1e-05, momentum=0.1, affine=True)` |  | torch.nn.BatchNorm over the feature axis, lazy in the number of features: dims 1 for (batch, features) and sequences, 2 for images, 3 for volumes |
-| `/layer/torch/bilinear` | `bilinear` | `(in1_features, in2_features, out_features, bias=True)` |  | torch.nn.Bilinear over two inputs of in1_features and in2_features |
-| `/layer/torch/celu` | `celu` | `(alpha=1.0)` |  | torch.nn.CELU with alpha |
-| `/layer/torch/channel_shuffle` | `channel_shuffle` | `(groups)` |  | torch.nn.ChannelShuffle over groups |
-| `/layer/torch/circular_pad` | `circular_pad` | `(padding)` |  | torch.nn.CircularPad2d |
-| `/layer/torch/circular_pad1d` | `circular_pad1d` | `(padding)` |  | torch.nn.CircularPad1d |
-| `/layer/torch/circular_pad3d` | `circular_pad3d` | `(padding)` |  | torch.nn.CircularPad3d |
-| `/layer/torch/concat` | `concat` | `(dim=1)` |  | Concatenate wires along a dimension |
-| `/layer/torch/constant_pad` | `constant_pad` | `(padding, value=0.0)` |  | torch.nn.ConstantPad2d with value |
-| `/layer/torch/constant_pad1d` | `constant_pad1d` | `(padding, value=0.0)` |  | torch.nn.ConstantPad1d |
-| `/layer/torch/constant_pad3d` | `constant_pad3d` | `(padding, value=0.0)` |  | torch.nn.ConstantPad3d |
-| `/layer/torch/conv1d` | `conv1d` | `(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.Conv1d; without in_channels the input channels are taken from the first batch |
-| `/layer/torch/conv2d` | `conv2d` | `(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | 2d convolution; without in_channels the input channels are taken from the first batch |
-| `/layer/torch/conv3d` | `conv3d` | `(out_channels, kernel, stride=1, padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.Conv3d; without in_channels the input channels are taken from the first batch |
-| `/layer/torch/conv_transpose1d` | `conv_transpose1d` | `(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.ConvTranspose1d; without in_channels the input channels are taken from the first batch |
-| `/layer/torch/conv_transpose2d` | `conv_transpose2d` | `(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.ConvTranspose2d; without in_channels the input channels are taken from the first batch |
-| `/layer/torch/conv_transpose3d` | `conv_transpose3d` | `(out_channels, kernel, stride=1, padding=0, output_padding=0, dilation=1, groups=1, bias=True, in_channels=None)` |  | torch.nn.ConvTranspose3d; without in_channels the input channels are taken from the first batch |
-| `/layer/torch/cosine_similarity` | `cosine_similarity` | `(dim=1, eps=1e-08)` |  | torch.nn.CosineSimilarity of two inputs along dim |
-| `/layer/torch/dropout` | `dropout` | `(p=0.5)` |  | torch.nn.Dropout |
-| `/layer/torch/dropout1d` | `dropout1d` | `(p=0.5)` |  | torch.nn.Dropout1d, whole channels of a sequence |
-| `/layer/torch/dropout2d` | `dropout2d` | `(p=0.5)` |  | torch.nn.Dropout2d, whole channels of an image |
-| `/layer/torch/dropout3d` | `dropout3d` | `(p=0.5)` |  | torch.nn.Dropout3d, whole channels of a volume |
-| `/layer/torch/elu` | `elu` | `(alpha=1.0)` |  | torch.nn.ELU with alpha |
-| `/layer/torch/embedding` | `embedding` | `(num, dim, padding_idx=None)` |  | torch.nn.Embedding(num, dim); num may be a kind data component such as vocab_size |
-| `/layer/torch/embedding_bag` | `embedding_bag` | `(num, dim, mode='mean')` |  | torch.nn.EmbeddingBag(num, dim), the mean, sum or max of a bag of ids; num may be vocab_size |
-| `/layer/torch/feature_alpha_dropout` | `feature_alpha_dropout` | `(p=0.5)` |  | torch.nn.FeatureAlphaDropout, alpha dropout of whole channels |
-| `/layer/torch/flatten` | `flatten` | `(start_dim=1, end_dim=-1)` |  | torch.nn.Flatten from start_dim to end_dim |
-| `/layer/torch/fold` | `fold` | `(output_size, kernel, dilation=1, padding=0, stride=1)` |  | torch.nn.Fold, sliding blocks back into an image of output_size |
-| `/layer/torch/fractional_maxpool` | `fractional_maxpool` | `(kernel, output_size=None, output_ratio=None)` |  | torch.nn.FractionalMaxPool2d to output_size or output_ratio |
-| `/layer/torch/fractional_maxpool3d` | `fractional_maxpool3d` | `(kernel, output_size=None, output_ratio=None)` |  | torch.nn.FractionalMaxPool3d |
-| `/layer/torch/gelu` | `gelu` | `(approximate='none')` |  | torch.nn.GELU; approximate none or tanh |
-| `/layer/torch/glu` | `glu` | `(dim=-1)` |  | torch.nn.GLU, the gated linear unit over dim |
-| `/layer/torch/group_norm` | `group_norm` | `(num_groups, num_channels, eps=1e-05, affine=True)` |  | torch.nn.GroupNorm: num_groups groups over num_channels channels |
-| `/layer/torch/gru` | `gru` | `(hidden, layers=1, dropout=0.0, bidirectional=False)` |  | GRU over (batch, steps, features) returning every step; the input width comes from the first batch |
-| `/layer/torch/gru_cell` | `gru_cell` | `(input_size, hidden, bias=True)` |  | torch.nn.GRUCell over one step; two inputs, x and h |
-| `/layer/torch/hardshrink` | `hardshrink` | `(lambd=0.5)` |  | torch.nn.Hardshrink, zero inside [-lambd, lambd] |
-| `/layer/torch/hardsigmoid` | `hardsigmoid` | `()` |  | torch.nn.Hardsigmoid |
-| `/layer/torch/hardswish` | `hardswish` | `()` |  | torch.nn.Hardswish |
-| `/layer/torch/hardtanh` | `hardtanh` | `(min_val=-1.0, max_val=1.0)` |  | torch.nn.Hardtanh clipped to [min_val, max_val] |
-| `/layer/torch/identity` | `identity` | `()` |  | torch.nn.Identity, the input as it is |
-| `/layer/torch/instance_norm` | `instance_norm` | `(dims=2, eps=1e-05, momentum=0.1, affine=False)` |  | torch.nn.InstanceNorm, lazy in the number of features: dims 1 for sequences, 2 for images, 3 for volumes |
-| `/layer/torch/last_step` | `last_step` | `()` |  | The last step of a sequence |
-| `/layer/torch/layer_norm` | `layer_norm` | `(normalized_shape, eps=1e-05, elementwise_affine=True)` |  | torch.nn.LayerNorm over the last axis; normalized_shape is its width, a number or {uri: feature_width} for the width of the feature tensor |
-| `/layer/torch/leaky_relu` | `leaky_relu` | `(negative_slope=0.01)` |  | torch.nn.LeakyReLU with negative_slope |
-| `/layer/torch/linear` |  | `(in_features, out_features, bias=True)` |  | torch.nn.Linear with in_features written out |
-| `/layer/torch/local_response_norm` | `local_response_norm` | `(size, alpha=0.0001, beta=0.75, k=1.0)` |  | torch.nn.LocalResponseNorm over size neighbouring channels |
-| `/layer/torch/log_sigmoid` | `log_sigmoid` | `()` |  | torch.nn.LogSigmoid |
-| `/layer/torch/log_softmax` | `log_softmax` | `(dim=-1)` |  | torch.nn.LogSoftmax over dim |
-| `/layer/torch/lppool` | `lppool` | `(norm_type, kernel, stride=None)` |  | torch.nn.LPPool2d, the power average pool of norm_type |
-| `/layer/torch/lppool1d` | `lppool1d` | `(norm_type, kernel, stride=None)` |  | torch.nn.LPPool1d |
-| `/layer/torch/lppool3d` | `lppool3d` | `(norm_type, kernel, stride=None)` |  | torch.nn.LPPool3d |
-| `/layer/torch/lstm` | `lstm` | `(hidden, layers=1, dropout=0.0, bidirectional=False)` |  | LSTM over (batch, steps, features) returning every step; the input width comes from the first batch |
-| `/layer/torch/lstm_cell` | `lstm_cell` | `(input_size, hidden, bias=True)` |  | torch.nn.LSTMCell over one step; inputs x and (h, c), outputs (h, c) |
-| `/layer/torch/max_unpool` | `max_unpool` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxUnpool2d, the inverse of a max pool that kept its indices; two inputs |
-| `/layer/torch/max_unpool1d` | `max_unpool1d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxUnpool1d; two inputs |
-| `/layer/torch/max_unpool3d` | `max_unpool3d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxUnpool3d; two inputs |
-| `/layer/torch/maxpool` | `maxpool` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxPool2d |
-| `/layer/torch/maxpool1d` | `maxpool1d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxPool1d |
-| `/layer/torch/maxpool3d` | `maxpool3d` | `(kernel, stride=None, padding=0)` |  | torch.nn.MaxPool3d |
-| `/layer/torch/mish` | `mish` | `()` |  | torch.nn.Mish |
-| `/layer/torch/multihead_attention` | `multihead_attention` | `(embed_dim, heads, dropout=0.0, bias=True, batch_first=True)` |  | torch.nn.MultiheadAttention over (batch, steps, embed_dim); inputs query, key and value, outputs the attended values and the weights |
-| `/layer/torch/pairwise_distance` | `pairwise_distance` | `(p=2.0, eps=1e-06, keepdim=False)` |  | torch.nn.PairwiseDistance of two inputs, the p norm of their difference |
-| `/layer/torch/pixel_shuffle` | `pixel_shuffle` | `(factor)` |  | torch.nn.PixelShuffle by factor |
-| `/layer/torch/pixel_unshuffle` | `pixel_unshuffle` | `(factor)` |  | torch.nn.PixelUnshuffle by factor |
-| `/layer/torch/prelu` | `prelu` | `(num_parameters=1, init=0.25)` |  | torch.nn.PReLU, a learned slope per channel (num_parameters) starting at init |
-| `/layer/torch/reflection_pad` | `reflection_pad` | `(padding)` |  | torch.nn.ReflectionPad2d |
-| `/layer/torch/reflection_pad1d` | `reflection_pad1d` | `(padding)` |  | torch.nn.ReflectionPad1d |
-| `/layer/torch/reflection_pad3d` | `reflection_pad3d` | `(padding)` |  | torch.nn.ReflectionPad3d |
-| `/layer/torch/relu` | `relu` | `()` |  | torch.nn.ReLU |
-| `/layer/torch/relu6` | `relu6` | `()` |  | torch.nn.ReLU6, ReLU clipped at 6 |
-| `/layer/torch/replication_pad` | `replication_pad` | `(padding)` |  | torch.nn.ReplicationPad2d |
-| `/layer/torch/replication_pad1d` | `replication_pad1d` | `(padding)` |  | torch.nn.ReplicationPad1d |
-| `/layer/torch/replication_pad3d` | `replication_pad3d` | `(padding)` |  | torch.nn.ReplicationPad3d |
-| `/layer/torch/rms_norm` | `rms_norm` | `(normalized_shape, eps=None, elementwise_affine=True)` |  | torch.nn.RMSNorm over the last axis; normalized_shape is its width, a number or {uri: feature_width} |
-| `/layer/torch/rnn` | `rnn` | `(hidden, layers=1, dropout=0.0, bidirectional=False, nonlinearity='tanh')` |  | Elman RNN over (batch, steps, features) returning every step, nonlinearity tanh or relu; the input width comes from the first batch |
-| `/layer/torch/rnn_cell` | `rnn_cell` | `(input_size, hidden, bias=True, nonlinearity='tanh')` |  | torch.nn.RNNCell over one step; two inputs, x and h |
-| `/layer/torch/rrelu` | `rrelu` | `(lower=0.125, upper=0.3333333333333333)` |  | torch.nn.RReLU, a random slope in [lower, upper] in train mode |
-| `/layer/torch/selu` | `selu` | `()` |  | torch.nn.SELU, self normalizing; pairs with alpha_dropout |
-| `/layer/torch/sigmoid` | `sigmoid` | `()` |  | torch.nn.Sigmoid |
-| `/layer/torch/silu` | `silu` | `()` |  | torch.nn.SiLU, x times sigmoid(x) |
-| `/layer/torch/softmax` | `softmax` | `(dim=-1)` |  | torch.nn.Softmax over dim |
-| `/layer/torch/softmax2d` | `softmax2d` | `()` |  | torch.nn.Softmax2d, the softmax over the channels of an image |
-| `/layer/torch/softmin` | `softmin` | `(dim=-1)` |  | torch.nn.Softmin over dim |
-| `/layer/torch/softplus` | `softplus` | `(beta=1.0, threshold=20.0)` |  | torch.nn.Softplus with beta and the linear threshold |
-| `/layer/torch/softshrink` | `softshrink` | `(lambd=0.5)` |  | torch.nn.Softshrink, shrunk toward zero by lambd |
-| `/layer/torch/softsign` | `softsign` | `()` |  | torch.nn.Softsign, x over 1 plus \|x\| |
-| `/layer/torch/tanh` | `tanh_layer` | `()` |  | torch.nn.Tanh; the alias is tanh_layer because tanh names the preprocessor |
-| `/layer/torch/tanhshrink` | `tanhshrink` | `()` |  | torch.nn.Tanhshrink, x minus tanh(x) |
-| `/layer/torch/threshold` | `threshold_layer` | `(threshold, value)` |  | torch.nn.Threshold: value where x is at or below threshold; the alias is threshold_layer because threshold names the calibration |
-| `/layer/torch/transformer` | `transformer` | `(d_model=512, heads=8, encoder_layers=6, decoder_layers=6, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.Transformer, the encoder and the decoder; inputs the source and the target sequences |
-| `/layer/torch/transformer_decoder` | `transformer_decoder` | `(d_model, heads, layers, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerDecoder of layers decoder layers; inputs the target sequence and the memory |
-| `/layer/torch/transformer_decoder_layer` | `transformer_decoder_layer` | `(d_model, heads, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerDecoderLayer; inputs the target sequence and the memory |
-| `/layer/torch/transformer_encoder` | `transformer_encoder` | `(d_model, heads, layers, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerEncoder of layers encoder layers over (batch, steps, d_model) |
-| `/layer/torch/transformer_encoder_layer` | `transformer_encoder_layer` | `(d_model, heads, dim_feedforward=2048, dropout=0.1, activation='relu', norm_first=False, batch_first=True)` |  | torch.nn.TransformerEncoderLayer over (batch, steps, d_model) |
-| `/layer/torch/unflatten` |  | `(dim, size)` |  | torch.nn.Unflatten of dim into size; the alias unflatten names kalfa's per sample reshape |
-| `/layer/torch/unfold` | `unfold` | `(kernel, dilation=1, padding=0, stride=1)` |  | torch.nn.Unfold, an image into sliding blocks |
-| `/layer/torch/upsample` | `upsample` | `(size=None, scale_factor=None, mode='nearest', align_corners=None)` |  | torch.nn.Upsample to size or by scale_factor; mode nearest, linear, bilinear, bicubic or trilinear |
-| `/layer/torch/zero_pad` | `zero_pad` | `(padding)` |  | torch.nn.ZeroPad2d; padding is a number or [left, right, top, bottom] |
-| `/layer/torch/zero_pad1d` | `zero_pad1d` | `(padding)` |  | torch.nn.ZeroPad1d |
-| `/layer/torch/zero_pad3d` | `zero_pad3d` | `(padding)` |  | torch.nn.ZeroPad3d |
-
-### init
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/init/torch/kaiming` | `kaiming` | `(nonlinearity='relu')` |  | Kaiming normal initialization |
-| `/init/torch/kaiming_uniform` | `kaiming_uniform` | `(nonlinearity='relu')` |  | Kaiming uniform initialization |
-| `/init/torch/normal` | `normal` | `(std, mean=0.0)` |  | Normal initialization with std and mean |
-| `/init/torch/xavier` | `xavier` | `(gain=1.0)` |  | Xavier uniform initialization |
-| `/init/torch/zeros` | `zeros` | `()` |  | Zero initialization |
-
-### criterion
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/criterion/kalfa/bce_logits` | `bce_logits` | `(predictions, targets, pos_weight=None)` | partial: True | Binary cross entropy on logits |
-| `/criterion/kalfa/cross_entropy` | `cross_entropy` | `(predictions, targets, weight=None, label_smoothing=0.0)` | partial: True | Cross entropy over class logits; weight may be a run time component |
-| `/criterion/kalfa/huber` | `huber` | `(predictions, targets, delta=1.0)` | partial: True | Huber loss with threshold delta |
-| `/criterion/kalfa/log_cosh` | `log_cosh` | `(predictions, targets)` | partial: True | log(cosh(error)) loss |
-| `/criterion/kalfa/mae` | `mae` | `(predictions, targets)` | partial: True | Mean absolute error |
-| `/criterion/kalfa/mse` | `mse` | `(predictions, targets)` | partial: True | Mean squared error |
-| `/criterion/kalfa/weighted_mse` | `weighted_mse` | `(predictions, targets, weights)` | partial: True; refs: weights=data | Mean squared error with a weight per target column; weights is a list in column order or {uri: target_weights, params: {weights: {column: 3.0, 'glob*': 1.5, default: 1.0}}}, named against the target columns the dataset carries |
-
-### objective
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/objective/kalfa/ddpm` | `ddpm` | `(models, batch, model, schedule, rng=None)` | partial: True; refs: model=model, schedule=schedule | DDPM noise prediction loss: a random time step and noise per sample (rng), the model predicts the noise of the noised input |
-| `/objective/kalfa/distill` | `distill` | `(models, batch, student, teacher, temperature=1.0, alpha=0.5, target=None)` | partial: True; refs: student=model, teacher=model | Knowledge distillation: alpha * KL(teacher \|\| student) at temperature T (times T squared) plus (1 - alpha) * cross entropy of the student; returns loss, ce and kl |
-| `/objective/kalfa/mdmm` | `mdmm` | `(models, batch, losses, primary, multipliers, constraints)` | partial: True; refs: primary=loss, constraints=loss, multipliers=model | The modified differential method of multipliers: minimize the primary losses definition under equality constraints on other definitions (a term of one as name.term), each held at its epsilon by a Lagrange multiplier the multipliers model carries; the loss is primary + sum of scale * (lambda * inf + damping * inf^2 / 2) with inf = epsilon - value, so epsilon is the target in the unit of the term and no weight is guessed; returns loss, primary and per constraint lambda/<name> and inf/<name>. The multipliers climb when their optimizer group has a negative lr |
-| `/objective/kalfa/ntxent` | `ntxent` | `(models, batch, model, temperature=0.5)` | partial: True; refs: model=model | NT-Xent contrastive loss over the two views of every image in the batch |
-| `/objective/kalfa/vae` | `vae` | `(models, batch, encoder, decoder, recon, w_rec=1.0, kl_schedule=None, step=None, rng=None)` | partial: True; refs: encoder=model, decoder=model, recon=criterion, kl_schedule=schedule | VAE loss: w_rec * recon(decoder(z), x) + kl_schedule(step) * KL, z sampled from the encoder's mu and logvar; returns loss, recon, kl and w_kl |
-| `/objective/kalfa/weighted_sum` | `weighted_sum` | `(models, batch, terms, losses)` | partial: True; refs: terms=loss | The weighted sum of other losses definitions on the same batch: terms maps a losses name to its weight; returns loss and every term |
-| `/objective/kalfa/wgan_g` | `wgan_g` | `(models, batch, generator, critic, latent, conditional=False, rng=None)` | partial: True; refs: generator=model, critic=model | WGAN generator loss: minus the critic's mean score of generated samples |
-| `/objective/kalfa/wgan_gp_d` | `wgan_gp_d` | `(models, batch, generator, critic, latent, gp_weight=10.0, conditional=False, rng=None, scaler=None)` | partial: True; refs: generator=model, critic=model; needs_grad: True | WGAN critic loss with a gradient penalty on interpolates; the label conditions both models |
-
-### metric
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/metric/kalfa/fid` | `fid` | `(model, latent, conditional=False, n=1000, extractor=None)` | state: True; refs: model=model; uses: models, batch | Fréchet inception distance of n samples of the model against n real images of the set; conditional samples use the batch labels |
-| `/metric/kalfa/perplexity` | `perplexity` | `()` | state: True | exp of the mean token cross entropy of the logits against the targets |
-| `/metric/kalfa/recon_error` | `recon_error` | `()` | state: True | Mean per sample squared reconstruction error of the output against the target |
-| `/metric/kalfa/rmse` | `rmse` | `()` | state: True | Root mean squared error |
-| `/metric/kalfa/sample_writer` | `sample_writer` | `(n=16, sampler=None)` | state: True; refs: sampler=generate; uses: models | A metric that writes n samples per pass under samples/turn_<n> (png and pt, or txt) from the sampler (sampler: generate takes the generate section) or the predicts model; it reports no value, use every and sets to pace it |
-| `/metric/torchmetrics/accuracy` | `accuracy` | `()` | state: True | Accuracy of class logits (argmax) against integer labels |
-| `/metric/torchmetrics/binary_auroc` | `auroc` | `()` | state: True | Area under the ROC curve of binary scores (torchmetrics) |
-| `/metric/torchmetrics/binary_average_precision` | `average_precision` | `()` | state: True | Average precision of binary scores (torchmetrics) |
-| `/metric/torchmetrics/f1` | `f1` | `(average='macro')` | state: True | Macro F1 of class logits (argmax) against integer labels |
-
-### adapter
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/adapter/kalfa/criterion` |  | `(criterion)` | uses: predicts | Feed a criterion the predicts model's output wire and the target field named by the definition's keys |
-| `/adapter/kalfa/metric` |  | `(metric)` | uses: predicts | Feed a metric the predicts model's output wire and the target field named by the definition's keys |
-| `/adapter/kalfa/objective` |  | `(objective)` |  | Call an objective with every model of the run and the batch, plus the step, epoch, rng, scaler and losses view its signature names |
-
-### optimizer
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/optimizer/torch/adam` | `adam` | `(models, params=None, schedule=None, loss=None)` | aliases: models; state: True; refs: loss=loss, schedule=schedule | torch Adam over the union of its models; params are Adam's keyword arguments |
-| `/optimizer/torch/adamw` | `adamw` | `(models, params=None, schedule=None, loss=None)` | aliases: models; state: True; refs: loss=loss, schedule=schedule | torch AdamW over the union of its models |
-| `/optimizer/torch/sgd` | `sgd` | `(models, params=None, schedule=None, loss=None)` | aliases: models; state: True; refs: loss=loss, schedule=schedule | torch SGD over the union of its models |
-
-### schedule
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/schedule/kalfa/linear_betas` | `linear_betas` | `(step, steps, start=0.0001, end=0.02)` | partial: True | The diffusion noise schedule: beta rises linearly from start to end over steps |
-| `/schedule/kalfa/linear_warmup` | `linear_warmup` | `(step, start, end, steps)` | partial: True | Linear ramp from start to end over steps updates, then end |
-| `/schedule/kalfa/step_decay` | `step_decay` | `(step, step_size, gamma)` | partial: True | Multiply by gamma every step_size updates; the value is the factor |
-| `/schedule/kalfa/warmup_cosine` | `warmup_cosine` | `(step, warmup, total)` | partial: True | Linear warmup to one over warmup updates, then a cosine decay to zero at total |
-
-### turn
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/turn/kalfa/alternating` | `alternating`, `supervised` | `(models, optimizers, emas, counters, composites, effects, loader, params, extra, losses, metrics, losses_keys, metrics_keys, predicts, steps, stream=None, device=None, prep=None, record=None, monitor=None)` | returns: models, optimizers, emas, counters, stream, metrics; bus: device=device, prep=prep, record=record, monitor=monitor; mutates: models, optimizers, emas, counters; extras: amp, grad_clip, accumulate | One turn: every step each optimizer in order minimizes its loss for its steps; a turn is an epoch, or K steps with a stream that lives across turns; losses and metrics are the running means of the pass; every update writes a line to steps.jsonl (the loss, the learning rate and, under grad_clip, the gradient norm of each optimizer) and reaches the monitor |
-
-### trigger
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/trigger/kalfa/after_turn` | `after_turn`, `after_epoch` | `(metrics, turn_index, state, at)` | partial: True; describe: turn ≥ {at} | Fires once the given number of turns has ended, counted across resumes |
-| `/trigger/kalfa/metric_above` | `metric_above` | `(metrics, turn_index, state, monitor, value)` | partial: True; describe: {monitor} > {value} | Fires when the monitored value rises above value; a missing value is not seen |
-| `/trigger/kalfa/metric_below` | `metric_below` | `(metrics, turn_index, state, monitor, value)` | partial: True; describe: {monitor} < {value} | Fires when the monitored value drops below value; a missing value is not seen |
-| `/trigger/kalfa/plateau` | `plateau` | `(metrics, turn_index, state, monitor, patience, mode='min', min_delta=0.0)` | partial: True; describe: {monitor} plateau {patience} | Fires after patience turns without improvement of the monitored value; turns without the value are not counted |
-| `/trigger/kalfa/time_budget` | `time_budget` | `(metrics, turn_index, state, minutes)` | partial: True; describe: after {minutes} minutes | Fires once the given number of minutes has passed since the first turn it saw |
-
-### checkpoint
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/checkpoint/kalfa/best` | `best` | `(monitor, mode='min', last=True)` | writes: best, last | Write best.pt when the monitored value improves and last.pt every turn; last: false writes best.pt alone, for a run that is never resumed |
-| `/checkpoint/kalfa/last` | `last` | `()` | writes: last | Write last.pt every turn |
-| `/checkpoint/kalfa/snapshot` | `snapshot` | `(every)` | writes: last, snapshot | Write snapshot_<n>.pt every n turns and last.pt every turn |
-
-### generate
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/generate/kalfa/ddpm_sampler` | `ddpm_sampler` | `(models, prep, rng, model, schedule, shape, n=64)` | partial: True; refs: model=model, schedule=schedule | n samples by the reverse diffusion of the noise schedule from pure noise |
-| `/generate/kalfa/gan_sampler` | `gan_sampler` | `(models, prep, rng, model, latent, n=64, conditional=False, n_classes=None)` | partial: True; refs: model=model | n samples of a generator from latent noise; conditional samples cycle through n_classes |
-| `/generate/kalfa/lm_sampler` | `lm_sampler` | `(models, prep, rng, model, prompt, max_new_tokens=100, temperature=1.0, context=None)` | partial: True; refs: model=model | Autoregressive text from a prompt with the record's tokenizer; temperature scales the logits, the window is context or the model's seq_len; the model's last layer has one logit per vocabulary entry (vocab_size) |
-
-### plot
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/plot/kalfa/architecture` | `architecture` | `(predictions, history, models, record, loaders=None, device=None, predicts=None, losses=None, losses_keys=None, optimizers=None, prep=None, name=None, figures=None)` | partial: True | kalfa's own drawing of every report model under plots/<name>_<model>.png: one box per graph node with the name from the config, what it is (a torch layer, a lego, another model), the shapes one batch traced through it and the layers inside it, the wires as arrows with their width, the input wire with its feature columns, the boundary wires as boxes, and the losses and the optimizers beside the outputs they read; matplotlib only, any device |
-| `/plot/kalfa/architecture_text` | `architecture_text` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | The report models printed as text under plots/<name>.txt, the module repr of each |
-| `/plot/kalfa/class_histogram` | `class_histogram` | `(predictions, history, models, record, output=None, target=None, bins=40, name=None, figures=None)` | partial: True; refs: target=field | Histogram of the raw scores of the test set, one series per target class; output names the wire and target the field when the table holds several |
-| `/plot/kalfa/confusion_matrix` | `confusion_matrix` | `(predictions, history, models, record, name=None, figures=None)` | partial: True | Confusion matrix of the decoded test predictions against the target labels, counts and row shares in every cell |
-| `/plot/kalfa/correlation_heatmap` | `correlation_heatmap` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, method='spearman', columns=None, sample=80000, annotate=False, name=None, figures=None)` | partial: True; needs: train_loader | The rank correlation of every column of a set against every other, features and targets together; it reads the set the definition names (train without one) |
-| `/plot/kalfa/data_pipeline` | `data_pipeline` | `(predictions, history, models, record, data_report=None, train_df=None, train_frame=None, prep=None, columns=None, name=None, figures=None)` | partial: True; needs: data_report | The data block as one picture: every stage with its rows and columns, the split, the fitted frame transforms and preprocessors, the features and targets, the loaders; under the fit, before and after histograms of the columns with the longest chains (columns names others) when the source is a table |
-| `/plot/kalfa/error_map` | `error_map` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, output=None, target=None, statistic='residual', bins=55, min_count=15, name=None, figures=None)` | partial: True; refs: x=column, y=column, target=field | The error of one prediction over a 2d grid of two columns: with statistic residual blue is a prediction below the truth and red above it, with abs the mean absolute error; bins holding fewer than min_count points stay empty |
-| `/plot/kalfa/feature_distributions` | `feature_distributions` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, log=None, bins=80, limit=24, per_row=4, name=None, figures=None)` | partial: True; needs: train_loader | A histogram per feature column of a set, in the original units; log names the columns to draw on a log10 axis |
-| `/plot/kalfa/forecast_samples` | `forecast_samples` | `(predictions, history, models, record, n=6, name=None, figures=None)` | partial: True | n sample windows of the test set: the true horizon against the predicted one |
-| `/plot/kalfa/image_grid` | `image_grid` | `(predictions, history, models, record, loaders=None, predicts=None, n=16, set=None, name=None, figures=None)` | partial: True | n outputs of the predicts model on the report set as an image grid |
-| `/plot/kalfa/image_pairs` | `image_pairs` | `(predictions, history, models, record, loaders=None, predicts=None, n=8, set=None, name=None, figures=None)` | partial: True | n inputs of the report set next to the predicts model's outputs (reconstructions) |
-| `/plot/kalfa/loss_curve` | `loss_curve` | `(predictions, history, models, record, series=None, log=False, x='turn', rates=False, name=None, figures=None)` | partial: True | Every history series over the turns, or the named ones; the axis says epoch when the manifest says a turn is one, turn otherwise; x: step draws the per update series of steps.jsonl (the loss, the gradient norm of every optimizer) over the steps instead; rates: true adds a panel of the learning rates below, and a series may name lr/<optimizer>; past twelve series the legend would crowd out the panel, so it is dropped and the note says to name the series wanted |
-| `/plot/kalfa/permutation_importance` | `permutation_importance` | `(predictions, history, models, record, loaders=None, prep=None, predicts=None, sets=None, device=None, repeats=3, sample=20000, top=25, output=None, target=None, groups=None, seed=0, name=None, figures=None)` | partial: True; refs: target=field | The drop in R2 when one feature column is shuffled, the largest first; the model runs again for every feature and every repeat, so sample bounds the cost; output names the wire and target the field it is scored against when the model has several |
-| `/plot/kalfa/pred_histogram` | `pred_histogram` | `(predictions, history, models, record, columns=4, bins=40, log=False, name=None, figures=None)` | partial: True | The distribution of every predicted field of the test set over the distribution of its truth on the same bins, the truth filled light and the prediction outlined dark, one column per field, with the ratio of predicted to true counts per bin below (a dashed line at one, a Poisson error bar per bin, a bin without true points stays empty); log draws the counts on a log axis |
-| `/plot/kalfa/pred_vs_true` | `pred_vs_true` | `(predictions, history, models, record, name=None, columns=4, kind='auto', gridsize=70, figures=None)` | partial: True | Predicted against true values of the test set, one panel per predicted field with its R2, as a hexbin density over many points and a scatter over few; the panel is titled with the field name, plus the output wire when two outputs predict the same field |
-| `/plot/kalfa/residuals` | `residuals` | `(predictions, history, models, record, output=None, target=None, bins=20, gridsize=60, name=None, figures=None)` | partial: True; refs: target=field | Three panels of one prediction's residual: the distribution with its bias and sigma, the residual against the truth as a density, and the mean and median error over equal count bins of the target range |
-| `/plot/kalfa/samples_gif` | `samples_gif` | `(predictions, history, models, record, name=None, duration=400, figures=None)` | partial: True | The per turn sample grids of samples/turn_*.png as an animation; skipped with a warning when there are none |
-| `/plot/kalfa/samples_matrix` | `samples_matrix` | `(predictions, history, models, record, name=None, n=8, figures=None)` | partial: True | A matrix of the per turn samples of samples/turn_*.pt: one row per turn, n columns; skipped with a warning when there are none |
-| `/plot/kalfa/target_correlation` | `target_correlation` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, method='spearman', columns=None, top=25, groups=None, name=None, figures=None)` | partial: True; refs: target=field; needs: train_loader | The rank correlation of every column with the target, the strongest first; groups maps a column to a group name and colours the bars by it |
-| `/plot/kalfa/target_vs_features` | `target_vs_features` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, target=None, columns=None, log=None, gridsize=60, bins=60, limit=24, per_row=4, name=None, figures=None)` | partial: True; refs: target=field; needs: train_loader | One panel per feature: the target against it as a hexbin density with the median profile over equal count bins; it reads the set the definition names (train without one) and draws in the original units |
-| `/plot/seaborn/kde` | `kde` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, x=None, y=None, hue=None, sample=20000, fill=True, name=None, figures=None)` | partial: True; refs: x=column, y=column, hue=column; needs: train_loader; requires: seaborn | seaborn's kernel density of one column of a set, or of two as contours; skipped with a warning when seaborn is not installed |
-| `/plot/seaborn/pairplot` | `pairplot` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, columns=None, hue=None, sample=5000, kind='scatter', diagonal='hist', height=2.2, name=None, figures=None)` | partial: True; needs: train_loader; requires: seaborn | seaborn's pairwise grid of a few columns of a set, hue colouring the points by a column; skipped with a warning when seaborn is not installed |
-| `/plot/seaborn/violin` | `violin` | `(predictions, history, models, record, loaders=None, prep=None, sets=None, value=None, group=None, sample=20000, name=None, figures=None)` | partial: True; refs: value=column, group=column; needs: train_loader; requires: seaborn | seaborn's violin of one column of a set, split by a grouping column when one is named; skipped with a warning when seaborn is not installed |
-| `/plot/torchmetrics/binary_precision_recall_curve` | `binary_precision_recall_curve` | `(predictions, history, models, record, output=None, target=None, name=None, figures=None)` | partial: True; refs: target=field | Precision recall curve of the raw test scores against the binary target; output names the wire and target the field when the table holds several |
-| `/plot/torchmetrics/binary_roc` | `binary_roc` | `(predictions, history, models, record, output=None, target=None, name=None, figures=None)` | partial: True; refs: target=field | ROC curve of the raw test scores against the binary target; output names the wire and target the field when the table holds several |
-| `/plot/torchview/architecture` | `torchview` | `(predictions, history, models, record, loaders=None, device=None, name=None, figures=None)` | partial: True; requires: torchview | torchview's drawing of every report model the batch feeds, under plots/<name>_<model>.png; it needs the graphviz dot binary and runs on the device of the run, so a composite keeps its referenced models with it |
-
-### strategy
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/strategy/kalfa/grid` | `grid` | `()` | enumerates: True | Every combination of the space's choices (a range needs steps); deterministic by id |
-| `/strategy/kalfa/optuna` | `optuna` | `(trials, seed=0, sampler='tpe')` |  | trials points proposed by optuna (tpe or random sampler) from the objectives fed back; local loop only, no --id |
-| `/strategy/kalfa/random` | `random` | `(count, seed=0)` |  | count points drawn uniformly from the space with a seed; deterministic by id |
-| `/strategy/kalfa/sobol` | `sobol` | `(count, seed=0, scramble=True)` |  | count points of a scrambled Sobol sequence with a seed; deterministic by id |
-
-### device
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/device/kalfa/auto` | `auto` | `()` |  | The first available device of cuda, mps, cpu |
-| `/device/kalfa/cpu` | `cpu` | `()` |  | The CPU |
-| `/device/kalfa/cuda` | `cuda` | `(index=0)` |  | The cuda device with the given index; an error when cuda or that index is not available |
-| `/device/kalfa/mps` | `mps` | `()` |  | The Apple mps device; an error when it is not available |
-
-### rng
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/rng/kalfa/derived` | `derived` | `(seed, name, index)` | partial: True | A substream per model by name: the build runs under sha256(seed:name), so inserting or renaming another model changes no weights; None without a seed |
-| `/rng/kalfa/global` | `global` | `(seed, name, index)` | partial: True | One global stream: no model touches the RNG, every build draws from the stream the seed started in build order, the way a plain script does |
-| `/rng/kalfa/indexed` | `indexed` | `(seed, name, index)` | partial: True | A substream per model by position: the build runs under sha256(seed:index), the rule of the runs made before the rng key, which reproduce with it; None without a seed |
-
-### export
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/export/kalfa/onnx` | `onnx` | `(model, inputs, directory, stem, opset=17, dynamo=False)` | requires: onnx | The model exported to <stem>.onnx from one traced batch, the wires as the input and output names, at the opset given; dynamo: true takes torch's newer torch.export based exporter, which needs onnxscript installed |
-| `/export/kalfa/pt2` | `pt2` | `(model, inputs, directory, stem)` |  | The model exported with torch.export from one traced batch, the batch dimension left dynamic, and saved as <stem>.pt2, the archive torch.export.load reads back |
-| `/export/kalfa/state_dict` | `state_dict` | `(model, inputs, directory, stem)` |  | The model's state_dict as <stem>.pt, the plain torch weights |
-
-### calibrate
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/calibrate/kalfa/threshold` | `threshold` | `(set='valid', quantile=0.95, output=None)` |  | A decision threshold read off a held out set at the end of training: the quantile of the raw output of the predicts model on that set; at predict time flag_<output> marks the rows above it |
-
-### lego
-
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/lego/kalfa/pixel_features` |  | `(size=4)` |  | A cheap FID feature extractor for demos and tests: images pooled to size by size and flattened; pass it as fid's extractor param |
+| key | what it holds |
+|---|---|
+| `include` | files merged below this one |
+| `params` | values read as `$name$` |
+| `plugins` | modules imported before the build |
+| `seed` | the seed of every random stream (default 0) |
+| `device` | `auto`, `cpu`, `mps`, `cuda`, `cuda:<index>` |
+| `record` | the record directory |
+| `data` | one call: the data class |
+| `models` | name: call of an `nn.Module` |
+| `losses` | name: call of an objective or a criterion |
+| `metrics` | name: call of a metric |
+| `optimizers` | name: call of a torch optimizer |
+| `train` | the budget, the step and what to keep |
+| `rules` | name: rule |
+| `plots` | name: call of a plot |
+| `generate` | one call: the sampler |
+| `sweep` | the strategy, the space and the objective of a sweep |
 
 ### data
 
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/data/kalfa/class_weights` | `class_weights` | `(loader, target=None)` | counts: True | Inverse frequency class weights of the train set's target field, mean one; built once the train loader exists |
-| `/data/kalfa/feature_index` | `feature_index` | `(loader, columns)` |  | The positions of the named columns in the feature tensor x, in the order the names are written; columns is a name, a glob or a list of them, and the positions follow the fitted plan, so a chain that widens a column (one_hot) is already counted; for select and for a loss that acts on part of the features |
-| `/data/kalfa/feature_width` | `feature_width` | `(loader)` |  | The width of the feature tensor x, from the fitted plan the train loader carries; for a layer whose shape follows it (layer_norm) |
-| `/data/kalfa/target_weights` | `target_weights` | `(loader, weights, target=None)` |  | A weight per target column, from names and globs resolved against the columns of the target field the dataset carries (every target field in order without target), default for the rest; built once the train loader exists |
-| `/data/kalfa/vocab_size` | `vocab_size` | `(prep)` |  | The vocabulary size of the fitted tokenizer among the preprocessors; built once prep exists |
+| data class | short name | batch fields | exposes |
+|---|---|---|---|
+| a parquet or csv table | `table` | `x` (float32 features), every target by name and every weight of `weights` by name | `n_features`, `feature_names`, `target_names`, `n_classes`, `class_weights`, `classes` |
+| a folder of class folders of images | `image_folder` | `image` (float `(C, H, W)`), `label` (int64) | `n_classes`, `classes`, `class_weights`, `image_shape` |
+| a text file of lines | `text_lines` | `input_ids`, `targets` (the next tokens) | `vocab_size`, `tokenizer`, `seq_len` |
+| your own class | its import path | what its loaders yield | its `exposes` list |
 
-## Skeleton steps
+A relative data path is looked for in the working directory first, then in the directories of the config files, so `file: housing.parquet` next to the config works from anywhere.
 
-These are the skeleton steps `src/kalfa/contract.yaml` calls: the nodes of its blocks, the builder,
-the loader, fit, read_prep and figures of its wiring, and the helpers the `sizes` and `header` facts name. They
-are not written in a config; the contract places them and the driver fills their params from the config
-sections. The list is derived from the URIs the contract mentions, so it cannot drift. The rest of the wiring
-stays in the catalog above: the adapters (`/adapter/kalfa/criterion`, `/adapter/kalfa/metric` and
-`/adapter/kalfa/objective`, which wrap the losses and metrics entries of a config by kind) and the defaults that
-stand in for a config value (`/split/kalfa/random`, `/device/kalfa/cpu`, `/rng/kalfa/derived`).
+#### table
 
-| URI | Alias | Signature | Facts | Description |
-|---|---|---|---|---|
-| `/builder/kalfa/module` |  | `(graph, rng=None, seed=None, name=None, index=0, init=None, trainable=True, weights=None, models=None, prep=None, train_loader=None)` | bus: prep=prep, train_loader=train_loader; roles: weights, bias, scale | Build a model graph into an nn.Module in the stream the rng lego derives from the seed, the name and the index, apply init roles, trainable and weights; reference nodes take the models dict; layer params that are kind data components are built from prep and the train loader |
-| `/lego/kalfa/apply` |  | `(df, prep, set, keys=None, mask=None)` |  | Apply the fitted chains to one set and type its columns; keys carry the sets a preprocessor is limited to; the rows the mask query selects stay in the frame and are not scored, the loader leaves them out and the plots see them as masked |
-| `/lego/kalfa/apply_frames` |  | `(df, frames)` |  | Apply the fitted frame transforms to one set, in the order they were fitted |
-| `/lego/kalfa/architecture_note` |  | `(models, loaders, composites=None, prep=None, predicts=None, losses=None, losses_keys=None, optimizers=None, record=None, device=None)` | returns: None; bus: record=record, device=device | The graph of every report model written to the record as architecture.json: the boxes of the architecture drawing with their column and row, the layers inside every node as a tree with the shapes one batch traced and their parameter counts, the wires as arrows; the board draws it and opens a box into its layers |
-| `/lego/kalfa/calibrate` |  | `(models, composites, prep, loaders, calibrations, predicts, record=None, device=None)` | returns: calibrations; bus: record=record, device=device | Fit every calibration of the calibrate section on the report models and the sets, in order, and keep them in the record under fitted/calibrate; predict applies them to its table |
-| `/lego/kalfa/checkpoint` |  | `(state, policy, metrics=None, record=None)` | returns: None; bus: metrics=metrics, record=record | Write the checkpoint files the policy asks for; nothing without a policy |
-| `/lego/kalfa/clone` |  | `(model, decay)` | state: True | An exponential moving average copy of a model with the given decay |
-| `/lego/kalfa/const` |  | `(value)` |  | A fresh copy of a constant value |
-| `/lego/kalfa/csv_header` |  | `(path, chunk=None, columns=None)` |  | The columns, the dtypes of the first rows and the line count of a CSV file; the listed columns only when the source names them |
-| `/lego/kalfa/data_report` |  | `(stages, split, after, fitted, prep, frames, loaders, transforms=None, set_transforms=None, record=None)` | returns: data_report; bus: record=record | The shape of the data at every stage of the data block, read from the bus keys the stages wrote: the rows and columns of the source and after every transform with the transform's call, the sets after the split and after their transforms, the fitted frame transforms and preprocessors, the features and targets, the loaders; written to the record as data.json |
-| `/lego/kalfa/evaluate` |  | `(models, emas, composites, counters, loader, set, losses, metrics, losses_keys, metrics_keys, predicts, device=None, prep=None, record=None)` | returns: metrics; bus: device=device, prep=prep, record=record | Losses (model scale) and metrics (original scale, through prep) of one set under no_grad; an empty set gives an empty mapping; record reaches metrics that write files |
-| `/lego/kalfa/figures` |  | `(format='png', width=None, height=None, dpi=150, style='kalfa')` |  | The look of every plot of a run: the file format, the size of one panel in inches, the dpi and the style (kalfa, or none for matplotlib's own); the figures section is its params and the built object reaches every plot that names figures |
-| `/lego/kalfa/fit` |  | `(df, fields, preprocessors, drop, keys=None, record=None, spectators=None)` | returns: prep; bus: record=record; state: True | Resolve the field globs and fit every preprocessor chain on the train set; keys carry the sets a preprocessor is limited to |
-| `/lego/kalfa/fit_frames` |  | `(df, frames, record=None)` | returns: frames; bus: record=record; state: True | Fit the frame transforms on the train set, each on what the ones before it produced, and keep them in the record under fitted/frames |
-| `/lego/kalfa/generate` |  | `(models, composites, prep, generate, record=None)` | returns: None; bus: record=record | Run the generate lego with the report models; nothing without a generate section |
-| `/lego/kalfa/given_sizes` |  | `(rows, valid=None, test=None, header=None)` |  | The set sizes of a given split: the source rows for train, the header of every given file for the other sets (header reads a path like the source) |
-| `/lego/kalfa/history` |  | `(monitor=None, metrics=None, turn_index=None, counters_next=None, optimizers_next=None, rules_next=None, effects=None, record=None)` | returns: None; bus: monitor=monitor, metrics=metrics, turn_index=turn_index, counters_next=counters_next, optimizers_next=optimizers_next, rules_next=rules_next, effects=effects, record=record | Append the turn's line to history.jsonl: the metrics, the learning rate and the loss every optimizer minimized this turn (as the rules set it), every other effect of the rules in force as effect/<target>, the duration as seconds, the rules that fired; and hand it to the monitor |
-| `/lego/kalfa/identity` |  | `(value)` | aliases: value | The value itself |
-| `/lego/kalfa/image_folder_header` |  | `(path)` |  | The fields, the dtypes, the image count and the classes of an image folder |
-| `/lego/kalfa/init_state` |  | `(state, epochs, steps, policy=None, resume=None, device=None, skip_training=False)` | returns: epochs_left; bus: resume=resume, device=device, skip_training=skip_training; mutates: state | Move the state to the device, load a checkpoint when resuming and restore the checkpoint policy from it, count the turns left (none when a repair skips training) |
-| `/lego/kalfa/kfold_sizes` |  | `(rows, k, fold, val=None, seed=None)` |  | The set sizes a k fold split produces from rows rows; without rows, which sets it produces |
-| `/lego/kalfa/merge` |  | `(parts, prefixes)` |  | Merge the per set metrics under the prefixes of the sets (train/, val/, test/) |
-| `/lego/kalfa/pack` |  | `(items)` | aliases: items | A mapping of the given items |
-| `/lego/kalfa/parquet_header` |  | `(path, chunk=None, columns=None)` |  | The columns, their arrow types and the row count of a parquet file, from its metadata; the listed columns only when the source names them |
-| `/lego/kalfa/predict` |  | `(models, composites, loader, prep, predicts, set, target_map=None, calibrations=None, record=None, device=None)` | returns: predictions; bus: record=record, device=device | Predict a set with the report model, invert the target chain, apply the fitted calibrations, write predictions.parquet for the test set and predictions_<set>.parquet for another |
-| `/lego/kalfa/prepared_header` |  | `(path)` |  | The header a prepared directory recorded in its manifest: the columns, the dtypes and the rows |
-| `/lego/kalfa/prepared_sizes` |  | `(rows, path)` |  | The set sizes a prepared directory recorded in its manifest |
-| `/lego/kalfa/ratio_sizes` |  | `(rows, ratios, seed=None, group=None)` |  | The set sizes a split by ratios produces from rows rows; without rows, which sets it produces |
-| `/lego/kalfa/read_frames` |  | `(record)` | returns: frames | The fitted frame transforms of a record, read from fitted/frames |
-| `/lego/kalfa/read_prep` |  | `(record)` | returns: prep | The fitted preprocessing plan of a record, read from its preprocessors directory |
-| `/lego/kalfa/run_all` |  | `(predictions, history, models, plots, keys=None, predicts=None, bus=None, record=None, figures=None, suffix='')` | returns: None; bus: record=record, figures=figures | Run every plot of the plots table with the predictions, the history and the models; keys carry the definition level keys (inputs, sets, width, height) and the lego of the plot, whose refs type the inputs and whose needs name the bus keys it cannot work without (skipped with a log line when one is missing); bus carries everything else the run has and a plot receives whatever its signature names, plus loaders, predicts, sets, name (with the suffix of the predictions it draws) and figures, the look of the run's plots sized for the definition |
-| `/lego/kalfa/save_final` |  | `(models, optimizers, emas, counters, rules, record=None, policy=None)` | returns: None; bus: record=record | Write final/state.pt with the full state and the checkpoint policy's state once training ends |
-| `/lego/kalfa/select` |  | `(models, emas, which, record=None)` | returns: selected; bus: record=record | The report models: copies loaded from best.pt, or the final state for last |
-| `/lego/kalfa/text_lines_header` |  | `(path)` |  | The text field and the line count of a text file |
-| `/lego/kalfa/transform_set` |  | `(df, set, transforms)` |  | Apply the transforms that name this set, in order; the frame passes untouched without any |
-| `/loader/kalfa/torch` |  | `(data, set, size=None, eval_size=None, shuffle=True, drop_last=False, workers=0, eval_workers=None, collate=None, balanced=False, buffer=4096, persistent=None, pin_memory=None, prefetch=None, device=None)` | bus: device=device | torch DataLoader over a dataset: size batches shuffled for the train set, eval_size batches in order for the other sets, the whole set as one batch without a size; drop_last auto drops the last train batch only when it would hold one row; balanced puts a class balancing sampler over the single target field; every worker is seeded from the torch seed on its own and stays alive between turns unless persistent says otherwise; eval_workers is workers for the evaluation loaders when it is not written; pin_memory follows the device, on for cuda; a stream dataset shuffles through buffer rows and takes no sampler or workers |
-| `/rule/kalfa/effects` |  | `(rules, models, optimizers, losses, loader)` | returns: effects, losses, models, optimizers; mutates: models, optimizers | The effects the fired rules left for this turn, applied once before it: a model's trainable flag and an optimizer's params in place, the models and the optimizers returned as they are, and the loss table as a copy with every loss param the rules set, which the turn and the evaluation of every set read alike |
-| `/rule/kalfa/open` |  | `(rules)` |  | Open the rule chain of a turn |
-| `/rule/kalfa/rule` |  | `(rules, name, when, set, after=None, metrics=None, turn_index=None, sticky=True)` | returns: rules; bus: metrics=metrics, turn_index=turn_index | Evaluate one rule: skipped until its after rule fired in an earlier turn; a sticky rule keeps its effects once fired and is not asked again; with sticky false it is asked every turn, its relative effects (times, plus) apply once per firing and its trigger starts over; later rules win the same key |
-| `/rule/kalfa/stop` |  | `(rules, triggers, metrics=None, record=None)` | returns: rules, stop; bus: metrics=metrics, record=record | Close the chain: the stop triggers are or'ed, their states kept under rules.stop; a stop.json in the record (kalfa stop, the board, ctrl-c) ends the loop after this turn as well |
+```yaml
+data:
+  use: table
+  file: housing.parquet
+  split: [0.7, 0.15, 0.15]
+  features: {"x*": standard_scaler, size: [log, minmax_scaler]}
+  targets: {price: standard_scaler}
+  filter: {all: "price > 0", train: "size < 500"}
+  drop: [notes]
+  spectators: [id]
+  batch: {size: 128, eval_size: 512}
+```
 
-## Alias packs
+* `file`: a `.parquet`, `.pq`, `.csv` or `.tsv` table.
+* `split`: required. A list of ratios is a shuffled split into train, valid and test (`[0.8, 0.2]` makes no test set). A call picks another split: `{use: random, ratios: [...], seed}`, `{use: sequential, ratios: [...], group: <column>}` (rows in their order, within each group when `group` names a column), `{use: kfold, folds: 5, fold: 0, seed, valid_ratio: 0.1}` (fold `fold` is the test set, `valid_ratio` carves a valid share from the rest) or `{use: given, column: <column>}` (the column says `train`, `valid` or `test` for every row; the three labels can be renamed with the `train`, `valid` and `test` params).
+* `features`: a mapping of column name patterns (fnmatch, `x*`) to a preprocessor, a list of preprocessors applied in order, or null for the raw column. A literal column name wins over a pattern, and a more specific pattern wins over a looser one. Columns that are targets, spectators, weights or the feed group are never features; a column no pattern matches is dropped with a warning.
+* `targets`: a mapping of target columns to a preprocessor, a list, or null. A `label` preprocessor makes a classification target: its batch field is int64, its classes are saved, and `class_weights` (inverse frequency, mean one) is exposed.
+* Preprocessors follow the scikit learn protocol (`fit`, `transform`, `inverse_transform`) and are fitted on the train rows only. The std ones are `standard_scaler`, `minmax_scaler`, `robust_scaler`, `one_hot` (one column per category, named `<column>_<category>`), `label`, `abs`, `log {base, norm}` and `cast {dtype}`; any import path works too.
+* `filter`: a pandas query kept for every row before the split, or a mapping of `all` (before the split) and `train`, `valid`, `test` (each set after the split) to queries. The filters are saved, so `kalfa predict --data` applies the `all` filter to new rows too.
+* `drop`: columns removed after the split and the filters, before the features are chosen.
+* `weights`: row weights for a loss, a mapping of a batch field name to a weight column of the table (`w: event_weight`) or to a mapping of conditions to weights (`w: {"price < 5": 5, "5 <= price < 15": 12}`). A condition is a pandas expression over the raw columns, as in `filter`, evaluated before the preprocessors and before `drop`, so it speaks the original units and may read any column. The first condition a row meets wins, and a row that meets none weighs 1. The weights are divided by their mean over the train set (a streamed table takes the mean of its fit rows), so they average one there and the size of the loss stays comparable; the mean must be positive. The field is a float32 tensor with one value per row (with a window feed, the rows of the horizon), and a loss reads it with `sample_weight`. A weight field is never a feature, cannot be named `x` or like a target, and `kalfa predict --data` does not compute it for new rows.
+* `spectators`: columns (or patterns) that are not fed to the model but are copied into the predictions table, such as an id.
+* `batch`: a size (default 128), or a mapping of `size`, `eval_size` (the batch of the valid and test sets, default `size`), `workers` (DataLoader workers, default 0), `drop_last` and `shuffle` (the train set, default true).
+* `feed`: turns the rows into samples another way, see the window feed below.
+* `stream`: reads a large table in pieces, see below.
 
-### /alias/kalfa/base
+Predictions of a table come back in the original units of every target, with the class names of a label target.
 
-| Alias | URI | Kind |
+#### The window feed
+
+```yaml
+data:
+  use: table
+  file: energy.parquet
+  split: {use: sequential, ratios: [0.7, 0.15, 0.15], group: site}
+  features: {"x*": standard_scaler}
+  targets: {load: standard_scaler}
+  feed: {use: window, size: 24, horizon: 6, stride: 1, context: true, group: site}
+```
+
+A window takes the features of `size` consecutive rows as `x` (a `(size, features)` tensor) and every target over the next `horizon` rows (`(horizon,)` for one column). `stride` skips start rows. `group` names a column whose value every window keeps to (one series per site); that column is not a feature. With `context: true` the first windows of the valid and test sets reach back into the rows of the previous set, so no rows are lost at the borders. The context reaches only into the set just before (a test window looks back into the valid rows, never into train), so a group gives test windows only when its test rows number at least `horizon` and its valid and test rows together at least `size + horizon`. The predictions table writes one column per horizon step: `load_0`, `load_1`, ... and `pred_<output>_0`, `pred_<output>_1`, ..., on the test set and on new rows given to `kalfa predict --data` alike (the truth of step i is the target at row `row + i` of the same group); the `forecast_samples` plot draws them, and the board pairs `pred_<output>_<i>` with `load_<i>`, one pair per step.
+
+#### Streaming a large table
+
+`stream: true` or `stream: {chunk: 65536, fit_rows: 100000}` reads the train set chunk by chunk instead of loading the file. It needs a `sequential` or `given` split (a stream cuts the file in order); the preprocessors are fitted on the first `fit_rows` train rows; rows are shuffled within each chunk; the valid and test sets are loaded whole. A stream does not combine with a feed or a grouped sequential split.
+
+#### image_folder
+
+```yaml
+data:
+  use: image_folder
+  folder: data/pets
+  split: [0.7, 0.15, 0.15]
+  transform: [{use: resize, size: 32}, to_tensor, {use: normalize, mean: imagenet}]
+  train_transform: [{use: random_crop, size: 32, padding: 2}, random_flip, to_tensor, {use: normalize, mean: imagenet}]
+  batch: 64
+```
+
+Every subdirectory of `folder` is a class and its images are the samples. `transform` applies to every set and `train_transform` replaces it for the train set. A transform list holds short names, calls or import paths, each a function from image to image (PIL image or tensor): `resize {size}`, `center_crop {size}`, `random_crop {size, padding}`, `random_flip {p}`, `grayscale`, `to_tensor` (float `(C, H, W)` in [0, 1]), `normalize {mean, std}` (numbers, lists or the presets `imagenet`, `cifar10`, `mnist`) and `two_views {each}` (applies the `each` list twice with fresh randomness and stacks the results as `(2, C, H, W)`, for contrastive learning). `labels: false` keeps the class folders as a spectator column but gives no target (autoencoders); a folder without class folders has no target either. `extensions` lists the image suffixes. The batch default is 64.
+
+#### text_lines
+
+```yaml
+data:
+  use: text_lines
+  file: data/lines.txt
+  tokenizer: char
+  seq_len: 64
+  split: [0.9, 0.05, 0.05]
+  batch: 32
+```
+
+The file is read line by line (empty lines are skipped) and the lines are split into sets. `tokenizer: char` builds a character vocabulary from the train lines (id 0 is unknown); any object with `encode`, `decode`, `size` and `fit` works too. Each set is cut into windows of `seq_len + 1` tokens with `stride` (default `seq_len`): `input_ids` are the first `seq_len` and `targets` the next token at each place. `lowercase: true` lowercases the text. A text file writes no predictions table; `lm_sampler` writes text instead.
+
+### models
+
+```yaml
+models:
+  net:
+    use: mlp
+    hidden: [64, 64]
+    out: 1
+    init: {use: xavier_init}
+    ema: {decay: 0.999, every: 1}
+  teacher:
+    use: mylegos.Classifier
+    n_classes: "@data.n_classes"
+    weights: {run: runs/teacher, model: net, which: best}
+    freeze: true
+```
+
+A model is any `nn.Module`. kalfa calls it with the batch fields listed in `inputs`, in that order (default: the `inputs` of the data class, `x` for a table), and names what it returns: a tensor takes the first name of `outputs` (default the model name), a tuple is matched with `outputs` in order, and a dict is used as it is. These names are what `pred` refers to.
+
+* `init`: a call that receives the module, such as `{use: normal_init, std: 0.02}`; a bare name is the call without params, so `init: xavier_init` is `init: {use: xavier_init}` (the same holds for the `schedule` of an optimizer). Lazy layers are filled on their first forward pass.
+* `weights`: loads a model from an earlier record: `run` is the record directory (or a bare string), `model` the model name there (default this name), `which` the checkpoint (`best`, `last` or `final`; default `last`).
+* `freeze`: `true` freezes every parameter and keeps the module in eval mode; a list of patterns (`["backbone.*"]`) freezes the matching parameter names and keeps fully frozen submodules in eval mode; `false` unfreezes. A rule may patch `freeze`.
+* `ema`: keeps an exponential moving average copy that follows every optimizer step whose `over` covers the model. A number is the decay; `{decay, every}` updates it every k steps. Name the copy with `@models.<name>.ema`, for a sampler or a metric.
+
+The build order is `init`, `weights`, `freeze`, `ema`. The std models are `mlp {hidden, out, activation, dropout, in_features}` and `stack {layers}`, a list of layer calls and short names (`linear`, `conv2d`, `batch_norm`, `layer_norm`, `embedding`, `dropout`, `flatten`, `relu`, `gelu`, `tanh`, `sigmoid`, `silu`, `last_step`) or import paths:
+
+```yaml
+models:
+  net:
+    use: stack
+    layers:
+      - {use: torch.nn.GRU, input_size: 2, hidden_size: 32, batch_first: true}
+      - last_step
+      - {use: linear, out_features: 6}
+```
+
+### losses
+
+A loss is either a criterion or an objective.
+
+* A **criterion** compares one prediction with one target: any callable `(pred, target) -> tensor`, such as `mse`, `l1`, `huber`, `bce_logits`, `cross_entropy`, `poisson_nll`, `torch.nn.SmoothL1Loss` or a plain function. kalfa picks the output named by `pred` and the batch field named by `target` (see the defaults); a trailing dimension of one is squeezed to match. With `rescale: true` both are first turned back into original units.
+* An **objective** reads everything: a `kalfa.Objective` with `forward(outputs, batch, ctx)` that returns a tensor or a dict with a `loss` key and more terms. The std objectives are `weighted_sum`, `mdmm`, `vae_elbo`, `wgan_gp_d`, `wgan_g`, `ddpm`, `distill` and `ntxent`.
+
+```yaml
+losses:
+  mse: mse
+  l1: l1
+  rec: {use: mse, pred: x_hat, target: image}
+  ce: {use: cross_entropy, weight: "@data.class_weights", label_smoothing: 0.1}
+  total:
+    use: weighted_sum
+    terms:
+      - {of: "@losses.mse", weight: 1.0}
+      - {of: "@losses.l1", weight: 0.1}
+```
+
+Every loss is a series on every set it runs on: `train/<loss>`, `val/<loss>`, `test/<loss>`, and one more series per extra term of a dict (`train/total/mse`, `train/elbo/kl`). A loss that an optimizer minimizes is averaged over the batches of the turn; the others observe without gradients. `on: [train]` limits a loss to some sets and `every: 2` computes it every second turn. `weighted_sum` sums `{of, weight, term}` entries (`term` picks a key of a dict result). `mdmm` adds constraints to an objective with one Lagrange multiplier each: `{use: mdmm, objective: "@losses.mse", constraints: [{of: "@losses.l1", epsilon: 0.05}]}`; its `lmbda` parameter goes into an optimizer group with a negative lr (`{of: "@losses.total", lr: -0.05}`).
+
+A criterion weighs its rows with `sample_weight`, the name of a weight field that `data.weights` puts into the batch:
+
+```yaml
+data:
+  use: table
+  targets: {price: standard_scaler}
+  weights:
+    w: {"price < 5": 5, "5 <= price < 15": 12}
+losses:
+  mse: {use: mse, sample_weight: w}
+```
+
+The criterion then computes one loss per element, multiplies the loss of every row by its weight and takes the mean (the sum with `reduction: sum`), on every set it runs on. It needs a loss with a `reduction` param, which the torch losses and the std ones have; a plain function of `(pred, target)` that returns one value is refused. The weight has one value per row and spreads over the other dimensions of the loss. A weighted criterion works inside `weighted_sum`, `mdmm` and `vae_elbo` like any other. Metrics take no `sample_weight` and stay unweighted, and an objective reads the weight field from the batch itself.
+
+### metrics
+
+A metric is any object with `update(pred, target)`, `compute()` and `reset()` (a torchmetrics metric works), or a `kalfa.ContextMetric` with `update(outputs, batch, ctx)` that reads everything. The std metrics are `rmse`, `mae`, `accuracy`, `f1`, `auroc`, `average_precision`, `perplexity` and `fid`.
+
+```yaml
+metrics:
+  rmse: rmse
+  f1: {use: f1, num_classes: "@data.n_classes", average: macro}
+  fid: {use: fid, model: "@models.generator.ema", latent: 64, real: image, n: 256, every: 5}
+```
+
+A metric is accumulated over the whole set and written as `<set>/<metric>`. It takes the same `pred`, `target`, `on`, `every` and `rescale` keys as a loss; `rescale` is on by default when the target can be inverted. A loss and a metric with the same name write the same series, and `check` warns (`series_clash`).
+
+### optimizers
+
+```yaml
+optimizers:
+  main:
+    use: adamw
+    lr: 1.0e-3
+    weight_decay: 1.0e-2
+    over:
+      - {of: "@models.net", match: "backbone.*", lr: 1.0e-4}
+      - "@models.net"
+    minimizes: "@losses.ce"
+    schedule: {use: cosine, steps: 5000, warmup: 200}
+```
+
+`use` is a torch optimizer class (`adam`, `adamw`, `sgd` or any import path) and the other params go to it. `over` names what it optimizes: a reference, a list of references, or groups `{of: <reference>, match: <pattern>, <torch params>}`. A group takes the parameters of `of` whose names (`named_parameters`) match the fnmatch pattern and that no earlier group took, with its own torch params; plain references take whatever is left. `over` may name objectives too (the multipliers of `mdmm`). `minimizes` is the loss the optimizer steps on; std steps require it (`minimizes_required`). `schedule` is a callable from the update count to a factor of the base lr: `warmup {steps}`, `cosine {steps, warmup, floor}`, `linear_warmup {start, end, steps}`, `step_decay {every, gamma}` or your own.
+
+Every update runs `zero_grad`, `backward` (through the grad scaler under AMP on cuda), gradient clipping, `step`, the schedule and the EMA copies. The history writes `lr/<optimizer>` (the first torch param group), `lr/<optimizer>/<group>` for every group of `over` (named `<model>[<match>]`, such as `lr/main/net[backbone.*]`), and `minimizes/<optimizer>` (the name of the loss it minimizes now); `updates.jsonl` writes `loss/<optimizer>`, `lr/<optimizer>` and `grad_norm/<optimizer>` per update.
+
+### train
+
+| key | value |
+|---|---|
+| `epochs` | the number of turns, each a pass over the train set |
+| `updates` | `{total, turn}`: the training counts updates, `turn` updates per turn (instead of `epochs`) |
+| `step` | the step call, default `supervised` |
+| `predicts` | `"@models.<name>"`, or `false` for a run whose model makes no predictions (a DDPM denoiser) |
+| `evaluate` | the sets evaluated after every turn, default the existing `valid` and `test` |
+| `checkpoint` | `{watch, mode, last, every}`: `best.pt` when the `watch` series improves (`mode` min or max), `last.pt` every turn unless `last: false`, `turn_<k>.pt` every `every` turns; `final.pt` is always written at the end |
+| `report` | `best` or `last` (default): the weights the final predictions, plots and samples use; `best` needs a `watch` |
+| `track` | plan paths whose values become series every turn: `[optimizers.main.lr, "losses.total.constraints[0].epsilon"]` writes `track/<path>` (quote a path with an index inside brackets) |
+| `log` | loggers: `[tensorboard]` writes TensorBoard event files to `<record>/tensorboard`, `[{use: echo, series: [val/rmse]}]` prints series per turn |
+
+Either `epochs` or `updates` is required, never both.
+
+### rules
+
+```yaml
+rules:
+  warm:
+    when: {use: after_epoch, at: 5}
+    set: {optimizers.main.lr: {times: 0.5}}
+  to_huber:
+    after: warm
+    when: {use: below, watch: train/mse, value: 0.05}
+    set: {optimizers.main.minimizes: "@losses.huber"}
+  samples:
+    when: {use: every, epochs: 2}
+    once: false
+    run: {use: write_samples, n: 16}
+  stop:
+    when: {use: plateau, watch: val/rmse, patience: 8}
+    stop: true
+```
+
+Rules are checked after every turn, after the evaluation and before the checkpoints, in the order of the config. A rule fires when it is ready and its trigger fires; without `when` it fires as soon as it is ready.
+
+* `when`: a trigger call.
+* `after`: the name of another rule; this rule is asked only from the turn after that rule fired.
+* `once`: true by default, so a rule fires once. With `once: false` it may fire every turn, and its trigger is reset after each firing.
+* `set`: a mapping of plan paths to patch values.
+* `stop: true`: the run ends after this turn, with its final checkpoint, predictions and plots.
+* `run`: an action call, such as `write_samples`.
+
+The turns a rule fired are in the `rules` list of every history line and on the board.
+
+#### Triggers
+
+| trigger | params | fires |
 |---|---|---|
-| `filter` | `/transform/kalfa/filter` | transform |
-| `derive` | `/transform/kalfa/derive` | transform |
-| `rename` | `/transform/kalfa/rename` | transform |
-| `astype` | `/transform/kalfa/astype` | transform |
-| `drop` | `/transform/kalfa/drop` | transform |
-| `sequential` | `/split/kalfa/sequential` | split |
-| `given` | `/split/kalfa/given` | split |
-| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
-| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
-| `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
-| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
-| `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
-| `cast` | `/pre/kalfa/cast` | pre |
-| `abs` | `/pre/kalfa/abs` | pre |
-| `log` | `/pre/kalfa/log` | pre |
-| `one_hot` | `/pre/kalfa/one_hot` | pre |
-| `label_encoder` | `/pre/kalfa/label_encoder` | pre |
-| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
-| `fill` | `/pre/kalfa/fill` | pre |
-| `table` | `/feed/kalfa/table` | feed |
-| `linear` | `/layer/kalfa/linear` | layer |
-| `linear_relu` | `/layer/kalfa/linear_relu` | layer |
-| `concat` | `/layer/torch/concat` | layer |
-| `flatten` | `/layer/torch/flatten` | layer |
-| `relu` | `/layer/torch/relu` | layer |
-| `leaky_relu` | `/layer/torch/leaky_relu` | layer |
-| `batch_norm` | `/layer/torch/batch_norm` | layer |
-| `layer_norm` | `/layer/torch/layer_norm` | layer |
-| `group_norm` | `/layer/torch/group_norm` | layer |
-| `dropout` | `/layer/torch/dropout` | layer |
-| `reparam` | `/layer/kalfa/reparam` | layer |
-| `select` | `/layer/kalfa/select` | layer |
-| `add` | `/layer/kalfa/add` | layer |
-| `subtract` | `/layer/kalfa/subtract` | layer |
-| `multiply` | `/layer/kalfa/multiply` | layer |
-| `divide` | `/layer/kalfa/divide` | layer |
-| `negate` | `/layer/kalfa/negate` | layer |
-| `multipliers` | `/layer/kalfa/multipliers` | layer |
-| `l1_distance` | `/layer/kalfa/l1_distance` | layer |
-| `gru` | `/layer/torch/gru` | layer |
-| `last_step` | `/layer/torch/last_step` | layer |
-| `softsign` | `/layer/torch/softsign` | layer |
-| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
-| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
-| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
-| `elu` | `/layer/torch/elu` | layer |
-| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
-| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
-| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
-| `lppool1d` | `/layer/torch/lppool1d` | layer |
-| `rrelu` | `/layer/torch/rrelu` | layer |
-| `prelu` | `/layer/torch/prelu` | layer |
-| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
-| `replication_pad` | `/layer/torch/replication_pad` | layer |
-| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
-| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
-| `hardshrink` | `/layer/torch/hardshrink` | layer |
-| `hardswish` | `/layer/torch/hardswish` | layer |
-| `rnn` | `/layer/torch/rnn` | layer |
-| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
-| `dropout2d` | `/layer/torch/dropout2d` | layer |
-| `dropout3d` | `/layer/torch/dropout3d` | layer |
-| `avgpool` | `/layer/torch/avgpool` | layer |
-| `lppool` | `/layer/torch/lppool` | layer |
-| `threshold_layer` | `/layer/torch/threshold` | layer |
-| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
-| `tanh_layer` | `/layer/torch/tanh` | layer |
-| `identity` | `/layer/torch/identity` | layer |
-| `mlp` | `/layer/kalfa/mlp` | layer |
-| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
-| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
-| `softplus` | `/layer/torch/softplus` | layer |
-| `softmax` | `/layer/torch/softmax` | layer |
-| `silu` | `/layer/torch/silu` | layer |
-| `softmin` | `/layer/torch/softmin` | layer |
-| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
-| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
-| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
-| `relu6` | `/layer/torch/relu6` | layer |
-| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
-| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
-| `softshrink` | `/layer/torch/softshrink` | layer |
-| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
-| `conv1d` | `/layer/torch/conv1d` | layer |
-| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
-| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
-| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
-| `conv3d` | `/layer/torch/conv3d` | layer |
-| `lstm` | `/layer/torch/lstm` | layer |
-| `max_unpool` | `/layer/torch/max_unpool` | layer |
-| `constant_pad` | `/layer/torch/constant_pad` | layer |
-| `mish` | `/layer/torch/mish` | layer |
-| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
-| `zero_pad` | `/layer/torch/zero_pad` | layer |
-| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
-| `celu` | `/layer/torch/celu` | layer |
-| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
-| `fold` | `/layer/torch/fold` | layer |
-| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
-| `log_softmax` | `/layer/torch/log_softmax` | layer |
-| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
-| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
-| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
-| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
-| `glu` | `/layer/torch/glu` | layer |
-| `instance_norm` | `/layer/torch/instance_norm` | layer |
-| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
-| `circular_pad` | `/layer/torch/circular_pad` | layer |
-| `upsample` | `/layer/torch/upsample` | layer |
-| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
-| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
-| `selu` | `/layer/torch/selu` | layer |
-| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
-| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
-| `softmax2d` | `/layer/torch/softmax2d` | layer |
-| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
-| `transformer` | `/layer/torch/transformer` | layer |
-| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
-| `rms_norm` | `/layer/torch/rms_norm` | layer |
-| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
-| `sigmoid` | `/layer/torch/sigmoid` | layer |
-| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
-| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
-| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
-| `lppool3d` | `/layer/torch/lppool3d` | layer |
-| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
-| `hardtanh` | `/layer/torch/hardtanh` | layer |
-| `dropout1d` | `/layer/torch/dropout1d` | layer |
-| `bilinear` | `/layer/torch/bilinear` | layer |
-| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
-| `gelu` | `/layer/torch/gelu` | layer |
-| `gru_cell` | `/layer/torch/gru_cell` | layer |
-| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
-| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
-| `unfold` | `/layer/torch/unfold` | layer |
-| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
-| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
-| `normal` | `/init/torch/normal` | init |
-| `xavier` | `/init/torch/xavier` | init |
-| `kaiming` | `/init/torch/kaiming` | init |
-| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
-| `zeros` | `/init/torch/zeros` | init |
-| `mse` | `/criterion/kalfa/mse` | criterion |
-| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
-| `huber` | `/criterion/kalfa/huber` | criterion |
-| `mae` | `/criterion/kalfa/mae` | criterion |
-| `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
-| `cross_entropy` | `/criterion/kalfa/cross_entropy` | criterion |
-| `bce_logits` | `/criterion/kalfa/bce_logits` | criterion |
-| `rmse` | `/metric/kalfa/rmse` | metric |
-| `accuracy` | `/metric/torchmetrics/accuracy` | metric |
-| `f1` | `/metric/torchmetrics/f1` | metric |
-| `auroc` | `/metric/torchmetrics/binary_auroc` | metric |
-| `average_precision` | `/metric/torchmetrics/binary_average_precision` | metric |
-| `adam` | `/optimizer/torch/adam` | optimizer |
-| `adamw` | `/optimizer/torch/adamw` | optimizer |
-| `sgd` | `/optimizer/torch/sgd` | optimizer |
-| `warmup_cosine` | `/schedule/kalfa/warmup_cosine` | schedule |
-| `linear_warmup` | `/schedule/kalfa/linear_warmup` | schedule |
-| `step_decay` | `/schedule/kalfa/step_decay` | schedule |
-| `supervised` | `/turn/kalfa/alternating` | turn |
-| `alternating` | `/turn/kalfa/alternating` | turn |
-| `plateau` | `/trigger/kalfa/plateau` | trigger |
-| `metric_below` | `/trigger/kalfa/metric_below` | trigger |
-| `metric_above` | `/trigger/kalfa/metric_above` | trigger |
-| `after_turn` | `/trigger/kalfa/after_turn` | trigger |
-| `after_epoch` | `/trigger/kalfa/after_turn` | trigger |
-| `time_budget` | `/trigger/kalfa/time_budget` | trigger |
-| `best` | `/checkpoint/kalfa/best` | checkpoint |
-| `last` | `/checkpoint/kalfa/last` | checkpoint |
-| `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
-| `loss_curve` | `/plot/kalfa/loss_curve` | plot |
-| `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
-| `pred_histogram` | `/plot/kalfa/pred_histogram` | plot |
-| `class_histogram` | `/plot/kalfa/class_histogram` | plot |
-| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
-| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
-| `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
-| `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
-| `architecture` | `/plot/kalfa/architecture` | plot |
-| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
-| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
-| `torchview` | `/plot/torchview/architecture` | plot |
-| `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
-| `mdmm` | `/objective/kalfa/mdmm` | objective |
-| `grid` | `/strategy/kalfa/grid` | strategy |
-| `random` | `/strategy/kalfa/random` | strategy |
-| `sobol` | `/strategy/kalfa/sobol` | strategy |
-| `optuna` | `/strategy/kalfa/optuna` | strategy |
-| `auto` | `/device/kalfa/auto` | device |
-| `cpu` | `/device/kalfa/cpu` | device |
-| `cuda` | `/device/kalfa/cuda` | device |
-| `mps` | `/device/kalfa/mps` | device |
-| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
-| `onnx` | `/export/kalfa/onnx` | export |
-| `pt2` | `/export/kalfa/pt2` | export |
-| `state_dict` | `/export/kalfa/state_dict` | export |
-| `derived` | `/rng/kalfa/derived` | rng |
-| `indexed` | `/rng/kalfa/indexed` | rng |
-| `global` | `/rng/kalfa/global` | rng |
+| `after_epoch` | `at` | from the turn whose number reaches `at` (absolute, so a resumed run counts on) |
+| `every` | `epochs` | every `epochs` turns |
+| `plateau` | `watch`, `patience`, `mode` (min), `min_delta` (0) | after `patience` turns without the series improving by `min_delta`; turns without a value are not counted |
+| `above` | `watch`, `value` | when the series is above `value` |
+| `below` | `watch`, `value` | when the series is below `value` |
+| `time_budget` | `minutes` | once `minutes` have passed since the first turn that asked it |
 
-### /alias/kalfa/lazy_tabular
+`watch` names a series of the turn, such as `val/rmse`, `train/total/kl` or `track/optimizers.main.lr`.
 
-| Alias | URI | Kind |
+#### Patches
+
+A path is dotted with optional list indexes: `optimizers.main.lr`, `losses.total.terms[1].weight`, `losses.total.constraints[0].epsilon`, `rules.stop.when.patience`. Its root is `models`, `losses`, `metrics`, `optimizers`, `train` or `rules`. A value is one of:
+
+* a plain value: a number, a string, a boolean or a list (`models.net.freeze: false`);
+* `{times: x}`: the current value times x;
+* `{plus: x}`: the current value plus x;
+* a reference, `"@losses.huber"`, resolved when the rule fires.
+
+What may be patched: the torch params of an optimizer (lr, weight decay, betas and the rest) and its `minimizes`; the `freeze` of a model; the constructor params of losses, metrics, the step and triggers (except their `fixed` lists) and the `on` and `every` of losses and metrics; `train.epochs` (or `train.updates.total`). `check` tests every rule path against this list (`not_mutable`, `unknown_path`). A patch of the optimizer lr sets the base value the schedule multiplies. A patch of `train.epochs` changes the length of the running training.
+
+Every patch is applied to the live object and to `plan.json`, and written to `events.jsonl` as `{"kind": "patch", "turn", "by", "path", "value", "asked"}` with the resolved value; a resumed run replays these events (see [resume](#checkpoints-resume-and-patch-replay)).
+
+### plots
+
+```yaml
+plots:
+  loss_curve: {use: loss_curve, series: [train/total, val/rmse]}
+  pred_vs_true: pred_vs_true
+  confusion_matrix: confusion_matrix
+```
+
+Plots are drawn at the end of a run into `<record>/plots`, from the record files (`history.jsonl`, `predictions.parquet`, `samples/`), and again at any time with `kalfa plots RECORD`. A std plot saves its image under its own name (`loss_curve.png`, `pred_vs_true.png`), so two entries of the same std plot write the same file; a plot of your own that returns its figure is saved under its key in the section. The std plots are `loss_curve {series}`, `pred_vs_true {pairs}`, `confusion_matrix {pred, target}`, `class_histogram {pred, target, bins}`, `binary_roc`, `binary_precision_recall_curve`, `forecast_samples {n, pred, target}`, `image_pairs {n, set}` (images above the reconstructions of the predicts model; it needs the run, so it draws during a run or through `kalfa plots`) and `samples_grid {n, file}`.
+
+### generate
+
+```yaml
+generate: {use: latent_sampler, model: "@models.ae.decoder", latent: 8, n: 16}
+```
+
+One sampler call. At the end of a run kalfa draws `n` samples into `<record>/samples/samples.pt`, with a PNG grid for images and a `.txt` for text, and `kalfa generate RECORD` draws more later. The std samplers are `gan_sampler {model, latent, n_classes, n}`, `latent_sampler {model, latent, n}`, `ddpm_sampler {model, schedule, shape, n, steps}` and `lm_sampler {model, tokenizer, prompt, max_new_tokens, temperature, top_k, n}`. The action `write_samples {sampler, n}` writes `samples/turn_<k>` from a rule, with the generate sampler when it names none.
+
+### sweep
+
+```yaml
+params:
+  lr: 1.0e-3
+  width: 64
+sweep:
+  strategy: grid
+  space:
+    lr: [1.0e-2, 1.0e-3]
+    width: [32, 64, 128]
+  objective: {watch: val/rmse, mode: min, at: best}
+  record: runs/sweep_lr_width
+```
+
+A sweep runs the config once per point, each point with other values of some params.
+
+* `strategy`: `grid {steps}` (every combination; a range needs `steps`), `random {trials, seed}` (the catalog calls it `random_search`; the seed defaults to the config seed), `optuna {trials, sampler: tpe | random, seed}` (asks the points one after another from an optuna study), or the import path of your own strategy (`points(space, seed)` for a fixed list, or `ask(space, objective)` and `tell(trial, value)` for an adaptive one).
+* `space`: param names of the `params` section, each a list of values, `{float: [a, b]}`, `{log: [a, b]}` (log uniform, or geometric steps in a grid) or `{int: [a, b]}`.
+* `objective`: `watch` (a series), `mode` (min or max), `at` (`best` over the turns of a point, or its `last` value).
+* `record`: the sweep root.
+
+The root holds `sweep.json`, `points.jsonl`, `sweep.sh` (one `kalfa sweep ... --point <i>` line per point), `sweep.sub` (an HTCondor submit file), `logs/` for points run with `--jobs`, and the point records `0000`, `0001` and so on. `kalfa summarize ROOT`, the sweep page of the board and `kalfa summarize ROOT --html` rank the points.
+
+## The runtime
+
+### Build order
+
+`data` is built and fitted (preprocessors and vocabularies learn from the train set), then `models` (the `@data.*` references resolve here; then `init`, `weights`, `freeze`, `ema`), `losses`, `metrics`, `optimizers`, `train.step`, `train.log`, `plots`, `generate`, and last the rules with their triggers and actions. An object with a `bind(ctx)` method gets it called once built. Each object then receives `name` and `path` attributes, unless its constructor takes params of those names. The models, the objectives and the metrics are moved to the device.
+
+### The loop
+
+Before the first turn the record already holds `fitted/` and `data.json`, and the loop writes `model_summary.json`, so the board shows the data flowchart and the model diagrams of a running record.
+
+Every turn:
+
+1. `turn` grows by one;
+2. the step trains the turn (`train_turn`);
+3. every set of `train.evaluate` is evaluated: losses and metrics that run on it (`on`, `every`) are computed without gradients, the losses as batch weighted means;
+4. the series of the turn are gathered: `train/<loss>`, `train/<loss>/<term>`, `val/<metric>`, `test/...`, `track/<path>`;
+5. the rules are asked in order;
+6. the checkpoints are written;
+7. the history line is written (with `lr/*`, `minimizes/*`, `seconds` and the rules that fired), the loggers and the progress line follow;
+8. a `stop.json` in the record ends the run after this turn.
+
+While the run is alive a background thread renews `updated` in the manifest every ten seconds, whatever the loop is doing (a long turn, the evaluation, the predictions, the plots), so a record reads as `stale` only when its process is gone. With it the manifest carries `within`, where the turn is: the loop notes the phase (`train`, the set being evaluated, then `after`, `predictions`, `samples` and `plots` at the end) and, while it trains or evaluates, how many batches of how many are done (updates of the turn when the unit is `updates`). The readers turn that into the fraction of the run that is done and the time left: the mean of the last five turns times the turns left, or the pace of the first turn while no turn has ended.
+
+The loop stops when the planned turns are done or a stop was asked. Then it writes `checkpoints/final.pt` and `model_summary.json`, loads the reported weights (`train.report`), writes `predictions.parquet` for the test set and every extra set of the data class (in original units: `row`, the targets, `pred_<output>`, `raw_<output>`, `prob_<output>_<class>` for classes, the spectators), draws the samples and the plots, and marks the manifest `done` (or `stopped`). An output that pairs with no target becomes `pred_<output>` (one value per row) or `pred_<output>_<k>` columns when it has at most 32 values per row; a wider one (an image, a long embedding) stays out of the table.
+
+### Steps
+
+A step object trains a turn. The protocol (`kalfa.Step`):
+
+* `train_turn(ctx)`: trains one turn and returns the train series. The default walks the train loader, calls `train_batch` for each batch, writes the update lines and computes the observer losses and train metrics;
+* `train_batch(batch, ctx) -> {optimizer name: loss value}`;
+* `eval_batch(batch, ctx) -> outputs` for evaluation;
+* `predict(batch, ctx) -> outputs` for the predictions table;
+* attributes `order`, `amp`, `grad_clip`, `accumulate` (set from the slot keys), `fixed` and `persist` (attribute names saved in checkpoints).
+
+The two std steps:
+
+* `supervised {order, amp, grad_clip, accumulate}`: for every batch, each optimizer in `order` (default the config order) computes the outputs of the predicts model (when there is one), evaluates the loss it minimizes and steps. `accumulate: k` sums the gradients of k batches into one update.
+* `alternating {order, repeat, fresh_batch, amp, grad_clip, accumulate}`: per round each optimizer in `order` takes `repeat[name]` steps (`repeat: {critic: 5, generator: 1}`), on the shared batch of the round or, with `fresh_batch: true`, on a new batch per step. It is the step of GANs.
+
+### The context
+
+Every hook receives the run context `ctx`. Its attributes: `config`, `tree`, `plan`, `settings` (the raw `train` mapping), `train` (the parsed train settings), `data`, `models` (name to model entry, whose `module` is the `nn.Module`), `losses`, `metrics`, `optimizers` (name to optimizer entry), `step`, `rules`, `plots`, `generate`, `loggers`, `device`, `rng`, `seed`, `record` (the record writer, or None), `history` (the history lines so far), `turn`, `updates`, `batches`, `set_name` (the set being walked), `latest` (the series of this turn), `fired` (the rules that fired this turn), `stopping`, `monitor`, `logger` (a `logging` logger), `best`, `patches`, `cursor`, `last_norms`, `rules_by_name`, `fitted_from` and `want_sets`. Its methods: `predicts()` (the predicts model entry or None), `loaders()` (set name to DataLoader), `set_modes(train)`, `stop(reason)` and `elapsed()` (seconds since the start).
+
+A model entry calls its module on a batch with `entry.call(batch)` and returns the named outputs. An optimizer entry has `minimize(loss, clip)`, `zero_grad()`, `backward(loss)`, `clip(limit)`, `step()`, `rate()` and `set_param(name, value)`; its torch optimizer is `entry.real`. The record writer has `path(name)`, `write_json(name, value)`, `write_text(name, text)`, `append(name, line)` (one JSON line) and `event(kind, turn, **fields)`.
+
+### Named random streams
+
+Randomness comes from named streams so that turning a feature on or off does not shift the randomness of another: `ctx.rng.normal("noise", shape, like=x)`, `ctx.rng.uniform(name, shape, like=x)`, `ctx.rng.integers(name, low, high, shape, device=...)`, `ctx.rng.permutation(name, count)`, and `ctx.rng.stream(name, device)` for a `torch.Generator`. Each stream is seeded with the sha256 of `<seed>:<name>`. The std pieces use `noise` (training objectives), `samples` (samplers), `fid` (the fid metric) and `loader` (the shuffling of the data). At the start of a run the global python, numpy and torch generators are seeded too, and the stream states go into every checkpoint.
+
+### Devices and mixed precision
+
+`ctx.device.torch` is the `torch.device`; batches are moved to it before the step sees them. `amp: true` on the step runs the forward passes under `torch.autocast` on cuda and mps (it does nothing on cpu), with a gradient scaler on cuda.
+
+### Checkpoints, resume and patch replay
+
+A checkpoint holds `turn`, `update`, the state of every stateful node (`models.<name>`, `models.<name>.ema`, `losses.<name>`, `metrics.<name>`, `optimizers.<name>` with the torch state, the update count and the grad scaler, `train.step`, `rules.<name>` with its trigger), the random stream states, the number of patches and the best watched value.
+
+`kalfa run --from RECORD` continues a record from its `last.pt` (or `final.pt`) into a new directory (`<record>_<datetime>`, or `--record DIR`, which must be empty). It loads the config of the source (`resolved.yaml`, or the config files given), applies `--set` and `-p` on top (`--set train.epochs=40` trains longer), restores the checkpoint, replays the patch events of the source up to the checkpoint turn, copies the history lines, `best.pt` and the `plugins/` folder, and goes on from the next turn. The new manifest names the source in `resumed_from` and lists the config files of the source after its own, so relative data paths still resolve when the resumed record is opened later.
+
+Opening a record (`predict`, `generate`, `export`, `plots`, `kalfa.open(...).predict()`) never fits the data again: the fitted preprocessors and vocabularies are loaded from `fitted/`, the sets are rebuilt with the same seed, and the weights come from the reported checkpoint.
+
+### Stopping a run
+
+A run ends early in three ways: a rule with `stop: true`; `kalfa stop RECORD` (or the stop button of the board), which writes `stop.json` that the loop reads after the turn; ctrl-c, which ends the run after the turn (a second ctrl-c aborts at once). Each way still writes the final checkpoint, the predictions and the plots, and the manifest says `stopped`.
+
+## The record directory
+
+```text
+runs/housing_20261108_143000/
+  manifest.json
+  resolved.yaml
+  plan.json
+  history.jsonl
+  updates.jsonl
+  events.jsonl
+  log.txt
+  model_summary.json
+  data.json
+  fitted/
+  checkpoints/
+  predictions.parquet
+  plots/
+  samples/
+  exports/
+  plugins/
+```
+
+* `manifest.json`: `format`, `kalfa` (the version), `name`, `started`, `updated` (renewed every ten seconds while the process lives, see [the loop](#the-loop)), `finished`, `status` (`running`, `done`, `failed` or `stopped`; a running record whose `updated` is older than two minutes reads as `stale`), `within` (only while it runs: `{turn, phase, done, total, unit, started}`, the turn in progress and how far it is), `config_files` (the files given and every included layer; opening the record looks for relative data paths and plugins in their directories), `params`, `unit` (`epochs` or `updates`), `turns_planned`, `turn`, `host`, `device`, `git` (`commit` and `dirty`, or null), `sweep` (`root`, `id` and `values` for a sweep point), `resumed_from`, `failure` (`type`, `message`, `traceback`).
+* `resolved.yaml`: the merged and substituted config, with a comment beside every leaf a layer overrode. `kalfa check RECORD` and `kalfa run --from RECORD` read it.
+* `plan.json`: every node with its slot, import path, params, slot keys, fixed params and signature state; the data inputs, exposed names and fields; the train settings; the rules; the series; the mutable paths. References are written as `{"ref": "models.net"}` or `{"ref": "models.ae", "attr": "decoder"}`. Patches update it.
+* `history.jsonl`: one line per turn with `turn`, `update`, the series (`<set>/<name>`, `<set>/<name>/<term>`, `lr/<opt>`, `lr/<opt>/<group>`, `minimizes/<opt>`, `track/<path>`), `seconds` and `rules`.
+* `updates.jsonl`: one line per update with `update`, `turn`, `loss/<opt>`, `lr/<opt>` and `grad_norm/<opt>`.
+* `events.jsonl`: one line per event with `at`, `turn` and `kind`: `run_start`, `turn`, `patch`, `checkpoint`, `stop`, `resume`, `error` and `run_end`.
+* `log.txt`: what the run said, every line with its time: the host, the process id and the device, one line per turn with its first values and the rules that fired, every warning kalfa logged (and its info lines when the command line shows them), a stop that was asked, the end, and for a failed run the error with its whole traceback. The board shows its tail on the log tab and the terminal interface with `l`.
+* `model_summary.json`: per model its `class`, `parameters`, `trainable`, the module `tree` with parameter counts, the `outputs` shapes on the first batch and `graph`, the diagram of one forward pass. The run writes it before its first turn and again at the end. The first batch comes from the valid set, else the test set, else the train set, and taking it leaves the randomness of the run untouched: the torch, numpy and python generators and the named streams, the `loader` stream of the train set among them, are restored. `graph` is `{"method": "eager", "truncated", "nodes", "edges", "groups"}`: kalfa calls the model once without gradients on the batch fields it reads, with a hook on every module and a `TorchFunctionMode` for the torch calls between modules. A leaf module (one without submodules) is a `module` node: `label` is the class name, `path` and `detail` the module path, `class` the full class path, and `parameters` its count; a module called twice is two nodes. A module with submodules, such as a `Sequential` or a block of yours, is a group around the nodes it ran (the root model is not a group). A torch function called outside the leaf modules on a traced tensor (`cat`, `add`, `matmul`, `softmax`, `scaled_dot_product_attention`, functional activations and the like) is an `op` node, while reshaping and moving calls (`view`, `reshape`, `permute`, `flatten`, `squeeze`, `to`, indexing and the like) only pass their input on. `input` nodes carry the field names and `output` nodes the output names, the edges follow the tensors, and every `shape` is per sample, the batch size left out. Past 300 module and op nodes the rest is left out and `truncated` is true. A model that a loss calls with inputs of its own, such as the denoiser of `ddpm` (called with the noised image and the step `t`) or a GAN generator (called with noise `z`), cannot run on the batch fields. kalfa keeps a copy of the inputs of each model's first call in training and traces the model on them instead: the summary written after the first turn and the one at the end carry its diagram, the `input` nodes are named after the parameters of the model's `forward`, and `graph_from` is `"first training call"` (it is `"first batch"` otherwise). When neither works, `graph` is null and `graph_note` says why.
+* `data.json`: `{"format": 1, "kind", "report", "pipeline"}`. `kind` is the short name of the data class (or its import path), `report` what the data reports about itself (the rows of each set, the columns with their chains, windows, classes, the image shape, lines and tokens) and `pipeline` the flowchart of the data tab: `nodes` (`id`, `kind`, `label`, `detail`, `count`, `group`), `edges` (`from`, `to`, `label`) and `groups` (`id`, `label`, `detail`, `parent`). A table has two lanes that meet at the batch, or at the window feed: the rows run from the source through the filter and the split into the sets, and the columns run from the source past the dropped columns through each feature pattern and each target and its fitted chain into the `x` and target tensors. A streamed table has a stream node and cuts the file by position before it filters, so its filter comes after the split. An image folder shows its source, classes, split, sets, the `transform` and `train_transform` chains and the image and label tensors; text lines show the source, the split, the sets (counted in windows, with their lines and tokens in the detail), the tokenizer, the windows and the tensors. A set node counts the rows the report gives for that set. The run writes the file after `fitted/` and again when it resumes; when the flowchart cannot be drawn, the run logs a warning and writes `pipeline: null`. A data class of yours without a `pipeline()` method gets a generic flowchart (see [a data class](#a-data-class)).
+* `fitted/`: what the data learned, so a record opens without fitting again: `preprocessors.joblib` and `fields.json` for a table (features, targets, classes, filters, spectators, the scales of the weights), `fields.json` for an image folder, `tokenizer.json` for text.
+* `checkpoints/`: `last.pt`, `best.pt`, `turn_<k>.pt` and `final.pt`.
+* `predictions.parquet`: the test set in original units; `kalfa predict` adds `predictions_<best|last|final>.parquet`, `predictions_<data file>.parquet` and a `_<model>` suffix for another model.
+* `plots/`: one image per plot.
+* `samples/`: `samples.pt` (with `.png` or `.txt`), `turn_<k>.*` from `write_samples`, `generate_<which>.*` from `kalfa generate`.
+* `exports/`: `<model>_<which>.pt` or `.onnx` from `kalfa export`.
+* `plugins/`: copies of the modules under the config directories that the run imported, so the record opens on another machine.
+* `tensorboard/`: event files of the tensorboard logger.
+* `stop.json`: written by `kalfa stop`, `{"by", "at"}`.
+
+## Commands
+
+Commands print their results (problems, tables, the paths they wrote) on stdout, and progress lines and errors on stderr. The exit code is 0 on success, 1 when the config has problems, 2 for any other error (and for a sweep with a failed point), 130 when aborted with ctrl-c. `kalfa --version` prints the version.
+
+### kalfa check
+
+`kalfa check CONFIG... [--set PATH=VALUE] [-p NAME=VALUE] [--plan]`
+
+Loads and merges the configs, imports the plugins, builds the static plan and prints every problem as `error <code>: <path>: <message> (<hint>)`, or `ok`. Nothing is built or trained. A record directory instead of a file checks its `resolved.yaml`, with its `plugins/` folder and the directories of its config files searched for plugins and data (`kalfa run` and `kalfa sweep` treat a record directory the same way). `resolved.yaml` keeps the `record` key of the config with its `$datetime$` already filled in, so `kalfa run RECORD` on a record written at its config's own `record` path aims at that record again and stops because it is not empty: name a new directory with `--record DIR` (in the config tab of the terminal interface, `record=DIR` in the `--set` field). `--plan` prints `plan.json` after the problems. Warnings do not fail the check.
+
+The problem codes: `yaml_error`, `duplicate_key`, `file_not_found`, `not_a_mapping`, `include_cycle`, `bad_include`, `bad_params`, `bad_plugins`, `plugin_import`, `unknown_param`, `param_cycle`, `unused_param`, `bad_set`, `bad_param`, `unknown_section`, `bad_section`, `not_a_call`, `bad_key`, `unknown_use`, `import_failed`, `unknown_key`, `missing_key`, `slot_conflict`, `reference_unknown`, `reference_expected`, `minimizes_required`, `minimizes_ref`, `predicts_ref`, `pred_required`, `target_required`, `unknown_output`, `unknown_weight`, `weight_objective`, `series_clash`, `split_required`, `data_file_missing`, `data_value`, `device_value`, `train_key`, `train_unit`, `train_report`, `report_best`, `train_track`, `train_log`, `track_path`, `checkpoint_key`, `checkpoint_value`, `checkpoint_watch`, `watch_unknown`, `unknown_series`, `evaluate_set`, `rules_type`, `rule_type`, `rule_key`, `rule_empty`, `rule_after`, `rule_ref`, `rule_set`, `rule_path`, `rule_value`, `unknown_path`, `not_mutable`, `generate_required`, `sweep_key`, `sweep_space`, `sweep_strategy`, `sweep_objective`, `sweep_param`, `sweep_record`.
+
+### kalfa run
+
+`kalfa run [CONFIG...] [--set PATH=VALUE] [-p NAME=VALUE] [--record DIR] [--from RECORD] [--quiet]`
+
+Checks the config, trains into the record directory and prints it. The record directory is announced first and repeated on failure. One progress line per turn goes to stderr, with the build and data notes; `--quiet` hides them. `--record DIR` overrides the `record` of the config. A record directory in place of CONFIG trains its `resolved.yaml` again. When the record directory a run would write into already holds a run (a record given in place of CONFIG, or a config whose `record` has no `$datetime$`, such as the fold records of `11_kfold` or the teacher of `13_distillation`), kalfa writes into `<record>_<datetime>` instead and says so on stderr; nothing is overwritten. `--from RECORD` continues that record from its last checkpoint into a new directory (see resume); configs given with it replace its `resolved.yaml`.
+
+### kalfa predict
+
+`kalfa predict RECORD [--data FILE] [--model NAME] [--which best|last|final] [--device D]`
+
+Opens the record and predicts. Without `--data` it predicts the test set again into `predictions_<which>.parquet`. `--data` takes a `.parquet`, `.pq`, `.csv` or `.tsv` table with the raw columns, or whatever the data class reads (a folder of images, an image, a text file), and writes `predictions_<name>.parquet`. `--model` predicts with another model than `train.predicts` and adds `_<model>` to the file name. `--which` picks the weights (default: `best` when `train.report` is best, else `last`).
+
+### kalfa summarize
+
+`kalfa summarize RECORD... [--by SERIES] [--mode min|max] [--top K] [--out DIR] [--markdown] [--columns NAMES] [--html] [--points IDS]`
+
+Prints one row per record, best first, and the best row. A path may be a record, a sweep root (its points) or a directory with records under it. The rows rank by `--by` (default the checkpoint `watch` of the first record) in `--mode` (default its mode, or min). The table holds `name`, `status`, `turn`, `total`, `seconds`, every param, `best`, `best_turn` and the last value of every series as `last_<series>`; the printed text table hides the train and lr series unless `--columns all` or a list of names, while `--markdown` and the `summary.md` of `--out` show every column. Records with a `fold` param are grouped by their other params, and after the best row every group prints the mean and the standard deviation of each last value over its folds. `--markdown` prints a markdown table, `--out DIR` writes `summary.csv` and `summary.md` (and `folds.csv`, one row per group and series, when there are fold groups), and `--html` writes a single file `report.html` (summary, curves, fold groups, sweep points and param scatters, and per record a section for each prediction pair drawn for its task; no external resources) into the first record or sweep root, or to `--out` (a file, or a directory for it); `--points` limits the details of a sweep report to some point ids.
+
+### kalfa generate
+
+`kalfa generate RECORD [--n N] [--which best|last|final] [--device D] [--out DIR]`
+
+Opens the record with its `generate` sampler and writes `n` samples (default the sampler's `n`) to `<record>/samples/generate_<which>.pt`, with a PNG grid for images or a `.txt` for text. `--out` writes elsewhere.
+
+### kalfa plots
+
+`kalfa plots RECORD [--only NAMES] [--which best|last|final] [--device D]`
+
+Draws the plots of the record's `plots` section again into `<record>/plots` and prints the files. `--only` takes comma separated plot names; `--which` picks the weights for plots that need the run, such as `image_pairs`.
+
+### kalfa export
+
+`kalfa export RECORD [--format state_dict|onnx] [--model NAME] [--which best|last|final] [--out PATH] [--device D] [--opset N] [--static]`
+
+Writes a model of the record: `state_dict` (default) saves the parameters with `torch.save`, `onnx` traces the model on a test batch (opset 17 by default, a dynamic batch axis unless `--static`). The default file is `<record>/exports/<model>_<which>.pt` or `.onnx`; `--out` names a file or a directory.
+
+### kalfa sweep
+
+`kalfa sweep CONFIG... [--set PATH=VALUE] [-p NAME=VALUE] [--record ROOT] [--count] [--show N] [--plan] [--point N] [--repair] [--jobs K] [--quiet]`
+
+Runs the points of the `sweep` section one after another and prints the root. `--count` prints the number of points, `--show N` the first N, `--plan` writes the plan files (`sweep.json`, `points.jsonl`, `sweep.sh`, `sweep.sub`) and exits, for a cluster. `--point N` runs one point (what each line of `sweep.sh` and each job of `sweep.sub` does). `--repair` runs only the failed, stopped or missing points. `--jobs K` runs K points at once in child processes, their output in `<root>/logs/<id>.log`. A failed point does not stop the others. `--record ROOT` overrides `sweep.record`.
+
+### kalfa stop
+
+`kalfa stop RECORD...`
+
+Writes `stop.json` into each running record; the run stops after its current turn and still writes its final files. A sweep root stops its running points. A finished record is left alone with a warning.
+
+### kalfa legos
+
+`kalfa legos [NAME|WORD] [--slot SLOT] [--docs]`
+
+Without arguments lists every short name with its one line description under its category; the categories follow the order of the config sections, and a name that a plugin registered is marked `(plugin)`. An exact name prints its page: target, slot, category, `goes in` (where the name sits in a config, for a category that has a place) and description; the params with their defaults (`hidden (required)`, `activation = 'relu'`), each with its note indented below it; `examples:`, YAML pieces that show the name in its place in a config (an optimizer under `optimizers:`, a preprocessor under `data.features`, a trigger under `rules.<name>.when`); and `used in:`, the configs under `examples/` that use the name as a lego (in a `use:`, in a short form such as `losses: {mse: mse}`, as a feature, target, split or transform, or in a lego param such as `activation`, `schedule` or `when`; tensor names do not count). On a terminal the page is in color, with the YAML highlighted; piped or redirected it is plain text. Another word searches the names and descriptions and lists the hits under their categories. `--slot` keeps one slot (`data`, `model`, `loss`, `metric`, `optimizer`, `schedule`, `step`, `trigger`, `action`, `logger`, `sampler`, `plot`, `strategy`, `value`), still listed by category. `--docs` prints the whole catalog as markdown: a `##` section per category with a line on where its names go, and under it a `###` entry per name with its target, description, params with their notes, examples in `yaml` blocks and the configs that use it.
+
+The categories, in their order, and where their names go:
+
+| category | members | goes in |
 |---|---|---|
-| `filter` | `/transform/kalfa/filter` | transform |
-| `derive` | `/transform/kalfa/derive` | transform |
-| `rename` | `/transform/kalfa/rename` | transform |
-| `astype` | `/transform/kalfa/astype` | transform |
-| `drop` | `/transform/kalfa/drop` | transform |
-| `sequential` | `/split/kalfa/sequential` | split |
-| `given` | `/split/kalfa/given` | split |
-| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
-| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
-| `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
-| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
-| `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
-| `cast` | `/pre/kalfa/cast` | pre |
-| `abs` | `/pre/kalfa/abs` | pre |
-| `log` | `/pre/kalfa/log` | pre |
-| `one_hot` | `/pre/kalfa/one_hot` | pre |
-| `label_encoder` | `/pre/kalfa/label_encoder` | pre |
-| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
-| `fill` | `/pre/kalfa/fill` | pre |
-| `table` | `/feed/kalfa/table` | feed |
-| `linear` | `/layer/kalfa/linear` | layer |
-| `linear_relu` | `/layer/kalfa/linear_relu` | layer |
-| `concat` | `/layer/torch/concat` | layer |
-| `flatten` | `/layer/torch/flatten` | layer |
-| `relu` | `/layer/torch/relu` | layer |
-| `leaky_relu` | `/layer/torch/leaky_relu` | layer |
-| `batch_norm` | `/layer/torch/batch_norm` | layer |
-| `layer_norm` | `/layer/torch/layer_norm` | layer |
-| `group_norm` | `/layer/torch/group_norm` | layer |
-| `dropout` | `/layer/torch/dropout` | layer |
-| `reparam` | `/layer/kalfa/reparam` | layer |
-| `select` | `/layer/kalfa/select` | layer |
-| `add` | `/layer/kalfa/add` | layer |
-| `subtract` | `/layer/kalfa/subtract` | layer |
-| `multiply` | `/layer/kalfa/multiply` | layer |
-| `divide` | `/layer/kalfa/divide` | layer |
-| `negate` | `/layer/kalfa/negate` | layer |
-| `multipliers` | `/layer/kalfa/multipliers` | layer |
-| `l1_distance` | `/layer/kalfa/l1_distance` | layer |
-| `gru` | `/layer/torch/gru` | layer |
-| `last_step` | `/layer/torch/last_step` | layer |
-| `softsign` | `/layer/torch/softsign` | layer |
-| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
-| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
-| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
-| `elu` | `/layer/torch/elu` | layer |
-| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
-| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
-| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
-| `lppool1d` | `/layer/torch/lppool1d` | layer |
-| `rrelu` | `/layer/torch/rrelu` | layer |
-| `prelu` | `/layer/torch/prelu` | layer |
-| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
-| `replication_pad` | `/layer/torch/replication_pad` | layer |
-| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
-| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
-| `hardshrink` | `/layer/torch/hardshrink` | layer |
-| `hardswish` | `/layer/torch/hardswish` | layer |
-| `rnn` | `/layer/torch/rnn` | layer |
-| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
-| `dropout2d` | `/layer/torch/dropout2d` | layer |
-| `dropout3d` | `/layer/torch/dropout3d` | layer |
-| `avgpool` | `/layer/torch/avgpool` | layer |
-| `lppool` | `/layer/torch/lppool` | layer |
-| `threshold_layer` | `/layer/torch/threshold` | layer |
-| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
-| `tanh_layer` | `/layer/torch/tanh` | layer |
-| `identity` | `/layer/torch/identity` | layer |
-| `mlp` | `/layer/kalfa/mlp` | layer |
-| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
-| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
-| `softplus` | `/layer/torch/softplus` | layer |
-| `softmax` | `/layer/torch/softmax` | layer |
-| `silu` | `/layer/torch/silu` | layer |
-| `softmin` | `/layer/torch/softmin` | layer |
-| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
-| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
-| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
-| `relu6` | `/layer/torch/relu6` | layer |
-| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
-| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
-| `softshrink` | `/layer/torch/softshrink` | layer |
-| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
-| `conv1d` | `/layer/torch/conv1d` | layer |
-| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
-| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
-| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
-| `conv3d` | `/layer/torch/conv3d` | layer |
-| `lstm` | `/layer/torch/lstm` | layer |
-| `max_unpool` | `/layer/torch/max_unpool` | layer |
-| `constant_pad` | `/layer/torch/constant_pad` | layer |
-| `mish` | `/layer/torch/mish` | layer |
-| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
-| `zero_pad` | `/layer/torch/zero_pad` | layer |
-| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
-| `celu` | `/layer/torch/celu` | layer |
-| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
-| `fold` | `/layer/torch/fold` | layer |
-| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
-| `log_softmax` | `/layer/torch/log_softmax` | layer |
-| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
-| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
-| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
-| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
-| `glu` | `/layer/torch/glu` | layer |
-| `instance_norm` | `/layer/torch/instance_norm` | layer |
-| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
-| `circular_pad` | `/layer/torch/circular_pad` | layer |
-| `upsample` | `/layer/torch/upsample` | layer |
-| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
-| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
-| `selu` | `/layer/torch/selu` | layer |
-| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
-| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
-| `softmax2d` | `/layer/torch/softmax2d` | layer |
-| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
-| `transformer` | `/layer/torch/transformer` | layer |
-| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
-| `rms_norm` | `/layer/torch/rms_norm` | layer |
-| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
-| `sigmoid` | `/layer/torch/sigmoid` | layer |
-| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
-| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
-| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
-| `lppool3d` | `/layer/torch/lppool3d` | layer |
-| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
-| `hardtanh` | `/layer/torch/hardtanh` | layer |
-| `dropout1d` | `/layer/torch/dropout1d` | layer |
-| `bilinear` | `/layer/torch/bilinear` | layer |
-| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
-| `gelu` | `/layer/torch/gelu` | layer |
-| `gru_cell` | `/layer/torch/gru_cell` | layer |
-| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
-| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
-| `unfold` | `/layer/torch/unfold` | layer |
-| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
-| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
-| `normal` | `/init/torch/normal` | init |
-| `xavier` | `/init/torch/xavier` | init |
-| `kaiming` | `/init/torch/kaiming` | init |
-| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
-| `zeros` | `/init/torch/zeros` | init |
-| `mse` | `/criterion/kalfa/mse` | criterion |
-| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
-| `huber` | `/criterion/kalfa/huber` | criterion |
-| `mae` | `/criterion/kalfa/mae` | criterion |
-| `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
-| `cross_entropy` | `/criterion/kalfa/cross_entropy` | criterion |
-| `bce_logits` | `/criterion/kalfa/bce_logits` | criterion |
-| `rmse` | `/metric/kalfa/rmse` | metric |
-| `accuracy` | `/metric/torchmetrics/accuracy` | metric |
-| `f1` | `/metric/torchmetrics/f1` | metric |
-| `auroc` | `/metric/torchmetrics/binary_auroc` | metric |
-| `average_precision` | `/metric/torchmetrics/binary_average_precision` | metric |
-| `adam` | `/optimizer/torch/adam` | optimizer |
-| `adamw` | `/optimizer/torch/adamw` | optimizer |
-| `sgd` | `/optimizer/torch/sgd` | optimizer |
-| `warmup_cosine` | `/schedule/kalfa/warmup_cosine` | schedule |
-| `linear_warmup` | `/schedule/kalfa/linear_warmup` | schedule |
-| `step_decay` | `/schedule/kalfa/step_decay` | schedule |
-| `supervised` | `/turn/kalfa/alternating` | turn |
-| `alternating` | `/turn/kalfa/alternating` | turn |
-| `plateau` | `/trigger/kalfa/plateau` | trigger |
-| `metric_below` | `/trigger/kalfa/metric_below` | trigger |
-| `metric_above` | `/trigger/kalfa/metric_above` | trigger |
-| `after_turn` | `/trigger/kalfa/after_turn` | trigger |
-| `after_epoch` | `/trigger/kalfa/after_turn` | trigger |
-| `time_budget` | `/trigger/kalfa/time_budget` | trigger |
-| `best` | `/checkpoint/kalfa/best` | checkpoint |
-| `last` | `/checkpoint/kalfa/last` | checkpoint |
-| `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
-| `loss_curve` | `/plot/kalfa/loss_curve` | plot |
-| `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
-| `pred_histogram` | `/plot/kalfa/pred_histogram` | plot |
-| `class_histogram` | `/plot/kalfa/class_histogram` | plot |
-| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
-| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
-| `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
-| `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
-| `architecture` | `/plot/kalfa/architecture` | plot |
-| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
-| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
-| `torchview` | `/plot/torchview/architecture` | plot |
-| `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
-| `mdmm` | `/objective/kalfa/mdmm` | objective |
-| `grid` | `/strategy/kalfa/grid` | strategy |
-| `random` | `/strategy/kalfa/random` | strategy |
-| `sobol` | `/strategy/kalfa/sobol` | strategy |
-| `optuna` | `/strategy/kalfa/optuna` | strategy |
-| `auto` | `/device/kalfa/auto` | device |
-| `cpu` | `/device/kalfa/cpu` | device |
-| `cuda` | `/device/kalfa/cuda` | device |
-| `mps` | `/device/kalfa/mps` | device |
-| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
-| `onnx` | `/export/kalfa/onnx` | export |
-| `pt2` | `/export/kalfa/pt2` | export |
-| `state_dict` | `/export/kalfa/state_dict` | export |
-| `derived` | `/rng/kalfa/derived` | rng |
-| `indexed` | `/rng/kalfa/indexed` | rng |
-| `global` | `/rng/kalfa/global` | rng |
-| `parquet` | `/source/kalfa/parquet_stream` | source |
-| `csv` | `/source/kalfa/csv_stream` | source |
-| `random_split` | `/split/kalfa/random` | split |
-| `kfold` | `/split/kalfa/kfold` | split |
-| `max_abs_scaler` | `/pre/sklearn/max_abs_scaler` | pre |
-| `robust_scaler` | `/pre/sklearn/robust_scaler` | pre |
-| `quantile_transformer` | `/pre/sklearn/quantile_transformer` | pre |
-| `power_transformer` | `/pre/sklearn/power_transformer` | pre |
-| `asinh` | `/pre/kalfa/asinh` | pre |
-| `sinh` | `/pre/kalfa/sinh` | pre |
-| `tanh` | `/pre/kalfa/tanh` | pre |
-| `atanh` | `/pre/kalfa/atanh` | pre |
-| `logit` | `/pre/kalfa/logit` | pre |
-| `kbins_discretizer` | `/pre/sklearn/kbins_discretizer` | pre |
-| `spline_transformer` | `/pre/sklearn/spline_transformer` | pre |
-| `window` | `/feed/kalfa/window` | feed |
-| `polynomial` | `/layer/kalfa/polynomial` | layer |
-| `l2_normalize` | `/layer/kalfa/l2_normalize` | layer |
-| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
-| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
-| `residuals` | `/plot/kalfa/residuals` | plot |
-| `error_map` | `/plot/kalfa/error_map` | plot |
-| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
-| `feature_distributions` | `/plot/kalfa/feature_distributions` | plot |
-| `target_correlation` | `/plot/kalfa/target_correlation` | plot |
-| `pairplot` | `/plot/seaborn/pairplot` | plot |
-| `violin` | `/plot/seaborn/violin` | plot |
-| `kde` | `/plot/seaborn/kde` | plot |
-| `class_weights` | `/data/kalfa/class_weights` | data |
-| `target_weights` | `/data/kalfa/target_weights` | data |
-| `feature_width` | `/data/kalfa/feature_width` | data |
-| `feature_index` | `/data/kalfa/feature_index` | data |
+| data | slot `data` | `data` |
+| splits | target under `kalfa.std.data.splits` | `data.split` |
+| table preprocessing | target under `kalfa.std.data.pre` or `sklearn.preprocessing` | `data.features` and `data.targets` |
+| feeds | target under `kalfa.std.data.window` | `data.feed` |
+| image transforms | target under `kalfa.std.data.transforms` | `data.transform` and `data.train_transform` |
+| tokenizers | `char_tokenizer` | `data.tokenizer` |
+| models | slot `model` | `models.<name>` |
+| layers | `linear`, `conv2d`, `batch_norm`, `layer_norm`, `dropout`, `embedding`, `flatten`, `last_step` | layers of a `stack` model |
+| activations | `relu`, `gelu`, `silu`, `sigmoid`, `tanh` | the activation of `mlp` or layers of `stack` |
+| init | target under `kalfa.std.init` | `models.<name>.init` |
+| losses | slot `loss`, apart from the objectives | `losses.<name>` |
+| objectives | `vae_elbo`, `wgan_gp_d`, `wgan_g`, `ddpm`, `distill`, `ntxent`, `mdmm`, `weighted_sum` | `losses.<name>` |
+| noise schedules | `cosine_beta`, `linear_beta` | the schedule of `ddpm` |
+| metrics | slot `metric` | `metrics.<name>` |
+| optimizers | slot `optimizer` | `optimizers.<name>` |
+| lr schedules | slot `schedule` | `optimizers.<name>.schedule` |
+| steps | slot `step` | `train.step` |
+| triggers | slot `trigger` | `rules.<name>.when` |
+| actions | slot `action` | `rules.<name>.run` |
+| samplers | slot `sampler` | `generate` |
+| plots | slot `plot` | `plots.<name>` |
+| loggers | slot `logger` | `train.log` |
+| sweep strategies | slot `strategy` | `sweep.strategy` |
+| other | every other name | no fixed place |
 
-### /alias/kalfa/tabular
+A std name is placed by its name first (layers, activations, objectives, noise schedules), then by the module of its target, then by its slot. A plugin name is placed by its slot alone and falls into `other` when its slot has no category. Empty categories are not shown.
 
-| Alias | URI | Kind |
-|---|---|---|
-| `filter` | `/transform/kalfa/filter` | transform |
-| `derive` | `/transform/kalfa/derive` | transform |
-| `rename` | `/transform/kalfa/rename` | transform |
-| `astype` | `/transform/kalfa/astype` | transform |
-| `drop` | `/transform/kalfa/drop` | transform |
-| `sequential` | `/split/kalfa/sequential` | split |
-| `given` | `/split/kalfa/given` | split |
-| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
-| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
-| `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
-| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
-| `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
-| `cast` | `/pre/kalfa/cast` | pre |
-| `abs` | `/pre/kalfa/abs` | pre |
-| `log` | `/pre/kalfa/log` | pre |
-| `one_hot` | `/pre/kalfa/one_hot` | pre |
-| `label_encoder` | `/pre/kalfa/label_encoder` | pre |
-| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
-| `fill` | `/pre/kalfa/fill` | pre |
-| `table` | `/feed/kalfa/table` | feed |
-| `linear` | `/layer/kalfa/linear` | layer |
-| `linear_relu` | `/layer/kalfa/linear_relu` | layer |
-| `concat` | `/layer/torch/concat` | layer |
-| `flatten` | `/layer/torch/flatten` | layer |
-| `relu` | `/layer/torch/relu` | layer |
-| `leaky_relu` | `/layer/torch/leaky_relu` | layer |
-| `batch_norm` | `/layer/torch/batch_norm` | layer |
-| `layer_norm` | `/layer/torch/layer_norm` | layer |
-| `group_norm` | `/layer/torch/group_norm` | layer |
-| `dropout` | `/layer/torch/dropout` | layer |
-| `reparam` | `/layer/kalfa/reparam` | layer |
-| `select` | `/layer/kalfa/select` | layer |
-| `add` | `/layer/kalfa/add` | layer |
-| `subtract` | `/layer/kalfa/subtract` | layer |
-| `multiply` | `/layer/kalfa/multiply` | layer |
-| `divide` | `/layer/kalfa/divide` | layer |
-| `negate` | `/layer/kalfa/negate` | layer |
-| `multipliers` | `/layer/kalfa/multipliers` | layer |
-| `l1_distance` | `/layer/kalfa/l1_distance` | layer |
-| `gru` | `/layer/torch/gru` | layer |
-| `last_step` | `/layer/torch/last_step` | layer |
-| `softsign` | `/layer/torch/softsign` | layer |
-| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
-| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
-| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
-| `elu` | `/layer/torch/elu` | layer |
-| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
-| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
-| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
-| `lppool1d` | `/layer/torch/lppool1d` | layer |
-| `rrelu` | `/layer/torch/rrelu` | layer |
-| `prelu` | `/layer/torch/prelu` | layer |
-| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
-| `replication_pad` | `/layer/torch/replication_pad` | layer |
-| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
-| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
-| `hardshrink` | `/layer/torch/hardshrink` | layer |
-| `hardswish` | `/layer/torch/hardswish` | layer |
-| `rnn` | `/layer/torch/rnn` | layer |
-| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
-| `dropout2d` | `/layer/torch/dropout2d` | layer |
-| `dropout3d` | `/layer/torch/dropout3d` | layer |
-| `avgpool` | `/layer/torch/avgpool` | layer |
-| `lppool` | `/layer/torch/lppool` | layer |
-| `threshold_layer` | `/layer/torch/threshold` | layer |
-| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
-| `tanh_layer` | `/layer/torch/tanh` | layer |
-| `identity` | `/layer/torch/identity` | layer |
-| `mlp` | `/layer/kalfa/mlp` | layer |
-| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
-| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
-| `softplus` | `/layer/torch/softplus` | layer |
-| `softmax` | `/layer/torch/softmax` | layer |
-| `silu` | `/layer/torch/silu` | layer |
-| `softmin` | `/layer/torch/softmin` | layer |
-| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
-| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
-| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
-| `relu6` | `/layer/torch/relu6` | layer |
-| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
-| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
-| `softshrink` | `/layer/torch/softshrink` | layer |
-| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
-| `conv1d` | `/layer/torch/conv1d` | layer |
-| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
-| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
-| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
-| `conv3d` | `/layer/torch/conv3d` | layer |
-| `lstm` | `/layer/torch/lstm` | layer |
-| `max_unpool` | `/layer/torch/max_unpool` | layer |
-| `constant_pad` | `/layer/torch/constant_pad` | layer |
-| `mish` | `/layer/torch/mish` | layer |
-| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
-| `zero_pad` | `/layer/torch/zero_pad` | layer |
-| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
-| `celu` | `/layer/torch/celu` | layer |
-| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
-| `fold` | `/layer/torch/fold` | layer |
-| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
-| `log_softmax` | `/layer/torch/log_softmax` | layer |
-| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
-| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
-| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
-| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
-| `glu` | `/layer/torch/glu` | layer |
-| `instance_norm` | `/layer/torch/instance_norm` | layer |
-| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
-| `circular_pad` | `/layer/torch/circular_pad` | layer |
-| `upsample` | `/layer/torch/upsample` | layer |
-| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
-| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
-| `selu` | `/layer/torch/selu` | layer |
-| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
-| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
-| `softmax2d` | `/layer/torch/softmax2d` | layer |
-| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
-| `transformer` | `/layer/torch/transformer` | layer |
-| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
-| `rms_norm` | `/layer/torch/rms_norm` | layer |
-| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
-| `sigmoid` | `/layer/torch/sigmoid` | layer |
-| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
-| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
-| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
-| `lppool3d` | `/layer/torch/lppool3d` | layer |
-| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
-| `hardtanh` | `/layer/torch/hardtanh` | layer |
-| `dropout1d` | `/layer/torch/dropout1d` | layer |
-| `bilinear` | `/layer/torch/bilinear` | layer |
-| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
-| `gelu` | `/layer/torch/gelu` | layer |
-| `gru_cell` | `/layer/torch/gru_cell` | layer |
-| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
-| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
-| `unfold` | `/layer/torch/unfold` | layer |
-| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
-| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
-| `normal` | `/init/torch/normal` | init |
-| `xavier` | `/init/torch/xavier` | init |
-| `kaiming` | `/init/torch/kaiming` | init |
-| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
-| `zeros` | `/init/torch/zeros` | init |
-| `mse` | `/criterion/kalfa/mse` | criterion |
-| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
-| `huber` | `/criterion/kalfa/huber` | criterion |
-| `mae` | `/criterion/kalfa/mae` | criterion |
-| `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
-| `cross_entropy` | `/criterion/kalfa/cross_entropy` | criterion |
-| `bce_logits` | `/criterion/kalfa/bce_logits` | criterion |
-| `rmse` | `/metric/kalfa/rmse` | metric |
-| `accuracy` | `/metric/torchmetrics/accuracy` | metric |
-| `f1` | `/metric/torchmetrics/f1` | metric |
-| `auroc` | `/metric/torchmetrics/binary_auroc` | metric |
-| `average_precision` | `/metric/torchmetrics/binary_average_precision` | metric |
-| `adam` | `/optimizer/torch/adam` | optimizer |
-| `adamw` | `/optimizer/torch/adamw` | optimizer |
-| `sgd` | `/optimizer/torch/sgd` | optimizer |
-| `warmup_cosine` | `/schedule/kalfa/warmup_cosine` | schedule |
-| `linear_warmup` | `/schedule/kalfa/linear_warmup` | schedule |
-| `step_decay` | `/schedule/kalfa/step_decay` | schedule |
-| `supervised` | `/turn/kalfa/alternating` | turn |
-| `alternating` | `/turn/kalfa/alternating` | turn |
-| `plateau` | `/trigger/kalfa/plateau` | trigger |
-| `metric_below` | `/trigger/kalfa/metric_below` | trigger |
-| `metric_above` | `/trigger/kalfa/metric_above` | trigger |
-| `after_turn` | `/trigger/kalfa/after_turn` | trigger |
-| `after_epoch` | `/trigger/kalfa/after_turn` | trigger |
-| `time_budget` | `/trigger/kalfa/time_budget` | trigger |
-| `best` | `/checkpoint/kalfa/best` | checkpoint |
-| `last` | `/checkpoint/kalfa/last` | checkpoint |
-| `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
-| `loss_curve` | `/plot/kalfa/loss_curve` | plot |
-| `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
-| `pred_histogram` | `/plot/kalfa/pred_histogram` | plot |
-| `class_histogram` | `/plot/kalfa/class_histogram` | plot |
-| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
-| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
-| `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
-| `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
-| `architecture` | `/plot/kalfa/architecture` | plot |
-| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
-| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
-| `torchview` | `/plot/torchview/architecture` | plot |
-| `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
-| `mdmm` | `/objective/kalfa/mdmm` | objective |
-| `grid` | `/strategy/kalfa/grid` | strategy |
-| `random` | `/strategy/kalfa/random` | strategy |
-| `sobol` | `/strategy/kalfa/sobol` | strategy |
-| `optuna` | `/strategy/kalfa/optuna` | strategy |
-| `auto` | `/device/kalfa/auto` | device |
-| `cpu` | `/device/kalfa/cpu` | device |
-| `cuda` | `/device/kalfa/cuda` | device |
-| `mps` | `/device/kalfa/mps` | device |
-| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
-| `onnx` | `/export/kalfa/onnx` | export |
-| `pt2` | `/export/kalfa/pt2` | export |
-| `state_dict` | `/export/kalfa/state_dict` | export |
-| `derived` | `/rng/kalfa/derived` | rng |
-| `indexed` | `/rng/kalfa/indexed` | rng |
-| `global` | `/rng/kalfa/global` | rng |
-| `parquet` | `/source/kalfa/parquet` | source |
-| `csv` | `/source/kalfa/csv` | source |
-| `random_split` | `/split/kalfa/random` | split |
-| `kfold` | `/split/kalfa/kfold` | split |
-| `max_abs_scaler` | `/pre/sklearn/max_abs_scaler` | pre |
-| `robust_scaler` | `/pre/sklearn/robust_scaler` | pre |
-| `quantile_transformer` | `/pre/sklearn/quantile_transformer` | pre |
-| `power_transformer` | `/pre/sklearn/power_transformer` | pre |
-| `asinh` | `/pre/kalfa/asinh` | pre |
-| `sinh` | `/pre/kalfa/sinh` | pre |
-| `tanh` | `/pre/kalfa/tanh` | pre |
-| `atanh` | `/pre/kalfa/atanh` | pre |
-| `logit` | `/pre/kalfa/logit` | pre |
-| `kbins_discretizer` | `/pre/sklearn/kbins_discretizer` | pre |
-| `spline_transformer` | `/pre/sklearn/spline_transformer` | pre |
-| `window` | `/feed/kalfa/window` | feed |
-| `polynomial` | `/layer/kalfa/polynomial` | layer |
-| `l2_normalize` | `/layer/kalfa/l2_normalize` | layer |
-| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
-| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
-| `residuals` | `/plot/kalfa/residuals` | plot |
-| `error_map` | `/plot/kalfa/error_map` | plot |
-| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
-| `feature_distributions` | `/plot/kalfa/feature_distributions` | plot |
-| `target_correlation` | `/plot/kalfa/target_correlation` | plot |
-| `pairplot` | `/plot/seaborn/pairplot` | plot |
-| `violin` | `/plot/seaborn/violin` | plot |
-| `kde` | `/plot/seaborn/kde` | plot |
-| `class_weights` | `/data/kalfa/class_weights` | data |
-| `target_weights` | `/data/kalfa/target_weights` | data |
-| `feature_width` | `/data/kalfa/feature_width` | data |
-| `feature_index` | `/data/kalfa/feature_index` | data |
+### kalfa board
 
-### /alias/kalfa/text
+`kalfa board [ROOT] [--host HOST] [--port PORT] [--open]`
 
-| Alias | URI | Kind |
-|---|---|---|
-| `filter` | `/transform/kalfa/filter` | transform |
-| `derive` | `/transform/kalfa/derive` | transform |
-| `rename` | `/transform/kalfa/rename` | transform |
-| `astype` | `/transform/kalfa/astype` | transform |
-| `drop` | `/transform/kalfa/drop` | transform |
-| `sequential` | `/split/kalfa/sequential` | split |
-| `given` | `/split/kalfa/given` | split |
-| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
-| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
-| `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
-| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
-| `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
-| `cast` | `/pre/kalfa/cast` | pre |
-| `abs` | `/pre/kalfa/abs` | pre |
-| `log` | `/pre/kalfa/log` | pre |
-| `one_hot` | `/pre/kalfa/one_hot` | pre |
-| `label_encoder` | `/pre/kalfa/label_encoder` | pre |
-| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
-| `fill` | `/pre/kalfa/fill` | pre |
-| `table` | `/feed/kalfa/table` | feed |
-| `linear` | `/layer/kalfa/linear` | layer |
-| `linear_relu` | `/layer/kalfa/linear_relu` | layer |
-| `concat` | `/layer/torch/concat` | layer |
-| `flatten` | `/layer/torch/flatten` | layer |
-| `relu` | `/layer/torch/relu` | layer |
-| `leaky_relu` | `/layer/torch/leaky_relu` | layer |
-| `batch_norm` | `/layer/torch/batch_norm` | layer |
-| `layer_norm` | `/layer/torch/layer_norm` | layer |
-| `group_norm` | `/layer/torch/group_norm` | layer |
-| `dropout` | `/layer/torch/dropout` | layer |
-| `reparam` | `/layer/kalfa/reparam` | layer |
-| `select` | `/layer/kalfa/select` | layer |
-| `add` | `/layer/kalfa/add` | layer |
-| `subtract` | `/layer/kalfa/subtract` | layer |
-| `multiply` | `/layer/kalfa/multiply` | layer |
-| `divide` | `/layer/kalfa/divide` | layer |
-| `negate` | `/layer/kalfa/negate` | layer |
-| `multipliers` | `/layer/kalfa/multipliers` | layer |
-| `l1_distance` | `/layer/kalfa/l1_distance` | layer |
-| `gru` | `/layer/torch/gru` | layer |
-| `last_step` | `/layer/torch/last_step` | layer |
-| `softsign` | `/layer/torch/softsign` | layer |
-| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
-| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
-| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
-| `elu` | `/layer/torch/elu` | layer |
-| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
-| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
-| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
-| `lppool1d` | `/layer/torch/lppool1d` | layer |
-| `rrelu` | `/layer/torch/rrelu` | layer |
-| `prelu` | `/layer/torch/prelu` | layer |
-| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
-| `replication_pad` | `/layer/torch/replication_pad` | layer |
-| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
-| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
-| `hardshrink` | `/layer/torch/hardshrink` | layer |
-| `hardswish` | `/layer/torch/hardswish` | layer |
-| `rnn` | `/layer/torch/rnn` | layer |
-| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
-| `dropout2d` | `/layer/torch/dropout2d` | layer |
-| `dropout3d` | `/layer/torch/dropout3d` | layer |
-| `avgpool` | `/layer/torch/avgpool` | layer |
-| `lppool` | `/layer/torch/lppool` | layer |
-| `threshold_layer` | `/layer/torch/threshold` | layer |
-| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
-| `tanh_layer` | `/layer/torch/tanh` | layer |
-| `identity` | `/layer/torch/identity` | layer |
-| `mlp` | `/layer/kalfa/mlp` | layer |
-| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
-| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
-| `softplus` | `/layer/torch/softplus` | layer |
-| `softmax` | `/layer/torch/softmax` | layer |
-| `silu` | `/layer/torch/silu` | layer |
-| `softmin` | `/layer/torch/softmin` | layer |
-| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
-| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
-| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
-| `relu6` | `/layer/torch/relu6` | layer |
-| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
-| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
-| `softshrink` | `/layer/torch/softshrink` | layer |
-| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
-| `conv1d` | `/layer/torch/conv1d` | layer |
-| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
-| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
-| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
-| `conv3d` | `/layer/torch/conv3d` | layer |
-| `lstm` | `/layer/torch/lstm` | layer |
-| `max_unpool` | `/layer/torch/max_unpool` | layer |
-| `constant_pad` | `/layer/torch/constant_pad` | layer |
-| `mish` | `/layer/torch/mish` | layer |
-| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
-| `zero_pad` | `/layer/torch/zero_pad` | layer |
-| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
-| `celu` | `/layer/torch/celu` | layer |
-| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
-| `fold` | `/layer/torch/fold` | layer |
-| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
-| `log_softmax` | `/layer/torch/log_softmax` | layer |
-| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
-| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
-| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
-| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
-| `glu` | `/layer/torch/glu` | layer |
-| `instance_norm` | `/layer/torch/instance_norm` | layer |
-| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
-| `circular_pad` | `/layer/torch/circular_pad` | layer |
-| `upsample` | `/layer/torch/upsample` | layer |
-| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
-| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
-| `selu` | `/layer/torch/selu` | layer |
-| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
-| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
-| `softmax2d` | `/layer/torch/softmax2d` | layer |
-| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
-| `transformer` | `/layer/torch/transformer` | layer |
-| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
-| `rms_norm` | `/layer/torch/rms_norm` | layer |
-| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
-| `sigmoid` | `/layer/torch/sigmoid` | layer |
-| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
-| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
-| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
-| `lppool3d` | `/layer/torch/lppool3d` | layer |
-| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
-| `hardtanh` | `/layer/torch/hardtanh` | layer |
-| `dropout1d` | `/layer/torch/dropout1d` | layer |
-| `bilinear` | `/layer/torch/bilinear` | layer |
-| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
-| `gelu` | `/layer/torch/gelu` | layer |
-| `gru_cell` | `/layer/torch/gru_cell` | layer |
-| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
-| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
-| `unfold` | `/layer/torch/unfold` | layer |
-| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
-| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
-| `normal` | `/init/torch/normal` | init |
-| `xavier` | `/init/torch/xavier` | init |
-| `kaiming` | `/init/torch/kaiming` | init |
-| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
-| `zeros` | `/init/torch/zeros` | init |
-| `mse` | `/criterion/kalfa/mse` | criterion |
-| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
-| `huber` | `/criterion/kalfa/huber` | criterion |
-| `mae` | `/criterion/kalfa/mae` | criterion |
-| `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
-| `cross_entropy` | `/criterion/kalfa/cross_entropy` | criterion |
-| `bce_logits` | `/criterion/kalfa/bce_logits` | criterion |
-| `rmse` | `/metric/kalfa/rmse` | metric |
-| `accuracy` | `/metric/torchmetrics/accuracy` | metric |
-| `f1` | `/metric/torchmetrics/f1` | metric |
-| `auroc` | `/metric/torchmetrics/binary_auroc` | metric |
-| `average_precision` | `/metric/torchmetrics/binary_average_precision` | metric |
-| `adam` | `/optimizer/torch/adam` | optimizer |
-| `adamw` | `/optimizer/torch/adamw` | optimizer |
-| `sgd` | `/optimizer/torch/sgd` | optimizer |
-| `warmup_cosine` | `/schedule/kalfa/warmup_cosine` | schedule |
-| `linear_warmup` | `/schedule/kalfa/linear_warmup` | schedule |
-| `step_decay` | `/schedule/kalfa/step_decay` | schedule |
-| `supervised` | `/turn/kalfa/alternating` | turn |
-| `alternating` | `/turn/kalfa/alternating` | turn |
-| `plateau` | `/trigger/kalfa/plateau` | trigger |
-| `metric_below` | `/trigger/kalfa/metric_below` | trigger |
-| `metric_above` | `/trigger/kalfa/metric_above` | trigger |
-| `after_turn` | `/trigger/kalfa/after_turn` | trigger |
-| `after_epoch` | `/trigger/kalfa/after_turn` | trigger |
-| `time_budget` | `/trigger/kalfa/time_budget` | trigger |
-| `best` | `/checkpoint/kalfa/best` | checkpoint |
-| `last` | `/checkpoint/kalfa/last` | checkpoint |
-| `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
-| `loss_curve` | `/plot/kalfa/loss_curve` | plot |
-| `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
-| `pred_histogram` | `/plot/kalfa/pred_histogram` | plot |
-| `class_histogram` | `/plot/kalfa/class_histogram` | plot |
-| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
-| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
-| `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
-| `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
-| `architecture` | `/plot/kalfa/architecture` | plot |
-| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
-| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
-| `torchview` | `/plot/torchview/architecture` | plot |
-| `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
-| `mdmm` | `/objective/kalfa/mdmm` | objective |
-| `grid` | `/strategy/kalfa/grid` | strategy |
-| `random` | `/strategy/kalfa/random` | strategy |
-| `sobol` | `/strategy/kalfa/sobol` | strategy |
-| `optuna` | `/strategy/kalfa/optuna` | strategy |
-| `auto` | `/device/kalfa/auto` | device |
-| `cpu` | `/device/kalfa/cpu` | device |
-| `cuda` | `/device/kalfa/cuda` | device |
-| `mps` | `/device/kalfa/mps` | device |
-| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
-| `onnx` | `/export/kalfa/onnx` | export |
-| `pt2` | `/export/kalfa/pt2` | export |
-| `state_dict` | `/export/kalfa/state_dict` | export |
-| `derived` | `/rng/kalfa/derived` | rng |
-| `indexed` | `/rng/kalfa/indexed` | rng |
-| `global` | `/rng/kalfa/global` | rng |
-| `parquet` | `/source/kalfa/parquet` | source |
-| `csv` | `/source/kalfa/csv` | source |
-| `text_lines` | `/source/kalfa/text_lines` | source |
-| `random_split` | `/split/kalfa/random` | split |
-| `kfold` | `/split/kalfa/kfold` | split |
-| `window` | `/feed/kalfa/window` | feed |
-| `next_token` | `/feed/kalfa/next_token` | feed |
-| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
-| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
-| `residuals` | `/plot/kalfa/residuals` | plot |
-| `error_map` | `/plot/kalfa/error_map` | plot |
-| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
-| `feature_distributions` | `/plot/kalfa/feature_distributions` | plot |
-| `target_correlation` | `/plot/kalfa/target_correlation` | plot |
-| `pairplot` | `/plot/seaborn/pairplot` | plot |
-| `violin` | `/plot/seaborn/violin` | plot |
-| `kde` | `/plot/seaborn/kde` | plot |
-| `class_weights` | `/data/kalfa/class_weights` | data |
-| `vocab_size` | `/data/kalfa/vocab_size` | data |
-| `char_tokenizer` | `/pre/kalfa/char_tokenizer` | pre |
-| `embedding` | `/layer/torch/embedding` | layer |
-| `perplexity` | `/metric/kalfa/perplexity` | metric |
-| `sample_writer` | `/metric/kalfa/sample_writer` | metric |
-| `lm_sampler` | `/generate/kalfa/lm_sampler` | generate |
+Serves the board over the records under `ROOT` (default the working directory) at http://127.0.0.1:8765/; `--open` opens the browser. See [the board](#the-board).
 
-### /alias/kalfa/vision
+### kalfa tui
 
-| Alias | URI | Kind |
-|---|---|---|
-| `filter` | `/transform/kalfa/filter` | transform |
-| `derive` | `/transform/kalfa/derive` | transform |
-| `rename` | `/transform/kalfa/rename` | transform |
-| `astype` | `/transform/kalfa/astype` | transform |
-| `drop` | `/transform/kalfa/drop` | transform |
-| `sequential` | `/split/kalfa/sequential` | split |
-| `given` | `/split/kalfa/given` | split |
-| `group_statistic` | `/frame/kalfa/group_statistic` | frame |
-| `target_encoding` | `/frame/kalfa/target_encoding` | frame |
-| `standard_scaler` | `/pre/sklearn/standard_scaler` | pre |
-| `median_std_scaler` | `/pre/kalfa/median_std_scaler` | pre |
-| `minmax_scaler` | `/pre/sklearn/minmax_scaler` | pre |
-| `cast` | `/pre/kalfa/cast` | pre |
-| `abs` | `/pre/kalfa/abs` | pre |
-| `log` | `/pre/kalfa/log` | pre |
-| `one_hot` | `/pre/kalfa/one_hot` | pre |
-| `label_encoder` | `/pre/kalfa/label_encoder` | pre |
-| `simple_imputer` | `/pre/kalfa/simple_imputer` | pre |
-| `fill` | `/pre/kalfa/fill` | pre |
-| `table` | `/feed/kalfa/table` | feed |
-| `linear` | `/layer/kalfa/linear` | layer |
-| `linear_relu` | `/layer/kalfa/linear_relu` | layer |
-| `concat` | `/layer/torch/concat` | layer |
-| `flatten` | `/layer/torch/flatten` | layer |
-| `relu` | `/layer/torch/relu` | layer |
-| `leaky_relu` | `/layer/torch/leaky_relu` | layer |
-| `batch_norm` | `/layer/torch/batch_norm` | layer |
-| `layer_norm` | `/layer/torch/layer_norm` | layer |
-| `group_norm` | `/layer/torch/group_norm` | layer |
-| `dropout` | `/layer/torch/dropout` | layer |
-| `reparam` | `/layer/kalfa/reparam` | layer |
-| `select` | `/layer/kalfa/select` | layer |
-| `add` | `/layer/kalfa/add` | layer |
-| `subtract` | `/layer/kalfa/subtract` | layer |
-| `multiply` | `/layer/kalfa/multiply` | layer |
-| `divide` | `/layer/kalfa/divide` | layer |
-| `negate` | `/layer/kalfa/negate` | layer |
-| `multipliers` | `/layer/kalfa/multipliers` | layer |
-| `l1_distance` | `/layer/kalfa/l1_distance` | layer |
-| `gru` | `/layer/torch/gru` | layer |
-| `last_step` | `/layer/torch/last_step` | layer |
-| `softsign` | `/layer/torch/softsign` | layer |
-| `avgpool3d` | `/layer/torch/avgpool3d` | layer |
-| `adaptive_maxpool3d` | `/layer/torch/adaptive_maxpool3d` | layer |
-| `constant_pad1d` | `/layer/torch/constant_pad1d` | layer |
-| `elu` | `/layer/torch/elu` | layer |
-| `pixel_unshuffle` | `/layer/torch/pixel_unshuffle` | layer |
-| `zero_pad1d` | `/layer/torch/zero_pad1d` | layer |
-| `alpha_dropout` | `/layer/torch/alpha_dropout` | layer |
-| `lppool1d` | `/layer/torch/lppool1d` | layer |
-| `rrelu` | `/layer/torch/rrelu` | layer |
-| `prelu` | `/layer/torch/prelu` | layer |
-| `cosine_similarity` | `/layer/torch/cosine_similarity` | layer |
-| `replication_pad` | `/layer/torch/replication_pad` | layer |
-| `embedding_bag` | `/layer/torch/embedding_bag` | layer |
-| `max_unpool3d` | `/layer/torch/max_unpool3d` | layer |
-| `hardshrink` | `/layer/torch/hardshrink` | layer |
-| `hardswish` | `/layer/torch/hardswish` | layer |
-| `rnn` | `/layer/torch/rnn` | layer |
-| `conv_transpose2d` | `/layer/torch/conv_transpose2d` | layer |
-| `dropout2d` | `/layer/torch/dropout2d` | layer |
-| `dropout3d` | `/layer/torch/dropout3d` | layer |
-| `avgpool` | `/layer/torch/avgpool` | layer |
-| `lppool` | `/layer/torch/lppool` | layer |
-| `threshold_layer` | `/layer/torch/threshold` | layer |
-| `conv_transpose3d` | `/layer/torch/conv_transpose3d` | layer |
-| `tanh_layer` | `/layer/torch/tanh` | layer |
-| `identity` | `/layer/torch/identity` | layer |
-| `mlp` | `/layer/kalfa/mlp` | layer |
-| `feature_alpha_dropout` | `/layer/torch/feature_alpha_dropout` | layer |
-| `adaptive_avgpool3d` | `/layer/torch/adaptive_avgpool3d` | layer |
-| `softplus` | `/layer/torch/softplus` | layer |
-| `softmax` | `/layer/torch/softmax` | layer |
-| `silu` | `/layer/torch/silu` | layer |
-| `softmin` | `/layer/torch/softmin` | layer |
-| `lstm_cell` | `/layer/torch/lstm_cell` | layer |
-| `constant_pad3d` | `/layer/torch/constant_pad3d` | layer |
-| `transformer_decoder_layer` | `/layer/torch/transformer_decoder_layer` | layer |
-| `relu6` | `/layer/torch/relu6` | layer |
-| `reflection_pad1d` | `/layer/torch/reflection_pad1d` | layer |
-| `maxpool1d` | `/layer/torch/maxpool1d` | layer |
-| `softshrink` | `/layer/torch/softshrink` | layer |
-| `conv_transpose1d` | `/layer/torch/conv_transpose1d` | layer |
-| `conv1d` | `/layer/torch/conv1d` | layer |
-| `hardsigmoid` | `/layer/torch/hardsigmoid` | layer |
-| `reflection_pad` | `/layer/torch/reflection_pad` | layer |
-| `local_response_norm` | `/layer/torch/local_response_norm` | layer |
-| `conv3d` | `/layer/torch/conv3d` | layer |
-| `lstm` | `/layer/torch/lstm` | layer |
-| `max_unpool` | `/layer/torch/max_unpool` | layer |
-| `constant_pad` | `/layer/torch/constant_pad` | layer |
-| `mish` | `/layer/torch/mish` | layer |
-| `rnn_cell` | `/layer/torch/rnn_cell` | layer |
-| `zero_pad` | `/layer/torch/zero_pad` | layer |
-| `pairwise_distance` | `/layer/torch/pairwise_distance` | layer |
-| `celu` | `/layer/torch/celu` | layer |
-| `log_sigmoid` | `/layer/torch/log_sigmoid` | layer |
-| `fold` | `/layer/torch/fold` | layer |
-| `pixel_shuffle` | `/layer/torch/pixel_shuffle` | layer |
-| `log_softmax` | `/layer/torch/log_softmax` | layer |
-| `transformer_encoder_layer` | `/layer/torch/transformer_encoder_layer` | layer |
-| `fractional_maxpool` | `/layer/torch/fractional_maxpool` | layer |
-| `adaptive_maxpool` | `/layer/torch/adaptive_maxpool` | layer |
-| `adaptive_avgpool1d` | `/layer/torch/adaptive_avgpool1d` | layer |
-| `glu` | `/layer/torch/glu` | layer |
-| `instance_norm` | `/layer/torch/instance_norm` | layer |
-| `circular_pad3d` | `/layer/torch/circular_pad3d` | layer |
-| `circular_pad` | `/layer/torch/circular_pad` | layer |
-| `upsample` | `/layer/torch/upsample` | layer |
-| `circular_pad1d` | `/layer/torch/circular_pad1d` | layer |
-| `adaptive_avgpool` | `/layer/torch/adaptive_avgpool` | layer |
-| `selu` | `/layer/torch/selu` | layer |
-| `transformer_encoder` | `/layer/torch/transformer_encoder` | layer |
-| `channel_shuffle` | `/layer/torch/channel_shuffle` | layer |
-| `softmax2d` | `/layer/torch/softmax2d` | layer |
-| `reflection_pad3d` | `/layer/torch/reflection_pad3d` | layer |
-| `transformer` | `/layer/torch/transformer` | layer |
-| `zero_pad3d` | `/layer/torch/zero_pad3d` | layer |
-| `rms_norm` | `/layer/torch/rms_norm` | layer |
-| `max_unpool1d` | `/layer/torch/max_unpool1d` | layer |
-| `sigmoid` | `/layer/torch/sigmoid` | layer |
-| `multihead_attention` | `/layer/torch/multihead_attention` | layer |
-| `adaptive_maxpool1d` | `/layer/torch/adaptive_maxpool1d` | layer |
-| `maxpool3d` | `/layer/torch/maxpool3d` | layer |
-| `lppool3d` | `/layer/torch/lppool3d` | layer |
-| `fractional_maxpool3d` | `/layer/torch/fractional_maxpool3d` | layer |
-| `hardtanh` | `/layer/torch/hardtanh` | layer |
-| `dropout1d` | `/layer/torch/dropout1d` | layer |
-| `bilinear` | `/layer/torch/bilinear` | layer |
-| `tanhshrink` | `/layer/torch/tanhshrink` | layer |
-| `gelu` | `/layer/torch/gelu` | layer |
-| `gru_cell` | `/layer/torch/gru_cell` | layer |
-| `replication_pad1d` | `/layer/torch/replication_pad1d` | layer |
-| `avgpool1d` | `/layer/torch/avgpool1d` | layer |
-| `unfold` | `/layer/torch/unfold` | layer |
-| `replication_pad3d` | `/layer/torch/replication_pad3d` | layer |
-| `transformer_decoder` | `/layer/torch/transformer_decoder` | layer |
-| `normal` | `/init/torch/normal` | init |
-| `xavier` | `/init/torch/xavier` | init |
-| `kaiming` | `/init/torch/kaiming` | init |
-| `kaiming_uniform` | `/init/torch/kaiming_uniform` | init |
-| `zeros` | `/init/torch/zeros` | init |
-| `mse` | `/criterion/kalfa/mse` | criterion |
-| `weighted_mse` | `/criterion/kalfa/weighted_mse` | criterion |
-| `huber` | `/criterion/kalfa/huber` | criterion |
-| `mae` | `/criterion/kalfa/mae` | criterion |
-| `log_cosh` | `/criterion/kalfa/log_cosh` | criterion |
-| `cross_entropy` | `/criterion/kalfa/cross_entropy` | criterion |
-| `bce_logits` | `/criterion/kalfa/bce_logits` | criterion |
-| `rmse` | `/metric/kalfa/rmse` | metric |
-| `accuracy` | `/metric/torchmetrics/accuracy` | metric |
-| `f1` | `/metric/torchmetrics/f1` | metric |
-| `auroc` | `/metric/torchmetrics/binary_auroc` | metric |
-| `average_precision` | `/metric/torchmetrics/binary_average_precision` | metric |
-| `adam` | `/optimizer/torch/adam` | optimizer |
-| `adamw` | `/optimizer/torch/adamw` | optimizer |
-| `sgd` | `/optimizer/torch/sgd` | optimizer |
-| `warmup_cosine` | `/schedule/kalfa/warmup_cosine` | schedule |
-| `linear_warmup` | `/schedule/kalfa/linear_warmup` | schedule |
-| `step_decay` | `/schedule/kalfa/step_decay` | schedule |
-| `supervised` | `/turn/kalfa/alternating` | turn |
-| `alternating` | `/turn/kalfa/alternating` | turn |
-| `plateau` | `/trigger/kalfa/plateau` | trigger |
-| `metric_below` | `/trigger/kalfa/metric_below` | trigger |
-| `metric_above` | `/trigger/kalfa/metric_above` | trigger |
-| `after_turn` | `/trigger/kalfa/after_turn` | trigger |
-| `after_epoch` | `/trigger/kalfa/after_turn` | trigger |
-| `time_budget` | `/trigger/kalfa/time_budget` | trigger |
-| `best` | `/checkpoint/kalfa/best` | checkpoint |
-| `last` | `/checkpoint/kalfa/last` | checkpoint |
-| `snapshot` | `/checkpoint/kalfa/snapshot` | checkpoint |
-| `loss_curve` | `/plot/kalfa/loss_curve` | plot |
-| `pred_vs_true` | `/plot/kalfa/pred_vs_true` | plot |
-| `pred_histogram` | `/plot/kalfa/pred_histogram` | plot |
-| `class_histogram` | `/plot/kalfa/class_histogram` | plot |
-| `binary_roc` | `/plot/torchmetrics/binary_roc` | plot |
-| `binary_precision_recall_curve` | `/plot/torchmetrics/binary_precision_recall_curve` | plot |
-| `confusion_matrix` | `/plot/kalfa/confusion_matrix` | plot |
-| `forecast_samples` | `/plot/kalfa/forecast_samples` | plot |
-| `architecture` | `/plot/kalfa/architecture` | plot |
-| `data_pipeline` | `/plot/kalfa/data_pipeline` | plot |
-| `architecture_text` | `/plot/kalfa/architecture_text` | plot |
-| `torchview` | `/plot/torchview/architecture` | plot |
-| `weighted_sum` | `/objective/kalfa/weighted_sum` | objective |
-| `mdmm` | `/objective/kalfa/mdmm` | objective |
-| `grid` | `/strategy/kalfa/grid` | strategy |
-| `random` | `/strategy/kalfa/random` | strategy |
-| `sobol` | `/strategy/kalfa/sobol` | strategy |
-| `optuna` | `/strategy/kalfa/optuna` | strategy |
-| `auto` | `/device/kalfa/auto` | device |
-| `cpu` | `/device/kalfa/cpu` | device |
-| `cuda` | `/device/kalfa/cuda` | device |
-| `mps` | `/device/kalfa/mps` | device |
-| `threshold` | `/calibrate/kalfa/threshold` | calibrate |
-| `onnx` | `/export/kalfa/onnx` | export |
-| `pt2` | `/export/kalfa/pt2` | export |
-| `state_dict` | `/export/kalfa/state_dict` | export |
-| `derived` | `/rng/kalfa/derived` | rng |
-| `indexed` | `/rng/kalfa/indexed` | rng |
-| `global` | `/rng/kalfa/global` | rng |
-| `parquet` | `/source/kalfa/parquet` | source |
-| `csv` | `/source/kalfa/csv` | source |
-| `image_folder` | `/source/kalfa/image_folder` | source |
-| `random_split` | `/split/kalfa/random` | split |
-| `kfold` | `/split/kalfa/kfold` | split |
-| `window` | `/feed/kalfa/window` | feed |
-| `target_vs_features` | `/plot/kalfa/target_vs_features` | plot |
-| `correlation_heatmap` | `/plot/kalfa/correlation_heatmap` | plot |
-| `residuals` | `/plot/kalfa/residuals` | plot |
-| `error_map` | `/plot/kalfa/error_map` | plot |
-| `permutation_importance` | `/plot/kalfa/permutation_importance` | plot |
-| `feature_distributions` | `/plot/kalfa/feature_distributions` | plot |
-| `target_correlation` | `/plot/kalfa/target_correlation` | plot |
-| `pairplot` | `/plot/seaborn/pairplot` | plot |
-| `violin` | `/plot/seaborn/violin` | plot |
-| `kde` | `/plot/seaborn/kde` | plot |
-| `image_pairs` | `/plot/kalfa/image_pairs` | plot |
-| `image_grid` | `/plot/kalfa/image_grid` | plot |
-| `samples_gif` | `/plot/kalfa/samples_gif` | plot |
-| `samples_matrix` | `/plot/kalfa/samples_matrix` | plot |
-| `class_weights` | `/data/kalfa/class_weights` | data |
-| `to_tensor` | `/pre/kalfa/to_tensor` | pre |
-| `to_tensor_signed` | `/pre/kalfa/to_tensor_signed` | pre |
-| `resize` | `/pre/kalfa/resize` | pre |
-| `random_crop_flip` | `/pre/kalfa/random_crop_flip` | pre |
-| `normalize` | `/pre/kalfa/normalize` | pre |
-| `two_views` | `/pre/kalfa/two_views` | pre |
-| `simclr_aug` | `/pre/kalfa/simclr_aug` | pre |
-| `unflatten` | `/layer/kalfa/unflatten` | layer |
-| `embedding` | `/layer/torch/embedding` | layer |
-| `conv2d` | `/layer/torch/conv2d` | layer |
-| `maxpool` | `/layer/torch/maxpool` | layer |
-| `vae` | `/objective/kalfa/vae` | objective |
-| `distill` | `/objective/kalfa/distill` | objective |
-| `wgan_gp_d` | `/objective/kalfa/wgan_gp_d` | objective |
-| `wgan_g` | `/objective/kalfa/wgan_g` | objective |
-| `ddpm` | `/objective/kalfa/ddpm` | objective |
-| `ntxent` | `/objective/kalfa/ntxent` | objective |
-| `fid` | `/metric/kalfa/fid` | metric |
-| `recon_error` | `/metric/kalfa/recon_error` | metric |
-| `sample_writer` | `/metric/kalfa/sample_writer` | metric |
-| `gan_sampler` | `/generate/kalfa/gan_sampler` | generate |
-| `ddpm_sampler` | `/generate/kalfa/ddpm_sampler` | generate |
-| `linear_betas` | `/schedule/kalfa/linear_betas` | schedule |
+`kalfa tui [ROOT] [--config CONFIG]`
+
+Opens the terminal interface over the records under `ROOT`; `--config` loads a config into its config tab, which the guide tab then explains. See [the terminal interface](#the-terminal-interface).
+
+## Python API
+
+```python
+import kalfa
+
+checked = kalfa.check("config.yaml", sets=["train.epochs=3"], params=["lr=3e-4"])
+print(checked.ok, checked.text())
+
+result = kalfa.run("config.yaml", sets=["train.epochs=3"], record="runs/try", monitor=True)
+record = kalfa.open(result.record)
+print(record.state, record.best)
+print(record.series(["train/mse", "val/rmse"]))
+table = record.predict(data="new.parquet")
+```
+
+* `kalfa.call(use, **params)` returns the call mapping `{"use": use, **params}`.
+* `kalfa.Run(**sections)` holds a config as Python objects, one keyword per section. `run.to_mapping()` gives the plain mapping, `run.check(sets=(), params=())` returns the check result, `run.start(record=None, sets=(), params=(), monitor=None)` trains.
+* `kalfa.Rule(when=None, after=None, once=True, set={}, stop=False, run=None)` and `kalfa.Train(epochs, updates, step, predicts, evaluate, checkpoint, report, track, log)` are dataclasses for the `rules` entries and the `train` section of a `Run`.
+* `kalfa.check(source, sets=(), params=())`: `source` is a path, a list of paths or a mapping. It returns a check result with `ok`, `problems`, `errors`, `warnings`, `text()`, `plan` and `config`.
+* `kalfa.run(source, sets=(), params=(), record=None, monitor=None)` trains and returns a result with `record` (the directory), `history` (the lines) and `context`. `sets` and `params` are lists of `"path=value"` strings or `(path, value)` pairs, or one mapping (`sets={"train.epochs": 3}`). `monitor=True` prints the progress lines, `None` or `False` is silent, and a `kalfa.Monitor(stream=None, quiet=False)` writes them to a stream.
+* `kalfa.open(directory)` returns a `kalfa.Record`, which reads the files of a record, live or finished:
+  * properties: `manifest`, `plan`, `summary` (name, status, unit, turn, total, times, seconds, params, best, last values, rules that fired, device, host, failure, sweep, resumed_from, and `within`, `fraction`, `eta` and `nonfinite`: the turn in progress, the share of the run that is done, the seconds left, and the first turn with a value that is not finite as `{turn, series, value}`), `state` (`running`, `stale`, `done`, `failed`, `stopped`, `unknown`), `progress`, `best` (`{series, mode, value, turn}`), `history` and `updates` (DataFrames of the raw files), `events`, `files`, `model_summary`, `data_report` (`data.json`: the data report and its flowchart, or None for an older record), `config` (the `resolved.yaml` text), `fields` (`fitted/fields.json`), `predictions` (a DataFrame or None);
+  * methods: `series(keys=None, limit=None)` and `steps(keys=None, limit=None)` (numeric DataFrames of the history and the updates, thinned to `limit` rows), `patches()`, `stats(where=None, **options)` (the prediction statistics the board shows: `rows`, one entry in `pairs` per prediction with its `task` and the numbers of that task, and the `overview`; `name`, `bins`, `sample`, `worst` and `overrides` pass through, see [prediction tasks](#prediction-tasks)), `compare(*others, keys=None)`, `predict(data=None, model=None, which=None, device=None)` (a DataFrame), `generate(n=None, which=None, device=None, out=None)`, `plots(only=None, which=None, device=None)` (the plot names drawn), `export(format="state_dict", model=None, which=None, out=None, **options)`, `stop(by="api")` and `resume(sets=(), params=())`.
+* `kalfa.api.records(root)` returns a `Record` for every record under a root (the points of a sweep included).
+* `kalfa.summarize(paths, by=None, mode=None, top=None)` returns a summary with `table` (a DataFrame), `best` (its first row), `by`, `mode`, `records`, `folds`, `sweep` and `points`; `kalfa.summary.text_of(summary)`, `kalfa.summary.markdown_of(summary)` and `kalfa.summary.write(summary, out)` print or save it.
+* `kalfa.predict(directory, data=None, model=None, which=None, device=None)` writes the predictions file and returns its `path` and `table`.
+* `kalfa.api.generate(directory, n=None, which=None, device=None, out=None)` returns the written `paths` and the `samples`.
+* `kalfa.api.export(directory, format="state_dict", model=None, which=None, out=None, device=None, opset=17, dynamic=True)` returns the written `path`.
+* `kalfa.api.stop(directories, by="api")` writes `stop.json` files and returns their paths.
+* `kalfa.api.sweep(source, sets=(), params=(), record=None, jobs=1, repair=False, monitor=None)` runs a sweep locally and returns one result per point (None for a failed point).
+* `kalfa.api.report(paths, out=None, by=None, mode=None, top=None, points=None)` writes `report.html` and returns its path.
+* `kalfa.lego(name, *, slot=None, doc="")` registers a short name (see [plugins](#kalfalego-and-plugins)); `kalfa.register(name, target, *, slot=None, doc="")` does the same without a decorator (`slot` and `doc` are keyword only) and `kalfa.resolve(name)` returns what the name was registered with: an import path string for a std name, the object itself for a `kalfa.lego` name.
+* Errors: `kalfa.KalfaError` is the base; `ConfigError`, `BuildError` and `RunError` derive from it; a config with errors raises `kalfa.core.errors.ProblemsError`, whose `problems` are `kalfa.Problem(code, message, path, hint, severity)` values.
+* `kalfa.records` is the package of record readers (`summary_of`, `series_of`, `events_of`, `records_under`, `sweep_points` and more) that every tool shares.
+
+## The board
+
+`uv run kalfa board runs --open` serves a page over every record and sweep under `runs` and follows them while they run. The page is a Vue and Plotly application served from the kalfa package; the two libraries load from cdn.jsdelivr.net, so the browser needs internet access. Every number the page shows is computed in Python from the record files; the browser only draws. Every chart opens large with a settings panel (see [charts](#charts)).
+
+Pages:
+
+* **home**: the running records first, then the recent ones, with progress and the best value. A running record moves within its turn too: the bar counts the batches done, and the card says where the turn is (`batch 120 of 400`, `valid batch 3 of 9`) and about how long is left. A record whose history holds a value that is not finite says which series and from which turn.
+* **runs**: the summary table of every record and sweep, sortable and filterable, with failed and stale counts; select records to compare them.
+* **compare**: the series of the selected records drawn over each other, the params that differ, and the `resolved.yaml` diff.
+* **sweep**: the points ranked by the objective, the best point, and a button that writes `report.html`. The points can be ticked (or the best 5, 10 or 20 taken at once) and compared like records. Three kinds of chart follow: the objective by point in the order the sweep made them with the best value so far, which says whether the search still finds anything; every point as one line across the params and the objective (a parallel coordinates chart, the color is the objective with the best bright, a drag along an axis keeps a range; points without an objective are left out and counted); and one scatter of the objective per param.
+* **record**: one record in nine tabs:
+  1. **overview**: progress with the batches of the turn in progress and the time left, best value, last values, params, rules that fired, identity (host, device, git), a stop button, and for a failed record the error with its traceback;
+  2. **curves**: every series against the turn, and the update curves (`loss/*`, `lr/*`, `grad_norm/*`) below, with a log axis switch. A dotted line with the names of the rules marks every turn a rule fired, on the turn charts and at the same update on the update charts (up to twelve marks carry their names; the rule marks button hides them);
+  3. **model**: every model with its class, parameter and trainable counts and three views: the diagram of one forward pass (see [the model diagram](#the-model-diagram)), the module tree with the share of the parameters each module holds, and the output shapes on the first batch and per sample. A record written before kalfa drew diagrams, or a model it could not trace, opens on the tree and says why;
+  4. **data**: the flowchart of `data.json` (see [the data flowchart](#the-data-flowchart)) with the details of the box clicked, the sets with their rows (and windows, lines or tokens when the data reports them), the other report fields and the columns that go into the model; below them the data section of the plan and the fitted fields (columns, preprocessor chains, classes). A record without `data.json` shows the plan and the fitted fields only;
+  5. **predictions**: the prediction tables of the record scored on the server, every `pred_` column read as a task with the panels of that task (see [prediction tasks](#prediction-tasks));
+  6. **plots**: the images under `plots/` and `samples/`;
+  7. **config**: `resolved.yaml`;
+  8. **files**: every file of the record and a text viewer that follows the tail of a growing file;
+  9. **log**: the last 300 lines of `log.txt`, followed while the record runs, then the events as a timeline and the tail of `events.jsonl`.
+
+Live updates: the server looks at the records (the manifest, the history, the events and the updates of each) every 2 seconds (1, 2, 5, 10 or 30, chosen in the top bar and remembered by the browser) and pushes the changed paths over server sent events; only the page in view reloads its data. The top bar also switches the theme (auto follows the system). The server keeps the summary of a record until one of those files changes, so a page over hundreds of records reads again only the ones that moved.
+
+Security: the board binds 127.0.0.1 by default and has no login, so only the local machine reaches it. Requests whose `Host` header is not localhost, an IP address, the `--host` value or the machine name are refused (against DNS rebinding); requests that change something (stop, report) or carry a `where` filter must come from the board page itself (`Sec-Fetch-Site` and `Origin` checks). A `where` filter accepts only column names, constants, comparisons, boolean and arithmetic operators and `in` over lists. File reads cannot leave the root, and the image route serves only image files that the `path` column of a prediction table names. `--host 0.0.0.0` exposes every record under the root, and the stop button, to the network: use it only on a network you trust, or reach a remote board through an SSH tunnel instead (`ssh -L 8765:127.0.0.1:8765 host`).
+
+The JSON behind the page is plain HTTP and can be scripted: `GET /api/records`, `GET /api/record/<path>` (and `/series?keys=a,b&limit=n`, `/updates`, `/events?kinds=a,b`, `/files`, `/file?name=<file>&tail=n`, `/predictions?where=&sample=&bins=&name=&pair=&task=&score=&positive=&threshold=&histograms=`, `/image?index=n&name=<table>`), `GET /api/compare?records=a,b&keys=`, `GET /api/sweep/<path>`, `POST /api/record/<path>/stop` (the record answer carries `failure` with the traceback and `marks`, the turns a rule fired; the sweep answer carries `order`, the objective and the best so far by point, and `space`, the axes of the parallel chart), `POST /api/report` with `{"records": [...], "out": null}` and `GET /api/report/<job>`, and `GET /api/live` as an event stream.
+
+### Charts
+
+Every chart has an expand button that opens it large with a settings panel beside it (below it on a narrow window); the settings button hides the panel, and escape or a click outside closes the view. The panel sets:
+
+* axes: the x and y scale (auto, linear or log) and range (an empty end follows the data), the axis titles and the grid;
+* lines and markers: the line width, the line style (solid, dashed, dotted), lines, markers or both, the marker size, the opacity and, for line charts, smoothing from 0 to 0.99 (an exponential moving average; the raw line stays faint and the hover shows both values); for a histogram the number of bins, which the server counts again (each histogram of the predictions tab keeps its own count, see [prediction tasks](#prediction-tasks));
+* look: a title drawn on the chart, the legend (auto, on or off) and its place (top, bottom, right, inside) and the palette (theme, colorblind, classic, viridis);
+* the width and height of the large view, and PNG or SVG downloads at a chosen width, height and scale;
+* advanced: Plotly layout JSON, merged over the layout of the chart when it parses (the box shows the parse error otherwise).
+
+Controls that do not fit a chart are hidden: a heatmap has no scales or ranges, a bar chart none on its category axis. The settings apply to the small chart and the large view alike and stay in the browser under `kalfa.chart.<key>`. The key is the chart kind and title, so a `train/mse` chart keeps its settings from record to record, while the predictions tab keys its charts by record and pair. Only the values that differ from the defaults are stored, a dot on expand marks a chart with saved settings, and reset clears them. The log y button of a card writes the same y scale setting. Zoom and hidden legend entries survive the live redraws.
+
+### The model diagram
+
+The model tab draws the `graph` of `model_summary.json` from left to right (TB turns it from top to bottom): a box for every group, and on each node its label in bold, its detail faint, its per sample shape as `[16]` and its parameter count abbreviated in the corner. Inputs, modules, operations and outputs have their own colors, and a folded group has a dashed border. A click on a group header folds the group into one node that gathers its edges, and a click on the folded node opens it again; with more than 60 nodes the top groups start folded. A click on a node shows its path, class, detail, shape and parameters, the group it sits in, and the nodes it takes from and feeds with the shapes on those edges. The toolbar fits the diagram into view, switches between LR and TB, expands or collapses every group and downloads the diagram as an SVG file; the wheel zooms and a drag pans. A model traced on its first call in training, such as a diffusion denoiser or a GAN generator, carries the chip "drawn from its first call in training"; while such a run is in its first turn, its tab still shows the tree.
+
+### The data flowchart
+
+The data tab draws the `pipeline` of `data.json` with the same diagram: one color per node kind (source, stream, filter, drop, split, set, classes, features, targets, weights, chain, transform, tokenizer, windows, feed, tensor, batch), the count in the corner (rows read, rows per set, columns per feature pattern, images, classes, windows, the vocabulary size) and the split shares on the edges into the sets. Chains of preprocessors and transforms are groups; with more than 40 nodes they start folded. A click on a box lists its kind, detail, count and group and what arrives on its edges.
+
+### Prediction tasks
+
+The predictions tab scores one prediction table at a time (a selector picks among the `predictions*.parquet` files of the record) on the server; a `where` filter, a pandas query over the columns such as `price > 200 and town == 'ank'`, narrows the rows that are scored, but never changes the task or the threshold, which are found on the whole table.
+
+Pairing: a `pred_<output>` column pairs with the `target` its loss or metric names, else with the only declared target of the data; a `pred_<output>_<i>` column pairs only with a `<target>_<i>` column, so an embedding is never compared with a spectator such as `path`. A column without a target is kept: the spread columns `pred_z_0`, `pred_z_1`, ... form one embedding pair, and a single column is a values pair.
+
+The task of a pair with a target is detected in this order:
+
+1. when its classes are known (from the plan or from `fitted/`), when `prob_<output>_<class>` columns exist or when the target is not numeric, it is a classification: binary with two classes, multiclass with more;
+2. a numeric target with two distinct values is binary, and the larger value is the positive class;
+3. a numeric target of whole numbers with 3 to 20 distinct values, whose predictions all fall in that set, is multiclass;
+4. anything else is a regression.
+
+Labels are always text, and whole numbers are written without decimals (`"0"`, `"1"`). The task selector offers what a pair can be read as, with auto naming the detected task: a label target with two classes binary or multiclass, a numeric target with two values binary or regression, a numeric multiclass target multiclass or regression; every other pair has one task.
+
+* **binary**: the score is the probability column of the positive class (`prob_<output>_<positive>`) when there is one, else the first candidate: one minus the probability of the other class (the selector names it after `prob_<output>_<other>`), any other `prob_` column as it is, then `raw_<output>` and `pred_<output>` when they are numeric with more than two distinct values. Such a number is read as growing with the default positive class (the larger value, or the second class); with the other class picked as positive it is turned around too, as one minus `pred_<output>` when it lies in [0, 1] and as its negative (`-pred_<output>`) otherwise, so the curves keep their meaning. A row is predicted positive when its score reaches the threshold. The threshold is 0.5 when every score lies in [0, 1], else the threshold with the best f1 on the table (an anomaly score, such as the one of `alad`), and the slider sets it by hand. Without a score the predicted labels are counted and there are no curves. The panels: accuracy, precision, recall, f1, specificity, balanced accuracy, ROC AUC and average precision; the confusion matrix as counts or as the share of each true class; the ROC and precision recall curves; the score histogram of each true class with the threshold line; and a sweep of precision, recall and f1 over at most 101 thresholds. Two selectors pick the score column and the positive class.
+* **multiclass**: accuracy, macro and weighted f1, the confusion matrix as counts or shares, precision, recall and f1 per class as bars and as a table, and an ROC curve per class against the rest for the classes with a `prob_` column.
+* **regression**: rmse, mae, r2 and bias, prediction against truth with the y = x line, the residual histogram, the histograms of truth and prediction, the residual quantiles and the worst rows.
+* **embedding**: a PCA map of the rows (at most 2000 of them), colored by the `label` column, else by a target, else by a text column with fewer than 20 values, and the histogram of the vector lengths.
+* **values**: the histogram and the quantiles, or the count of each label for a text column.
+
+When a table has several pairs (the targets of a multi target model, or several outputs), an overview table on top lists them with their task and one headline number: r2 (or rmse) for a regression, ROC AUC (or f1 without a score) for a binary pair, accuracy for a multiclass pair, the variance share of the two PCA components for an embedding and the row count for values. A click on a row, or on a button of the pair bar below it, opens that pair.
+
+When the table has a `path` column of image files (png, jpg, jpeg, gif, bmp, webp), as the predictions of an image folder do, every pair carries a gallery of at most 24 rows with the image, the truth, the prediction and the score or the error: the wrong predictions first for a classification, the largest errors first for a regression, the first rows otherwise. The images come from `/api/record/<path>/image?index=n&name=<table>`, which reads the `path` value of that row and serves it only when it names an image file.
+
+The choices of a pair (task, score, positive class, threshold) stay in the browser for each record, table and pair under `kalfa.predictions.<record>|<table>|<pair>`, and back to auto clears them. From Python, `record.stats(overrides={"pred_net": {"task": "multiclass"}})` or `{"pred_score": {"threshold": 3.5}}` applies the same choices (the `threshold_rule` of a given threshold is `given`); a task the pair cannot take, a score that is not a candidate or a positive label that is not one of the labels is an error.
+
+Bins: every histogram of the tab keeps its own number of bins in its chart settings, and the page asks the server to count again only the histograms of the selected pair whose count was set; the others use 40 bins. The histograms are `residual_hist` and `truth_hist` for a regression (truth and prediction share their edges, so the count of `truth_hist` sets both), `score_hist` for a binary pair (its score chart is drawn as lines and still has the bins box), `norm_hist` for an embedding and `hist` for values; a multiclass pair has none. From Python, `record.stats(overrides={"pred_net": {"bins": {"residual_hist": 60}}})` sets one count, and `bins` (default 40) sets every histogram the override does not name. A count below 1 is an error, a count above 1000 is cut to 1000, and a name that the task of the pair does not draw is an error that lists the names it draws. Over HTTP the page sends `histograms=residual_hist:60,truth_hist:30` together with `pair`.
+
+## The terminal interface
+
+`uv run kalfa tui runs` opens a Textual interface with four tabs; `1`, `2`, `3` and `4` switch between them, escape leaves an input field and `q` quits.
+
+* **records**: a table of the records under the root (name, status, turn of total, best), with a filter field and a line that says how many rows are shown and by what they are sorted. Selecting one shows its summary, params, last values and a sparkline per series; a running record also says where its turn is and about how long is left, a record with a value that is not finite names the series and the turn, and a failed one ends with the last lines of its traceback. Keys: `/` goes to the filter (words, each found in the name, the status or a `param=value`; enter or escape goes back to the table), `t` sorts by the next of started, name, status, turn and best (a click on a column header sorts by it, a second click turns it around), enter on a sweep lists its points and backspace comes back, `p` predict, `g` generate, `o` plots, `u` resume (`kalfa run --from` the record, into a new directory beside it; a running record is refused), `l` prints the last 40 lines of `log.txt`, `s` stop, `b` open the board on the root, `r` refresh. The table also refreshes every ten seconds, reading the records in a thread of its own and keeping the summary of every record that did not change, so the keys stay responsive over many records.
+* **legos**: a search field above a tree of the categories of [kalfa legos](#kalfa-legos) with their counts (`losses (6)`), and the page of the highlighted entry beside it. Every category starts closed; enter opens it, and its leaves show each name with its one line description. A search keeps the names whose name or description holds the word, opens the categories that have hits and puts the cursor on the first hit; enter or escape in the search field goes to the tree. A highlighted name shows its page: its category and where it goes in a config, the notes of its params, its YAML examples highlighted and the example configs that use it. A highlighted category shows where its names go and lists them.
+* **config**: a config path, `--set` and `-p` fields and an output pane. Keys: `c` check, `p` check and print the plan, `x` run, `w` sweep. Runs and sweeps start as child processes whose output streams into the pane; they keep running when the interface closes, while a board started with `b` closes with it.
+* **guide**: the config of the config tab (its path, `--set` and `-p` fields, read when the tab opens and again with `r`; a record directory reads its `resolved.yaml` as in the config tab) shown as a document. On the left is the list of its sections in the order of the config, with the top level values (`seed`, `device`, `record`, `include`, `plugins`) gathered into one `run` section; choosing a section scrolls to it. On the right every section has a title bar in its own color, a paragraph on what kalfa does with it and its entries: every param, every top level value, every key of `data`, `train`, `generate` and `sweep`, and every name of `models`, `losses`, `metrics`, `optimizers`, `plots` and `rules`, each with its YAML highlighted and dim notes below it. The notes say what a name is (its one line description, or the class or function an import path names), what the params and slot keys written there do, what each reference and each `$param$` stands for, what kalfa fills in when a key is not written (the output and the target a loss or a metric compares, whether a metric is rescaled), which optimizer minimizes a loss and which rule switches to it, who reads a model or a loss, the series an entry writes, what a rule does in one sentence, and the layer a value came from (another file, `--set` or `-p`). Each problem of `kalfa check` stands under its entry, yellow for a warning and red for an error; one that matches no entry stands under its section, and one without a path at the top. Nothing is built and no data is read. From Python, `kalfa.commands.guide.document(paths, sets=(), params=())` returns the same document as a mapping (title, ok, problems and the sections with their entries), and `guide.text(doc)` writes it as plain text.
+
+## Writing your own pieces
+
+Every piece below is a plain Python class or function in a module next to the config, named by its import path (`pieces.TwoHeads`). The samples form one module, `pieces.py`: the config under [Putting the pieces together](#putting-the-pieces-together) uses them on the housing table, the data class comes with its own config, and the tests of kalfa train both.
+
+### A model
+
+Any `nn.Module`. The constructor params are the keys of the call; `forward` receives the batch fields named by `inputs`.
+
+```python
+from torch import nn
+
+
+class TwoHeads(nn.Module):
+    def __init__(self, width=32):
+        super().__init__()
+        self.body = nn.Sequential(nn.LazyLinear(width), nn.ReLU())
+        self.mean = nn.Linear(width, 1)
+        self.spread = nn.Linear(width, 1)
+
+    def forward(self, x):
+        hidden = self.body(x)
+        return self.mean(hidden), self.spread(hidden)
+```
+
+```yaml
+models:
+  net: {use: pieces.TwoHeads, width: 64, outputs: [mean, spread]}
+```
+
+### A criterion function
+
+A function whose first two params are the prediction and the target; the other params are bound from the config.
+
+```python
+def scaled_l1(pred, target, scale=1.0):
+    return ((pred - target).abs() / scale).mean()
+```
+
+```yaml
+losses:
+  l1: {use: pieces.scaled_l1, scale: 2.0}
+```
+
+### An Objective
+
+A `kalfa.Objective` reads the outputs, the batch and the context, and returns a tensor or a dict with `loss` and more terms; each extra term becomes a series (`train/nll/sigma`). Constructor params named like the loss slot keys (`pred`, `target`, `on`, `every`, `rescale`, `sample_weight`) never reach the class from a config (`slot_conflict`), so give them other names.
+
+```python
+import torch
+
+import kalfa
+
+
+class GaussianNll(kalfa.Objective):
+    def __init__(self, field="price", floor=1.0e-3):
+        super().__init__()
+        self.field = field
+        self.floor = float(floor)
+
+    def forward(self, outputs, batch, ctx):
+        mean = outputs["mean"]
+        sigma = torch.nn.functional.softplus(outputs["spread"]) + self.floor
+        truth = batch[self.field].view_as(mean)
+        nll = (torch.log(sigma) + 0.5 * ((truth - mean) / sigma) ** 2).mean()
+        return {"loss": nll, "sigma": sigma.mean()}
+```
+
+An objective that holds models gets them as references (`generator: "@models.generator"`), and its own parameters (such as the multipliers of `mdmm`) can be optimized by naming it in `over`.
+
+### A metric
+
+An object with `update(pred, target)`, `compute()` and `reset()`; kalfa picks `pred` and `target` as for a criterion, in original units when the target can be inverted. A `kalfa.ContextMetric` reads everything instead.
+
+```python
+import torch
+
+import kalfa
+
+
+class MaxError:
+    def __init__(self):
+        self.worst = 0.0
+
+    def reset(self):
+        self.worst = 0.0
+
+    def update(self, pred, target):
+        self.worst = max(self.worst, float((pred - target).abs().max()))
+
+    def compute(self):
+        return self.worst
+
+
+class Coverage(kalfa.ContextMetric):
+    on = ("valid", "test")
+
+    def __init__(self, field="price", width=1.0):
+        self.field = field
+        self.width = float(width)
+        self.inside = 0
+        self.count = 0
+
+    def reset(self):
+        self.inside = 0
+        self.count = 0
+
+    def update(self, outputs, batch, ctx):
+        mean = outputs["mean"]
+        sigma = torch.nn.functional.softplus(outputs["spread"])
+        truth = batch[self.field].view_as(mean)
+        self.inside += int(((truth - mean).abs() <= self.width * sigma).sum())
+        self.count += truth.numel()
+
+    def compute(self):
+        return self.inside / max(self.count, 1)
+```
+
+### A Step
+
+A `kalfa.Step` decides what a batch does. Overriding `train_batch`, `eval_batch` and `predict` keeps the default turn (batches, update lines, observers); overriding `train_turn` takes the whole turn. The slot keys `order`, `amp`, `grad_clip` and `accumulate` arrive as attributes.
+
+```python
+import kalfa
+
+
+class NoisyInputs(kalfa.Step):
+    def __init__(self, sigma=0.1):
+        self.sigma = float(sigma)
+
+    def train_batch(self, batch, ctx):
+        noise = ctx.rng.normal("noise", None, like=batch["x"]) * self.sigma
+        noisy = {**batch, "x": batch["x"] + noise}
+        model = ctx.predicts()
+        losses = {}
+        for name, optimizer in ctx.optimizers.items():
+            value = optimizer.minimizes(model.call(noisy), noisy, ctx)
+            loss = value["loss"] if isinstance(value, dict) else value
+            ctx.last_norms[name] = optimizer.minimize(loss, clip=self.grad_clip)
+            losses[name] = value
+        return losses
+
+    def eval_batch(self, batch, ctx):
+        return ctx.predicts().call(batch)
+
+    def predict(self, batch, ctx):
+        return ctx.predicts().call(batch)
+```
+
+```yaml
+train:
+  epochs: 20
+  step: {use: pieces.NoisyInputs, sigma: 0.05, grad_clip: 1.0}
+```
+
+### A Trigger
+
+A `kalfa.Trigger` answers `fires(ctx)` after every turn. `describe()` names it in the logs, `reset()` runs after each firing of a rule with `once: false`, and the attributes named in `persist` are saved in checkpoints.
+
+```python
+import math
+
+import kalfa
+
+
+class NotFinite(kalfa.Trigger):
+    def __init__(self, watch):
+        self.watch = watch
+
+    def fires(self, ctx):
+        value = ctx.latest.get(self.watch)
+        return value is not None and not math.isfinite(value)
+
+    def describe(self):
+        return f"{self.watch} is not finite"
+```
+
+### An Action
+
+A `kalfa.Action` is called with the context when its rule fires.
+
+```python
+import kalfa
+
+
+class Snapshot(kalfa.Action):
+    def __init__(self, series=("val/max_error",)):
+        self.series = list(series)
+
+    def __call__(self, ctx):
+        if ctx.record is not None:
+            values = {name: ctx.latest.get(name) for name in self.series}
+            ctx.record.append("snapshots.jsonl", {"turn": ctx.turn, **values})
+```
+
+### A Logger
+
+A `kalfa.Logger` listed in `train.log` gets `bind(ctx)` once, `update(ctx, line)` after every update, `turn(ctx, line)` after every turn and `close(ctx)` when training ends, also on failure.
+
+```python
+import kalfa
+
+
+class BestSeen(kalfa.Logger):
+    def __init__(self, watch="val/max_error"):
+        self.watch = watch
+        self.best = None
+
+    def turn(self, ctx, line):
+        value = line.get(self.watch)
+        if value is not None and (self.best is None or value < self.best):
+            self.best = value
+
+    def close(self, ctx):
+        if ctx.record is not None and self.best is not None:
+            ctx.record.write_json("best_seen.json", {self.watch: self.best})
+```
+
+### A sampler
+
+A sampler has `sample(ctx, n)` and returns a tensor (images as `(N, C, H, W)` get a PNG grid) or a list of strings. Draw randomness from the `samples` stream.
+
+```python
+import torch
+
+
+class Probe:
+    def __init__(self, model, width, n=8):
+        self.model = model
+        self.width = int(width)
+        self.n = int(n)
+
+    def sample(self, ctx, n=None):
+        x = ctx.rng.normal("samples", (n or self.n, self.width), device=ctx.device.torch)
+        with torch.no_grad():
+            mean, _ = self.model(x)
+        return mean
+```
+
+### A plot
+
+A function `(record, figures, **params)` that reads the record files and returns a matplotlib figure, saved as `plots/<key>.png` (or saves its own with `figures.save(figure, name)` and returns None). `figures.new()` makes a figure in the house style and `figures.colors` is the palette. A plot that takes a `ctx` param receives the run context.
+
+```python
+from pathlib import Path
+
+import pandas
+
+
+def residuals(record, figures, pred="pred_mean", target="price", bins=30):
+    table = pandas.read_parquet(Path(record) / "predictions.parquet")
+    figure = figures.new()
+    axis = figure.subplots()
+    axis.hist(table[pred] - table[target], bins=bins, color=figures.colors[0])
+    axis.set_xlabel(f"{pred} minus {target}")
+    return figure
+```
+
+### kalfa.lego and plugins
+
+`kalfa.lego` gives a class or function a short name. The module must be imported before the config is built, so list it under `plugins` (a module name or a `.py` file next to the config). Registered names join the catalog of the Python process that imported the module; the `kalfa legos` command imports no plugins, so it lists the std names only. The record copies the module into its `plugins/` directory.
+
+```python
+import torch
+
+import kalfa
+
+
+@kalfa.lego("logcosh", slot="loss", doc="log of cosh of the error: quadratic near zero, linear far away")
+def logcosh(pred, target):
+    return torch.log(torch.cosh(pred - target)).mean()
+```
+
+```yaml
+plugins: [pieces.py]
+losses:
+  smooth: logcosh
+```
+
+### Putting the pieces together
+
+```yaml
+plugins: [pieces.py]
+seed: 3
+data:
+  use: table
+  file: housing.parquet
+  split: [0.7, 0.15, 0.15]
+  features: {"x*": standard_scaler}
+  targets: {price: standard_scaler}
+  batch: 32
+models:
+  net: {use: pieces.TwoHeads, width: 32, outputs: [mean, spread]}
+losses:
+  nll: {use: pieces.GaussianNll, field: price}
+  l1: {use: pieces.scaled_l1, scale: 2.0}
+  smooth: logcosh
+metrics:
+  max_error: pieces.MaxError
+  coverage: {use: pieces.Coverage, width: 1.0}
+optimizers:
+  main: {use: adam, lr: 1.0e-2, over: "@models.net", minimizes: "@losses.nll"}
+train:
+  epochs: 20
+  step: {use: pieces.NoisyInputs, sigma: 0.05, grad_clip: 1.0}
+  log: [{use: pieces.BestSeen, watch: val/max_error}]
+rules:
+  guard:
+    when: {use: pieces.NotFinite, watch: train/nll}
+    stop: true
+  snapshot:
+    when: {use: every, epochs: 1}
+    once: false
+    run: {use: pieces.Snapshot, series: [val/max_error, val/coverage]}
+generate: {use: pieces.Probe, model: "@models.net", width: "@data.n_features", n: 8}
+plots:
+  residuals: {use: pieces.residuals, bins: 20}
+record: runs/pieces_$datetime$
+```
+
+### A data class
+
+A data class declares `inputs` (the batch fields a model gets by default) and `exposes` (the names `@data.<name>` may read), and gives `fit(ctx)` (learn from the train set and make the sets) and `loaders()` (set name to a DataLoader of dict batches). `target_names` lists the targets for the defaults. `save(directory)` writes what was learned under `<directory>/fitted`, `load(directory)` reads it back and `rebuild(ctx)` makes the sets again when a record is opened; a class that learns nothing may leave out `save` and `load`. `predictions = False` skips the predictions table; a class that writes one also gives `rows(set)`, `spectators(set)`, `inverse(name, values)`, `decode(name, values)`, `is_label(name)`, `rescales(name)` and `loader_for(data)`. An optional class method `check(params, problems, directories)` adds problems to `kalfa check`. An optional `report()` returns a mapping of facts for `data.json`, with the rows of each set under `rows`, and an optional `pipeline()` returns its flowchart as `{"nodes", "edges", "groups"}` in the format of [data.json](#the-record-directory); `kalfa.std.data.flow.Flow` builds one (`node`, `edge`, `join`, `step`, `group`, `chain` and `result`). Without `pipeline()` the run writes a generic flowchart: a source, a set node for each entry of `report()["rows"]`, a tensor for each input and target, and the batch.
+
+```python
+import torch
+from torch.utils.data import DataLoader
+
+
+class Sine:
+    inputs = ("x",)
+    exposes = ("n_features",)
+    predictions = False
+    target_names = ["y"]
+
+    def __init__(self, rows=512, batch=64):
+        self.rows = int(rows)
+        self.batch = int(batch)
+        self.n_features = 1
+        self.made = {}
+
+    def fit(self, ctx):
+        generator = torch.Generator().manual_seed(ctx.seed)
+        x = torch.rand(self.rows, 1, generator=generator) * 6.0
+        samples = [{"x": point, "y": torch.sin(point)} for point in x]
+        cut = int(self.rows * 0.8)
+        self.made = {"train": DataLoader(samples[:cut], batch_size=self.batch, shuffle=True,
+                                         generator=ctx.rng.stream("loader")),
+                     "valid": DataLoader(samples[cut:], batch_size=self.batch)}
+
+    def loaders(self):
+        return self.made
+
+    def rebuild(self, ctx):
+        self.fit(ctx)
+
+    def save(self, directory):
+        pass
+
+    def load(self, directory):
+        pass
+```
+
+```yaml
+plugins: [pieces.py]
+data: {use: pieces.Sine, rows: 256, batch: 32}
+models:
+  net: {use: mlp, hidden: [16, 16], out: 1, activation: tanh, in_features: "@data.n_features"}
+losses:
+  mse: mse
+metrics:
+  rmse: rmse
+optimizers:
+  main: {use: adam, lr: 1.0e-2, over: "@models.net", minimizes: "@losses.mse"}
+train:
+  epochs: 30
+  checkpoint: {watch: val/rmse}
+record: runs/sine_$datetime$
+```
+
+## Reference config
+
+This config uses only std names and most of the grammar; the tests of kalfa check it and train it for two turns on the housing table that `examples/minimal/make_data.py` writes. Running it for two turns: `uv run kalfa run reference.yaml -p epochs=2`.
+
+```yaml
+params:
+  epochs: 40
+  lr: 3.0e-3
+  seed: 11
+seed: $seed$
+record: runs/reference_$datetime$
+data:
+  use: table
+  file: housing.parquet
+  split: {use: random, ratios: [0.7, 0.15, 0.15]}
+  features:
+    "x*": standard_scaler
+    x3: [{use: cast, dtype: float64}, robust_scaler]
+  targets: {price: standard_scaler}
+  filter: {train: "price > 0"}
+  batch: {size: 32, eval_size: 128}
+models:
+  net:
+    use: mlp
+    hidden: [64, 64]
+    out: 1
+    activation: gelu
+    dropout: 0.1
+    in_features: "@data.n_features"
+    init: {use: xavier_init}
+    ema: {decay: 0.98, every: 1}
+losses:
+  mse: mse
+  l1: l1
+  huber: {use: huber, delta: 1.0}
+  total:
+    use: weighted_sum
+    terms:
+      - {of: "@losses.mse", weight: 1.0}
+      - {of: "@losses.l1", weight: 0.1}
+metrics:
+  rmse: rmse
+  mae: {use: mae, on: [valid, test]}
+  rmse_scaled: {use: rmse, rescale: false, every: 2}
+optimizers:
+  main:
+    use: adamw
+    lr: $lr$
+    weight_decay: 1.0e-4
+    over:
+      - {of: "@models.net", match: "*.bias", weight_decay: 0.0}
+      - "@models.net"
+    minimizes: "@losses.total"
+    schedule: {use: cosine, steps: 400, warmup: 20}
+train:
+  epochs: $epochs$
+  step: {use: supervised, grad_clip: 5.0}
+  evaluate: [valid, test]
+  checkpoint: {watch: val/rmse, mode: min, last: true, every: 10}
+  report: best
+  track: [optimizers.main.lr, "losses.total.terms[1].weight"]
+  log: [{use: echo, series: [val/rmse]}]
+rules:
+  halve:
+    when: {use: after_epoch, at: 1}
+    set: {optimizers.main.lr: {times: 0.5}}
+  more_l1:
+    when: {use: every, epochs: 1}
+    once: false
+    set:
+      losses.total.terms[1].weight: {plus: 0.05}
+  to_huber:
+    after: halve
+    when: {use: below, watch: train/total, value: 100.0}
+    set: {optimizers.main.minimizes: "@losses.huber"}
+  calm:
+    when: {use: plateau, watch: val/rmse, patience: 5, min_delta: 0.01}
+    stop: true
+  far_off:
+    when: {use: above, watch: val/rmse, value: 1.0e+6}
+    stop: true
+  budget:
+    when: {use: time_budget, minutes: 30}
+    stop: true
+plots:
+  loss_curve: {use: loss_curve, series: [train/total, val/rmse, val/mae]}
+  pred_vs_true: pred_vs_true
+sweep:
+  strategy: grid
+  space:
+    lr: [1.0e-3, 3.0e-3]
+    seed: [11, 12]
+  objective: {watch: val/rmse, mode: min, at: best}
+  record: runs/reference_sweep
+```
+
+`kalfa sweep reference.yaml` runs the four points of its sweep section under `runs/reference_sweep`; `kalfa run` ignores that section.

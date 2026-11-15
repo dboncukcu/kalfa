@@ -66,6 +66,7 @@ runs/minimal_20261110_143000/
   history.jsonl          one line per turn: every series, the learning rates, the rules that fired
   updates.jsonl          one line per update: loss, learning rate, gradient norm
   events.jsonl           starts, patches, checkpoints, stops and errors
+  log.txt                what the run said: a line per turn, warnings, and the traceback when it fails
   model_summary.json     parameter counts, module trees and a diagram of every model
   data.json              what the data found and a flowchart from the file to the batch
   fitted/                preprocessors and classes, so the record opens without fitting again
@@ -123,14 +124,14 @@ print(record.history[["turn", "val/rmse"]])
 
 ## The board
 
-`uv run kalfa board runs --open` serves the records under `runs` at http://127.0.0.1:8765/ and follows the running ones live. Besides the list of runs, a compare page draws the curves of several records over each other with the params and the config lines that differ, and a sweep page ranks the points. Every record opens in nine tabs:
+`uv run kalfa board runs --open` serves the records under `runs` at http://127.0.0.1:8765/ and follows the running ones live. Besides the list of runs, a compare page draws the curves of several records over each other with the params and the config lines that differ, and a sweep page ranks the points, draws them across the whole space and over the order of the search, and sends the ones you tick to the compare page. A running record shows where its turn is and about how long is left. Every record opens in nine tabs:
 
-* **overview**: progress, best and last values, the rules that fired, why the run stopped and a stop button.
-* **curves**: every series. Any chart opens large with its own settings (scales, ranges, line style, smoothing, size) and downloads as PNG or SVG.
+* **overview**: progress, best and last values, the rules that fired, why the run stopped, the traceback of a failed run and a stop button.
+* **curves**: every series, with a mark on every turn a rule fired. Any chart opens large with its own settings (scales, ranges, line style, smoothing, size) and downloads as PNG or SVG.
 * **model**: a diagram of every model from one forward pass, with groups that fold, the module tree and the output shapes.
 * **data**: a flowchart from the file to the batch, with the rows of every set.
 * **predictions**: every prediction column read as its task (regression, binary, multiclass or embedding) with the measures of that task, an overview when there are several targets, a threshold slider for binary tasks and an image gallery when the rows are images.
-* **plots**, **config**, **files** and **log**.
+* **plots**, **config**, **files** and **log** (the output of the run and its events).
 
 ## The terminal interface
 
@@ -140,7 +141,7 @@ uv run kalfa tui runs --config config.yaml
 
 Four tabs:
 
-* **records**: the records under `runs` with their summaries and sparklines, and keys to predict, plot, stop or open the board.
+* **records**: the records under `runs` with their summaries and sparklines, a filter and a sort, the points of a sweep behind enter, and keys to predict, plot, resume, read the log, stop or open the board.
 * **legos**: the catalog as a tree of categories. Each page says where the name goes in a config and shows its params with notes, YAML examples and the example configs that use it.
 * **config**: checks, plans, runs or sweeps a config.
 * **guide**: the same config as a document, section by section in color, with every entry explained.

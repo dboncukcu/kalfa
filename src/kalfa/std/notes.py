@@ -57,6 +57,10 @@ DATA = {
             "filter": ("a pandas query kept for every row before the split, or a mapping of all (before the split) "
                        "and train, valid, test (each set after the split) to queries"),
             "drop": "columns removed after the split and the filters, before the features are chosen",
+            "weights": ("row weights for a loss: a mapping of a batch field name to a weight column of the table or "
+                        "to a mapping of pandas conditions to weights ({w: {\"price < 5\": 5}}); the first "
+                        "condition a row meets wins and a row that meets none weighs 1; the weights are scaled to "
+                        "mean one on the train set, and a loss reads them with sample_weight: w"),
             "spectators": ("columns or patterns that are not fed to the model but are copied into the predictions "
                            "table, such as an id"),
             "feed": "a call that turns the rows into samples another way, such as {use: window, size: 24, horizon: 6}",

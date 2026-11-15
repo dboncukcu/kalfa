@@ -48,6 +48,7 @@
 .kdiagram-node.kind-classes { --kind: var(--series-5); }
 .kdiagram-node.kind-features { --kind: var(--series-2); }
 .kdiagram-node.kind-targets { --kind: var(--series-5); }
+.kdiagram-node.kind-weights { --kind: var(--series-6); }
 .kdiagram-node.kind-chain { --kind: var(--ink-2); }
 .kdiagram-node.kind-transform { --kind: var(--ink-2); }
 .kdiagram-node.kind-tokenizer { --kind: var(--series-2); }

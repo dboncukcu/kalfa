@@ -29,6 +29,9 @@ def criterion_notes(keys):
         notes.append("rescale: compares in the original units, after undoing the preprocessor of the target")
     elif keys.get("rescale") is False:
         notes.append("rescale: false compares the preprocessed values")
+    if keys.get("sample_weight") is not None:
+        notes.append(f"sample_weight: the loss of every row is multiplied by the batch field "
+                     f"{value_text(keys['sample_weight'])} before it is averaged")
     return notes
 
 

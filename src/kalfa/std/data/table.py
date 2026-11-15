@@ -52,6 +52,7 @@ from kalfa.std.data.options import (
     stream_check,
     stream_split_check,
 )
+from kalfa.std.data.weights import scale_of, weights_of
 
 
 __all__ = ["BATCH_DEFAULTS", "Block", "FILTER_KEYS", "REGISTRATIONS", "SET_NAMES", "STREAM_SPLIT", "Table",
@@ -155,9 +156,13 @@ class Table(Loaders):
             stream_split_check(params.get("stream"), params.get("split"))
         except BuildError as failure:
             problems.append(error("data_value", str(failure), "data.split"))
+        try:
+            weights_of(params.get("weights"), params.get("targets"), params.get("drop"))
+        except BuildError as failure:
+            problems.append(error("data_value", str(failure), "data.weights"))
 
     def __init__(self, file, split=None, features=None, targets=None, filter=None, drop=None, spectators=None,
-                 feed=None, batch=128, stream=False):
+                 feed=None, batch=128, stream=False, weights=None):
         self.file = file
         self.feed = feed
         self.engine = None
@@ -173,6 +178,8 @@ class Table(Loaders):
         self.filter = filter
         self.all_filter, self.set_filters = filters_of(filter)
         self.drop = names_of(drop, "drop")
+        self.weights = weights_of(weights, self.targets, self.drop)
+        self.weight_scales = {}
         self.spectator_patterns = names_of(spectators, "spectators")
         self.batch = batch_spec(batch)
         self.blocks = []
@@ -212,7 +219,7 @@ class Table(Loaders):
                     raise BuildError(f"filter.{name}: the query {text!r} leaves the {name} set empty")
         if "train" not in sets:
             raise BuildError("the split leaves no train rows")
-        return {name: self.dropped(part) for name, part in sets.items()}
+        return {name: self.dropped(self.weighed(part)) for name, part in sets.items()}
 
     def materialize(self, sets, ctx):
         self.rng = getattr(ctx, "rng", None)
@@ -250,6 +257,7 @@ class Table(Loaders):
         self.blocks = self.blocks_of(list(train.columns))
         self.fit_blocks(train)
         self.fitted_targets = self.fit_targets(train)
+        self.weight_scales = self.fit_weights(train)
         self.expose()
         self.fitted = True
         self.materialize(sets, ctx)
@@ -266,14 +274,49 @@ class Table(Loaders):
         dropping = [column for column in self.drop if column in frame.columns]
         return frame.drop(columns=dropping) if dropping else frame
 
+    def weighed(self, frame):
+        if not self.weights:
+            return frame
+        added = {}
+        for weight in self.weights:
+            if weight.name in frame.columns and weight.name != weight.column:
+                raise BuildError(f"weights.{weight.name}: the table already has a column {weight.name!r}; give the "
+                                 "weight field another name")
+            added[weight.name] = weight.values(frame)
+        return frame.assign(**added)
+
+    def weight_columns(self):
+        names = [weight.name for weight in self.weights]
+        return set(names) | {weight.column for weight in self.weights if weight.column is not None}
+
+    def fit_weights(self, train):
+        scales = {}
+        for weight in self.weights:
+            scales[weight.name] = scale_of(weight, train[weight.name].to_numpy(dtype="float64"))
+            logger.info(f"data: weight {weight.name} is scaled by {scales[weight.name]:.6g} so its train mean is one")
+        return scales
+
+    def weight_tensors(self, frame):
+        found = {}
+        for weight in self.weights:
+            if weight.name not in frame.columns:
+                continue
+            if weight.name not in self.weight_scales:
+                raise BuildError(f"weights.{weight.name}: the weight was not fitted; the fitted files hold no scale "
+                                 "for it")
+            values = frame[weight.name].to_numpy(dtype="float64") * self.weight_scales[weight.name]
+            found[weight.name] = tensor_of(values, "float32")
+        return found
+
     def blocks_of(self, columns):
         missing = [name for name in self.targets if name not in columns]
         if missing:
             raise BuildError(f"target columns {missing} are not in the table; the columns are {columns}")
         spectators = [column for column in columns if matches_any(column, self.spectator_patterns)]
         group = getattr(self.feed, "group", None)
-        candidates = [column for column in columns
-                      if column not in self.targets and column not in spectators and column != group]
+        weights = self.weight_columns()
+        candidates = [column for column in columns if column not in self.targets and column not in spectators
+                      and column != group and column not in weights]
         owners = owners_of(candidates, list(self.features))
         blocks = []
         for pattern, spec in self.features.items():
@@ -362,6 +405,7 @@ class Table(Loaders):
                     raise BuildError(f"the {set_name} set lacks the target column {target.name!r}")
                 continue
             targets[target.name] = self.target_tensor(target, frame)
+        targets.update(self.weight_tensors(frame))
         return self.features_of(frame), targets, numpy.asarray(frame.index)
 
     def groups_of(self, frame):
@@ -468,6 +512,7 @@ class Table(Loaders):
             "drops": list(self.drop),
             "spectators": list(self.spectator_patterns),
             "filter": self.all_filter,
+            "weights": [{"name": name, "scale": scale} for name, scale in self.weight_scales.items()],
         }
         (root / "fields.json").write_text(json.dumps(fields, indent=2))
 
@@ -492,6 +537,7 @@ class Table(Loaders):
         self.drop = list(fields.get("drops") or [])
         self.spectator_patterns = list(fields.get("spectators") or [])
         self.all_filter = fields.get("filter")
+        self.weight_scales = {item["name"]: float(item["scale"]) for item in fields.get("weights") or []}
         self.expose()
         self.datasets = {}
         self.spectator_frames = {}
@@ -508,9 +554,13 @@ class Table(Loaders):
         for block in self.blocks:
             for name in block.names:
                 columns[name] = step_names(block.chain)
-        return {"rows": dict(self.counts), "features": self.n_features, "targets": list(self.target_names),
-                "classes": None if self.classes is None else list(self.classes), "columns": columns,
-                "windows": self.windows()}
+        found = {"rows": dict(self.counts), "features": self.n_features, "targets": list(self.target_names),
+                 "classes": None if self.classes is None else list(self.classes), "columns": columns,
+                 "windows": self.windows()}
+        if self.weights:
+            found["weights"] = {weight.name: {"from": weight.source(), "scale": self.weight_scales.get(weight.name)}
+                                for weight in self.weights}
+        return found
 
     def feature_blocks(self):
         if self.fitted:
@@ -570,6 +620,11 @@ class Table(Loaders):
                 about = "" if width is None else f"{width} value" if width == 1 else f"{width} values"
             tensor = graph.node(f"tensor:{name}", "tensor", name, about)
             graph.join(ends, tensor)
+            tensors.append(tensor)
+        for weight in self.weights:
+            key = graph.step(source, f"weights:{weight.name}", "weights", weight.name, weight.detail())
+            tensor = graph.node(f"tensor:{weight.name}", "tensor", weight.name, "row weights, mean one on train")
+            graph.join([key], tensor)
             tensors.append(tensor)
         return tensors
 

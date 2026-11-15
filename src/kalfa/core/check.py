@@ -183,6 +183,12 @@ def check_cycles(specs, problems):
                                   f"rules.{name}.after"))
 
 
+def data_weights(tree):
+    node = tree.nodes.get("data")
+    weights = (node.params or {}).get("weights") if node is not None else None
+    return [str(name) for name in weights] if isinstance(weights, dict) else []
+
+
 def data_targets(tree):
     node = tree.nodes.get("data")
     if node is None:
@@ -364,11 +370,17 @@ def check_criteria(tree, problems):
     predicts_known = (len(models) == 1 and predicts is not False) or (target in tree.nodes and not attr)
     outputs = output_names(tree)
     table, targets = data_targets(tree)
+    weights = data_weights(tree)
     outputs_hint = "the outputs are " + ", ".join(outputs) if outputs else None
     for section in ("losses", "metrics"):
         kind = SINGULAR[section]
         for node in tree.section(section).values():
             if not is_criterion(node):
+                if (node.keys or {}).get("sample_weight") is not None:
+                    problems.append(error("weight_objective", f"{kind} {node.name!r} is an objective; sample_weight "
+                                          "belongs to a criterion, a loss of (pred, target)",
+                                          f"{node.path}.sample_weight",
+                                          hint="an objective reads the weight field from the batch itself"))
                 continue
             keys = node.keys or {}
             pred = keys.get("pred")
@@ -384,6 +396,12 @@ def check_criteria(tree, problems):
                 hint = "the targets are " + ", ".join(targets) if targets else "the data declares no targets"
                 problems.append(error("target_required", f"{kind} {node.name!r} needs target: <name> because the data "
                                       f"has {len(targets)} targets", node.path, hint=hint))
+            weight = keys.get("sample_weight")
+            if table and weight is not None and weight not in weights:
+                hint = ("the weights are " + ", ".join(weights) if weights
+                        else 'declare it under data.weights, such as weights: {w: {"price < 5": 5}}')
+                problems.append(error("unknown_weight", f"sample_weight {weight!r} is no weight of the data",
+                                      f"{node.path}.sample_weight", hint=hint))
 
 
 def check_device(tree, problems):

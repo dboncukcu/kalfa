@@ -162,6 +162,7 @@ class StreamDataset(IterableDataset):
                 x = table.features_of(frame)
                 targets = {target.name: table.target_tensor(target, frame) for target in table.fitted_targets
                            if target.name in frame.columns}
+                targets.update(table.weight_tensors(frame))
                 if generator is None:
                     order = range(len(frame))
                 else:
@@ -225,7 +226,7 @@ class StreamEngine:
         labels = {"train": split.train, "valid": split.valid, "test": split.test}
         return {name: StreamPart(name, 0, count, label) for name, label in labels.items() if label is not None}
 
-    def selected(self, frame, part):
+    def selected(self, frame, part, weigh=True):
         table = self.table
         rows = frame.index
         if len(rows) and (rows[0] < part.start or rows[-1] >= part.stop):
@@ -237,12 +238,12 @@ class StreamEngine:
         text = table.set_filters.get(part.name)
         if text:
             frame = query(frame, text, f"filter.{part.name}")
-        return table.dropped(frame)
+        return table.dropped(table.weighed(frame) if weigh else frame)
 
-    def frames(self, part, columns=None, shard=0, shards=1):
+    def frames(self, part, columns=None, shard=0, shards=1, weigh=True):
         with closing(self.reader.chunks(columns, part.start, part.stop, shard, shards)) as chunks:
             for frame in chunks:
-                yield self.selected(frame, part)
+                yield self.selected(frame, part, weigh)
 
     def materialized(self, parts):
         if not parts:
@@ -288,6 +289,6 @@ class StreamEngine:
                 self.known[key] = max(part.stop - part.start, 0)
             else:
                 columns = None if filtered else [self.table.split.column]
-                with closing(self.frames(part, columns)) as frames:
+                with closing(self.frames(part, columns, weigh=False)) as frames:
                     self.known[key] = sum(len(frame) for frame in frames)
         return self.known[key]
