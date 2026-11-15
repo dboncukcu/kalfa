@@ -1,0 +1,9 @@
+{
+  "title": "The smallest config that trains: a table, one model, one loss, one metric and one optimizer",
+  "shows": ["table", "standard_scaler", "mlp", "mse", "rmse", "adam", "defaults"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "minimal", "sets": {"train.epochs": 3, "data.batch": 32}},
+    {"predict": "minimal"}
+  ]
+}

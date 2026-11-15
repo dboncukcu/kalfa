@@ -1,36 +1,52 @@
-"""Data of example 04: data/pets, six classes of small RGB images (a bright patch per class), and data/pets_new."""
-
+import shutil
 from pathlib import Path
 
 import numpy
+from PIL import Image, ImageDraw
 
-HERE = Path(__file__).parent
+
+HERE = Path(__file__).resolve().parent
+SIZE = 16
+CLASSES = {"cat": (230, 140, 40), "dog": (150, 90, 50), "owl": (190, 190, 210)}
+PER_CLASS = 24
+NEW_PER_CLASS = 4
 
 
-def write_image_folder(root, classes=("zero", "one"), per_class=24, size=28, channels=1, seed=0):
-    from PIL import Image
+def pet_image(name, generator):
+    background = generator.integers(0, 60, (SIZE, SIZE, 3)).astype("uint8")
+    image = Image.fromarray(background)
+    draw = ImageDraw.Draw(image)
+    shade = numpy.clip(numpy.array(CLASSES[name]) + generator.integers(-30, 31, 3), 0, 255)
+    color = tuple(int(value) for value in shade)
+    left, top = (int(value) for value in generator.integers(1, 6, 2))
+    extent = int(generator.integers(8, 11))
+    right, bottom = left + extent, top + extent
+    if name == "cat":
+        draw.polygon([(left, top), (left + extent // 2, bottom), (right, top)], fill=color)
+    elif name == "dog":
+        draw.rectangle((left, top, right, bottom), fill=color)
+    else:
+        draw.ellipse((left, top, right, bottom), fill=color)
+    return image
 
+
+def write_folder(root, per_class, seed):
+    if root.exists():
+        shutil.rmtree(root)
     generator = numpy.random.default_rng(seed)
-    root = Path(root)
-    for position, name in enumerate(classes):
+    for name in CLASSES:
         directory = root / name
-        directory.mkdir(parents=True, exist_ok=True)
+        directory.mkdir(parents=True)
         for index in range(per_class):
-            canvas = generator.integers(0, 40, size=(size, size, channels), dtype="uint8")
-            half = size // 2
-            row = 0 if position % 2 == 0 else half
-            column = 0 if position < 2 else half
-            canvas[row:row + half, column:column + half] = 200 + generator.integers(0, 50, size=(half, half, channels))
-            image = Image.fromarray(canvas[:, :, 0] if channels == 1 else canvas, mode="L" if channels == 1 else "RGB")
-            image.save(directory / f"{index:03d}.png")
-    return root
+            pet_image(name, generator).save(directory / f"{index:03d}.png")
+    return per_class * len(CLASSES)
 
 
 def main():
-    classes = ("bengal", "boxer", "husky", "persian", "pug", "sphynx")
-    write_image_folder(HERE / "data" / "pets", classes=classes, per_class=24, size=64, channels=3)
-    write_image_folder(HERE / "data" / "pets_new", classes=classes, per_class=2, size=64, channels=3, seed=7)
-    print("wrote data/pets (6 classes, 144 images) and data/pets_new (12 images)")
+    count = write_folder(HERE / "data" / "pets", PER_CLASS, seed=0)
+    fresh = write_folder(HERE / "data" / "pets_new", NEW_PER_CLASS, seed=1)
+    print(f"wrote data/pets ({count} images of {SIZE}x{SIZE} in {len(CLASSES)} classes) and data/pets_new "
+          f"({fresh} images)")
 
 
 if __name__ == "__main__":

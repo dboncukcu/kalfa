@@ -1,0 +1,9 @@
+{
+  "title": "A character language model on play lines: text_lines with the char tokenizer, a small causal transformer trained by updates, perplexity, and text sampled from a prompt",
+  "shows": ["text_lines", "char tokenizer", "train.updates", "cosine schedule with warmup", "grad_clip", "perplexity", "lm_sampler", "samples_grid"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "charlm", "sets": {"models.lm.layers": 2, "models.lm.dim": 32, "models.lm.heads": 2}, "params": {"seq_len": 32, "total_steps": 300, "turn_updates": 100, "warmup": 20}},
+    {"generate": "charlm", "n": 3}
+  ]
+}

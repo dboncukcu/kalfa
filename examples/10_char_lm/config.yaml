@@ -1,75 +1,44 @@
-# 10: a character level language model. The tokenizer is a preprocessor (fitted on the train set, the vocabulary goes into the record),
-# the vocabulary size is the kind: data component vocab_size (from the fitted tokenizer; the embedding's num and the last layer's out_features),
-# the next token feed feed: next_token (the input_ids and targets fields), a turn of 200 steps (steps), accumulation, AMP,
-# clipping as the turn's params, warmup plus cosine in the optimizer (total = steps.total), perplexity on the validation set every turn,
-# generation from the record, autoregressive (kalfa generate; reads the tokenizer from the preprocessor). It fits the alternating turn: one optimizer.
-
-include:
-  - /alias/kalfa/text
-
-plugins:
-  - gpt_legos
-
 params:
-  total_steps: 20000
-  turn_steps: 200
-  lr: 3.0e-4
-  seq_len: 128
-  seed: 7
-
-seed: $seed$
-device: cuda                      # a device lego (auto | cpu | cuda | mps | {uri, params}); an unavailable device is an error
-
+  seq_len: 64
+  total_steps: 1000
+  turn_updates: 100
+  warmup: 50
+seed: 7
 data:
-  source: {uri: text_lines, params: {path: data/shakespeare.txt}}
-  split: {ratios: [0.98, 0.02, 0.0], seed: $seed$}
+  use: text_lines
+  file: data/corpus.txt
+  tokenizer: char
+  seq_len: $seq_len$
+  split: [0.9, 0.05, 0.05]
   batch: 64
-  preprocessors:
-    tokenizer: {uri: char_tokenizer}
-  fields:
-    text: {preprocessors: [tokenizer]}
-  feed: {uri: next_token, params: {seq_len: $seq_len$}}
-
-model:
-  models:
-    gpt:
-      optimizer: main
-      inputs: [input_ids]
-      outputs: [logits]
-      nodes:
-        - {uri: embedding, params: {num: {uri: vocab_size}, dim: 256}}
-        - {uri: gpt, params: {d_model: 256, layers: 4, heads: 4, seq_len: $seq_len$}}
-        - {uri: linear, params: {out_features: {uri: vocab_size}}}
-
-metrics:
-  perplexity: {uri: perplexity, target: targets}
-
+models:
+  lm: {use: gpt_legos.GPT, vocab_size: "@data.vocab_size", seq_len: $seq_len$, layers: 4, dim: 128, heads: 4}
 losses:
-  lm: {uri: cross_entropy, target: targets}
-
+  ce: {use: cross_entropy, target: targets}
+metrics:
+  ppl: {use: perplexity, target: targets}
 optimizers:
   main:
-    uri: adamw
-    params: {lr: $lr$, weight_decay: 0.1}
-    loss: lm
-    schedule: {uri: warmup_cosine, params: {warmup: 500, total: $total_steps$}}
-
-training:
-  turn: supervised
-  steps: {total: $total_steps$, turn: $turn_steps$}
-  accumulate: 2
-  amp: true
-  grad_clip: 1.0
-  stop:
-    - {uri: plateau, params: {monitor: val/perplexity, patience: 10}}
-  checkpoint: {uri: best, params: {monitor: val/perplexity}}
+    use: adamw
+    lr: 6.0e-4
+    betas: [0.9, 0.95]
+    weight_decay: 0.1
+    over: "@models.lm"
+    minimizes: "@losses.ce"
+    schedule: {use: cosine, warmup: $warmup$, steps: $total_steps$}
+train:
+  updates: {total: $total_steps$, turn: $turn_updates$}
+  step: {use: supervised, amp: true, grad_clip: 1.0}
+  checkpoint: {watch: val/ppl}
   report: best
-
 generate:
-  uri: lm_sampler
-  params: {model: gpt, prompt: "ROMEO:", max_new_tokens: 500, temperature: 0.9}
-
+  use: lm_sampler
+  model: "@models.lm"
+  tokenizer: "@data.tokenizer"
+  prompt: "ROMEO:"
+  max_new_tokens: 400
+  temperature: 0.8
 plots:
-  loss_curve: {uri: loss_curve, params: {series: [train/lm, val/perplexity]}}
-
+  loss_curve: loss_curve
+  samples: samples_grid
 record: runs/charlm_$datetime$

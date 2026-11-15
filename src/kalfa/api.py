@@ -1,966 +1,284 @@
-import contextlib
-import hashlib
-import inspect
-import json
-import shutil
-import socket
-import subprocess
-import sys
-import warnings
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 
 import pandas
-import tezgah
-import torch
-from cirak.api import Analysis
-from cirak.build import ComponentStore, build_components
-from cirak.errors import CirakWarning, ConfigError, error, render_problems
-from cirak.registry import registry
 
-from .aliasing import aliasing_problems
-from .check import Checker
-from .config import Surface, load_surface
-from .contract import Contract
-from .driver import call_with_params, recipe
-from .errors import KalfaError
-from .kinds import kalfa_kind
-from .recipe import analyze, compile, dump, implicit_bindings
-from .record import (
-    DATETIME_TOKEN,
-    Heartbeat,
-    Record,
-    read_resolved,
-    record_dir,
-    resolved_data,
-    resume_source,
-    write_failure,
-    write_flow,
-    write_resolved,
-    write_resume_note,
-)
-from .std.calibrate.base import read_calibrations
-from .std.checkpoint.base import load, load_into
-from .std.common.device import Device
-from .std.common.files import atomic, read_lines, write_json, write_text
-from .std.common.generation import write_samples
-from .std.common.history import History
-from .std.common.log import Monitor, clock, logger_for, since
-from .std.common.prediction import prediction_table
-from .std.common.rng import seed_all
-from .std.common.runtime import call_model, named_outputs, resolve_model
-from .std.export.kalfa.formats import traced_inputs
-from .std.frame.base import read_frames, write_frames
-from .std.lego.kalfa.clone import Ema
-from .std.lego.kalfa.data_steps import apply_frames
-from .std.lego.kalfa.prep import apply
-from .std.lego.kalfa.run_all import run_all
-from .std.lego.kalfa.state import select
-from .std.pre.base import Prep, read_prep, write_prep
+from . import summary as summarizing
+from .core import check as checking
+from .core import run as running
+from .core.run import Monitor
+from .records import reader
+from .records import stats as statistics
+from .records.compare import compare as compare_records, config_of
 
 
-logger = logger_for("run")
+def call(use, **params):
+    return {"use": use, **params}
 
 
 @dataclass
-class Prepared:
-    surface: Surface
-    problems: list
-    contract: Contract
-    sizes: dict | None = None
-    header: dict | None = None
-    document: dict | None = None
-    analysis: Analysis | None = None
-    pipeline: tezgah.Pipeline | None = None
-    implicit: list = field(default_factory=list)
-    measured: dict | None = None
-    aliasing: list = field(default_factory=list)
-    sets: list = field(default_factory=list)
+class Rule:
+    when: object = None
+    after: str | None = None
+    once: bool = True
+    set: dict = field(default_factory=dict)
+    stop: bool = False
+    run: object = None
 
-    @property
-    def errors(self):
-        return [problem for problem in self.problems if problem.severity == "error"]
-
-    @property
-    def warnings(self):
-        return [problem for problem in self.problems if problem.severity == "warning"]
-
-    @property
-    def passed(self):
-        return not self.errors
-
-    def dump(self):
-        if self.analysis is None:
-            return None
-        plan = self.pipeline.resolved if self.pipeline is not None else None
-        return dump(self.analysis, plan)
-
-
-def has_errors(problems):
-    return any(problem.severity == "error" for problem in problems)
-
-
-def resolved_of(run_dir):
-    resolved = Path(run_dir) / "resolved.yaml"
-    if not resolved.exists():
-        raise KalfaError(f"{run_dir} has no resolved.yaml")
-    return resolved
-
-
-def record_paths(paths, contract=None):
-    found = []
-    for path in paths:
-        if not isinstance(path, dict) and Path(path).is_dir():
-            found.append(str(resolved_of(path)))
-            contract = recorded_contract(path, contract)
-        else:
-            found.append(path)
-    return found, contract
-
-
-def data_hash(config):
-    return hashlib.sha256(json.dumps(config.get("data"), sort_keys=True, default=str).encode("utf-8")).hexdigest()
-
-
-def prepared_manifest(directory):
-    manifest = Record(directory).read_json("manifest.json")
-    if manifest is None or manifest.get("kind") != "data":
-        raise KalfaError(f"{directory} is no prepared directory; kalfa prepare cfg.yaml --out {directory} writes one")
-    return manifest
-
-
-def prepare(paths, sets=None, inputs=None, dry=True, contract=None, prepared=None, record=None) -> Prepared:
-    started = clock()
-    paths, contract = record_paths(paths, contract)
-    contract = contract or Contract.load()
-    inputs = contract.run_inputs if inputs is None else list(inputs)
-    surface = load_surface(paths, sets)
-    manifest = prepared_manifest(prepared) if prepared is not None else None
-    checker = Checker(surface, registry, contract, manifest["header"] if manifest is not None else None)
-    problems = list(surface.problems)
-    blocking = has_errors(problems)
-    if not blocking:
-        checker.run()
-        problems.extend(checker.problems)
-        logger.debug(f"checked in {since(started)}: {len(problems)} problems")
-    found = Prepared(surface, problems, contract)
-    found.sets = list(checker.sets)
-    found.header = checker.header
-    found.sizes = checker.sizes() if checker.header is not None else None
-    if blocking or has_errors(checker.problems) and not checker.header_only_errors():
-        return found
-    if manifest is not None and manifest.get("hash") != data_hash(surface.data):
-        problems.append(error("prepared_mismatch", f"{prepared} was prepared from another data section; prepare "
-                                                   f"it again from this config"))
-        return found
-    try:
-        found.document = recipe(surface.data, registry, surface.aliases, contract, record=record, prepared=prepared)
-    except (KeyError, TypeError, ValueError, AttributeError) as exception:
-        problems.append(error("driver_failed", f"the driver cannot shape this config: {exception!r}"))
-        return found
-    analysis = analyze(found.document, contract)
-    found.analysis = analysis
-    problems.extend(analysis.problems)
-    if has_errors(analysis.problems):
-        return found
-    built = clock()
-    pipeline, tezgah_problems = compile(analysis, inputs, dry)
-    problems.extend(tezgah_problems)
-    logger.debug(f"compiled the flow in {since(built)}")
-    found.pipeline = pipeline
-    if pipeline is not None and pipeline.resolved is not None:
-        found.implicit = list(implicit_bindings(pipeline.resolved))
-        found.aliasing = aliasing_problems(pipeline, registry)
-        problems.extend(found.aliasing)
-    return found
-
-
-def gate(problems):
-    failures = [problem for problem in problems if problem.severity == "error"]
-    warns = [problem for problem in problems if problem.severity == "warning"]
-    if warns:
-        warnings.warn(CirakWarning(render_problems(warns)), stacklevel=2)
-    if failures:
-        raise ConfigError(failures)
-
-
-def check(paths, sets=None, measure=False, contract=None, prepared=None) -> Prepared:
-    found = prepare(paths, sets, dry=True, contract=contract, prepared=prepared)
-    if measure and found.document is not None and found.passed:
-        found.measured = (dict(prepared_manifest(prepared)["sizes"]) if prepared is not None
-                          else measured_sizes(found.document, found.contract))
-    return found
+    def to_mapping(self):
+        out = {}
+        if self.when is not None:
+            out["when"] = self.when
+        if self.after is not None:
+            out["after"] = self.after
+        if not self.once:
+            out["once"] = False
+        if self.set:
+            out["set"] = dict(self.set)
+        if self.stop:
+            out["stop"] = True
+        if self.run is not None:
+            out["run"] = self.run
+        return out
 
 
 @dataclass
-class PreparedData:
-    directory: str
-    sizes: dict
-    manifest: dict
-
-
-def prepare_data(paths, sets=None, out=None, contract=None) -> PreparedData:
-    found = prepare(paths, sets, dry=True, contract=contract)
-    gate(found.problems)
-    config = found.surface.data
-    source = config["data"]["source"]
-    if registry.facts(source["uri"]).get("stream"):
-        raise KalfaError("a stream source is lazy already; there is nothing to prepare")
-    if Path(out).is_dir() and any(Path(out).iterdir()):
-        raise KalfaError(f"prepared directory {out} exists and is not empty; remove it or give --out another "
-                         f"directory")
-    names = document_sets(found.document)
-    wanted = ["prep", "frames", "data_report", *[f"{name}_df" for name in names]]
-    outputs = flow_outputs(found.document, ("data",), wanted, found.contract)
-    target = Record(out)
-    target.directory.mkdir(parents=True, exist_ok=True)
-    samples = bool(registry.facts(source["uri"]).get("samples"))
-    sizes = {}
-    for name in names:
-        part = outputs[f"{name}_df"]
-        sizes[name] = int(len(part))
-        if samples:
-            target.write_text(f"{name}.json", json.dumps([int(position) for position in part.positions]))
-        else:
-            with atomic(target.path(f"{name}.parquet")) as temporary:
-                part.rename_axis("row").reset_index().to_parquet(temporary, index=False)
-    write_prep(outputs["prep"], target.directory)
-    write_frames(outputs["frames"], target.directory)
-    target.write_json("data.json", outputs["data_report"])
-    manifest = target.manifest("data", hash=data_hash(config), sets=names, sizes=sizes,
-                               layout="samples" if samples else "table", header=found.header,
-                               source=call_with_params(source), config=[str(path) for path in paths
-                                                                         if not isinstance(path, dict)])
-    logger.info(f"prepared {out}: " + ", ".join(f"{name} {size}" for name, size in sizes.items()))
-    return PreparedData(str(out), sizes, manifest)
-
-
-def document_sets(document):
-    return list(document["flow"]["data"]["params"]["sets"])
-
-
-def measured_sizes(document, contract=None):
-    sets = document_sets(document)
-    outputs = data_outputs(document, [f"{name}_loader" for name in sets], contract)
-    return {name: outputs[f"{name}_loader"].dataset.count() for name in sets}
-
-
-@dataclass
-class Probe:
-    sizes: dict | None = None
-    prep: Prep | None = None
-    features: int | None = None
-    parameters: dict = field(default_factory=dict)
-    shapes: dict = field(default_factory=dict)
-    notes: dict = field(default_factory=dict)
-
-
-def probe(document, contract=None) -> Probe:
-    sets = document_sets(document)
-    outputs = flow_outputs(document, ("data", "models"),
-                           ["prep", *[f"{name}_loader" for name in sets], "models", "composites"], contract)
-    found = Probe(sizes={name: outputs[f"{name}_loader"].dataset.count() for name in sets},
-                  prep=outputs.get("prep"))
-    if found.prep is not None:
-        found.features = len(found.prep.features)
-    batch = next(iter(outputs["train_loader"]), None)
-    models = {**(outputs.get("models") or {}), **(outputs.get("composites") or {})}
-    for name, module in models.items():
-        if batch is not None:
-            try:
-                with torch.no_grad():
-                    result = named_outputs(module, call_model(module, batch))
-                found.shapes[name] = {wire: tuple(value.shape) for wire, value in result.items()
-                                      if isinstance(value, torch.Tensor)}
-            except Exception as exception:
-                found.notes[name] = f"not built on the batch: {type(exception).__name__} {exception}"
-        if module.initialized:
-            found.parameters[name] = (sum(item.numel() for item in module.parameters()),
-                                      sum(item.numel() for item in module.parameters() if item.requires_grad))
-    return found
-
-
-@dataclass
-class RunResult:
-    record: str
-    report: tezgah.Report
-    device: Device | None = None
-
-
-def build_device(call):
-    if isinstance(call, Device):
-        return call
-    if isinstance(call, torch.device):
-        return Device(call, str(call))
-    if isinstance(call, str):
-        uri, params = call, {}
-    elif isinstance(call, dict) and isinstance(call.get("uri"), str):
-        uri, params = call["uri"], dict(call.get("params") or {})
-    else:
-        raise KalfaError(f"device must be a device lego (auto, cpu, cuda, mps or {{uri, params}}), got {call!r}")
-    if not uri.startswith("/"):
-        resolved = registry.aliases().get(uri)
-        if resolved is None:
-            known = sorted(name for name, target in registry.aliases().items() if kalfa_kind(target) == "device")
-            raise KalfaError(f"device {uri!r} is not a known device lego; the short names are {known}")
-        uri = resolved
-    if registry.lookup(uri) is None:
-        raise KalfaError(f"device {uri} is not registered")
-    if kalfa_kind(uri) != "device":
-        raise KalfaError(f"{uri} is a {kalfa_kind(uri)} lego, device needs a device lego")
-    try:
-        device = registry.resolve(uri)(**params)
-    except RuntimeError as exception:
-        raise KalfaError(str(exception)) from exception
-    if not isinstance(device, torch.device):
-        raise KalfaError(f"device lego {uri} returned {type(device).__name__}, not a torch.device")
-    return Device(device, uri, params)
-
-
-def device_of(config, contract=None):
-    contract = contract or Contract.load()
-    return build_device(config.get("device") if config.get("device") is not None
-                        else contract.wiring["default_device"])
-
-
-def write_device_note(record, device):
-    write_json(Path(record) / "device.json", device.note())
-
-
-def git_note(root):
-    try:
-        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True)
-        status = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True,
-                                check=True)
-    except (OSError, subprocess.CalledProcessError):
-        return {"commit": None, "dirty": None}
-    return {"commit": commit.stdout.strip(), "dirty": bool(status.stdout.strip())}
-
-
-def write_git_note(record, paths):
-    files = [path for path in paths if not isinstance(path, dict)]
-    root = Path(files[0]).resolve().parent if files else Path.cwd()
-    write_json(Path(record) / "git.json", git_note(root))
-
-
-def run(paths, sets=None, executor="serial", workers=None, resume=None, resume_from=None, when=None,
-        contract=None, monitor=None, prepared=None, identity=None) -> RunResult:
-    started = clock()
-    paths, contract = record_paths(paths, contract)
-    contract = contract or Contract.load()
-    inputs = contract.run_inputs + (["resume"] if resume is not None else [])
-    found = prepare(paths, sets, inputs=inputs, dry=False, contract=contract, prepared=prepared)
-    gate(found.problems)
-    if executor != "serial" and found.aliasing:
-        gate([error(problem.kind, problem.message, hint=problem.hint) for problem in found.aliasing])
-    config = found.surface.data
-    record = record_dir(config, when)
-    target = Path(record)
-    if target.exists() and any(target.iterdir()):
-        raise KalfaError(f"record directory {record} exists and is not empty; change record or remove it")
-    seed_all(config.get("seed"))
-    if config.get("seed") is not None:
-        logger.debug(f"seed {config['seed']}")
-    logger.info(f"record {record}")
-    target.mkdir(parents=True, exist_ok=True)
-    with failure_noted(record):
-        note = Record(record)
-        note.manifest(**{"kind": "run", "name": target.name, "config": [str(path) for path in paths
-                                                                        if not isinstance(path, dict)],
-                         "params": dict(config.get("params") or {}), "contract": contract.digest(),
-                         "turn": "steps" if (config.get("training") or {}).get("steps") is not None else "epoch",
-                         "prepared": str(prepared) if prepared is not None else None, **(identity or {})})
-        note.host()
-        write_resolved(record, found.surface)
-        contract.write(target / "contract.yaml")
-        copy_plugins(config.get("plugins"), target)
-        write_flow(record, found.dump())
-        if prepared is not None:
-            shutil.copytree(Path(prepared) / "fitted", target / "fitted", dirs_exist_ok=True)
-        if resume_from is not None:
-            old = Path(resume_from) / "checkpoints"
-            if old.is_dir():
-                shutil.copytree(old, target / "checkpoints", dirs_exist_ok=True)
-            write_resume_note(record, resume_from, resume)
-            logger.info(f"resuming {resume_from} from {Path(resume).name}")
-        values = {"resume": str(resume)} if resume is not None else {}
-        return launch(found, record, paths, contract, monitor, executor, workers, values, started)
-
-
-@contextlib.contextmanager
-def failure_noted(record):
-    try:
-        yield
-    except BaseException as exception:
-        try:
-            write_failure(record, exception)
-        except OSError as problem:
-            logger.warning(f"{record}: failure.json not written ({problem})")
-        raise
-
-
-def launch(found, record, paths, contract, monitor, executor, workers, values, started) -> RunResult:
-    config = found.surface.data
-    monitor = monitor or Monitor()
-    device = device_of(config, contract)
-    logger.info(f"device {device} ({device.uri})")
-    write_device_note(record, device)
-    write_git_note(record, paths)
-    monitor.open(record)
-    values = {"device": device, "record": record, "monitor": monitor, **values}
-    tezgah.subscribe(found.pipeline, monitor.sink)
-    try:
-        with Heartbeat(record):
-            report = tezgah.run(found.pipeline, inputs=values, executor=executor, workers=workers,
-                                record_dir=record)
-    finally:
-        monitor.finish()
-    logger.info(f"finished in {since(started)}")
-    return RunResult(record, report, device)
-
-
-def stop(record, by="cli"):
-    note = Record(record)
-    if not note.is_record:
-        raise KalfaError(f"{record} is no record directory; a record holds manifest.json or resolved.yaml")
-    state = note.state()
-    if state in ("finished", "failed", "lost"):
-        raise KalfaError(f"{record} has ended already ({state}); there is nothing to stop")
-    targets = [note]
-    if (note.read_json("manifest.json") or {}).get("kind") == "sweep":
-        targets += [Record(child) for child in sorted(note.directory.iterdir())
-                    if child.is_dir() and Record(child).is_record and Record(child).state() == "running"]
-    for target in targets:
-        target.request_stop(by)
-    return [str(target.directory) for target in targets]
-
-
-def copy_plugins(names, record):
-    for name in names or []:
-        module = sys.modules.get(name)
-        file = getattr(module, "__file__", None)
-        if not file:
-            continue
-        source = Path(file)
-        target = Path(record) / "plugins"
-        target.mkdir(parents=True, exist_ok=True)
-        if source.name == "__init__.py":
-            shutil.copytree(source.parent, target / source.parent.name, dirs_exist_ok=True)
-        else:
-            shutil.copyfile(source, target / source.name)
-
-
-def recorded_contract(run_dir, contract=None):
-    if contract is not None:
-        return contract
-    copy = Path(run_dir) / "contract.yaml"
-    return Contract.load(copy) if copy.exists() else Contract.load()
-
-
-def resume(run_dir, sets=None, executor="serial", workers=None, when=None, contract=None,
-           monitor=None) -> RunResult:
-    source = resume_source(run_dir)
-    if source is None:
-        raise KalfaError(f"{run_dir} has neither checkpoints/last.pt nor final/state.pt; nothing to resume")
-    resolved = resolved_of(run_dir)
-    return run([str(resolved)], sets, executor, workers, resume=source, resume_from=str(run_dir), when=when,
-               contract=recorded_contract(run_dir, contract), monitor=monitor)
-
-
-REPAIRABLE = ("plots", "figures", "device", "calibrate", "generate", "record", "include", "plugins", "params", "sweep",
-              "training.report")
-ATTEMPT_FILES = ("run.json", "failure.json", "events.jsonl", "stdout.txt", "stderr.txt", "flow.yaml", "resolved.yaml",
-                 "device.json", "git.json", "host.json", "stop.json", "heartbeat", "plugins")
-UNSET = object()
-
-
-@dataclass
-class Diagnosis:
-    record: Path
-    state: str
-    stage: str | None
-    source: Path | None
-
-
-@dataclass
-class Repaired:
-    result: RunResult
-    stage: str
-    turn: int
-    attempt: int
-
-
-def diagnose(record) -> Diagnosis:
-    note = Record(record)
-    if not note.is_record:
-        raise KalfaError(f"{record} is no record directory; a record holds manifest.json or resolved.yaml")
-    final = Path(record) / "final" / "state.pt"
-    last = Path(record) / "checkpoints" / "last.pt"
-    if final.exists():
-        return Diagnosis(Path(record), note.state(), "after", final)
-    if last.exists():
-        return Diagnosis(Path(record), note.state(), "training", last)
-    return Diagnosis(Path(record), note.state(), None, None)
-
-
-def named_record(paths, sets=None):
-    surface = load_surface(paths, sets)
-    gate(surface.problems)
-    named = surface.data.get("record")
-    if not isinstance(named, str):
-        raise KalfaError("the config names no record directory; give the run to repair with --record")
-    if DATETIME_TOKEN in named:
-        raise KalfaError(f"the config writes a new record directory every run ({named}); give the run to repair "
-                         f"with --record")
-    return Path(named)
-
-
-def no_checkpoint_text(record):
-    return (f"{record} failed before its first checkpoint, so there is nothing to continue from; start it again: "
-            f"remove {record} and run the config with kalfa run (a sweep point with kalfa sweep CONFIG --id N). "
-            f"A failed run is repairable when it writes a checkpoint every turn: training.checkpoint: last, or best "
-            f"(it writes last.pt too)")
-
-
-def flattened(value, prefix=""):
-    if isinstance(value, dict) and value:
-        for key, item in value.items():
-            yield from flattened(item, f"{prefix}.{key}" if prefix else str(key))
-    else:
-        yield prefix, value
-
-
-def refused_changes(before, after):
-    old, new = dict(flattened(before or {})), dict(flattened(after or {}))
-    changed = sorted(key for key in old.keys() | new.keys() if old.get(key, UNSET) != new.get(key, UNSET))
-    return [key for key in changed
-            if not any(key == allowed or key.startswith(f"{allowed}.") for allowed in REPAIRABLE)]
-
-
-def checkpoint_counters(source):
-    counters = load(source).get("counters") or {}
-    step = counters.get("global_step")
-    return int(counters.get("turn", 0)), int(step) if step is not None else None
-
-
-def cut_lines(path, key, limit):
-    if limit is None or not path.exists():
-        return
-    kept = [line for line in read_lines(path) if isinstance(line.get(key), (int, float)) and line[key] <= limit]
-    write_text(path, "".join(json.dumps(line, default=float) + "\n" for line in kept))
-
-
-def open_attempt(record, stage, source, turn, paths):
-    target = Path(record)
-    note = Record(target)
-    attempts = list((note.read_json("repair.json") or {}).get("attempts") or [])
-    number = len(attempts) + 1
-    folder = target / "attempts" / str(number)
-    folder.mkdir(parents=True, exist_ok=True)
-    for name in ATTEMPT_FILES:
-        if (target / name).exists():
-            shutil.move(str(target / name), str(folder / name))
-    if stage == "training":
-        for name in ("history.jsonl", "steps.jsonl"):
-            if (target / name).exists():
-                shutil.copy2(target / name, folder / name)
-    attempts.append({"attempt": number, "started": datetime.now().isoformat(timespec="seconds"), "stage": stage,
-                     "from": str(Path(source).relative_to(target)), "turn": turn, "host": socket.gethostname(),
-                     "config": [str(path) for path in paths if not isinstance(path, dict)], "status": "running"})
-    note.write_json("repair.json", {"attempts": attempts})
-    return number
-
-
-def close_attempt(record, number, status):
-    note = Record(record)
-    try:
-        attempts = list((note.read_json("repair.json") or {}).get("attempts") or [])
-        for entry in attempts:
-            if entry.get("attempt") == number:
-                entry.update({"status": status, "ended": datetime.now().isoformat(timespec="seconds")})
-        note.write_json("repair.json", {"attempts": attempts})
-    except (OSError, ValueError) as problem:
-        logger.warning(f"{record}: repair.json not updated ({problem})")
-
-
-def refuse_record_dirs(paths):
-    if any(not isinstance(path, dict) and Path(path).is_dir() for path in paths):
-        raise KalfaError("repair takes the config files the run was started with, not a record directory; name the "
-                         "record with --record")
-
-
-def repair(paths, sets=None, record=None, prepared=None, executor="serial", workers=None, contract=None,
-           monitor=None) -> Repaired:
-    started = clock()
-    refuse_record_dirs(paths)
-    target = Path(record) if record is not None else named_record(paths, sets)
-    diagnosis = diagnose(target)
-    if diagnosis.state != "failed":
-        raise KalfaError(f"{target} is {diagnosis.state}, not failed; repair continues failed runs only")
-    if diagnosis.source is None:
-        raise KalfaError(no_checkpoint_text(target))
-    contract = recorded_contract(target, contract)
-    if prepared is None:
-        prepared = (Record(target).read_json("manifest.json") or {}).get("prepared")
-    inputs = contract.run_inputs + ["resume"] + (["skip_training"] if diagnosis.stage == "after" else [])
-    found = prepare(paths, sets, inputs=inputs, dry=False, contract=contract, prepared=prepared, record=target)
-    gate(found.problems)
-    if executor != "serial" and found.aliasing:
-        gate([error(problem.kind, problem.message, hint=problem.hint) for problem in found.aliasing])
-    refused = refused_changes(read_resolved(target), resolved_data(found.surface))
-    if refused:
-        shown = ", ".join(refused[:12]) + (f" and {len(refused) - 12} more" if len(refused) > 12 else "")
-        raise KalfaError(f"{target}: the config differs from the one the run trained with at {shown}; repair "
-                         f"continues the same run and takes changes only under {', '.join(REPAIRABLE)}; kalfa "
-                         f"resume --set training.epochs=N trains more turns, kalfa run starts a new run")
-    config = found.surface.data
-    seed_all(config.get("seed"))
-    turn, step = checkpoint_counters(diagnosis.source)
-    number = open_attempt(target, diagnosis.stage, diagnosis.source, turn, paths)
-    if diagnosis.stage == "after":
-        logger.info(f"repairing {target} (attempt {number}): the after block from final/state.pt, turn {turn}")
-    else:
-        logger.info(f"repairing {target} (attempt {number}): training from turn {turn} of checkpoints/last.pt")
-    values = {"resume": str(diagnosis.source)}
-    if diagnosis.stage == "after":
-        values["skip_training"] = True
-    try:
-        with failure_noted(target):
-            if diagnosis.stage == "training":
-                cut_lines(target / "history.jsonl", "turn", turn)
-                cut_lines(target / "steps.jsonl", "step", step)
-            Record(target).host()
-            write_resolved(target, found.surface)
-            copy_plugins(config.get("plugins"), target)
-            write_flow(target, found.dump())
-            result = launch(found, str(target), paths, contract, monitor, executor, workers, values, started)
-    except KeyboardInterrupt:
-        close_attempt(target, number, "interrupted")
-        raise
-    except Exception:
-        close_attempt(target, number, "failed")
-        raise
-    close_attempt(target, number, "ok")
-    return Repaired(result, diagnosis.stage, turn, number)
-
-
-def rebuild_models(analysis, store, prep=None, train_loader=None):
-    models = {}
-    composites = {}
-    for name, node in (analysis.flow.get("models") or {}).items():
-        if not (isinstance(node, dict) and "block" in node and "builder" in node):
-            continue
-        expansion = store.expansion(f"flow.models.{name}")
-        graph = store.graph(expansion)
-        builder = registry.resolve(node["builder"])
-        params = store.resolve_params(node.get("params") or {})
-        inputs = node.get("inputs") or {}
-        output = node["outputs"][0] if isinstance(node.get("outputs"), list) else name
-        if "models" in inputs:
-            composites[output] = builder(graph, models=models, prep=prep, train_loader=train_loader, **params)
-        else:
-            models[output] = builder(graph, prep=prep, train_loader=train_loader, **params)
-    return models, composites
-
-
-def weights_of(run_dir, which):
-    base = Path(run_dir)
-    if which == "final":
-        path = base / "final" / "state.pt"
-        if not path.exists():
-            raise KalfaError(f"{run_dir} has no final/state.pt; the run has not ended")
-        return path
-    if which == "best":
-        path = base / "checkpoints" / "best.pt"
-        if not path.exists():
-            raise KalfaError(f"{run_dir} has no checkpoints/best.pt")
-        return path
-    for candidate in (base / "final" / "state.pt", base / "checkpoints" / "last.pt"):
-        if candidate.exists():
-            return candidate
-    raise KalfaError(f"{run_dir} has neither final/state.pt nor checkpoints/last.pt")
-
-
-@dataclass
-class Opened:
-    run_dir: str
-    contract: Contract
-    surface: Surface
-    which: str
-    document: dict
-    analysis: Analysis
-    store: ComponentStore
-    prep: Prep
-    frames: list = field(default_factory=list)
-    calibrations: dict = field(default_factory=dict)
-    models: dict | None = None
-    composites: dict | None = None
-    payload: dict | None = None
-    loaders: dict | None = None
-
-    @property
-    def config(self):
-        return self.surface.data
-
-    @property
-    def after(self):
-        return self.document["flow"]["after"]["params"] or {}
-
-    def rebuild(self):
-        if self.models is None:
-            self.loaders = record_loaders(self.document, self.contract)
-            self.models, self.composites = rebuild_models(self.analysis, self.store, self.prep,
-                                                          self.loaders.get("train"))
-            self.payload = load(weights_of(self.run_dir, self.which))
-            for name, module in self.models.items():
-                if name in self.payload.get("models", {}):
-                    module.load_state_dict(self.payload["models"][name])
-        return self.models, self.composites
-
-    def ema_copies(self):
-        models, _ = self.rebuild()
-        copies = {}
-        for name, state in self.payload.get("emas", {}).items():
-            if name in models:
-                ema = Ema(models[name], 1.0)
-                ema.load_state_dict(state)
-                copies[name] = ema
-        return copies
-
-
-def open_record(run_dir, which=None, sets=None, contract=None) -> Opened:
-    resolved = resolved_of(run_dir)
-    contract = recorded_contract(run_dir, contract)
-    surface = load_surface([str(resolved)], sets)
-    gate(surface.problems)
-    config = surface.data
-    document = recipe(config, registry, surface.aliases, contract, record=run_dir)
-    analysis = analyze(document, contract)
-    gate(analysis.problems)
-    store = build_components(analysis.data, analysis.expansions, registry)
-    return Opened(str(run_dir), contract, surface, which or config["training"].get("report", "last"), document,
-                  analysis, store, read_prep(run_dir), read_frames(run_dir), read_calibrations(run_dir))
-
-
-def record_loaders(document, contract=None):
-    sets = document_sets(document)
-    outputs = data_outputs(document, [f"{name}_loader" for name in sets], contract)
-    return {name: outputs[f"{name}_loader"] for name in sets}
-
-
-def new_loader(opened, data):
-    if isinstance(data, pandas.DataFrame):
-        df = data
-    else:
-        source = opened.config["data"]["source"]
-        df = registry.resolve(source["uri"])(**{**(source.get("params") or {}), "path": data})
-    params = opened.document["flow"]["data"]["params"]
-    df = apply_frames(replay_transforms(opened, df, params), opened.frames)
-    frame = apply(df, opened.prep, "test", mask=params.get("mask"))
-    feed = params["feed"]
-    dataset = registry.resolve(feed["uri"])(frame, None, **(feed.get("params") or {}))
-    spec = params["loaders"]["test"]
-    return registry.resolve(spec["uri"])(dataset, **spec["params"])
-
-
-def replay_transforms(opened, df, params):
-    steps = [*(params.get("transform_pre") or []),
-             *((params.get("set_transforms") or {}).get("test") or {}).get("transforms", [])]
-    before = len(df) if isinstance(df, pandas.DataFrame) else None
-    for step in steps:
-        df = opened.store.resolve_params(step)(df)
-    if steps and before is not None:
-        logger.info(f"{len(steps)} transforms replayed, {before - len(df)} of {before} rows dropped")
-    return df
-
-
-def chosen_plots(table, chosen):
-    if chosen == "all":
-        return dict(table)
-    names = [name for name in chosen.split(",") if name] if isinstance(chosen, str) else list(chosen)
-    unknown = [name for name in names if name not in table]
-    if unknown:
-        raise KalfaError(f"plots {unknown} are not in the plots section, which has {sorted(table)}")
-    return {name: table[name] for name in names}
-
-
-def draw_plots(opened, chosen, predictions, history, models, bus, suffix=""):
-    after = opened.after
-    table = opened.store.get("plots") if opened.document.get("plots") else {}
-    plots = chosen_plots(table, chosen)
-    figures = opened.store.resolve_params(after["figures"])
-    run_all(predictions, history, models, plots, keys=after.get("plots_keys"), predicts=after.get("predicts"),
-            bus={key: bus.get(key) for key in opened.contract.plot_bus}, record=opened.run_dir, figures=figures,
-            suffix=suffix)
-    return list(plots)
+class Train:
+    epochs: int | None = None
+    updates: dict | None = None
+    step: object = None
+    predicts: str | None = None
+    evaluate: list | None = None
+    checkpoint: dict | None = None
+    report: str | None = None
+    track: list | None = None
+    log: list | None = None
+
+    def to_mapping(self):
+        return {key: value for key, value in self.__dict__.items() if value is not None}
+
+
+def section_mapping(key, value):
+    converter = getattr(value, "to_mapping", None)
+    if callable(converter):
+        return converter()
+    if key == "rules" and isinstance(value, dict):
+        return {name: section_mapping(name, rule) for name, rule in value.items()}
+    return value
+
+
+class Run:
+    def __init__(self, **sections):
+        self.sections = sections
+
+    def to_mapping(self):
+        return {key: section_mapping(key, value) for key, value in self.sections.items()}
+
+    def check(self, sets=(), params=()):
+        return checking.check(mappings=[self.to_mapping()], sets=running.pairs(sets),
+                              params=running.pairs(params, "param"))
+
+    def start(self, record=None, sets=(), params=(), monitor=None):
+        return running.run(mappings=[self.to_mapping()], sets=sets, params=params, record=record,
+                           monitor=monitor_of(monitor))
+
+
+def sources(source):
+    if isinstance(source, dict):
+        return (), [source]
+    if isinstance(source, (list, tuple)):
+        return tuple(str(item) for item in source), []
+    return (str(source),), []
+
+
+def check(source, sets=(), params=()):
+    paths, mappings = sources(source)
+    return checking.check(paths=paths, sets=running.pairs(sets), params=running.pairs(params, "param"),
+                          mappings=mappings)
+
+
+def monitor_of(monitor):
+    if monitor is True:
+        return Monitor()
+    if monitor is False:
+        return Monitor(quiet=True)
+    return monitor
+
+
+def run(source, sets=(), params=(), record=None, monitor=None):
+    paths, mappings = sources(source)
+    return running.run(paths=paths, sets=sets, params=params, mappings=mappings, record=record,
+                       monitor=monitor_of(monitor))
 
 
 @dataclass
 class Prediction:
-    path: str | None
+    path: str
     table: pandas.DataFrame
-    model: str
-    plots: list = field(default_factory=list)
 
 
-def predict(run_dir, model=None, which=None, data=None, sets=None, device=None, contract=None,
-            plots=None) -> Prediction:
-    opened = open_record(run_dir, which, sets, contract)
-    models, composites = opened.rebuild()
-    emas = opened.ema_copies()
-    name = model or opened.after.get("predicts")
-    target = resolve_model(name, models, composites, emas)
-    logger.info(f"predicting with {name} ({opened.which} weights)")
-    device = build_device(device) if device is not None else Device.cpu()
-    device.place(models)
-    device.place(composites)
-    device.place(emas)
-    if data is not None:
-        loaders = {"test": new_loader(opened, data)}
-        tag = "_frame" if isinstance(data, pandas.DataFrame) else f"_{Path(data).stem}"
-    else:
-        loaders = opened.loaders
-        tag = ""
-    if model is not None:
-        tag += f"_{model}"
-    loader = loaders["test"]
-    table = prediction_table(target, loader, opened.prep, loader.dataset, device, opened.after.get("targets"))
-    for item in opened.calibrations.values():
-        table = item.apply(table)
-    path = Path(run_dir) / f"predictions{tag}.parquet"
-    table.to_parquet(path, index=False)
-    logger.info(f"{len(table)} rows -> {path}")
-    drawn = []
-    if plots is not None:
-        bus = {"prep": opened.prep, "composites": composites, "device": device,
-               **{f"{set_name}_loader": item for set_name, item in loaders.items()}}
-        drawn = draw_plots(opened, plots, table, History.read(run_dir), {**composites, **models}, bus, tag)
-    return Prediction(str(path), table, name, drawn)
+def predict(directory, data=None, model=None, which=None, device=None):
+    path, table = running.predict_record(str(directory), data=data, model=model, which=which, device=device)
+    return Prediction(str(path), table)
 
 
-@dataclass
-class Plots:
-    record: str
-    names: list
+class Record:
+    def __init__(self, directory):
+        self.directory = str(directory)
+
+    @property
+    def manifest(self):
+        return reader.read_manifest(self.directory)
+
+    @property
+    def plan(self):
+        return reader.read_plan(self.directory)
+
+    @property
+    def history(self):
+        return pandas.DataFrame(reader.read_history(self.directory))
+
+    @property
+    def events(self):
+        return reader.read_events(self.directory)
+
+    @property
+    def best(self):
+        return reader.best_of(self.directory)
+
+    def predict(self, data=None, model=None, which=None, device=None):
+        return predict(self.directory, data=data, model=model, which=which, device=device).table
+
+    def generate(self, n=None, which=None, device=None, out=None):
+        from .commands.generate import generate_record
+
+        return generate_record(self.directory, n=n, which=which, device=device, out=out)
+
+    def plots(self, only=None, which=None, device=None):
+        from .commands.plots import draw
+
+        return draw(self.directory, only=only, which=which, device=device)
+
+    def export(self, format="state_dict", model=None, which=None, out=None, **options):
+        from .commands.export import export_record
+
+        return export_record(self.directory, format=format, model=model, which=which, out=out, **options)
+
+    def stop(self, by="api"):
+        from .commands.stop import stop_record
+
+        return stop_record(self.directory, by=by)
+
+    def resume(self, sets=(), params=()):
+        return running.resume(self.directory, sets=sets, params=params)
+
+    @property
+    def summary(self):
+        return reader.summary_of(self.directory)
+
+    @property
+    def state(self):
+        return reader.state_of(self.manifest)
+
+    @property
+    def progress(self):
+        return reader.progress_of(self.directory)
+
+    @property
+    def updates(self):
+        return pandas.DataFrame(reader.read_updates(self.directory))
+
+    @property
+    def files(self):
+        return reader.files_of(self.directory)
+
+    @property
+    def model_summary(self):
+        return reader.model_summary_of(self.directory)
+
+    @property
+    def data_report(self):
+        return reader.data_report_of(self.directory)
+
+    @property
+    def config(self):
+        return config_of(self.directory)
+
+    @property
+    def fields(self):
+        return reader.fields_of(self.directory)
+
+    @property
+    def predictions(self):
+        return statistics.read_predictions(self.directory)
+
+    def series(self, keys=None, limit=None):
+        return pandas.DataFrame(reader.series_of(self.directory, keys=keys_of(keys), limit=limit))
+
+    def steps(self, keys=None, limit=None):
+        return pandas.DataFrame(reader.updates_of(self.directory, keys=keys_of(keys), limit=limit))
+
+    def patches(self):
+        return reader.events_of(self.directory, kinds=["patch"])
+
+    def stats(self, where=None, **options):
+        return statistics.prediction_stats(self.directory, plan=self.plan, where=where, **options)
+
+    def compare(self, *others, keys=None):
+        directories = [self.directory] + [directory_of(other) for other in others]
+        return compare_records(directories, keys=keys_of(keys))
 
 
-def plots(run_dir, only=None, sets=None, device=None, contract=None) -> Plots:
-    opened = open_record(run_dir, None, sets, contract)
-    contract = opened.contract
-    wanted = ["prep", "models", "emas", "composites", "optimizers", "data_report", "train_df", "train_frame",
-              *[f"{name}_loader" for name in document_sets(opened.document)]]
-    outputs = flow_outputs(opened.document, ("data", "models", "optimizers"), wanted, contract)
-    counters = {}
-    rules = {}
-    final = Path(run_dir) / "final" / "state.pt"
-    if final.exists():
-        load_into(outputs["models"], outputs["optimizers"], outputs["emas"], counters, rules, load(final))
-    selected = select(outputs["models"], outputs["emas"], opened.which, str(run_dir))
-    device = build_device(device) if device is not None else Device.cpu()
-    device.place(selected)
-    device.place(outputs["composites"])
-    table = Path(run_dir) / "predictions.parquet"
-    predictions = pandas.read_parquet(table) if table.exists() else None
-    logger.info(f"redrawing the plots of {run_dir} with the {opened.which} models")
-    bus = {**outputs, "device": device, "counters": counters, "rules": rules,
-           "losses": opened.store.get("losses") if opened.document.get("losses") else {},
-           "losses_keys": opened.document["flow"]["training"]["params"].get("losses_keys")}
-    drawn = draw_plots(opened, only or "all", predictions, History.read(run_dir), selected, bus)
-    return Plots(str(run_dir), drawn)
+def keys_of(keys):
+    if keys is None:
+        return None
+    return [keys] if isinstance(keys, str) else list(keys)
 
 
-@dataclass
-class Exported:
-    path: str | None
-    model: str
-    format: str
+def directory_of(record):
+    return record.directory if isinstance(record, Record) else str(record)
 
 
-def export_params(uri, params):
-    given = dict(params or {})
-    names = set(inspect.signature(registry.resolve(uri)).parameters) - {"model", "inputs", "directory", "stem"}
-    unknown = sorted(set(given) - names)
-    if unknown:
-        raise KalfaError(f"{uri} has no parameter {unknown[0]!r}; it takes {sorted(names) or 'none'}")
-    return given
+def open(directory):
+    return Record(directory)
 
 
-def export(run_dir, format="state_dict", model=None, which=None, out=None, sets=None, device=None,
-           contract=None, params=None) -> Exported:
-    opened = open_record(run_dir, which, sets, contract)
-    uri = format if format.startswith("/") else registry.aliases().get(format)
-    if uri is None or registry.lookup(uri) is None:
-        raise KalfaError(f"export format {format!r} is no export lego; the std ones are onnx, pt2 and state_dict")
-    if kalfa_kind(uri) != "export":
-        raise KalfaError(f"{uri} is a {kalfa_kind(uri)} lego, not an export")
-    written = export_params(uri, params)
-    models, composites = opened.rebuild()
-    emas = opened.ema_copies()
-    name = model or opened.after.get("predicts")
-    target = resolve_model(name, models, composites, emas)
-    device = build_device(device) if device is not None else Device.cpu()
-    device.place(models)
-    device.place(composites)
-    device.place(emas)
-    loader = opened.loaders["test"]
-    batch = device.move(next(iter(loader)))
-    directory = Path(out) if out is not None else Path(run_dir) / "export"
-    inputs = traced_inputs(target, batch)
-    target.eval()
-    with torch.no_grad():
-        target(*inputs)
-    logger.info(f"exporting {name} ({opened.which} weights) as {uri}")
-    path = registry.resolve(uri)(target, inputs, directory, name, **written)
-    if path is not None:
-        logger.info(f"wrote {path}")
-    return Exported(str(path) if path is not None else None, name, uri)
+def records(root):
+    return [Record(directory) for directory in summarizing.under(root)]
 
 
-@dataclass
-class Generated:
-    path: str | None
-    samples: torch.Tensor | str
+def summarize(paths, by=None, mode=None, top=None):
+    return summarizing.summarize(paths, by=by, mode=mode, top=top)
 
 
-def generate(run_dir, which=None, sets=None, device=None, contract=None) -> Generated:
-    opened = open_record(run_dir, which, sets, contract)
-    if opened.config.get("generate") is None:
-        raise KalfaError(f"{run_dir}: the config has no generate section")
-    models, composites = opened.rebuild()
-    everything = {**composites, **models}
-    everything.update({f"{name}.ema": ema for name, ema in opened.ema_copies().items()})
-    sampler = opened.store.resolve_params(opened.after["generate"])
-    logger.info(f"generating with the {opened.which} models")
-    device = build_device(device) if device is not None else Device.cpu()
-    device.place(everything)
-    seed_all(opened.config.get("seed"))
-    samples = sampler(models=everything, prep=opened.prep, rng=device.generator())
-    target = Path(run_dir) / "samples"
-    write_samples(samples, target)
-    path = target / ("samples.txt" if isinstance(samples, str) else "samples.pt")
-    return Generated(str(path), samples)
+def generate(directory, n=None, which=None, device=None, out=None):
+    from .commands.generate import generate_record
+
+    return generate_record(str(directory), n=n, which=which, device=device, out=out)
 
 
-def data_outputs(document, names, contract=None):
-    return flow_outputs(document, ("data",), names, contract)
+def export(directory, format="state_dict", model=None, which=None, out=None, **options):
+    from .commands.export import export_record
+
+    return export_record(str(directory), format=format, model=model, which=which, out=out, **options)
 
 
-def flow_outputs(document, blocks, names, contract=None):
-    flow = {"outputs": list(names)}
-    for block in blocks:
-        flow[block] = document["flow"][block]
-    analysis = analyze({**{key: value for key, value in document.items() if key != "flow"}, "flow": flow}, contract)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        gate(analysis.problems)
-        pipeline, problems = compile(analysis, [], dry=False)
-        gate(problems)
-        report = tezgah.run(pipeline, inputs={})
-    return report.outputs
+def stop(directories, by="api"):
+    from .commands.stop import stop_many
+
+    return stop_many([str(item) for item in ([directories] if isinstance(directories, (str, Path)) else directories)],
+                     by=by)
 
 
-__all__ = ["Diagnosis", "Exported", "Generated", "KalfaError", "Opened", "Plots", "Prepared", "PreparedData",
-           "Prediction", "Probe", "Repaired", "RunResult", "check", "diagnose", "export", "generate", "open_record",
-           "plots", "predict", "prepare", "prepare_data", "probe", "read_resolved", "repair", "resume", "run",
-           "seed_all", "stop"]
+def sweep(source, sets=(), params=(), record=None, jobs=1, repair=False, monitor=None):
+    from .commands import sweep as sweeping
+
+    paths, mappings = sources(source)
+    plan = sweeping.plan_of(paths=paths, sets=sets, params=params, mappings=mappings, record=record)
+    return sweeping.run_local(plan, monitor=monitor, jobs=jobs, repair=repair, log=lambda text: None)
+
+
+def report(paths, out=None, by=None, mode=None, top=None, points=None):
+    from .commands.report import write_report
+
+    return write_report(paths, out=out, by=by, mode=mode, top=top, points=points)

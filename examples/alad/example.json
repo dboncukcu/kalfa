@@ -1,0 +1,10 @@
+{
+  "title": "ALAD anomaly detection on a table: five models, two adversarial objectives, a train set of normal rows only and anomaly scores",
+  "shows": ["filter per set", "drop", "preprocessor chains", "abs", "log", "plugin models and objectives",
+            "alternating", "init", "auroc", "average_precision", "plot functions in a plugin", "predict on new data"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "alad", "params": {"epochs": 3}},
+    {"predict": "alad", "data": "anomaly_new.parquet"}
+  ]
+}

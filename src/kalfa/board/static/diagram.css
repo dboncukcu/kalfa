@@ -1,0 +1,76 @@
+.kdiagram { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.kdiagram-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.kdiagram-tools .tool:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
+.kdiagram-hint { margin-right: 8px; }
+.kdiagram-canvas { display: block; width: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); cursor: grab; user-select: none; touch-action: none; }
+.kdiagram-canvas.panning { cursor: grabbing; }
+
+.kdiagram-group .group-box { fill: color-mix(in srgb, var(--ink) 2.5%, transparent); stroke: var(--line-2); stroke-width: 1; }
+.kdiagram-group.depth-2 .group-box { fill: color-mix(in srgb, var(--ink) 3%, transparent); stroke-dasharray: 5 3; }
+.kdiagram-group.depth-3 .group-box, .kdiagram-group.depth-4 .group-box { fill: color-mix(in srgb, var(--ink) 3.5%, transparent); stroke-dasharray: 2 3; }
+.kdiagram-group .group-head { cursor: pointer; }
+.kdiagram-group .group-hit { fill: transparent; stroke: none; }
+.kdiagram-group .group-head:hover .group-hit { fill: color-mix(in srgb, var(--accent) 8%, transparent); }
+.kdiagram-group .group-label { font: 600 11px var(--font); fill: var(--ink-2); }
+.kdiagram-group .group-detail { font-weight: 400; fill: var(--muted); }
+.kdiagram-group .group-corner { font: 10px var(--mono); fill: var(--muted); }
+.kdiagram-group .group-head:hover .group-label { fill: var(--accent); }
+
+.kdiagram-edge .edge-line { fill: none; stroke: color-mix(in srgb, var(--muted) 75%, transparent); stroke-width: 1.3; }
+.kdiagram-edge .edge-hit { fill: none; stroke: transparent; stroke-width: 10; pointer-events: stroke; }
+.kdiagram-edge:hover .edge-line { stroke: var(--ink-2); }
+.kdiagram-edge.on .edge-line { stroke: var(--accent); stroke-width: 2; }
+.kdiagram-arrow { fill: color-mix(in srgb, var(--muted) 75%, transparent); stroke: none; }
+.kdiagram-arrow.on { fill: var(--accent); }
+.kdiagram .edge-label { font: 10px var(--mono); fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+
+.kdiagram-node { cursor: pointer; --kind: var(--line-2); }
+.kdiagram-node .node-box { fill: color-mix(in srgb, var(--kind) 9%, var(--surface)); stroke: color-mix(in srgb, var(--kind) 65%, var(--line-2)); stroke-width: 1; }
+.kdiagram-node:hover .node-box { stroke: var(--kind); stroke-width: 1.6; }
+.kdiagram-node.selected .node-box { stroke: var(--accent); stroke-width: 2.2; }
+.kdiagram-node.collapsed .node-box { stroke-dasharray: 4 3; stroke-width: 1.4; }
+.kdiagram-node .node-label { font: 600 12px var(--font); fill: var(--ink); }
+.kdiagram-node .node-detail { font: 11px var(--font); fill: var(--muted); }
+.kdiagram-node .node-shape { font: 11px var(--mono); fill: var(--ink-2); }
+.kdiagram-node .node-corner { font: 10px var(--mono); fill: var(--muted); }
+
+.kdiagram-node.kind-input { --kind: var(--series-1); }
+.kdiagram-node.kind-module { --kind: var(--ink-2); }
+.kdiagram-node.kind-op { --kind: var(--series-4); }
+.kdiagram-node.kind-output { --kind: var(--series-3); }
+.kdiagram-node.kind-group { --kind: var(--muted); }
+.kdiagram-node.kind-source { --kind: var(--series-1); }
+.kdiagram-node.kind-stream { --kind: var(--series-1); }
+.kdiagram-node.kind-filter { --kind: var(--series-4); }
+.kdiagram-node.kind-drop { --kind: var(--series-8); }
+.kdiagram-node.kind-split { --kind: var(--series-7); }
+.kdiagram-node.kind-set { --kind: var(--series-3); }
+.kdiagram-node.kind-classes { --kind: var(--series-5); }
+.kdiagram-node.kind-features { --kind: var(--series-2); }
+.kdiagram-node.kind-targets { --kind: var(--series-5); }
+.kdiagram-node.kind-weights { --kind: var(--series-6); }
+.kdiagram-node.kind-chain { --kind: var(--ink-2); }
+.kdiagram-node.kind-transform { --kind: var(--ink-2); }
+.kdiagram-node.kind-tokenizer { --kind: var(--series-2); }
+.kdiagram-node.kind-windows { --kind: var(--series-6); }
+.kdiagram-node.kind-feed { --kind: var(--series-6); }
+.kdiagram-node.kind-tensor { --kind: var(--series-7); }
+.kdiagram-node.kind-batch { --kind: var(--ink); }
+
+.model-views { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 8px 0; overflow-x: auto; }
+.model-views .tab { background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; font: inherit; }
+.model-views .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.model-views .tab:disabled { opacity: 0.45; cursor: default; }
+.model-diagram { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); gap: 12px; align-items: start; }
+.model-detail { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); min-width: 0; }
+.model-detail-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-weight: 600; overflow-wrap: anywhere; }
+.model-detail dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 0; }
+.model-detail dt { color: var(--muted); font-size: 12px; }
+.model-detail dd { margin: 0; overflow-wrap: anywhere; font-size: 12px; }
+.model-detail ul { margin: 0; padding-left: 16px; }
+.model-detail li { font-size: 12px; overflow-wrap: anywhere; }
+.model-note { margin: 4px 0; }
+
+@media (max-width: 860px) {
+  .model-diagram { grid-template-columns: 1fr; }
+}

@@ -1,36 +1,45 @@
-"""Data of example 09: data/stl10/unlabeled (one folder of RGB images) and data/stl10/test (four classes)."""
-
+import shutil
 from pathlib import Path
 
 import numpy
+from PIL import Image, ImageDraw
 
-HERE = Path(__file__).parent
+
+HERE = Path(__file__).resolve().parent
+SIZE = 16
+COUNT = 640
+SHAPES = ("disc", "square", "triangle", "bar")
 
 
-def write_image_folder(root, classes=("zero", "one"), per_class=24, size=28, channels=1, seed=0):
-    from PIL import Image
-
-    generator = numpy.random.default_rng(seed)
-    root = Path(root)
-    for position, name in enumerate(classes):
-        directory = root / name
-        directory.mkdir(parents=True, exist_ok=True)
-        for index in range(per_class):
-            canvas = generator.integers(0, 40, size=(size, size, channels), dtype="uint8")
-            half = size // 2
-            row = 0 if position % 2 == 0 else half
-            column = 0 if position < 2 else half
-            canvas[row:row + half, column:column + half] = 200 + generator.integers(0, 50, size=(half, half, channels))
-            image = Image.fromarray(canvas[:, :, 0] if channels == 1 else canvas, mode="L" if channels == 1 else "RGB")
-            image.save(directory / f"{index:03d}.png")
-    return root
+def shape_image(shape, generator):
+    background = generator.integers(0, 70, (SIZE, SIZE, 3)).astype("uint8")
+    image = Image.fromarray(background)
+    draw = ImageDraw.Draw(image)
+    color = tuple(int(value) for value in generator.integers(120, 256, 3))
+    left, top = (int(value) for value in generator.integers(1, 6, 2))
+    extent = int(generator.integers(7, 11))
+    right, bottom = left + extent, top + extent
+    if shape == "disc":
+        draw.ellipse((left, top, right, bottom), fill=color)
+    elif shape == "square":
+        draw.rectangle((left, top, right, bottom), fill=color)
+    elif shape == "triangle":
+        draw.polygon([(left, bottom), (left + extent // 2, top), (right, bottom)], fill=color)
+    else:
+        draw.rectangle((left, top + extent // 3, right, top + 2 * extent // 3), fill=color)
+    return image
 
 
 def main():
-    write_image_folder(HERE / "data" / "stl10" / "unlabeled", classes=("all",), per_class=512, size=64, channels=3)
-    write_image_folder(HERE / "data" / "stl10" / "test", classes=("bird", "cat", "deer", "dog"), per_class=8, size=64,
-                       channels=3, seed=7)
-    print("wrote data/stl10/unlabeled (512 images) and data/stl10/test (4 classes, 32 images)")
+    root = HERE / "data" / "unlabeled"
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True)
+    generator = numpy.random.default_rng(0)
+    for index in range(COUNT):
+        shape = SHAPES[int(generator.integers(len(SHAPES)))]
+        shape_image(shape, generator).save(root / f"{index:03d}.png")
+    print(f"wrote data/unlabeled ({COUNT} unlabeled images of {SIZE}x{SIZE} in one flat folder)")
 
 
 if __name__ == "__main__":

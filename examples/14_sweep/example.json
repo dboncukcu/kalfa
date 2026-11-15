@@ -1,0 +1,14 @@
+{
+  "title": "Sweep the housing regression over lr and width three ways: a grid, random search and optuna, then the sweep report",
+  "shows": ["sweep", "grid", "random_search", "optuna", "objective", "summarize --html"],
+  "needs": ["01_mlp_regression"],
+  "steps": [
+    {"sweep": "grid.yaml", "record": "grid", "params": {"epochs": 1},
+     "sets": {"sweep.space.lr": [1.0e-2, 1.0e-3], "sweep.space.width": [16, 32], "data.batch": 32}},
+    {"sweep": "random.yaml", "record": "random", "params": {"epochs": 1},
+     "sets": {"sweep.strategy.trials": 3, "data.batch": 32}},
+    {"sweep": "optuna.yaml", "record": "optuna", "params": {"epochs": 1},
+     "sets": {"sweep.strategy.trials": 3, "data.batch": 32}},
+    {"summarize": ["grid"], "html": "report.html"}
+  ]
+}

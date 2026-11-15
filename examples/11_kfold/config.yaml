@@ -1,0 +1,6 @@
+include: [../01_mlp_regression/config.yaml]
+params:
+  fold: 0
+data:
+  split: {use: kfold, folds: 5, fold: $fold$, valid_ratio: 0.15}
+record: runs/cv_housing_fold$fold$

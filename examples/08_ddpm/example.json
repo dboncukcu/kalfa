@@ -1,0 +1,11 @@
+{
+  "title": "A DDPM on texture patches: a tiny UNet learns the noise under a cosine beta schedule and a warmup lr, then its EMA copy samples in a few steps",
+  "shows": ["ddpm", "cosine_beta", "predicts: false", "ema", "warmup lr schedule", "amp", "grad_clip", "checkpoint every", "ddpm_sampler"],
+  "needs": [],
+  "steps": [
+    {"run": "config.yaml", "record": "ddpm", "params": {"epochs": 3, "diffusion_steps": 100},
+     "sets": {"data.batch.size": 64, "models.unet.channels": 8, "optimizers.main.schedule.steps": 20,
+              "generate.steps": 10}},
+    {"generate": "ddpm", "n": 16}
+  ]
+}

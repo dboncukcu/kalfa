@@ -1,36 +1,59 @@
-"""Data of example 05: data/mnist, ten classes of 28 by 28 grayscale images, and data/mnist_new."""
-
 from pathlib import Path
 
 import numpy
+from PIL import Image, ImageDraw
 
-HERE = Path(__file__).parent
+
+HERE = Path(__file__).resolve().parent
+SIZE = 16
+SEGMENTS = {"zero": "abcdef", "one": "bc", "four": "bcfg", "seven": "abc"}
 
 
-def write_image_folder(root, classes=("zero", "one"), per_class=24, size=28, channels=1, seed=0):
-    from PIL import Image
+def corners(generator):
+    left = 4 + int(generator.integers(-1, 2))
+    top = 2 + int(generator.integers(-1, 2))
+    width = 6 + int(generator.integers(0, 2))
+    height = 5 + int(generator.integers(0, 2))
+    return left, top, left + width, top + height, top + 2 * height
 
+
+def segment_lines(left, top, right, middle, bottom):
+    return {
+        "a": [(left, top), (right, top)],
+        "b": [(right, top), (right, middle)],
+        "c": [(right, middle), (right, bottom)],
+        "d": [(left, bottom), (right, bottom)],
+        "e": [(left, middle), (left, bottom)],
+        "f": [(left, top), (left, middle)],
+        "g": [(left, middle), (right, middle)],
+    }
+
+
+def glyph(segments, generator):
+    image = Image.new("L", (SIZE, SIZE), 0)
+    draw = ImageDraw.Draw(image)
+    lines = segment_lines(*corners(generator))
+    shade = int(generator.integers(170, 256))
+    for name in segments:
+        draw.line(lines[name], fill=shade, width=int(generator.integers(1, 3)))
+    noise = generator.normal(scale=12.0, size=(SIZE, SIZE))
+    return Image.fromarray(numpy.clip(numpy.asarray(image, dtype=float) + noise, 0, 255).astype("uint8"))
+
+
+def write_digits(root, count, seed):
     generator = numpy.random.default_rng(seed)
-    root = Path(root)
-    for position, name in enumerate(classes):
+    for name, segments in SEGMENTS.items():
         directory = root / name
         directory.mkdir(parents=True, exist_ok=True)
-        for index in range(per_class):
-            canvas = generator.integers(0, 40, size=(size, size, channels), dtype="uint8")
-            half = size // 2
-            row = 0 if position % 2 == 0 else half
-            column = 0 if position < 2 else half
-            canvas[row:row + half, column:column + half] = 200 + generator.integers(0, 50, size=(half, half, channels))
-            image = Image.fromarray(canvas[:, :, 0] if channels == 1 else canvas, mode="L" if channels == 1 else "RGB")
-            image.save(directory / f"{index:03d}.png")
-    return root
+        for index in range(count):
+            glyph(segments, generator).save(directory / f"{index:03d}.png")
+    return len(SEGMENTS) * count
 
 
 def main():
-    classes = tuple(str(digit) for digit in range(10))
-    write_image_folder(HERE / "data" / "mnist", classes=classes, per_class=20, size=28)
-    write_image_folder(HERE / "data" / "mnist_new", classes=classes, per_class=2, size=28, seed=7)
-    print("wrote data/mnist (10 classes, 200 images) and data/mnist_new (20 images)")
+    written = write_digits(HERE / "data" / "digits", 32, seed=0)
+    fresh = write_digits(HERE / "data" / "digits_new", 3, seed=1)
+    print(f"wrote data/digits ({written} images of {', '.join(SEGMENTS)}) and data/digits_new ({fresh} images)")
 
 
 if __name__ == "__main__":
